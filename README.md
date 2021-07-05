@@ -1,4 +1,4 @@
-# hyperaudio-lite-editor
+# Hyperaudio Lite Editor (HLE)
 A lightweight transcript editor for editing and correcting STT generated timed transcripts.
 
 
