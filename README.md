@@ -12,3 +12,13 @@ If you want to use `Hyperaudio Lite Editor` to develop commercial sites, tools, 
 ### Open source license
 
 If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use `Hyperaudio Lite Editor` under the terms of the [AGPL-3.0](./LICENSE).
+
+## Demo
+
+[Try the latest demo](https://lab.hyperaud.io/demos/hle/v03/)
+
+### Instructions
+
+Edit in the usual way.
+Double-click on words to navigate. 
+
