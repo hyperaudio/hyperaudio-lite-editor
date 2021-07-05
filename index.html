@@ -1,3 +1,4 @@
+<!-- Example index.html Copyright (C) BBC Research & Development - content used with kind permission of Ian Forrester https://twitter.com/cubicgarden/ -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -18,9 +19,24 @@
     </form>
   </p>
 
-  <video id="hyperplayer" style="z-index: 5000000; position:relative; width:400px" src="http://vm-1147-user.virt.ch.bbc.co.uk/exports/education.mp4" type="audio/mp4" controls></video>
+  <!-- Comment out the following line if you are using an alternative player. ie SoundCloud or YouTube -->
+  <video id="hyperplayer" class="hyperaudio-player" style="z-index: 5000000; position:relative; width:400px" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls>
+    <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
+  </video>
 
-  <div contenteditable id="hypertranscript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px">
+  <!-- Uncomment the following lines for SoundCloud compatibility. Keep commented if you are using native or YouTube -->
+  <!-- iFrame HTML can be found by clicking the embed button while viewing the audio on SoundCloud -->
+  <!-- <script src="https://w.soundcloud.com/player/api.js"></script>
+  <iframe id="hyperplayer" data-player-type="soundcloud" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" 
+        src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/730479133&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true">
+  </iframe> -->
+
+  <!-- Uncomment the following lines for YouTube compatibility. Keep commented if you are using native or SoundCloud -->
+  <!-- <iframe id="hyperplayer" data-player-type="youtube" width="400" height="300" frameborder="no" allow="autoplay"
+    src="https://www.youtube.com/embed/xLcsdc823dg?enablejsapi=1">
+  </iframe> -->
+
+  <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px" contenteditable="true">
     <article>
       <header></header>
       <section class="active">
@@ -118,10 +134,10 @@
         <span data-m="36390" data-d="450">realise </span>
         <span data-m="36840" data-d="150">what </span>
         <span data-m="36990" data-d="120">we're </span>
-        <span data-m="37110" data-d="300">giving </span>
-        <span data-m="37410" data-d="120">and </span>
-        <span data-m="37550" data-d="280">why </span>
-        <span data-m="38430" data-d="120">we </span>
+        <span data-m="37110" data-d="150">giving </span>
+        <span data-m="37260" data-d="150">away </span>
+        <span data-m="38410" data-d="80">and </span>
+        <span data-m="38490" data-d="60">we </span>
         <span data-m="38550" data-d="330">don't </span>
         <span data-m="38880" data-d="660">realise </span>
         <span data-m="39810" data-d="90">the </span>
@@ -144,7 +160,7 @@
         <span data-m="46020" data-d="470">privacy, </span>
         <span data-m="46490" data-d="470">they </span>
         <span data-m="46980" data-d="240">are </span>
-        <span data-m="47220" data-d="390">issues </span>
+        <span data-m="47220" data-d="390">issues –</span>
         <span data-m="47610" data-d="300">people </span>
         <span data-m="47910" data-d="210">do </span>
         <span data-m="48120" data-d="300">care </span>
@@ -964,44 +980,27 @@
       </p>
       <footer></footer>
     </section>
-  </article>
+    </article>
   </div>
-
-  <div style="text-align: center"><input id="overtype" style="font-size: x-large;" type="text"></div>
-
+  
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-wrapper.js"></script>
-  <!--<script src="js/share-this.js"></script>-->
-  <script src="../share-this/dist/share-this.js"></script>
-  <script src="../share-this/dist/sharers/twitter.js"></script>
+  <script src="js/caption.js"></script>
   <script>
-  var timer = null;
-  var player = document.getElementById('hyperplayer');
 
-  var overtype = document.getElementById('overtype');
+  // minimizedMode is still experimental - it aims to show the current words in the title, which can be seen on the browser tab.
+  let minimizedMode = false;
+  let autoScroll = true;
 
-  var overtypeArr = [];
+  new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll);
 
-  overtype.addEventListener("keyup", function() {
-      console.log("pausing");
-      clearTimeout(timer);
-      player.pause();
-      timer = setTimeout(function(){
-        player.play();
-        console.log("re-playing");
-        console.dir(overtype);
-        overtypeArr = overtype.value.split(' ');
-        console.dir(overtypeArr);
-      }, 3000);
-  });
+  // Override scroll parameters
+  //ht1.setScrollParameters(<duration>, <delay>, <offset>, <container>);
 
-  ShareThis({
-      sharers: [ ShareThisViaTwitter ],
-      selector: "#hypertranscript"
-  }).init();
+  // this should create captions  
+  let cap1 = caption();
+  cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+  
   </script>
-
-  <!-- Uncomment the following script if you require IE versions less than 10 to be supported or Opera Mini http://caniuse.com/#search=classlist ¯\_(ツ)_/¯ -->
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/2014.01.31/classList.min.js"></script> -->
 </body>
 </html>
