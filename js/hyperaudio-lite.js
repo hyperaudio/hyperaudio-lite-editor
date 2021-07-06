@@ -311,26 +311,34 @@ class HyperaudioLite {
       if (index > 0) {
         scrollNode = this.wordArr[index - 1].n.parentNode;
 
-        if (scrollNode.tagName != 'P') {
+        if (scrollNode !== null && scrollNode.tagName != 'P') {
           // it's not inside a para so just use the element
           scrollNode = this.wordArr[index - 1].n;
         }
 
         if (currentParaIndex != this.paraIndex) {
           if (typeof this.scroller !== 'undefined' && this.autoscroll === true) {
-            if (typeof this.scrollerContainer !== 'undefined' && this.scrollerContainer !== null) {
-              this.scroller(scrollNode, 'scroll', {
-                container: this.scrollerContainer,
-                duration: this.scrollerDuration,
-                delay: this.scrollerDelay,
-                offset: this.scrollerOffset,
-              });
+            if (scrollNode !== null) {
+              if (typeof this.scrollerContainer !== 'undefined' && this.scrollerContainer !== null) {
+                console.log(scrollNode);
+                console.log(this.scrollerContainer)
+                this.scroller(scrollNode, 'scroll', {
+                  container: this.scrollerContainer,
+                  duration: this.scrollerDuration,
+                  delay: this.scrollerDelay,
+                  offset: this.scrollerOffset,
+                });
+              } else {
+                this.scroller(scrollNode, 'scroll', {
+                  duration: this.scrollerDuration,
+                  delay: this.scrollerDelay,
+                  offset: this.scrollerOffset,
+                });
+              }
             } else {
-              this.scroller(scrollNode, 'scroll', {
-                duration: this.scrollerDuration,
-                delay: this.scrollerDelay,
-                offset: this.scrollerOffset,
-              });
+              let words = this.transcript.querySelectorAll('[data-m]');
+              this.wordArr = this.createWordArray(words);
+              this.paras = this.transcript.getElementsByTagName('p');
             }
           }
 
@@ -427,7 +435,9 @@ class HyperaudioLite {
 
     if (index > 0) {
       this.wordArr[index - 1].n.classList.add('active');
-      this.wordArr[index - 1].n.parentNode.classList.add('active');
+      if (this.wordArr[index - 1].n.parentNode !== null) {
+        this.wordArr[index - 1].n.parentNode.classList.add('active');
+      }
     }
 
     // Establish current paragraph index
