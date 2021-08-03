@@ -1,30 +1,15 @@
-/*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - Version 0.0.1 */
-
-/*!  Hyperaudio Lite Editor's source code is provided under a dual license model.
-
-Commercial license
-------------------
-
-If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact info@hyperaud.io
-
-Open source license
--------------------
-
-If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use Hyperaudio Lite Editor under the terms of the AGPL-3.0 License.
-*/
-
+/*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
+/*! Version 2.0.0 */
 
 'use strict';
 
 class HyperaudioLite {
-  
-  constructor(transcriptId, mediaElementId, minimizedMode, autoscroll) {
+  constructor(transcriptId, mediaElementId, minimizedMode, autoscroll, doubleClick) {
     this.transcript = document.getElementById(transcriptId);
-    this.init(mediaElementId, minimizedMode, autoscroll);
+    this.init(mediaElementId, minimizedMode, autoscroll, doubleClick);
   }
 
-  init = (mediaElementId, m, a) => {
+  init = (mediaElementId, m, a, d) => {
     const windowHash = window.location.hash;
     const hashVar = windowHash.substring(1, windowHash.indexOf('='));
 
@@ -56,6 +41,8 @@ class HyperaudioLite {
     this.scrollerDuration = 800;
     this.scrollerDelay = 0;
 
+    this.doubleClick = d;
+
     //Create the array of timed elements (wordArr)
 
     const words = this.transcript.querySelectorAll('[data-m]');
@@ -77,11 +64,11 @@ class HyperaudioLite {
     if (this.playerType === 'native') {
       this.player.addEventListener('pause', this.clearTimer, false);
       this.player.addEventListener('play', this.checkPlayHead, false);
-    } else if (playerType === 'soundcloud') {
+    } else if (this.playerType === 'soundcloud') {
       // SoundCloud
       this.player = SC.Widget(mediaElementId);
-      this.player.bind(SC.Widget.Events.PAUSE, clearTimer);
-      this.player.bind(SC.Widget.Events.PLAY, checkPlayHead);
+      this.player.bind(SC.Widget.Events.PAUSE, this.clearTimer);
+      this.player.bind(SC.Widget.Events.PLAY, this.checkPlayHead);
     } else {
       // assume YouTube
       const tag = document.createElement('script');
@@ -114,8 +101,14 @@ class HyperaudioLite {
     words[0].classList.add('active');
     this.paras[0].classList.add('active');
 
-    this.transcript.addEventListener('dblclick', this.setPlayHead, false);
-    this.transcript.addEventListener('dblclick', this.checkPlayHead, false);
+    let playHeadEvent = 'click';
+
+    if (this.doubleClick === true) {
+      playHeadEvent = 'dblclick';
+    }
+
+    this.transcript.addEventListener(playHeadEvent, this.setPlayHead, false);
+    this.transcript.addEventListener(playHeadEvent, this.checkPlayHead, false);
 
     const start = this.hashArray[0];
 
@@ -262,7 +255,7 @@ class HyperaudioLite {
       if (this.playerType === 'native') {
         this.player.currentTime = timeSecs;
         this.player.play();
-      } else if (playerType === 'soundcloud') {
+      } else if (this.playerType === 'soundcloud') {
         this.player.seekTo(timeSecs * 1000);
         this.player.play();
       } else {
@@ -283,13 +276,13 @@ class HyperaudioLite {
 
     if (this.playerType === 'native') {
       this.currentTime = this.player.currentTime;
-    } else if (playerType === 'soundcloud') {
+    } else if (this.playerType === 'soundcloud') {
       this.player.getPosition(function (ms) {
         this.currentTime = ms / 1000;
       });
     } else {
       // assume YouTube
-      this.currentTime = player.getCurrentTime();
+      this.currentTime = this.player.getCurrentTime();
     }
 
     //check for end time of shared piece
@@ -320,8 +313,6 @@ class HyperaudioLite {
           if (typeof this.scroller !== 'undefined' && this.autoscroll === true) {
             if (scrollNode !== null) {
               if (typeof this.scrollerContainer !== 'undefined' && this.scrollerContainer !== null) {
-                console.log(scrollNode);
-                console.log(this.scrollerContainer)
                 this.scroller(scrollNode, 'scroll', {
                   container: this.scrollerContainer,
                   duration: this.scrollerDuration,
@@ -336,6 +327,7 @@ class HyperaudioLite {
                 });
               }
             } else {
+              // the wordlst needs refreshing
               let words = this.transcript.querySelectorAll('[data-m]');
               this.wordArr = this.createWordArray(words);
               this.paras = this.transcript.getElementsByTagName('p');
@@ -386,10 +378,8 @@ class HyperaudioLite {
   };
 
   updateTranscriptVisualState = () => {
-
     let index = 0;
     let words = this.wordArr.length - 1;
-
 
     // Binary search https://en.wikipedia.org/wiki/Binary_search_algorithm
     while (index <= words) {
@@ -453,8 +443,8 @@ class HyperaudioLite {
     });
 
     let indices = {
-      currentWordIndex : index,
-      currentParaIndex: currentParaIndex
+      currentWordIndex: index,
+      currentParaIndex: currentParaIndex,
     };
 
     return indices;
