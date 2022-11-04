@@ -1,42 +1,30 @@
-/*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - Version 0.0.1 */
-
-/*!  Hyperaudio Lite Editor's source code is provided under a dual license model.
-
-Commercial license
-------------------
-
-If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact info@hyperaud.io
-
-Open source license
--------------------
-
-If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use Hyperaudio Lite Editor under the terms of the AGPL-3.0 License.
-*/
-
+/*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
+/*! Version 2.0.16 (patch) */
 'use strict';
 
-var caption = (function () {
-
+var caption = function () {
   var cap = {};
 
   function formatSeconds(seconds) {
-
-    //console.log("seconds = "+seconds);
-    if(typeof seconds == 'number'){ 
-      return new Date(seconds.toFixed(3) * 1000).toISOString().substr(11, 12);
+    if (typeof seconds == 'number') {
+      //console.log("seconds = "+seconds);
+      return new Date(seconds.toFixed(3) * 1000).toISOString().substring(11,23);
     } else {
-      console.log("warning - attempting to format the non number: "+seconds);
+      console.log('warning - attempting to format the non number: ' + seconds);
       return null;
     }
   }
 
-  cap.init = function(transcriptId, playerId, maxLength, minLength) {
+  function convertTimecodeToSrt(timecode) {
+    //the same as VTT format but milliseconds separated by a comma
+    return timecode.substring(0,8) + "," + timecode.substring(9,12);
+  }
+
+  cap.init = function (transcriptId, playerId, maxLength, minLength) {
     var transcript = document.getElementById(transcriptId);
     var words = transcript.querySelectorAll('[data-m]');
     var data = {};
     data.segments = [];
-    var segmentIndex = 0;
 
     function segmentMeta(speaker, start, duration, chars) {
       this.speaker = speaker;
@@ -58,59 +46,71 @@ var caption = (function () {
     // defaults
     var maxLineLength = 37;
     var minLineLength = 21;
+    var maxWordDuration = 2; //seconds
 
-    var captionsVtt = "WEBVTT\n"
+    var captionsVtt = 'WEBVTT\n';
+    var captionsSrt = '';
 
     var endSentenceDelimiter = /[\.。?؟!]/g;
     var midSentenceDelimiter = /[,、–，،و:，…‥]/g;
 
-    if (!isNaN(maxLength)) {
+    if (!isNaN(maxLength) && maxLength != null) {
       maxLineLength = maxLength;
     }
 
-    if (!isNaN(minLength)) {
+    if (!isNaN(minLength) && minLength != null) {
       minLineLength = minLength;
     }
 
-    var lastSpeaker = "";
-    
-    words.forEach(function(word, i) {
+    var lastSpeaker = '';
 
+    words.forEach(function (word, i) {
       if (thisSegmentMeta === null) {
         // create segment meta object
-        thisSegmentMeta = new segmentMeta("", null, 0, 0, 0);
+        thisSegmentMeta = new segmentMeta('', null, 0, 0, 0);
       }
 
-      if (word.classList.contains("speaker")) {
-
+      if (word.classList.contains('speaker')) {
         // checking that this is not a new segment AND a new empty segment wasn't already created
-        if (thisSegmentMeta !== null && thisSegmentMeta.start !== null) { 
+        if (thisSegmentMeta !== null && thisSegmentMeta.start !== null) {
           //console.log("pushing...");
           //console.log(thisSegmentMeta);
           data.segments.push(thisSegmentMeta); // push the previous segment because it's a new speaker
-          thisSegmentMeta = new segmentMeta("", null, 0, 0, 0);
+          thisSegmentMeta = new segmentMeta('', null, 0, 0, 0);
         }
 
         thisSegmentMeta.speaker = word.innerText;
-
       } else {
-
-        var thisStart = parseInt(word.getAttribute("data-m"))/1000;
-        var thisDuration = parseInt(word.getAttribute("data-d"))/1000;
+        var thisStart = parseInt(word.getAttribute('data-m')) / 1000;
+        var thisDuration = parseInt(word.getAttribute('data-d')) / 1000;
 
         if (isNaN(thisStart)) {
           thisStart = 0;
         }
-        
+
+        // data-d (duration) is an optional attribute, if it doesn't exist 
+        // use the start time of the next word (if it exists) or for the last word
+        // pick a sensible duration.  
+
         if (isNaN(thisDuration)) {
-          thisDuration = 0;
+          if (i < (words.length - 1)) {
+            thisDuration = (parseInt(words[i+1].getAttribute('data-m') - 1) / 1000) - thisStart;
+            if (thisDuration > maxWordDuration) {
+              thisDuration = maxWordDuration;
+            }
+          } else {
+            thisDuration = 5; // sensible default for the last word
+          }
         }
+
+        //console.log("thisStart = " + thisStart);
+        //console.log("thisDuration = " + thisDuration);
 
         var thisText = word.innerText;
 
         thisWordMeta = new wordMeta(thisStart, thisDuration, thisText);
-        
-        if (thisSegmentMeta.start === null) { 
+
+        if (thisSegmentMeta.start === null) {
           thisSegmentMeta.start = thisStart;
           thisSegmentMeta.duration = 0;
           thisSegmentMeta.chars = 0;
@@ -141,47 +141,60 @@ var caption = (function () {
     var captions = [];
     var thisCaption = null;
 
-    data.segments.map(function(segment) {
-
+    data.segments.map(function (segment, i, arr) {
       // If the entire segment fits on a line, add it to the captions.
       if (segment.chars < maxLineLength) {
 
-        thisCaption = new captionMeta(formatSeconds(segment.start), formatSeconds(segment.start + segment.duration), "");
-        
-        segment.words.forEach(function(wordMeta) {
+        if (segment.duration === 0){
+          if (i < arr.length) {
+            segment.duration = arr[i+1].start - segment.start; 
+          } else {
+            segment.duration = 5 * 1000;
+          }
+        } 
+
+        thisCaption = new captionMeta(
+          formatSeconds(segment.start),
+          formatSeconds(segment.start + segment.duration),
+          '',
+        );
+
+        segment.words.forEach(function (wordMeta) {
           thisCaption.text += wordMeta.text;
         });
 
-        thisCaption.text += "\n";
+        thisCaption.text += '\n';
         //console.log("0. pushing because the whole segment fits on a line!");
         //console.log(thisCaption);
         captions.push(thisCaption);
         thisCaption = null;
-
-      } else { // The number of chars in this segment is longer than our single line maximum
+      } else {
+        // The number of chars in this segment is longer than our single line maximum
 
         var charCount = 0;
-        var lineText = "";
+        var lineText = '';
         var firstLine = true;
         var lastOutTime;
         var lastInTime = null;
-        
-        segment.words.forEach(function(wordMeta, index) {
 
+        segment.words.forEach(function (wordMeta, index) {
           var lastChar = wordMeta.text.replace(/\s/g, '').slice(-1);
 
-          if (lastInTime === null) { // if it doesn't exist yet set the caption start time to the word's start time.
+          if (lastInTime === null) {
+            // if it doesn't exist yet set the caption start time to the word's start time.
             lastInTime = wordMeta.start;
           }
 
           // Are we over the minimum length of a line and hitting a good place to split mid-sentence?
           if (charCount + wordMeta.text.length > minLineLength && lastChar.match(midSentenceDelimiter)) {
-
             if (firstLine === true) {
+              thisCaption = new captionMeta(
+                formatSeconds(lastInTime),
+                formatSeconds(wordMeta.start + wordMeta.duration),
+                '',
+              );
+              thisCaption.text += lineText + wordMeta.text + '\n';
 
-              thisCaption = new captionMeta(formatSeconds(lastInTime), formatSeconds(wordMeta.start + wordMeta.duration), "");
-              thisCaption.text += lineText + wordMeta.text + "\n"; 
-              
               //check for last word in segment, if it is we can push a one line caption, if not – move on to second line
 
               if (index + 1 >= segment.words.length) {
@@ -192,11 +205,11 @@ var caption = (function () {
               } else {
                 firstLine = false;
               }
-
-            } else { // We're on the second line ... we're over the minimum chars and in a good place to split – let's push the caption
+            } else {
+              // We're on the second line ... we're over the minimum chars and in a good place to split – let's push the caption
 
               thisCaption.stop = formatSeconds(wordMeta.start + wordMeta.duration);
-              thisCaption.text += lineText + wordMeta.text + "\n";
+              thisCaption.text += lineText + wordMeta.text;
               //console.log("2. pushing because we're on the second line and have a good place to split");
               //console.log(thisCaption);
               captions.push(thisCaption);
@@ -206,22 +219,20 @@ var caption = (function () {
 
             // whether first line or not we should reset ready for a new caption
             charCount = 0;
-            lineText = "";
-            lastInTime = null; 
-
-          } else { // we're not over the minimum length with a suitable splitting point
+            lineText = '';
+            lastInTime = null;
+          } else {
+            // we're not over the minimum length with a suitable splitting point
 
             // If we add this word are we over the maximum?
             if (charCount + wordMeta.text.length > maxLineLength) {
-
               if (firstLine === true) {
-
                 if (lastOutTime === undefined) {
                   lastOutTime = wordMeta.start + wordMeta.duration;
                 }
 
-                thisCaption = new captionMeta(formatSeconds(lastInTime), formatSeconds(lastOutTime), "");
-                thisCaption.text += lineText + "\n";
+                thisCaption = new captionMeta(formatSeconds(lastInTime), formatSeconds(lastOutTime), '');
+                thisCaption.text += lineText + '\n';
 
                 // It's just the first line so we should only push a new caption if it's the very last word!
 
@@ -231,12 +242,12 @@ var caption = (function () {
                 } else {
                   firstLine = false;
                 }
-
-              } else { // We're on the second line and since we're over the maximum with the next word we should push this caption!
+              } else {
+                // We're on the second line and since we're over the maximum with the next word we should push this caption!
 
                 thisCaption.stop = formatSeconds(lastOutTime);
-                thisCaption.text += lineText + "\n";
- 
+                thisCaption.text += lineText;
+
                 captions.push(thisCaption);
 
                 thisCaption = null;
@@ -244,52 +255,74 @@ var caption = (function () {
               }
 
               // do the stuff we need to do to start a new line
-              charCount = wordMeta.text.length; 
+              charCount = wordMeta.text.length;
               lineText = wordMeta.text;
               lastInTime = wordMeta.start; // Why do we do this??????
-
-            } else { // We're not over the maximum with this word, update the line length and add the word to the text
+            } else {
+              // We're not over the maximum with this word, update the line length and add the word to the text
 
               charCount += wordMeta.text.length;
               lineText += wordMeta.text;
-
             }
           }
 
           // for every word update the lastOutTime
           lastOutTime = wordMeta.start + wordMeta.duration;
         });
-        
+
         // we're out of words for this segment - decision time!
-        if (thisCaption !== null) { // The caption had been started, time to add whatever text we have and add a stop point
+        if (thisCaption !== null) {
+          // The caption had been started, time to add whatever text we have and add a stop point
           thisCaption.stop = formatSeconds(lastOutTime);
-          thisCaption.text += lineText + "\n";
+          thisCaption.text += lineText;
           //console.log("3. pushing at end of segment when new caption HAS BEEN created");
           //console.log(thisCaption);
           captions.push(thisCaption);
           thisCaption = null;
-          
-        } else { // caption hadn't been started yet - create one!
-          if (lastInTime !== null) { 
+        } else {
+          // caption hadn't been started yet - create one!
+          if (lastInTime !== null) {
             thisCaption = new captionMeta(formatSeconds(lastInTime), formatSeconds(lastOutTime), lineText);
             //console.log("4. pushing at end of segment when new caption has yet to be created");
             //console.log(thisCaption);
             captions.push(thisCaption);
-            thisCaption = null;  
+            thisCaption = null;
           }
         }
       }
     });
 
-    captions.forEach(function(caption) {
-      captionsVtt += "\n" + caption.start + "-->" + caption.stop + "\n" + caption.text + "\n";
+    //console.log("start creating captions");
+
+    captions.forEach(function (caption, i) {
+      captionsVtt += '\n' + caption.start + ' --> ' + caption.stop + '\n' + caption.text + '\n';
+      //console.log(caption.start + ' --> ' + caption.stop + '\n' + caption.text);
+      captionsSrt += '\n' + (i + 1) + '\n' + convertTimecodeToSrt(caption.start) + ' --> ' + convertTimecodeToSrt(caption.stop) + '\n' + caption.text + '\n';
     });
 
-    document.getElementById(playerId+'-vtt').setAttribute("src", 'data:text/vtt,'+encodeURIComponent(captionsVtt));
-    console.log(captionsVtt);
+    var video = document.getElementById(playerId);
 
-  }
+    if (video !== null) {
+      video.addEventListener("loadedmetadata", function() {
+        //var track = document.createElement("track");
+        var track = document.getElementById(playerId+'-vtt');
+        track.kind = "captions";
+        track.label = "English";
+        track.srclang = "en";
+        track.src = "data:text/vtt,"+encodeURIComponent(captionsVtt);
+        video.textTracks[0].mode = "showing";
+      });
+  
+      video.textTracks[0].mode = "showing";
+    }
+
+    function captionsObj(vtt, srt) {
+      this.vtt = vtt;
+      this.srt = srt;
+    }
+
+    return new captionsObj(captionsVtt, captionsSrt);
+  };
 
   return cap;
-
-});
+};

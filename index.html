@@ -974,8 +974,10 @@ If you are creating an open source application under a license compatible with t
   let minimizedMode = false;
   let autoScroll = true;
   let doubleClick = true;
+  let webMonetization = false;
+  let playOnClick = false;
 
-  let hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick);
+  let hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
   // Override scroll parameters
   //ht1.setScrollParameters(<duration>, <delay>, <offset>, <container>);
