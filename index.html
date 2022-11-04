@@ -983,7 +983,54 @@ If you are creating an open source application under a license compatible with t
   // this should create captions  
   let cap1 = caption();
   cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+
+  let sanitisationCheck = function () {
+    console.log("checking inactivity");
+    let time;
+    window.onload = resetTimer;
+    document.onkeyup = resetTimer;
+    document.ontouchend = resetTimer;
+
+    const rootnode = document.querySelector("#hypertranscript");
+
+    function sanitise() {
+
+      let d = new Date();
+      let starttime = d.getTime();
+      console.log(starttime);
+      
+      let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
+
+      while (walker.nextNode()) {
+        if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
+            && walker.currentNode.parentElement.tagName !== "SPAN") {
+
+          // if previousSibling is a span, add the textContent of currentNode to it
+          if (walker.currentNode.previousSibling.tagName === "SPAN") {
+            walker.currentNode.previousSibling.textContent += walker.currentNode.textContent;
+          } else { 
+            // assume nextSibling is a span for now and add textContent of currentNode to that
+            walker.currentNode.nextSibling.textContent += walker.currentNode.textContent;
+          }
+
+          // remove currentNode as we've merged its contents
+          //walker.currentNode.parentNode.removeChild(walker.currentNode);
+          walker.currentNode.textContent = "";
+        }
+      }
+
+      d = new Date();
+      console.log("sanitising took "+(d.getTime() - starttime)+"ms");
+    }
+
+    function resetTimer() {
+      console.log("reset timer");
+      clearTimeout(time);
+      time = setTimeout(sanitise, 1000);
+    }
+  };
   
+  sanitisationCheck();
   </script>
 </body>
 </html>
