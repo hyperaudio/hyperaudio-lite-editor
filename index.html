@@ -20,14 +20,43 @@ If you are creating an open source application under a license compatible with t
   <meta charset="utf-8">
   <title>Hyperaudio Lite Editor - (Demo)</title>
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
+  <style>
+    body {
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Fira Sans','Droid Sans','Helvetica Neue',sans-serif;
+    }
+
+    input, output {
+      display: inline-block;
+      vertical-align: middle;
+      padding: 8px;
+    }
+
+    input[type="number"] {
+      width: 40px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+    }
+
+    #search {
+      width: 230px;
+      margin-right: 10px;
+    }
+
+    #pbr-holder {
+      padding-top: 24px;
+    }
+
+  </style>
 </head>
 <body>
 
   <p>
     <form id="searchForm" style="float:right">
       <!-- comment out the following line if you don't need playback rate controls -->
-      Playback Rate <span id="currentPbr">1</span><input id="pbr" type="range" value="1" min="0.5" max="3" step="0.1" style="width:10%">
-      <input id="search" type="text" ><input type="submit" value="search">
+      
+      <div><input id="search" type="text"><input type="submit" value="search"></div>
+      <div id="pbr-holder">Playback Rate <input id="pbr" type="range" value="1" step="0.1" min="0.1" max="3" id="range" oninput="rangenumber.value=value"/>
+        <input type="number" id="rangenumber" value="1" step="0.1" min="0.1" max="3" oninput="pbr.value=value"></div>
     </form>
   </p>
 
@@ -51,6 +80,7 @@ If you are creating an open source application under a license compatible with t
   <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px" contenteditable="true">
     <article>
       <section class="active">
+      
       <p>
         <span data-m="4470" data-d="270">We </span>
         <span data-m="4740" data-d="240">have </span>
