@@ -78,17 +78,14 @@ var searchPhrase = function (phrase) {
   }
 }
 
-window.onload = function() {
 
-  // playbackRate listener
-	var p = document.getElementById('pbr');
-	var cp = document.getElementById('currentPbr');
+// playbackRate listener
+var p = document.getElementById('pbr');
+var player = document.getElementById('hyperplayer');
 
-  if (p !== null) {
-    p.addEventListener('input', function(){
-      cp.innerHTML = p.value;
-      hyperplayer.playbackRate = p.value;
-    },false);
-  }
+if (p !== null) {
+  p.addEventListener('input', function(){
+    console.log("here");
+    player.playbackRate = p.value;
+  },false);
 }
-
