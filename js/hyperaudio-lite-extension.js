@@ -78,14 +78,12 @@ var searchPhrase = function (phrase) {
   }
 }
 
-
 // playbackRate listener
 var p = document.getElementById('pbr');
 var player = document.getElementById('hyperplayer');
 
 if (p !== null) {
   p.addEventListener('input', function(){
-    console.log("here");
     player.playbackRate = p.value;
   },false);
 }
