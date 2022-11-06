@@ -51,7 +51,7 @@ If you are creating an open source application under a license compatible with t
 <body>
 
   <p>
-    <form id="searchForm" style="float:right">
+    <form id="searchForm" style="float:right; padding-top:120px">
       <!-- comment out the following line if you don't need playback rate controls -->
       
       <div><input id="search" type="text"><input type="submit" value="search"></div>
@@ -61,9 +61,11 @@ If you are creating an open source application under a license compatible with t
   </p>
 
   <!-- Comment out the following line if you are using an alternative player. ie SoundCloud or YouTube -->
-  <video id="hyperplayer" class="hyperaudio-player" style="z-index: 5000000; position:relative; width:400px" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls>
-    <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
-  </video>
+  <div style="width:400px; margin:auto">
+    <video id="hyperplayer" class="hyperaudio-player" style="z-index: 5000000; position:relative; width:400px;" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls>
+      <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
+    </video>
+  </div>
 
   <!-- Uncomment the following lines for SoundCloud compatibility. Keep commented if you are using native or YouTube -->
   <!-- iFrame HTML can be found by clicking the embed button while viewing the audio on SoundCloud -->
