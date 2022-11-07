@@ -1,0 +1,36 @@
+body {
+  font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Fira Sans','Droid Sans','Helvetica Neue',sans-serif;
+}
+
+input, output {
+  display: inline-block;
+  vertical-align: middle;
+  padding: 8px;
+}
+
+input[type="number"] {
+  width: 42px;
+  border: 1px solid #bbb;
+}
+
+#search {
+  width: 230px;
+  margin-right: 10px;
+}
+
+#pbr-holder {
+  padding-top: 24px;
+}
+
+.top-bar-container {
+  display: flex;
+}
+
+.top-bar-item {
+  flex-grow: 1;
+  height: 100px;
+}
+
+.top-bar-item + .top-bar-item {
+  margin-left: 2%;
+}

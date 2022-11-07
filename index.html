@@ -18,54 +18,37 @@ If you are creating an open source application under a license compatible with t
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Hyperaudio Lite Editor - (Demo)</title>
+  <title>Hyperaudio Lite Editor</title>
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
-  <style>
-    body {
-      font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Fira Sans','Droid Sans','Helvetica Neue',sans-serif;
-    }
-
-    input, output {
-      display: inline-block;
-      vertical-align: middle;
-      padding: 8px;
-    }
-
-    input[type="number"] {
-      width: 42px;
-      border: 1px solid #bbb;
-      border-radius: 3px;
-    }
-
-    #search {
-      width: 230px;
-      margin-right: 10px;
-    }
-
-    #pbr-holder {
-      padding-top: 24px;
-    }
-
-  </style>
+  <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
 </head>
 <body>
+  <div class="top-bar-container">
+    <div class="top-bar-item" style="width:320px">
 
-  <p>
-    <form id="searchForm" style="float:right; padding-top:120px">
-      <!-- comment out the following line if you don't need playback rate controls -->
-      
-      <div><input id="search" type="text"><input type="submit" value="search"></div>
-      <div id="pbr-holder">Playback Rate <input id="pbr" type="range" value="1" step="0.1" min="0.1" max="3" id="range" oninput="rangenumber.value=value"/>
-        <input type="number" id="rangenumber" value="1" step="0.1" min="0.1" max="3" oninput="pbr.value=value"></div>
-    </form>
-  </p>
+    </div>
 
-  <!-- Comment out the following line if you are using an alternative player. ie SoundCloud or YouTube -->
-  <div style="width:400px; margin:auto">
-    <video id="hyperplayer" class="hyperaudio-player" style="z-index: 5000000; position:relative; width:400px;" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls>
-      <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
-    </video>
+    <!-- Comment out the following line if you are using an alternative player. ie SoundCloud or YouTube -->
+    <div class="top-bar-item">
+      <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls style="width:400px">
+        <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
+      </video>
+    </div>
+
+    <div class="top-bar-item">
+      <form id="searchForm" style="float:right; padding-top:120px">
+        <!-- comment out the following line if you don't need playback rate controls -->
+        
+        <div><input id="search" type="text"><input type="submit" value="search"></div>
+        <div id="pbr-holder">
+          Playback Rate <input id="pbr" type="range" value="1" step="0.1" min="0.1" max="3" id="range" oninput="rangenumber.value=value"/>
+          <input type="number" id="rangenumber" value="1" step="0.1" min="0.1" max="3" oninput="pbr.value=value">
+        </div>
+      </form>
+    </div>
   </div>
+
+
 
   <!-- Uncomment the following lines for SoundCloud compatibility. Keep commented if you are using native or YouTube -->
   <!-- iFrame HTML can be found by clicking the embed button while viewing the audio on SoundCloud -->
@@ -79,7 +62,7 @@ If you are creating an open source application under a license compatible with t
     src="https://www.youtube.com/embed/xLcsdc823dg?enablejsapi=1">
   </iframe> -->
 
-  <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px" contenteditable="true">
+  <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px; margin-top:140px" contenteditable="true">
     <article>
       <section class="active">
       
@@ -999,75 +982,76 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-extension.js"></script>
   <script src="js/caption.js"></script>
   <script>
+  function hyperaudio() {
 
-  // minimizedMode is still experimental - it aims to show the current words in the title, which can be seen on the browser tab.
-  let minimizedMode = false;
-  let autoScroll = false;
-  let doubleClick = true;
-  let webMonetization = false;
-  let playOnClick = false;
+    let minimizedMode = false;
+    let autoScroll = false;
+    let doubleClick = true;
+    let webMonetization = false;
+    let playOnClick = false;
 
-  let hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
+    let hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
-  // Override scroll parameters
-  //ht1.setScrollParameters(<duration>, <delay>, <offset>, <container>);
+    // Override scroll parameters
+    //ht1.setScrollParameters(<duration>, <delay>, <offset>, <container>);
 
-  // this should create captions  
-  let cap1 = caption();
-  cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+    // this should create captions  
+    let cap1 = caption();
+    cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
 
-  let sanitisationCheck = function () {
-    console.log("checking inactivity");
-    let time;
-    window.onload = resetTimer;
-    document.onkeyup = resetTimer;
-    document.ontouchend = resetTimer;
+    let sanitisationCheck = function () {
+      console.log("checking inactivity");
+      let time;
+      window.onload = resetTimer;
+      document.onkeyup = resetTimer;
+      document.ontouchend = resetTimer;
 
-    const rootnode = document.querySelector("#hypertranscript");
+      const rootnode = document.querySelector("#hypertranscript");
 
-    function sanitise() {
+      function sanitise() {
 
-      let d = new Date();
-      let starttime = d.getTime();
-      console.log(starttime);
-      
-      let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
+        let d = new Date();
+        let starttime = d.getTime();
+        console.log(starttime);
+        
+        let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
 
-      while (walker.nextNode()) {
-        if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
-            && walker.currentNode.parentElement.tagName !== "SPAN") {
+        while (walker.nextNode()) {
+          if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
+              && walker.currentNode.parentElement.tagName !== "SPAN") {
 
-          // if previousSibling is a span, add the textContent of currentNode to it
-          if (walker.currentNode.previousSibling.tagName === "SPAN") {
-            walker.currentNode.previousSibling.textContent += walker.currentNode.textContent;
-          } else { 
-            // assume nextSibling is a span for now and add textContent of currentNode to that
-            walker.currentNode.nextSibling.textContent += walker.currentNode.textContent;
+            // if previousSibling is a span, add the textContent of currentNode to it
+            if (walker.currentNode.previousSibling.tagName === "SPAN") {
+              walker.currentNode.previousSibling.textContent += walker.currentNode.textContent;
+            } else { 
+              // assume nextSibling is a span for now and add textContent of currentNode to that
+              walker.currentNode.nextSibling.textContent += walker.currentNode.textContent;
+            }
+
+            // remove currentNode as we've merged its contents
+            //walker.currentNode.parentNode.removeChild(walker.currentNode);
+            walker.currentNode.textContent = "";
           }
-
-          // remove currentNode as we've merged its contents
-          //walker.currentNode.parentNode.removeChild(walker.currentNode);
-          walker.currentNode.textContent = "";
         }
+
+        const words = document.querySelectorAll("[data-m]");
+        hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
+        hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
+        hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
+
+        d = new Date();
+        console.log("sanitising took "+(d.getTime() - starttime)+"ms");
       }
 
-      const words = document.querySelectorAll("[data-m]");
-      hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
-      hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
-      hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
-
-      d = new Date();
-      console.log("sanitising took "+(d.getTime() - starttime)+"ms");
-    }
-
-    function resetTimer() {
-      console.log("reset timer");
-      clearTimeout(time);
-      time = setTimeout(sanitise, 1000);
-    }
-  };
-  
-  sanitisationCheck();
+      function resetTimer() {
+        console.log("reset timer");
+        clearTimeout(time);
+        time = setTimeout(sanitise, 1000);
+      }
+    };
+    
+    sanitisationCheck();
+  }
   </script>
 </body>
 </html>
