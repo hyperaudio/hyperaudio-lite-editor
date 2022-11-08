@@ -958,6 +958,9 @@ If you are creating an open source application under a license compatible with t
     </section>
     </article>
   </div>
+
+  <a class="sub-download" id="download-vtt" href="" download="hyperaudio.vtt">Download WebVTT ⬇</a>
+  <a class="sub-download" id="download-srt" href="" download="hyperaudio.srt">Download SRT ⬇</a>
   
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
@@ -973,9 +976,38 @@ If you are creating an open source application under a license compatible with t
 
     const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
-    // this should create captions  
-    const cap1 = caption();
-    cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+    
+
+    const captionCheck = function () {
+      console.log("in caption check");
+      let time = 0;
+      window.onload = resetCaptionTimer;
+      document.onkeyup = resetCaptionTimer;
+      document.ontouchend = resetCaptionTimer;
+
+      function generateCaptions() {
+        let d = new Date();
+        let starttime = d.getTime();
+
+        // this should create captions  
+        const cap1 = caption();
+        let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+
+        document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
+        document.querySelector('#download-srt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.srt));
+
+        d = new Date();
+        console.log("captions took "+(d.getTime() - starttime)+"ms");
+      }
+
+      function resetCaptionTimer() {
+        console.log("reset caption timer");
+        clearTimeout(time);
+        time = setTimeout(generateCaptions, 2000);
+      }
+    };
+
+    //captionCheck();
 
     const sanitisationCheck = function () {
       let time = 0;
@@ -986,9 +1018,9 @@ If you are creating an open source application under a license compatible with t
       const rootnode = document.querySelector("#hypertranscript");
 
       function sanitise() {
-        //let d = new Date();
-        //let starttime = d.getTime();
-        //console.log(starttime);
+        let d = new Date();
+        let starttime = d.getTime();
+        console.log(starttime);
         
         let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
 
@@ -1015,12 +1047,25 @@ If you are creating an open source application under a license compatible with t
         hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
         hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
 
-        // d = new Date();
-        //console.log("sanitising took "+(d.getTime() - starttime)+"ms");
+        const cap1 = caption();
+        let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+
+        document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
+        document.querySelector('#download-srt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.srt));
+
+        const track = document.querySelector('#hyperplayer-vtt');
+        track.kind = "captions";
+        track.label = "English";
+        track.srclang = "en";
+        track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
+        document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
+
+        d = new Date();
+        console.log("sanitising took "+(d.getTime() - starttime)+"ms");
       }
 
       function resetTimer() {
-        //console.log("reset timer");
+        console.log("reset sanitisation timer");
         clearTimeout(time);
         time = setTimeout(sanitise, 1000);
       }
