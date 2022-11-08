@@ -72,11 +72,17 @@
 
     wordData.forEach((element, index) => {
 
-      if (previousElementEnd !== 0 && (element.start - previousElementEnd) > 0.5){
-        hyperTranscript += "\n  </p>\n  <p>\n   ";
+      let currentWord = punctuatedWords[index];
+
+      if (previousElementEnd !== 0 && (element.start - previousElementEnd) > 0.5 ){
+        let previousWord = punctuatedWords[index-1];
+        let previousWordLastChar = previousWord.charAt(previousWord.length-1);
+        if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
+          hyperTranscript += "\n  </p>\n  <p>\n   ";
+        }
       } 
 
-      hyperTranscript += `<span data-m='${element.start.toFixed(2)*1000}' data-d='${(element.end - element.start).toFixed(2)*1000}'>${punctuatedWords[index]} </span>`;
+      hyperTranscript += `<span data-m='${element.start.toFixed(2)*1000}' data-d='${(element.end - element.start).toFixed(2)*1000}'>${currentWord} </span>`;
 
       previousElementEnd = element.end;
     });
