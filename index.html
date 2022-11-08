@@ -1,5 +1,5 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.0.1 -->
+<!--  Hyperaudio Lite Editor - Version 0.1.0 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -24,21 +24,16 @@ If you are creating an open source application under a license compatible with t
 </head>
 <body>
   <div class="top-bar-container">
-    <div class="top-bar-item" style="width:320px">
-
-    </div>
-
-    <!-- Comment out the following line if you are using an alternative player. ie SoundCloud or YouTube -->
+    <div class="top-bar-item" style="width:320px"></div>
     <div class="top-bar-item">
+      <!-- example src -->
       <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls style="width:400px">
         <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
       </video>
     </div>
 
     <div class="top-bar-item">
-      <form id="searchForm" style="float:right; padding-top:120px">
-        <!-- comment out the following line if you don't need playback rate controls -->
-        
+      <form id="searchForm" style="float:right; padding-top:120px">        
         <div><input id="search" type="text"><input type="submit" value="search"></div>
         <div id="pbr-holder">
           Playback Rate <input id="pbr" type="range" value="1" step="0.1" min="0.1" max="3" id="range" oninput="rangenumber.value=value"/>
@@ -48,24 +43,10 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-
-
-  <!-- Uncomment the following lines for SoundCloud compatibility. Keep commented if you are using native or YouTube -->
-  <!-- iFrame HTML can be found by clicking the embed button while viewing the audio on SoundCloud -->
-  <!-- <script src="https://w.soundcloud.com/player/api.js"></script>
-  <iframe id="hyperplayer" data-player-type="soundcloud" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" 
-        src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/730479133&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true">
-  </iframe> -->
-
-  <!-- Uncomment the following lines for YouTube compatibility. Keep commented if you are using native or SoundCloud -->
-  <!-- <iframe id="hyperplayer" data-player-type="youtube" width="400" height="300" frameborder="no" allow="autoplay"
-    src="https://www.youtube.com/embed/xLcsdc823dg?enablejsapi=1">
-  </iframe> -->
-
   <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px; margin-top:140px" contenteditable="true">
+    <!-- example data -->
     <article>
       <section class="active">
-      
       <p>
         <span data-m="4470" data-d="270">We </span>
         <span data-m="4740" data-d="240">have </span>
@@ -984,24 +965,20 @@ If you are creating an open source application under a license compatible with t
   <script>
   function hyperaudio() {
 
-    let minimizedMode = false;
-    let autoScroll = false;
-    let doubleClick = true;
-    let webMonetization = false;
-    let playOnClick = false;
+    const minimizedMode = false;
+    const autoScroll = false;
+    const doubleClick = true;
+    const webMonetization = false;
+    const playOnClick = false;
 
-    let hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
-
-    // Override scroll parameters
-    //ht1.setScrollParameters(<duration>, <delay>, <offset>, <container>);
+    const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
     // this should create captions  
-    let cap1 = caption();
+    const cap1 = caption();
     cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
 
-    let sanitisationCheck = function () {
-      console.log("checking inactivity");
-      let time;
+    const sanitisationCheck = function () {
+      let time = 0;
       window.onload = resetTimer;
       document.onkeyup = resetTimer;
       document.ontouchend = resetTimer;
@@ -1009,10 +986,9 @@ If you are creating an open source application under a license compatible with t
       const rootnode = document.querySelector("#hypertranscript");
 
       function sanitise() {
-
-        let d = new Date();
-        let starttime = d.getTime();
-        console.log(starttime);
+        //let d = new Date();
+        //let starttime = d.getTime();
+        //console.log(starttime);
         
         let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
 
@@ -1039,12 +1015,12 @@ If you are creating an open source application under a license compatible with t
         hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
         hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
 
-        d = new Date();
-        console.log("sanitising took "+(d.getTime() - starttime)+"ms");
+        // d = new Date();
+        //console.log("sanitising took "+(d.getTime() - starttime)+"ms");
       }
 
       function resetTimer() {
-        console.log("reset timer");
+        //console.log("reset timer");
         clearTimeout(time);
         time = setTimeout(sanitise, 1000);
       }
@@ -1052,6 +1028,7 @@ If you are creating an open source application under a license compatible with t
     
     sanitisationCheck();
   }
+  hyperaudio();
   </script>
 </body>
 </html>
