@@ -1026,7 +1026,13 @@ If you are creating an open source application under a license compatible with t
         track.label = "English";
         track.srclang = "en";
         track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-        document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
+
+        // check to see if it's an mp3, in which case we don't display captions
+        if (document.querySelector('#hyperplayer').src.split('.').pop() === "mp3") {
+          document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
+        } else {
+          document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
+        }
 
         d = new Date();
         console.log("sanitising took "+(d.getTime() - starttime)+"ms");
