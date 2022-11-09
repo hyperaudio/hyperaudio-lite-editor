@@ -976,41 +976,9 @@ If you are creating an open source application under a license compatible with t
 
     const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
-    
-
-    const captionCheck = function () {
-      console.log("in caption check");
-      let time = 0;
-      window.onload = resetCaptionTimer;
-      document.onkeyup = resetCaptionTimer;
-      document.ontouchend = resetCaptionTimer;
-
-      function generateCaptions() {
-        let d = new Date();
-        let starttime = d.getTime();
-
-        // this should create captions  
-        const cap1 = caption();
-        let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-
-        document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
-        document.querySelector('#download-srt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.srt));
-
-        d = new Date();
-        console.log("captions took "+(d.getTime() - starttime)+"ms");
-      }
-
-      function resetCaptionTimer() {
-        console.log("reset caption timer");
-        clearTimeout(time);
-        time = setTimeout(generateCaptions, 2000);
-      }
-    };
-
-    //captionCheck();
-
     const sanitisationCheck = function () {
       let time = 0;
+      resetTimer();
       window.onload = resetTimer;
       document.onkeyup = resetTimer;
       document.ontouchend = resetTimer;
