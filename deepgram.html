@@ -22,7 +22,8 @@
     const  token =  document.querySelector('#token').value;
 
     if (media !== "" || token !== "") {
-      document.querySelector("#editor").contentWindow.document.querySelector("#hypertranscript").src = media;
+      console.log(media);
+      document.querySelector("#editor").contentWindow.document.querySelector("#hyperplayer").src = media;
       fetch('https://api.deepgram.com/v1/listen?model=general&tier=enhanced&punctuate=true', {
         method: 'POST',
         headers: {
