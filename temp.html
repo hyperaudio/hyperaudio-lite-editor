@@ -1,52 +1,23 @@
-<!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.1.0 -->
-
-<!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
-
-Commercial license
-------------------
-
-If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact info@hyperaud.io
-
-Open source license
--------------------
-
-If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use Hyperaudio Lite Editor under the terms of the AGPL-3.0 License.
--->
-<!-- Example index.html Copyright (C) BBC Research & Development - content used with kind permission of Ian Forrester https://twitter.com/cubicgarden/ -->
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Hyperaudio Lite Editor</title>
+  <title>Hyperaudio – Interactive Transcript</title>
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
-  <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
+  <link rel="stylesheet" href="css/share-this.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/velocity/1.5.0/velocity.js"></script>
+  <script src="https://platform.twitter.com/widgets.js"></script>
 </head>
 <body>
-  <div class="top-bar-container">
-    <div class="top-bar-item" style="width:320px"></div>
-    <div class="top-bar-item">
-      <!-- example src -->
-      <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls style="width:400px">
-        <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
-      </video>
-    </div>
+  <video id="hyperplayer" class="hyperaudio-player" style="z-index: 5000000; position:relative; width:100%" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls>
+    <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="data:text/vtt,WEBVTT%0A%0A00%3A00%3A04.470%20--%3E%2000%3A00%3A07.720%0AWe%20have%20two%20selves%20in%20the%20world%20at%20%0Aany%20given%20time%20now.%20%0A%0A00%3A00%3A08.490%20--%3E%2000%3A00%3A13.290%0AWe%20have%20the%20physical%20self%2C%20%0Aour%20flesh%20and%20blood%2C%20our%20voice%2C%20%0A%0A00%3A00%3A13.860%20--%3E%2000%3A00%3A18.450%0Aour%20presence%20in%20the%20world%20which%20%0Aextends%20beyond%20our%20bodies%20but%20lives%20%0A%0A00%3A00%3A18.450%20--%3E%2000%3A00%3A19.590%0Ain%20this%20physical%20space.%20%0A%0A00%3A00%3A20.560%20--%3E%2000%3A00%3A23.640%0AThere's%20this%20other%20space%2C%20%0Awe%20started%20calling%20cyberspace%20a%20long%20%0A%0A00%3A00%3A23.640%20--%3E%2000%3A00%3A25.080%0Atime%20ago%2C%20but%20it's%20a%20real%20thing.%20%0A%0A00%3A00%3A25.770%20--%3E%2000%3A00%3A26.720%0AIt's%20a%20data%20space.%0A%0A%0A00%3A00%3A26.940%20--%3E%2000%3A00%3A32.009%0AWe%20are%20as%20people%20quite%20often%20data%20%0Ailliterate.%20%0A%0A00%3A00%3A32.850%20--%3E%2000%3A00%3A35.730%0AWe%20don't%20realise%20the%20impact%20of%20what%20%0Adata%20has%20on%20our%20lives%2C%20%0A%0A00%3A00%3A35.760%20--%3E%2000%3A00%3A39.900%0Awe%20don't%20realise%20what%20we're%20giving%20%0Aaway%20and%20we%20don't%20realise%20the%20%0A%0A00%3A00%3A39.900%20--%3E%2000%3A00%3A44.587%0Amechanisms%20that%20will%20enable%20us%20to%20%0Are-empower%20ourselves%20in%20this%20%0A%0A00%3A00%3A44.587%20--%3E%2000%3A00%3A44.669%0Aenvironment.%0A%0A00%3A00%3A45.060%20--%3E%2000%3A00%3A48.420%0ASecurity%20and%20privacy%2C%20%0Athey%20are%20issues%20%E2%80%93people%20do%20care%20%0A%0A00%3A00%3A48.420%20--%3E%2000%3A00%3A52.170%0Aabout%20them%20and%20we%20need%20to%2C%20%0Awe%20should%20address%20them.%0A%0A00%3A00%3A52.890%20--%3E%2000%3A00%3A55.560%0AI%20think%20unfortunately%20at%20the%20minute%20%0Awe%20make%20people%20aware%20of%20their%20%0A%0A00%3A00%3A55.560%20--%3E%2000%3A00%3A57.870%0Apersonal%20data%20when%20terrible%20things%20%0Ahappen.%0A%0A00%3A00%3A58.500%20--%3E%2000%3A01%3A02.100%0AIt's%20going%20to%20take%20personal%20%0Aexperiences%20of%20falling%20over%2C%20%0A%0A00%3A01%3A04.260%20--%3E%2000%3A01%3A08.010%0Asome%20kind%20of%20truly%20horrific%20%0Aexperience%20before%20people%20actually%20%0A%0A00%3A01%3A08.010%20--%3E%2000%3A01%3A11.400%0Afeel%20that%20they%20are%20compelled%20to%20be%20%0Aeducated%20about%20this.%0A%0A00%3A01%3A11.500%20--%3E%2000%3A01%3A13.200%0AAnd%20I%20think%20there's%20two%20pieces%20of%20%0Adata.%20%0A%0A00%3A01%3A13.230%20--%3E%2000%3A01%3A17.400%0APeople%20feel%20very%20strongly%20about%2C%20%0Aone%20is%20health%20care%20and%20the%20other%20one%20%0A%0A00%3A01%3A17.400%20--%3E%2000%3A01%3A18.000%0Ais%20banking.%20%0A%0A00%3A01%3A18.660%20--%3E%2000%3A01%3A23.790%0ASo%20if%20you%20touch%20those%20two%20areas%2C%20%0Athe%20reaction%20is%20extremely%20strong%20%0A%0A00%3A01%3A23.790%20--%3E%2000%3A01%3A30.000%0Abecause%20they%20feel%20that%20it%20sort%20of%20%0Atouches%20something%20that%20they%20should%20%0A%0A00%3A01%3A30.000%20--%3E%2000%3A01%3A31.320%0Abe%20in%20complete%20control%20of.%0A%0A00%3A01%3A31.680%20--%3E%2000%3A01%3A36.480%0AThe%20Internet%20is%20manmade%20and%20%0Aeverything%20you%20put%20online%20is%20%0A%0A00%3A01%3A36.480%20--%3E%2000%3A01%3A37.200%0Arecoverable.%20%0A%0A00%3A01%3A38.160%20--%3E%2000%3A01%3A41.670%0AThere%20are%20world-class%20security%20experts%2C%20%0Abut%20there%20are%20still%20people%20who%20are%20%0A%0A00%3A01%3A41.670%20--%3E%2000%3A01%3A43.590%0Astealing%20money%20from%20bank%20accounts.%0A%0A00%3A01%3A43.710%20--%3E%2000%3A01%3A48.690%0AAs%20technologists%20we%20we%20have%20a%20duty%20%0Ato%20try%20to%20explain%20these%20things%20to%20%0A%0A00%3A01%3A48.690%20--%3E%2000%3A01%3A52.860%0Apeople%20and%20to%20try%20to%20get%20across%2C%20%0Ayou%20know%2C%20find%20ways%20to%20make%20it%20real%20%0A%0A00%3A01%3A52.860%20--%3E%2000%3A01%3A59.310%0Aand%20make%20it%20make%20sense%20and%20we%20need%20%0Amore%20examples%20and%20better%20education.%0A%0A00%3A01%3A59.460%20--%3E%2000%3A02%3A05.080%0AWe%20need%20to%20create%20a%20more%20informed%20%0Adebate%20about%20data%2C%20especially%20the%20%0A%0A00%3A02%3A05.070%20--%3E%2000%3A02%3A06.050%0Avalue%20of%20data.%20%0A%0A00%3A02%3A06.390%20--%3E%2000%3A02%3A10.699%0AThe%20value%20of%20data%20as%20individuals%20and%20%0Athe%20value%20of%20data%20aggregated.%0A%0A00%3A02%3A15.060%20--%3E%2000%3A02%3A19.290%0ARight%20now%20there's%20more%20talk%20than%20%0Aever%20about%20owning%20your%20own%20data%2C%20%0A%0A00%3A02%3A21.860%20--%3E%2000%3A02%3A25.530%0Abecause%20there%20are%20so%20many%20companies%20%0Aout%20there%20that%20are%20gathering%20data%20%0A%0A00%3A02%3A25.530%20--%3E%2000%3A02%3A29.520%0Aabout%20us%2C%20that%20we%20don't%20own%20at%20all%2C%20%0Athat%20we%20don't%20control%20at%20all.%0A%0A00%3A02%3A29.850%20--%3E%2000%3A02%3A34.830%0ASo%20if%20we're%20trying%20to%20manage%20your%20%0Aown%20data%2C%20one%20of%20the%20problems%20with%20%0A%0A00%3A02%3A34.830%20--%3E%2000%3A02%3A38.580%0Athis%20is%20you%20don't%20necessarily%20know%20%0Awhat%20data%20you're%20giving%20to%20other%20%0A%0A00%3A02%3A38.580%20--%3E%2000%3A02%3A38.880%0Apeople.%20%0A%0A00%3A02%3A39.030%20--%3E%2000%3A02%3A43.050%0ASo%20lacking%20information%20and%20lacking%20%0Ain%20any%20way%20of%20finding%20out%20that%20%0A%0A00%3A02%3A43.050%20--%3E%2000%3A02%3A43.740%0Ainformation.%0A%0A00%3A02%3A44.010%20--%3E%2000%3A02%3A47.250%0ASo%20I%20actually%20want%20it%20to%20be%20in%20the%20%0Ahands%20of%20agencies%20that%20are%20going%20to%20%0A%0A00%3A02%3A47.250%20--%3E%2000%3A02%3A52.200%0Ado%20good%20with%20that%20that%20can%20maybe%20use%20%0Amy%20data%20in%20comparison%20to%20millions%20of%20%0A%0A00%3A02%3A52.200%20--%3E%2000%3A02%3A56.190%0Aother%20people's%20data%20to%20find%20trends%2C%20%0Aor%20to%20find%20specifics%20about%20me.%20%0A%0A00%3A02%3A56.940%20--%3E%2000%3A03%3A00.000%0ASo%20yeah%20we%20needed%20it%20to%20be%20out%20there%20%0Ain%20order%20to%20make%20it%20work%2C%20%0A%0A00%3A03%3A01.500%20--%3E%2000%3A03%3A04.560%0Aand%20that's%20where%20the%20tension%20comes%20%0Ain%20because%20as%20soon%20as%20I%20agree%20for%20it%20%0A%0A00%3A03%3A04.560%20--%3E%2000%3A03%3A08.700%0Ato%20be%20out%20there%2C%20and%20allow%20it%20to%20be%20%0Aworked%20on%20it's%20a%20bit%20like%20having%20a%20%0A%0A00%3A03%3A08.700%20--%3E%2000%3A03%3A12.960%0Ahouse%20party%20when%20I%20was%20seventeen%20and%20said%2C%20%0Aeverybody's%20welcome.%20%0A%0A00%3A03%3A13.460%20--%3E%2000%3A03%3A20.840%0AWell%20they%20were%20until%20it%20got%20a%20bit%20%0Aout%20of%20hand%20and%20you%20know%20with%20that%20%0A%0A00%3A03%3A20.930%20--%3E%2000%3A03%3A21.380%0Astory%20goes.%0A%0A00%3A03%3A21.630%20--%3E%2000%3A03%3A27.870%0AI%20think%20that%2C%20I%20think%20that%20there%20are%20%0Avery%20few%20people%20who%20are%20willing%20to%20%0A%0A00%3A03%3A27.870%20--%3E%2000%3A03%3A32.780%0Asacrifice%20as%20much%20as%20it%20would%20%0Aactually%20take%20me%20to%20not%20be%20monitored%20%0A%0A00%3A03%3A32.880%20--%3E%2000%3A03%3A34.200%0Aand%20surveilled%20at%20all.%0A%0A00%3A03%3A38.730%20--%3E%2000%3A03%3A44.010%0AWe%20need%20to%20move%20the%20debate%20beyond%20a%20%0Adiscussion%20about%20what%20it%20can%20be%20in%20a%20%0A%0A00%3A03%3A44.010%20--%3E%2000%3A03%3A49.760%0Acommercial%20realm%20into%20activity%20in%20%0Athe%20ordinary%20domestic%20role.%0A%0A00%3A03%3A50.100%20--%3E%2000%3A03%3A56.460%0AI%20think%20we%20should%20be%20educating%20%0Apeople%20about%20data%20through%20building%20%0A%0A00%3A03%3A56.460%20--%3E%2000%3A04%3A00.900%0Apartnerships%20with%20the%20companies%20who%20%0Aare%20involved%20in%20selling%20those%20%0A%0A00%3A04%3A00.900%20--%3E%2000%3A04%3A01.590%0Aproducts.%0A%0A00%3A04%3A02.190%20--%3E%2000%3A04%3A07.920%0AI%20think%20we%20already%20have%20a%20middleman%20%0Afor%20open%20data%20in%20an%20institution%20%0A%0A00%3A04%3A07.920%20--%3E%2000%3A04%3A12.420%0Athat's%20been%20recently%20created%20the%20%0AOpen%20Data%20Institute%2C%20co-founded%20by%20%0A%0A00%3A04%3A12.630%20--%3E%2000%3A04%3A16.200%0ATim%20Berners-Lee%20and%20Gavin%20Starkson%2C%20%0Athere's%20some%20fantastic%20people%20that%20%0A%0A00%3A04%3A17.320%20--%3E%2000%3A04%3A19.350%0Acreated%20an%20accreditation%20system.%0A%0A00%3A04%3A19.800%20--%3E%2000%3A04%3A23.250%0AWhat's%20going%20to%20happen%20in%20the%20long%20%0Arun%20is%20that%20people%20will%20have%20control%20%0A%0A00%3A04%3A23.250%20--%3E%2000%3A04%3A25.830%0Aover%20their%20personal%20data%20because%20%0Athey'll%20know%20better%20what%20to%20do%20with%20%0A%0A00%3A04%3A25.830%20--%3E%2000%3A04%3A31.740%0Ait%20and%20the%20tools%20will%20exist%20for%20them%20%0Ato%20do%20more%20with%20it%2C%20with%20that%20data%20%0A%0A00%3A04%3A31.770%20--%3E%2000%3A04%3A33.180%0Athan%20these%20other%20companies%20could.%20%0A%0A00%3A04%3A34.070%20--%3E%2000%3A04%3A36.360%0AIt's%20just%20like%20it%20was%20with%20personal%20%0Acomputing.%0A%0A00%3A04%3A36.590%20--%3E%2000%3A04%3A43.430%0Aand%20when%20you%20kind%20of%20mobilize%20a%20%0Aworld%20task%20force%20of%20paper%20geeks%20you%20%0A%0A00%3A04%3A43.440%20--%3E%2000%3A04%3A44.370%0Alike%20making%20stuff.%0A%0A00%3A04%3A44.760%20--%3E%2000%3A04%3A49.080%0AI%20don't%20think%20we%20need%20technology%20%0Abusinesses%20to%20sit%20there%20and%20vouch%20%0A%0A00%3A04%3A49.080%20--%3E%2000%3A04%3A52.440%0Afor%20people's%20data.%20%0A%0A00%3A04%3A53.020%20--%3E%2000%3A04%3A58.080%0AThat%20seems%20to%20me%20an%20old%20way%20of%20doing%20things%2C%20%0AI%20think%20an%20open%20source%20approach%20with%20%0A%0A00%3A04%3A58.470%20--%3E%2000%3A05%3A03.750%0Afive-star%20accreditation%20from%20the%20ODI%20%0Aseems%20a%20good%20way%20forward.%0A%0A00%3A05%3A04.260%20--%3E%2000%3A05%3A09.900%0AThe%20trap%20not%20to%20fall%20into%20is%20the%20%0Atrap%20of%20fear%20right%20now%2C%20%0A%0A00%3A05%3A09.990%20--%3E%2000%3A05%3A13.260%0Aand%20we're%20at%20a%20high%20point%20of%20fear%20%0Athanks%20to%20Edward%20Snowden%2C%20%0A%0A00%3A05%3A13.650%20--%3E%2000%3A05%3A18.330%0Athanks%20to%20discovering%20what%20the%20NSA%20%0Aand%20the%20US%20has%20been%20doing%2C%20%0A%0A00%3A05%3A18.330%20--%3E%2000%3A05%3A20.130%0Aand%20what%20GCHQ%20here%20has%20been%20doing.%0A%0A00%3A05%3A20.370%20--%3E%2000%3A05%3A25.175%0AIf%20you%20can%20build%20a%20sneaky%20feature%20%0Ainto%20a%20device%2C%20and%20you%20decide%20not%20to%20%0A%0A00%3A05%3A25.175%20--%3E%2000%3A05%3A28.190%0Atell%20the%20user%20you%20decide%20to%20kind%20of%20%0Abreak%20the%20law%20a%20bit%2C%20certainly%20in%20%0A%0A00%3A05%3A28.190%20--%3E%2000%3A05%3A31.110%0Adata%20protection%20terms%2C%20%0Atheres%20a%20real%20risk%20that%20it%20will%20get%20%0A%0A00%3A05%3A31.110%20--%3E%2000%3A05%3A31.650%0Afound%20out.%0A%0A00%3A05%3A31.920%20--%3E%2000%3A05%3A35.650%0AThis%20is%20a%20power%20we%20can%20use%20for%20good%20%0Aor%20evil%20and%20probably%20both%2C%20%0A%0A00%3A05%3A36.360%20--%3E%2000%3A05%3A40.440%0Abut%20we%2C%20it's%20present%20in%20the%20world%20%0Anow%20and%20we%20have%20to%20figure%20out%20how%20to%20%0A%0A00%3A05%3A40.440%20--%3E%2000%3A05%3A40.750%0Ause%20it.%0A">
+  </video>
 
-    <div class="top-bar-item">
-      <form id="searchForm" style="float:right; padding-top:120px">        
-        <div><input id="search" type="text"><input type="submit" value="search"></div>
-        <div id="pbr-holder">
-          Playback Rate <input id="pbr" type="range" value="1" step="0.1" min="0.1" max="3" id="range" oninput="rangenumber.value=value"/>
-          <input type="number" id="rangenumber" value="1" step="0.1" min="0.1" max="3" oninput="pbr.value=value">
-        </div>
-      </form>
-    </div>
-  </div>
+  <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px">
 
-  <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px; margin-top:140px" contenteditable="true">
     <!-- example data -->
     <article>
-      <section class="active">
+      <section>
       <p>
         <span data-m="4470" data-d="270">We </span>
         <span data-m="4740" data-d="240">have </span>
@@ -286,8 +257,7 @@ If you are creating an open source application under a license compatible with t
         <span data-m="92400" data-d="760">manmade </span>
         <span data-m="93750" data-d="240">and </span>
         <span data-m="94200" data-d="540">everything </span>
-        <span data-m="94740" data-d="150">you </span>
-        <span data-m="94890" data-d="210">put </span>
+        <span data-m="94740" data-d="150">you s</span><span data-m="94890" data-d="210">put </span>
         <span data-m="95100" data-d="720">online </span>
         <span data-m="96330" data-d="150">is </span>
         <span data-m="96480" data-d="720">recoverable. </span>
@@ -619,7 +589,7 @@ If you are creating an open source application under a license compatible with t
         <span data-m="213790" data-d="410">all. </span>
       </p>
       <p>
-        <span data-m="218730" data-d="0" class="speaker">Jon: </span>
+        <span data-m="218730" data-d="0">Jon: </span>
         <span data-m="218730" data-d="480">We </span>
         <span data-m="219270" data-d="450">need </span>
         <span data-m="220740" data-d="180">to </span>
@@ -957,134 +927,35 @@ If you are creating an open source application under a license compatible with t
       <footer></footer>
     </section>
     </article>
+  
   </div>
-
-  <a id="download-vtt" href="" download="hyperaudio.vtt">Download WebVTT ⬇</a>
-  <a id="download-srt" href="" download="hyperaudio.srt">Download SRT ⬇</a>
-  <a id="download-html" href="" download="hypertranscript.html">Download HTML ⬇</a>
-  <a id="download-hypertranscript" href="" download="hyperaudio.html">Download Interactive Transcript ⬇</a>
+  
+  <p>
+    <form id="searchForm" style="float:right">
+      Playback Rate <span id="currentPbr">1</span><input id="pbr" type="range" value="1" min="0.5" max="3" step="0.1" style="width:50px">
+    </form>
+  </p>
   
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
-  <script src="js/caption.js"></script>
+  <script src="js/share-this.js"></script>
+  <script src="js/share-this-twitter.js"></script>
+  <script src="js/share-this-clipboard.js"></script>
   <script>
-  function hyperaudio() {
+  /*ShareThis({
+      sharers: [ ShareThisViaTwitter, ShareThisViaClipboard ],
+      selector: "article"
+  }).init();*/
 
-    const minimizedMode = false;
-    const autoScroll = false;
-    const doubleClick = true;
-    const webMonetization = false;
-    const playOnClick = false;
+  // minimizedMode is still experimental - it aims to show the current words in the title, which can be seen on the browser tab.
+  let minimizedMode = false;
+  let autoScroll = true;
+  let doubleClick = false;
+  let webMonetization = true;
+  let playOnClick = true;
 
-    const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
+  new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
-    
-    let hyperaudioTemplate = "";
-
-    fetch('hyperaudio-template.html')
-    .then(function(response) {
-        // When the page is loaded convert it to text
-        return response.text()
-    })
-    .then(function(html) {
-      hyperaudioTemplate = html;
-    })
-    .catch(function(err) {  
-        console.log('Failed to fetch page: ', err);  
-    });
-
-    const sanitisationCheck = function () {
-      let time = 0;
-      resetTimer();
-      window.onload = resetTimer;
-      document.onkeyup = resetTimer;
-      document.ontouchend = resetTimer;
-
-      let rootnode = document.querySelector("#hypertranscript");
-      let sourceMedia = document.querySelector("#hyperplayer").src;
-      let track = document.querySelector('#hyperplayer-vtt');
-
-      function sanitise() {
-        let d = new Date();
-        let starttime = d.getTime();
-        console.log(starttime);
-        
-        let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
-
-        while (walker.nextNode()) {
-          if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
-              && walker.currentNode.parentElement.tagName !== "SPAN") {
-
-            // if previousSibling is a span, add the textContent of currentNode to it
-            if (walker.currentNode.previousSibling.tagName === "SPAN") {
-              walker.currentNode.previousSibling.textContent += walker.currentNode.textContent;
-            } else { 
-              // assume nextSibling is a span for now and add textContent of currentNode to that
-              walker.currentNode.nextSibling.textContent += walker.currentNode.textContent;
-            }
-
-            // remove currentNode as we've merged its contents
-            //walker.currentNode.parentNode.removeChild(walker.currentNode);
-            walker.currentNode.textContent = "";
-          }
-        }
-
-        const words = document.querySelectorAll("[data-m]");
-        hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
-        hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
-        hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
-
-        const cap1 = caption();
-        let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-
-        let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-
-        document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
-        document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
-        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
-
-        document.querySelector('#download-hypertranscript').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperaudioTemplate.replace('{hypertranscript}',hypertranscript).replace('{sourcemedia}',sourceMedia).replace('{sourcevtt}', track.src)));
-     
-
-        //instead of regexp to remove classes we could use something like...
-
-        // remove all class attributes from html string
-        /*const removeClass = html => {
-          const doc = new DOMParser().parseFromString(html, 'text/html');
-          const elements = doc.querySelectorAll('*');
-          elements.forEach(element => {
-            element.removeAttribute('class');
-          });
-          return doc.body.innerHTML;
-        }*/
-
-        
-        track.kind = "captions";
-        track.label = "English";
-        track.srclang = "en";
-        track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
-        // check to see if it's an mp3, in which case we don't display captions
-        if (document.querySelector('#hyperplayer').src.split('.').pop() === "mp3") {
-          document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
-        } else {
-          document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
-        }
-
-        d = new Date();
-        console.log("sanitising took "+(d.getTime() - starttime)+"ms");
-      }
-
-      function resetTimer() {
-        console.log("reset sanitisation timer");
-        clearTimeout(time);
-        time = setTimeout(sanitise, 1000);
-      }
-    };
-    
-    sanitisationCheck();
-  }
-  hyperaudio();
   </script>
 </body>
 </html>
