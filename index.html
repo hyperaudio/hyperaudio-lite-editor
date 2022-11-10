@@ -961,6 +961,7 @@ If you are creating an open source application under a license compatible with t
 
   <a class="sub-download" id="download-vtt" href="" download="hyperaudio.vtt">Download WebVTT ⬇</a>
   <a class="sub-download" id="download-srt" href="" download="hyperaudio.srt">Download SRT ⬇</a>
+  <a class="sub-download" id="download-html" href="" download="hyperaudio.html">Download HTML ⬇</a>
   
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
@@ -1019,7 +1020,8 @@ If you are creating an open source application under a license compatible with t
         let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
 
         document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
-        document.querySelector('#download-srt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.srt));
+        document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
+        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(rootnode.innerHTML.replace(/ class=".*?"/g, '')));
 
         const track = document.querySelector('#hyperplayer-vtt');
         track.kind = "captions";
