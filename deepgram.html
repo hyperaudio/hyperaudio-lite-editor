@@ -6,28 +6,81 @@
   <h3>Hyperaudio Lite Editor &mdash; Deepgram Integration Demo</h3>
   <div style="height:80px; position: top;">
     <form onsubmit="getData(event)" style="float:right">
+      <select id="language" id="language" placeholder="language">
+      </select>
       <input type="text" id="media" name="media" size="30" placeholder="media">
       <input type="text" id="token" name="token" size="30" placeholder="token">
+
       <input type="submit" value="transcribe">
     </form>
   </div>
   <iframe id="editor" width="100%" height="100%" style="border:0"  src="index.html"></iframe>
 </body>
 <script>
+
+  function configureLanguage() {
+    const select = document.querySelector('#language');
+    const optionLanguage = {
+      "English (United States)": "en-US",
+      "English (Great Britain)": "en-GB",
+      "Italian": "it",
+      "Spanish": "es",
+      "Chinese, Simplified Mandarin (China)": "zh-CN",
+      "Chinese, Traditional Mandarin (Taiwan)": "zh-TW",
+      "Dutch": "nl",
+      "English (Australia)": "en-AU",
+      "English (India)" : "en-IN",
+      "English (New Zealand)" : "en-NZ",
+      "French" : "fr",
+      "French (Canada)" : "fr-CA",
+      "German" : "de",
+      "Hindi" : "hi",
+      "Hindi (Latin Script)" : "hi-Latn",
+      "Indonesian" : "id",
+      "Japanese" : "ja",
+      "Korean" : "ko",
+      "Polish" : "pl",
+      "Portuguese": "pt",
+      "Portuguese (Brazil)" : "pt-BR",
+      "Portuguese (Portugal)" : "pt-PT",
+      "Russian" : "ru",
+      "Spanish" : "es",
+      "Swedish" : "sv",
+      "Turkish" : "tr",
+      "Ukrainian": "uk",
+      }
+
+    let counter = 0
+    Object.keys(optionLanguage).forEach( language => {
+      console.log(language)
+      let option = document.createElement("option")
+      option.value = optionLanguage[language]
+      option.innerHTML = `<span>${language}<span>`
+      if (counter === 0) {
+        option.selected = "selected"
+      }
+      select.appendChild(option)
+      counter += 1
+
+    } )
+  }
+
+  configureLanguage()
+
   function getData(event) {
 
     document.querySelector("#editor").contentWindow.document.querySelector('#hypertranscript').innerHTML = "Transcribing...";
-
+    const language = document.querySelector('#language').value;
     const  media =  document.querySelector('#media').value;
     const  token =  document.querySelector('#token').value;
 
     if (media !== "" || token !== "") {
 
       let player = document.querySelector("#editor").contentWindow.document.querySelector("#hyperplayer");
-      
+
       player.src = media;
 
-      fetch('https://api.deepgram.com/v1/listen?model=general&tier=enhanced&punctuate=true', {
+      fetch(`https://api.deepgram.com/v1/listen?model=general&tier=enhanced&punctuate=true&language=${language}`, {
         method: 'POST',
         headers: {
             'Authorization': 'Token '+token+'',
@@ -84,7 +137,7 @@
         if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
           hyperTranscript += "\n  </p>\n  <p>\n   ";
         }
-      } 
+      }
 
       hyperTranscript += `<span data-m='${element.start.toFixed(2)*1000}' data-d='${(element.end - element.start).toFixed(2)*1000}'>${currentWord} </span>`;
 
