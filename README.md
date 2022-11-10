@@ -15,7 +15,9 @@ If you are creating an open source application under a license compatible with t
 
 ## Demo
 
-[Try the latest demo](https://lab.hyperaud.io/demos/hle/v03/)
+[Try the latest demo](https://lab.hyperaud.io/demos/hle/v04/)
+
+[Deepgram demo](https://lab.hyperaud.io/demos/hle/v04/deepgram.html)
 
 ### Instructions
 
