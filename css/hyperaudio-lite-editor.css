@@ -2,9 +2,8 @@ body {
   font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Fira Sans','Droid Sans','Helvetica Neue',sans-serif;
 }
 
-input, output {
+input, output, select {
   display: inline-block;
-  vertical-align: middle;
   padding: 8px;
 }
 
@@ -15,11 +14,11 @@ input[type="number"] {
 
 #search {
   width: 230px;
-  margin-right: 10px;
+  margin-right: 4px;
 }
 
 #pbr-holder {
-  padding-top: 24px;
+  padding-top: 20px;
 }
 
 .top-bar-container {
