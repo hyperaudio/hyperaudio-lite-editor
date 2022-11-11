@@ -1,20 +1,27 @@
+<!DOCTYPE html>
 <html>
-<body>
 <head>
   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
 </head>
-  <h3>Hyperaudio Lite Editor &mdash; Deepgram Integration Demo</h3>
+<body style="position:absolute; top: 0px; bottom: 0px; width: 98%; overflow-y:hidden; background-color: #ededed";">
   <div style="height:80px; position: top;">
-    <form onsubmit="getData(event)" style="float:right">
-      <select id="language" id="language" placeholder="language">
-      </select>
-      <input type="text" id="media" name="media" size="30" placeholder="media">
-      <input type="text" id="token" name="token" size="30" placeholder="token">
-
-      <input type="submit" value="transcribe">
+    <h4>Hyperaudio Lite Editor &mdash; Deepgram Demo</h4>
+  
+    <form onsubmit="getData(event)" style="float:right; margin-top:4px">
+      <div style="float:right; margin-top: -40px; padding-bottom: 40px;">
+        <input type="text" id="token" name="token" size="30" placeholder="token">
+        <select id="language" id="language" placeholder="language">
+        </select>
+      </div>
+      <div style="display: block; ">
+        <span style="float:right; margin-top:-20px; padding-bottom: 10px;">
+        <input type="text" id="media" name="media" size="30" placeholder="media">
+        <input type="submit" value="transcribe">
+        </span>
+      </div>
     </form>
   </div>
-  <iframe id="editor" width="100%" height="100%" style="border:0"  src="index.html"></iframe>
+  <iframe id="editor" width="100%" height="100%" style="border:0;"  src="index.html"></iframe>
 </body>
 <script>
 
