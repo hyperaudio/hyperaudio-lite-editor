@@ -22,14 +22,16 @@ input[type="number"] {
 }
 
 .top-bar-container {
-  display: flex;
+  /*display: flex;*/
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
-.top-bar-item {
+/*.top-bar-item {
   flex-grow: 1;
   height: 100px;
 }
 
 .top-bar-item + .top-bar-item {
-  margin-left: 2%;
-}
+  margin-left: 0%;
+}*/
