@@ -4,6 +4,12 @@
   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
 </head>
 <body style="position:absolute; top: 0px; bottom: 0px; width: 98%; overflow-y:hidden; background-color: #ededed";">
+  <dialog id="error-dialog">
+    <p>Token or media URL not valid.</p>
+    <form method="dialog">
+      <button>OK</button>
+    </form>
+  </dialog>
   <div style="height:80px; margin-top:20px">
     <h4 style="padding-left:8px; margin: 0">Hyperaudio Lite Editor &mdash; Deepgram Demo</h4>
   
@@ -59,7 +65,7 @@
 
     let counter = 0
     Object.keys(optionLanguage).forEach( language => {
-      console.log(language)
+      //console.log(language)
       let option = document.createElement("option")
       option.value = optionLanguage[language]
       option.innerHTML = `<span>${language}<span>`
@@ -72,7 +78,7 @@
     } )
   }
 
-  configureLanguage()
+  configureLanguage();
 
   function getData(event) {
 
@@ -80,6 +86,7 @@
     const language = document.querySelector('#language').value;
     const  media =  document.querySelector('#media').value;
     const  token =  document.querySelector('#token').value;
+    let tier = "enhanced";
 
     if (media !== "" || token !== "") {
 
@@ -87,29 +94,8 @@
 
       player.src = media;
 
-      fetch(`https://api.deepgram.com/v1/listen?model=general&tier=enhanced&punctuate=true&language=${language}`, {
-        method: 'POST',
-        headers: {
-            'Authorization': 'Token '+token+'',
-            'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-            'url': media
-        })
-      })
-      .then(response => {
-        if (!response.ok) {
-            throw new Error("HTTP error " + response.status);
-            console.log("HTTP error " + response.status);
-        }
-        return response.json();
-      })
-      .then(json => {
-        parseData(json);
-      })
-      .catch(function () {
-        this.dataError = true;
-      })
+      fetchData(token, media, tier, language);
+
     } else { // test data
       document.querySelector('#hyperplayer').src = "https://lab.hyperaud.io/demos/hyperaudio-lite-back-to-basics-cbr/Software_Unscripted_36_Back_to_Basics_in_Production_with_Marc_Grabanksi_MIX.mp3";
       fetch("test.json")
@@ -122,6 +108,46 @@
 
     event.preventDefault();
     return false;
+  }
+
+  function fetchData(token, media, tier, language) {
+    fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&language=${language}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Token '+token+'',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        'url': media
+      })
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(response.status);
+      } else {
+        console.log("response ok");
+      }
+      
+      return response.json();
+    })
+    .then(json => {
+      parseData(json);
+    })
+    .catch(function (error) {
+      console.dir("error is : "+error);
+      error = error + "";
+
+      if (error.indexOf("401") > 0) {
+        document.querySelector('#error-dialog').showModal();
+      }
+      
+      if (error.indexOf("400") > 0 && tier === "enhanced") {
+        tier = "base";
+        fetchData(token, media, tier, language);
+      }
+      this.dataError = true;
+      document.querySelector("#editor").contentWindow.document.querySelector('#hypertranscript').innerHTML = ''; 
+    })
   }
 
   function parseData(json) {
@@ -155,6 +181,8 @@
 
     document.querySelector("#editor").contentWindow.document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
     document.querySelector("#editor").contentWindow.hyperaudio();
+
+
   }
 </script>
 </html>
