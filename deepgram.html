@@ -4,8 +4,8 @@
   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
 </head>
 <body style="position:absolute; top: 0px; bottom: 0px; width: 98%; overflow-y:hidden; background-color: #ededed";">
-  <div style="height:80px; position: top;">
-    <h4>Hyperaudio Lite Editor &mdash; Deepgram Demo</h4>
+  <div style="height:80px; margin-top:20px">
+    <h4 style="padding-left:8px; margin: 0">Hyperaudio Lite Editor &mdash; Deepgram Demo</h4>
   
     <form onsubmit="getData(event)" style="float:right; margin-top:4px">
       <div style="float:right; margin-top: -40px; padding-bottom: 40px;">
@@ -76,7 +76,7 @@
 
   function getData(event) {
 
-    document.querySelector("#editor").contentWindow.document.querySelector('#hypertranscript').innerHTML = "Transcribing...";
+    document.querySelector("#editor").contentWindow.document.querySelector('#hypertranscript').innerHTML = 'Transcribing...<br/><img src="rings.svg" width="50" alt="" style="margin: auto; display: block;">';
     const language = document.querySelector('#language').value;
     const  media =  document.querySelector('#media').value;
     const  token =  document.querySelector('#token').value;
