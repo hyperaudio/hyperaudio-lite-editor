@@ -26,12 +26,3 @@ input[type="number"] {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
 }
-
-/*.top-bar-item {
-  flex-grow: 1;
-  height: 100px;
-}
-
-.top-bar-item + .top-bar-item {
-  margin-left: 0%;
-}*/
