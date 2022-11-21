@@ -15,7 +15,11 @@ If you are creating an open source application under a license compatible with t
 
 ## Demos
 
+![Screen capture of core Hyperaudio Lite Editor showing a transcript being edited](https://user-images.githubusercontent.com/208756/203117151-f5912633-cd88-4d80-80cd-204076442060.png)
+
 [Try the latest demo](https://lab.hyperaud.io/demos/hle/v04/)
+
+![Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited](https://user-images.githubusercontent.com/208756/203117162-0d8dfd5c-a62e-42ca-b75d-25814e4b4810.png)
 
 [Deepgram demo](https://lab.hyperaud.io/demos/hle/v04/deepgram.html)
 
