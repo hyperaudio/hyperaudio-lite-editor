@@ -153,22 +153,30 @@
   function parseData(json) {
     this.users = json;
 
+    const maxWordsInPara = 100;
+    const significantGapInSeconds = 0.5;
+
     const punctuatedWords = json.results.channels[0].alternatives[0].transcript.split(' ');
     const wordData = json.results.channels[0].alternatives[0].words;
 
     let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
 
     let previousElementEnd = 0;
+    let wordsInPara = 0;
 
     wordData.forEach((element, index) => {
 
       let currentWord = punctuatedWords[index];
+      wordsInPara++;
 
-      if (previousElementEnd !== 0 && (element.start - previousElementEnd) > 0.5 ){
+      // if there's a gap longer than half a second consider splitting into new para
+
+      if (previousElementEnd !== 0 && (element.start - previousElementEnd) > significantGapInSeconds || wordsInPara > maxWordsInPara){
         let previousWord = punctuatedWords[index-1];
         let previousWordLastChar = previousWord.charAt(previousWord.length-1);
         if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
           hyperTranscript += "\n  </p>\n  <p>\n   ";
+            wordsInPara = 0;
         }
       }
 
