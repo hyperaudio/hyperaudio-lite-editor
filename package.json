@@ -1,0 +1,17 @@
+{
+  "name": "haley",
+  "version": "1.0.0",
+  "description": "a desktop timed transcript editor",
+  "main": "index,js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^21.2.3"
+  },
+  "dependencies": {
+    "electron-fetch": "^1.9.1"
+  }
+}
