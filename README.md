@@ -19,7 +19,14 @@ If you are creating an open source application under a license compatible with t
 
 [Deepgram demo](https://lab.hyperaud.io/demos/hle/v04/deepgram.html)
 
-### Instructions
+### Electron Build Instructions
+
+```sh
+npm install
+npm start
+```
+
+### User Instructions
 
 Edit in the usual way.
 Double-click on words to navigate. 
