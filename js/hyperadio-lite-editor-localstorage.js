@@ -21,7 +21,7 @@ function renderTranscript(
   videoDomId = 'hyperplayer',
 ) {
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
-  document.getElementById(videoDomId).outerHTML = hypertranscriptstorage['video'];
+  document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
 }
 
 /*
@@ -37,7 +37,7 @@ function saveHyperTranscript(
   videoDomId = 'hyperplayer',
 ) {
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
-  let video = document.getElementById(videoDomId).outerHTML;
+  let video = document.getElementById(videoDomId).src;
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
   localStorage.setItem(transcriptionName, JSON.stringify(hypertranscriptstorage));
   console.log('HyperTranscript saved');
