@@ -10,11 +10,9 @@ class HyperTranscriptStorage {
     this.video = video;
   }
 }
+
 /*
- * Save the current HyperTranscript in the local storage
- * @param {string} transcriptionName - the name of the transcription
- * @param {string} hypertranscriptDomId - the id of the hypertranscript dom element
- * @param {string} videoDomId - the id of the video dom element
+ * Render the HyperTranscript in the DOM
  * @return {void}
  */
 function renderTranscript(
@@ -26,6 +24,13 @@ function renderTranscript(
   document.getElementById(videoDomId).outerHTML = hypertranscriptstorage['video'];
 }
 
+/*
+ * Save the current HyperTranscript in the local storage
+ * @param {string} transcriptionName - the name of the transcription
+ * @param {string} hypertranscriptDomId - the id of the hypertranscript dom element
+ * @param {string} videoDomId - the id of the video dom element
+ * @return {void}
+ */
 function saveHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
