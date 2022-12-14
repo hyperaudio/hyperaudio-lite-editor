@@ -70,7 +70,7 @@ function selectLoadHyperTranscript() {
   hypertranscriptSavedUrls += '';
   console.log(hypertranscriptSavedUrls);
 
-  let transcriptionNameKey = prompt(`Enter the url of the saved HyperTranscript: ${hypertranscriptSavedUrls}`);
+  let transcriptionNameKey = prompt(`Enter the number of the saved HyperTranscript: ${hypertranscriptSavedUrls}`);
   let hypertranscriptstorage = JSON.parse(localStorage.getItem(localStorage.key(transcriptionNameKey)));
   if (hypertranscriptstorage) {
     renderTranscript(hypertranscriptstorage);
