@@ -11,6 +11,33 @@ class HyperTranscriptStorage {
   }
 }
 
+
+/**
+ * Abstract Class Storage.
+ *
+ * @class Storage
+ */
+ class Storage {
+
+  constructor() {
+    if (this.constructor == Storage) {
+      throw new Error("Abstract classes can't be instantiated.");
+    }
+  }
+
+  getItem(key) {
+    throw new Error("Method 'getItem()' must be implemented.");
+  }
+
+  length() {
+    throw new Error("Method 'length()' must be implemented.");
+  }
+
+  key(index) {
+    throw new Error("Method 'key()' must be implemented.");
+  }
+}
+
 /*
  * Render the HyperTranscript in the DOM
  * @return {void}
@@ -35,11 +62,12 @@ function saveHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
+  storage = localStorage,
 ) {
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
-  localStorage.setItem(transcriptionName, JSON.stringify(hypertranscriptstorage));
+  storage.setItem(transcriptionName, JSON.stringify(hypertranscriptstorage));
   console.log('HyperTranscript saved');
 }
 
@@ -54,8 +82,9 @@ function loadHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
+  storage=localStorage,
 ) {
-  let hypertranscriptstorage = JSON.parse(localStorage.getItem(transcriptionName));
+  let hypertranscriptstorage = JSON.parse(storage.getItem(transcriptionName));
   if (hypertranscriptstorage) {
     renderTranscript(hypertranscriptstorage);
     console.log('HyperTranscript loaded');
@@ -67,16 +96,16 @@ function loadHyperTranscript(
 /*
  * Select the HyperTranscript in the local storage to display
  */
-function selectLoadHyperTranscript() {
+function selectLoadHyperTranscript(storage=localStorage) {
   let hypertranscriptSavedUrls = '';
-  for (let i = 0; i < localStorage.length; i++) {
-    hypertranscriptSavedUrls += `\n ${i} - ${localStorage.key(i)}`;
+  for (let i = 0; i < storage.length; i++) {
+    hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
   }
   hypertranscriptSavedUrls += '';
   console.log(hypertranscriptSavedUrls);
 
   let transcriptionNameKey = prompt(`Enter the number of the saved HyperTranscript: ${hypertranscriptSavedUrls}`);
-  let hypertranscriptstorage = JSON.parse(localStorage.getItem(localStorage.key(transcriptionNameKey)));
+  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(transcriptionNameKey)));
   if (hypertranscriptstorage) {
     renderTranscript(hypertranscriptstorage);
     console.log('HyperTranscript loaded');
