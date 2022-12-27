@@ -31,3 +31,7 @@ Double-click on words to navigate.
 ### Alternative Versions
 
 [Electron](https://github.com/hyperaudio/hyperaudio-lite-editor/tree/electron-build)
+
+### Commercial Licenses
+
+Contact [mark@hyperaud.io](mailto:mark@hyperaud.io)
