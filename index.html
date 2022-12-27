@@ -2,15 +2,11 @@
 <!--  Hyperaudio Lite Editor - Version 0.1.0 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
-
 Commercial license
 ------------------
-
 If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact info@hyperaud.io
-
 Open source license
 -------------------
-
 If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use Hyperaudio Lite Editor under the terms of the AGPL-3.0 License.
 -->
 <!-- Example index.html Copyright (C) BBC Research & Development - content used with kind permission of Ian Forrester https://twitter.com/cubicgarden/ -->
@@ -25,7 +21,7 @@ If you are creating an open source application under a license compatible with t
 <body>
   <div class="top-bar-container">
     <div class="top-bar-item">
-      
+
     </div>
 
     <div class="top-bar-item">
@@ -38,7 +34,7 @@ If you are creating an open source application under a license compatible with t
     </div>
 
     <div class="top-bar-item">
-      <form id="searchForm" style="float:right; padding-top:120px; margin-right: -6px;">        
+      <form id="searchForm" style="float:right; padding-top:120px; margin-right: -6px;">
         <div><input id="search" type="text"><input type="submit" value="search"></div>
         <div id="pbr-holder" style="float:right">
           Playback Rate <input type="number" id="pbr" value="1" step="0.1" min="0.1" max="3">
@@ -970,10 +966,16 @@ If you are creating an open source application under a license compatible with t
       <a id="download-srt" href="" download="hyperaudio.srt">SRT ⬇</a>
       <a id="download-html" href="" download="hypertranscript.html">HTML ⬇</a>
       <a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript ⬇</a>
+        <button id="hyperadio-lite-editor-localstorage-save">
+          Save to Local Storage ⬇
+        </button>
+        <button id="hyperadio-lite-editor-localstorage-load">
+          Restore from Local Storage
+        </button>
     </p>
 
   </div>
-  
+
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
   <script src="js/caption.js"></script>
@@ -988,7 +990,7 @@ If you are creating an open source application under a license compatible with t
 
     const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
-    
+
     let hyperaudioTemplate = "";
 
     fetch('hyperaudio-template.html')
@@ -999,8 +1001,8 @@ If you are creating an open source application under a license compatible with t
     .then(function(html) {
       hyperaudioTemplate = html;
     })
-    .catch(function(err) {  
-        console.log('Failed to fetch page: ', err);  
+    .catch(function(err) {
+        console.log('Failed to fetch page: ', err);
     });
 
     const sanitisationCheck = function () {
@@ -1018,7 +1020,7 @@ If you are creating an open source application under a license compatible with t
         let d = new Date();
         let starttime = d.getTime();
         console.log(starttime);
-        
+
         let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
 
         while (walker.nextNode()) {
@@ -1028,7 +1030,7 @@ If you are creating an open source application under a license compatible with t
             // if previousSibling is a span, add the textContent of currentNode to it
             if (walker.currentNode.previousSibling.tagName === "SPAN") {
               walker.currentNode.previousSibling.textContent += walker.currentNode.textContent;
-            } else { 
+            } else {
               // assume nextSibling is a span for now and add textContent of currentNode to that
               walker.currentNode.nextSibling.textContent += walker.currentNode.textContent;
             }
@@ -1054,7 +1056,19 @@ If you are creating an open source application under a license compatible with t
         document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
 
         document.querySelector('#download-hypertranscript').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperaudioTemplate.replace('{hypertranscript}',hypertranscript).replace('{sourcemedia}',sourceMedia).replace('{sourcevtt}', track.src)));
-     
+
+            document
+              .querySelector("#download-hypertranscript")
+              .setAttribute(
+                "href",
+                "data:text/html," +
+                  encodeURIComponent(
+                    hyperaudioTemplate
+                      .replace("{hypertranscript}", hypertranscript)
+                      .replace("{sourcemedia}", sourceMedia)
+                      .replace("{sourcevtt}", track.src)
+                  )
+              );
 
         //instead of regexp to remove classes we could use something like...
 
@@ -1068,7 +1082,7 @@ If you are creating an open source application under a license compatible with t
           return doc.body.innerHTML;
         }*/
 
-        
+
         track.kind = "captions";
         track.label = "English";
         track.srclang = "en";
@@ -1091,10 +1105,28 @@ If you are creating an open source application under a license compatible with t
         time = setTimeout(sanitise, 1000);
       }
     };
-    
+
     sanitisationCheck();
   }
   hyperaudio();
   </script>
+
+    <script src="./js/hyperadio-lite-editor-storage.js"></script>
+
+    <script>
+
+      document
+        .querySelector("#hyperadio-lite-editor-localstorage-save")
+        .addEventListener("click", function () {
+          let transcriptionName = document.getElementById("hyperplayer").src
+          saveHyperTranscript(transcriptionName);
+        });
+
+      document
+        .querySelector("#hyperadio-lite-editor-localstorage-load")
+        .addEventListener("click", function () {
+          selectLoadHyperTranscript();
+        });
+    </script>
 </body>
 </html>
