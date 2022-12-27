@@ -29,6 +29,10 @@ class HyperTranscriptStorage {
     throw new Error("Method 'getItem()' must be implemented.");
   }
 
+  setItem(key, value) {
+    throw new Error("Method 'setItem()' must be implemented.");
+  }
+
   length() {
     throw new Error("Method 'length()' must be implemented.");
   }
@@ -36,6 +40,8 @@ class HyperTranscriptStorage {
   key(index) {
     throw new Error("Method 'key()' must be implemented.");
   }
+
+
 }
 
 /*
