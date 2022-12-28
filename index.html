@@ -1106,6 +1106,22 @@ If you are creating an open source application under a license compatible with t
   </script>
 
   <!-- comment out if localstorage not required -->
+
+  <dialog id="fileSelectDialog">
+    <form method="dialog">
+      <h4>Restore from local storage</h4>
+      <p>
+        <select id="localstorage-select">
+          <option value="default">Select file…</option>
+        </select>
+      </p>
+      <div>
+        <button value="cancel">Cancel</button>
+        <button id="confirmBtn" value="default">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="./js/hyperadio-lite-editor-storage.js"></script>
 
   <script>
@@ -1124,6 +1140,7 @@ If you are creating an open source application under a license compatible with t
         selectLoadHyperTranscript();
       });
   </script>
+
   <!-- end of localstorage additions -->
 </body>
 </html>

@@ -103,23 +103,41 @@ function loadHyperTranscript(
  * Select the HyperTranscript in the local storage to display
  */
 function selectLoadHyperTranscript(storage=localStorage) {
+
+  const fileSelectDialog = document.getElementById('fileSelectDialog');
+  const confirmBtn = fileSelectDialog.querySelector('#confirmBtn');
+
+  fileSelectDialog.showModal();
+
+  let fileSelect = document.querySelector("#localstorage-select");
   let hypertranscriptSavedUrls = '';
   for (let i = 0; i < storage.length; i++) {
     console.log(storage.key(i));
     console.log(storage.key(i).indexOf(".hyperaudio"));
     if (storage.key(i).indexOf(".hyperaudio") > 0) {
       hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
+      let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(".hyperaudio"));
+      fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
     }
   }
-  hypertranscriptSavedUrls += '';
+
+  /*hypertranscriptSavedUrls += '';
   console.log(hypertranscriptSavedUrls);
 
-  let transcriptionNameKey = prompt(`Enter the number of the saved HyperTranscript: ${hypertranscriptSavedUrls}`);
-  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(transcriptionNameKey)));
-  if (hypertranscriptstorage) {
-    renderTranscript(hypertranscriptstorage);
-    console.log('HyperTranscript loaded');
-  } else {
-    alert('no saved HyperTranscript found');
-  }
+  let transcriptionNameKey = prompt(`Enter the number of the saved HyperTranscript: ${hypertranscriptSavedUrls}`);*/
+
+  fileSelect.addEventListener('change', () => {
+    confirmBtn.value = document.querySelector("#localstorage-select").value;
+  });
+
+  fileSelect.addEventListener('close', () => {
+    let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileSelectDialog.returnValue)));
+    if (hypertranscriptstorage) {
+      renderTranscript(hypertranscriptstorage);
+      console.log('HyperTranscript loaded');
+    } else {
+      alert('no saved HyperTranscript found');
+    }
+  });
+
 }
