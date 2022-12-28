@@ -132,6 +132,7 @@ function selectLoadHyperTranscript(storage=localStorage) {
 
   let fileSelect = document.querySelector("#localstorage-select");
   let hypertranscriptSavedUrls = '';
+  fileSelect.innerHTML = '<option value="default">Select file…</option>';
   for (let i = 0; i < storage.length; i++) {
     if (storage.key(i).indexOf(".hyperaudio") > 0) {
       hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
