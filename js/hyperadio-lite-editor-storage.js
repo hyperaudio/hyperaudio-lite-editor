@@ -72,7 +72,7 @@ function saveHyperTranscript(
 ) {
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
-  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
+  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video+".hyperaudio");
   storage.setItem(transcriptionName, JSON.stringify(hypertranscriptstorage));
   console.log('HyperTranscript saved');
 }
