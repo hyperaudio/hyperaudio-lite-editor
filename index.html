@@ -1107,6 +1107,20 @@ If you are creating an open source application under a license compatible with t
 
   <!-- comment out if localstorage not required -->
 
+  <dialog id="fileSaveDialog">
+    <form method="dialog">
+      <h4>Save to local storage</h4>
+      <p>
+        <label for="localstorage-fname">File name:</label>
+        <input type="text" id="localstorage-fname" name="localstorage-fname"> 
+      </p>
+      <div>
+        <button value="cancel">Cancel</button>
+        <button id="confirmBtn" value="default">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="fileSelectDialog">
     <form method="dialog">
       <h4>Restore from local storage</h4>
