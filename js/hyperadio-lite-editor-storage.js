@@ -11,7 +11,6 @@ class HyperTranscriptStorage {
   }
 }
 
-
 /**
  * Abstract Class Storage.
  *
@@ -40,8 +39,6 @@ class HyperTranscriptStorage {
   key(index) {
     throw new Error("Method 'key()' must be implemented.");
   }
-
-
 }
 
 /*
@@ -72,7 +69,7 @@ function saveHyperTranscript(
 ) {
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
-  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video+".hyperaudio");
+  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
   storage.setItem(transcriptionName, JSON.stringify(hypertranscriptstorage));
   console.log('HyperTranscript saved');
 }
@@ -112,8 +109,6 @@ function selectLoadHyperTranscript(storage=localStorage) {
   let fileSelect = document.querySelector("#localstorage-select");
   let hypertranscriptSavedUrls = '';
   for (let i = 0; i < storage.length; i++) {
-    console.log(storage.key(i));
-    console.log(storage.key(i).indexOf(".hyperaudio"));
     if (storage.key(i).indexOf(".hyperaudio") > 0) {
       hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
       let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(".hyperaudio"));
@@ -121,16 +116,11 @@ function selectLoadHyperTranscript(storage=localStorage) {
     }
   }
 
-  /*hypertranscriptSavedUrls += '';
-  console.log(hypertranscriptSavedUrls);
-
-  let transcriptionNameKey = prompt(`Enter the number of the saved HyperTranscript: ${hypertranscriptSavedUrls}`);*/
-
   fileSelect.addEventListener('change', () => {
     confirmBtn.value = document.querySelector("#localstorage-select").value;
   });
 
-  fileSelect.addEventListener('close', () => {
+  fileSelectDialog.addEventListener('close', () => {
     let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileSelectDialog.returnValue)));
     if (hypertranscriptstorage) {
       renderTranscript(hypertranscriptstorage);
@@ -139,5 +129,4 @@ function selectLoadHyperTranscript(storage=localStorage) {
       alert('no saved HyperTranscript found');
     }
   });
-
 }
