@@ -26,3 +26,7 @@ input[type="number"] {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
 }
+
+dialog::backdrop {
+  backdrop-filter: blur(1px);
+}
