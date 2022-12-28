@@ -105,7 +105,11 @@ function loadHyperTranscript(
 function selectLoadHyperTranscript(storage=localStorage) {
   let hypertranscriptSavedUrls = '';
   for (let i = 0; i < storage.length; i++) {
-    hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
+    console.log(storage.key(i));
+    console.log(storage.key(i).indexOf(".hyperaudio"));
+    if (storage.key(i).indexOf(".hyperaudio") > 0) {
+      hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
+    }
   }
   hypertranscriptSavedUrls += '';
   console.log(hypertranscriptSavedUrls);
