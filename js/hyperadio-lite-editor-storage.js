@@ -105,7 +105,7 @@ function saveHyperTranscript(
  * @param {string} videoDomId - the id of the video dom element
  * @return {void}
  */
-function loadHyperTranscript(
+/*function loadHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
@@ -113,12 +113,14 @@ function loadHyperTranscript(
 ) {
   let hypertranscriptstorage = JSON.parse(storage.getItem(transcriptionName));
   if (hypertranscriptstorage) {
+    console.log("here");
+    console.log(hypertranscriptstorage);
     renderTranscript(hypertranscriptstorage);
     console.log('HyperTranscript loaded');
   } else {
     alert('no saved HyperTranscript found');
   }
-}
+}*/
 
 /*
  * Select the HyperTranscript in the local storage to display
@@ -147,12 +149,16 @@ function selectLoadHyperTranscript(storage=localStorage) {
   });
 
   fileSelectDialog.addEventListener('close', () => {
-    let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileSelectDialog.returnValue)));
-    if (hypertranscriptstorage) {
-      renderTranscript(hypertranscriptstorage);
-      console.log('HyperTranscript loaded');
-    } else {
-      alert('no saved HyperTranscript found');
+    if (fileSelectDialog.returnValue !== "cancel") {
+      let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileSelectDialog.returnValue)));
+      if (hypertranscriptstorage) {
+        console.log(hypertranscriptstorage);
+        console.log(fileSelectDialog.returnValue);
+        renderTranscript(hypertranscriptstorage);
+        console.log('HyperTranscript loaded');
+      } else {
+        alert('no saved HyperTranscript found');
+      }
     }
   });
 }
