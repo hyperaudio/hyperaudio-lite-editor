@@ -11,36 +11,7 @@ class HyperTranscriptStorage {
   }
 }
 
-/**
- * Abstract Class Storage.
- *
- * @class Storage
- */
- class Storage {
-
-  constructor() {
-    if (this.constructor == Storage) {
-      throw new Error("Abstract classes can't be instantiated.");
-    }
-  }
-
-  getItem(key) {
-    throw new Error("Method 'getItem()' must be implemented.");
-  }
-
-  setItem(key, value) {
-    throw new Error("Method 'setItem()' must be implemented.");
-  }
-
-  length() {
-    throw new Error("Method 'length()' must be implemented.");
-  }
-
-  key(index) {
-    throw new Error("Method 'key()' must be implemented.");
-  }
-}
-
+// We should move this from global scope
 let lastFilename = null;
 
 /*
@@ -50,7 +21,7 @@ let lastFilename = null;
 function renderTranscript(
   hypertranscriptstorage,
   hypertranscriptDomId = 'hypertranscript',
-  videoDomId = 'hyperplayer',
+  videoDomId = 'hyperplayer'
 ) {
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
   document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
@@ -67,16 +38,18 @@ function saveHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
-  storage = localStorage,
+  storage = window.localStorage
 ) {
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
 
-  const fileSaveDialog = document.getElementById('fileSaveDialog');
+  const fileSaveDialog = document.querySelector('#fileSaveDialog');
   fileSaveDialog.showModal();
 
   let filenameSave = document.querySelector("#localstorage-fname");
+
+  //TODO – store .hyperaudio in a const named localStorageExtension or similar
 
   if (lastFilename === null) {
     //by default just the media filename
@@ -87,11 +60,6 @@ function saveHyperTranscript(
     filenameSave.value = lastFilename;
   }
 
-  /*fileSave.addEventListener('change', () => {
-    console.log("change text");
-    confirmBtn.value = document.querySelector("#localstorage-fname").value;
-  });*/
-
   fileSaveDialog.addEventListener('close', () => {
     storage.setItem(filenameSave.value+".hyperaudio", JSON.stringify(hypertranscriptstorage));
     console.log('HyperTranscript saved');
@@ -99,35 +67,11 @@ function saveHyperTranscript(
 }
 
 /*
- * Load the current HyperTranscript in the local storage
- * @param {string} transcriptionName - the name of the transcription
- * @param {string} hypertranscriptDomId - the id of the hypertranscript dom element
- * @param {string} videoDomId - the id of the video dom element
- * @return {void}
+ * Select the HyperTranscript saved in the localStorage to display
  */
-/*function loadHyperTranscript(
-  transcriptionName = 'hypertranscript--last',
-  hypertranscriptDomId = 'hypertranscript',
-  videoDomId = 'hyperplayer',
-  storage=localStorage,
-) {
-  let hypertranscriptstorage = JSON.parse(storage.getItem(transcriptionName));
-  if (hypertranscriptstorage) {
-    console.log("here");
-    console.log(hypertranscriptstorage);
-    renderTranscript(hypertranscriptstorage);
-    console.log('HyperTranscript loaded');
-  } else {
-    alert('no saved HyperTranscript found');
-  }
-}*/
+function selectLoadHyperTranscript(storage = window.localStorage) {
 
-/*
- * Select the HyperTranscript in the local storage to display
- */
-function selectLoadHyperTranscript(storage=localStorage) {
-
-  const fileSelectDialog = document.getElementById('fileSelectDialog');
+  const fileSelectDialog = document.querySelector('#fileSelectDialog');
   const confirmBtn = fileSelectDialog.querySelector('#confirmBtn');
 
   fileSelectDialog.showModal();
