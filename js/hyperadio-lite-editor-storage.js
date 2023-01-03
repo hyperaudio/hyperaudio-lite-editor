@@ -96,8 +96,6 @@ function selectLoadHyperTranscript(storage = window.localStorage) {
     if (fileSelectDialog.returnValue !== "cancel") {
       let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileSelectDialog.returnValue)));
       if (hypertranscriptstorage) {
-        console.log(hypertranscriptstorage);
-        console.log(fileSelectDialog.returnValue);
         renderTranscript(hypertranscriptstorage);
         console.log('HyperTranscript loaded');
       } else {
