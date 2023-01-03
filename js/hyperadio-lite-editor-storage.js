@@ -11,7 +11,8 @@ class HyperTranscriptStorage {
   }
 }
 
-// We should move this from global scope
+// We should move these from global scope
+const fileExtension = ".hyperaudio";
 let lastFilename = null;
 
 /*
@@ -53,7 +54,7 @@ function saveHyperTranscript(
 
   if (lastFilename === null) {
     //by default just the media filename
-    filenameSave.value = transcriptionName.substring(0,transcriptionName.lastIndexOf(".hyperaudio")).substring(transcriptionName.lastIndexOf("/")+1);
+    filenameSave.value = transcriptionName.substring(0,transcriptionName.lastIndexOf(fileExtension)).substring(transcriptionName.lastIndexOf("/")+1);
     lastFilename = filenameSave.value;
   } else {
     // if it's been saved before this session, use the last filename
@@ -61,7 +62,7 @@ function saveHyperTranscript(
   }
 
   fileSaveDialog.addEventListener('close', () => {
-    storage.setItem(filenameSave.value+".hyperaudio", JSON.stringify(hypertranscriptstorage));
+    storage.setItem(filenameSave.value+fileExtension, JSON.stringify(hypertranscriptstorage));
     console.log('HyperTranscript saved');
   });
 }
@@ -80,9 +81,9 @@ function selectLoadHyperTranscript(storage = window.localStorage) {
   let hypertranscriptSavedUrls = '';
   fileSelect.innerHTML = '<option value="default">Select file…</option>';
   for (let i = 0; i < storage.length; i++) {
-    if (storage.key(i).indexOf(".hyperaudio") > 0) {
+    if (storage.key(i).indexOf(fileExtension) > 0) {
       hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
-      let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(".hyperaudio"));
+      let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
       fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
     }
   }
