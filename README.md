@@ -14,10 +14,10 @@ If you want to use `Hyperaudio Lite Editor` to develop commercial sites, tools, 
 If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use `Hyperaudio Lite Editor` under the terms of the [AGPL-3.0](./LICENSE).
 
 ## Demos
-[Try the latest demo](https://lab.hyperaud.io/demos/hle/demo-06/)
+[Try the latest demo](https://lab.hyperaud.io/demos/hle/demo-07/)
 ![Screen capture of core Hyperaudio Lite Editor showing a transcript being edited](https://user-images.githubusercontent.com/208756/203117151-f5912633-cd88-4d80-80cd-204076442060.png)
 
-[Deepgram demo (now with localStorage)](https://lab.hyperaud.io/demos/hle/demo-06/deepgram.html)
+[Deepgram demo (now with localStorage and installable as a Progressive Web App)](https://lab.hyperaud.io/demos/hle/demo-07/deepgram.html)
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
 ![Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited](https://user-images.githubusercontent.com/208756/203117162-0d8dfd5c-a62e-42ca-b75d-25814e4b4810.png)
