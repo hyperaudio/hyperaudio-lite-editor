@@ -2,6 +2,15 @@
 <html>
 <head>
   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
+
+  <!-- Meta Tags required for
+    Progressive Web App -->
+  <meta name= "apple-mobile-web-app-status-bar" content="#aa7700">
+  <meta name="theme-color" content="black">
+
+  <!-- Manifest File link -->
+  <link rel="manifest" href="manifest.json">
+
 </head>
 <body style="position:absolute; top: 0px; bottom: 0px; width: 98%; overflow-y:hidden; background-color: #ededed";">
   <dialog id="error-dialog">
@@ -189,9 +198,28 @@
 
     document.querySelector("#editor").contentWindow.document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
     document.querySelector("#editor").contentWindow.hyperaudio();
-
-
   }
+</script>
+
+<!-- service worker script for PWA -->
+<script>
+	window.addEventListener('load', () => {
+	  registerSW();
+	});
+
+	// Register the Service Worker
+	async function registerSW() {
+    if ('serviceWorker' in navigator) {
+      try {
+      await navigator
+          .serviceWorker
+          .register('serviceworker.js');
+      }
+      catch (e) {
+      console.log('SW registration failed');
+      }
+    }
+	}
 </script>
 
 </html>
