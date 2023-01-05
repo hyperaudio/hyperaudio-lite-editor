@@ -1105,5 +1105,56 @@ If you are creating an open source application under a license compatible with t
   }
   hyperaudio();
   </script>
+
+  <!-- comment out if localstorage not required -->
+
+  <dialog id="fileSaveDialog">
+    <form method="dialog">
+      <h4>Save to local storage</h4>
+      <p>
+        <label for="localstorage-fname">File name:</label>
+        <input type="text" id="localstorage-fname" name="localstorage-fname"> 
+      </p>
+      <div>
+        <button value="cancel">Cancel</button>
+        <button id="confirmBtn" value="default">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="fileSelectDialog">
+    <form method="dialog">
+      <h4>Restore from local storage</h4>
+      <p>
+        <select id="localstorage-select">
+        </select>
+      </p>
+      <div>
+        <button value="cancel">Cancel</button>
+        <button id="confirmBtn" value="default">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="./js/hyperadio-lite-editor-storage.js"></script>
+
+  <script>
+    document.querySelector('#controls').insertAdjacentHTML("beforeend", '<p><button id="hyperadio-lite-editor-localstorage-save">Save to Local Storage</button> <button id="hyperadio-lite-editor-localstorage-load">Restore from Local Storage</button></p> ');
+
+    document
+      .querySelector("#hyperadio-lite-editor-localstorage-save")
+      .addEventListener("click", function () {
+        let transcriptionName = document.getElementById("hyperplayer").src;
+        saveHyperTranscript(transcriptionName+".hyperaudio");
+      });
+
+    document
+      .querySelector("#hyperadio-lite-editor-localstorage-load")
+      .addEventListener("click", function () {
+        selectLoadHyperTranscript();
+      });
+  </script>
+
+  <!-- end of localstorage additions -->
 </body>
 </html>
