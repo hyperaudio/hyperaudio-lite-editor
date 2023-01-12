@@ -27,14 +27,7 @@ function renderTranscript(
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
   document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
 
-  const minimizedMode = false;
-  const autoScroll = false;
-  const doubleClick = true;
-  const webMonetization = false;
-  const playOnClick = false;
-
-  hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
-
+  hyperaudio();
 }
 
 /*

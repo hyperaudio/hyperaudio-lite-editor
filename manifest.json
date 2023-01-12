@@ -1,7 +1,7 @@
 {
   "name":"Hyperaudio Lite Editor",
   "short_name":"PWA",
-  "start_url":"deepgram-pwa.html",
+  "start_url":"alternative.html",
   "display":"standalone",
   "background_color":"#ffffff",
   "theme_color":"white",
