@@ -146,11 +146,11 @@ function importHyperTranscript(file) {
   reader.readAsText(file);
 }
 
-function downloadLocalStorage() {
-  var data = {};
-  for (var i = 0; i < localStorage.length; i++) {
-    var key = localStorage.key(i);
-    data[key] = localStorage.getItem(key);
-  }
-  downloadJson(data, 'localstorage.json');
-}
+// function downloadLocalStorage() {
+//   var data = {};
+//   for (var i = 0; i < localStorage.length; i++) {
+//     var key = localStorage.key(i);
+//     data[key] = localStorage.getItem(key);
+//   }
+//   downloadJson(data, 'localstorage.json');
+// }
