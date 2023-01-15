@@ -962,7 +962,7 @@ If you are creating an open source application under a license compatible with t
   <div id="footer" style="position: absolute; height: 140px; bottom: 0px; right: 0;">
 
     <p id="controls">
-      Download as 
+      Download as
       <a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT ⬇</a>
       <a id="download-srt" href="" download="hyperaudio.srt">SRT ⬇</a>
       <a id="download-html" href="" download="hypertranscript.html">HTML ⬇</a>
@@ -1113,7 +1113,7 @@ If you are creating an open source application under a license compatible with t
       <h4>Save to local storage</h4>
       <p>
         <label for="localstorage-fname">File name:</label>
-        <input type="text" id="localstorage-fname" name="localstorage-fname"> 
+        <input type="text" id="localstorage-fname" name="localstorage-fname">
       </p>
       <div>
         <button value="cancel">Cancel</button>
@@ -1139,7 +1139,13 @@ If you are creating an open source application under a license compatible with t
   <script src="./js/hyperadio-lite-editor-storage.js"></script>
 
   <script>
-    document.querySelector('#controls').insertAdjacentHTML("beforeend", '<p><button id="hyperadio-lite-editor-localstorage-save">Save to Local Storage</button> <button id="hyperadio-lite-editor-localstorage-load">Restore from Local Storage</button></p> ');
+    document.querySelector('#controls').insertAdjacentHTML("beforeend", `
+      <p><button id="hyperadio-lite-editor-localstorage-save">Save to Local Storage</button>
+      <button id="hyperadio-lite-editor-localstorage-load">Restore from Local Storage</button></p>
+      <p>
+      <button id="hyperadio-lite-editor-localstorage-export">Export json</button>
+      <input id="hyperadio-lite-editor-localstorage-import" type="file" multiple accept=".json" style="display: none"><button id="hyperadio-lite-editor-localstorage-import-button" >Import json</button>
+      </p>`);
 
     document
       .querySelector("#hyperadio-lite-editor-localstorage-save")
@@ -1148,10 +1154,31 @@ If you are creating an open source application under a license compatible with t
         saveHyperTranscript(transcriptionName+".hyperaudio");
       });
 
-    document
+
+
+      document
+      .querySelector("#hyperadio-lite-editor-localstorage-export")
+      .addEventListener("click", function () {
+        exportHyperTranscript();
+      });
+
+
+
+      document
       .querySelector("#hyperadio-lite-editor-localstorage-load")
       .addEventListener("click", function () {
         selectLoadHyperTranscript();
+      });
+
+    var fileInput = document.querySelector("#hyperadio-lite-editor-localstorage-import");
+      fileInput.addEventListener("change", function() {
+        importHyperTranscript(fileInput.files[0]);
+      });
+
+    var importButton = document.querySelector("#hyperadio-lite-editor-localstorage-import-button");
+    importButton.addEventListener("click", function() {
+        document
+      .querySelector("#hyperadio-lite-editor-localstorage-import").click();
       });
   </script>
 

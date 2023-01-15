@@ -12,7 +12,7 @@ class HyperTranscriptStorage {
 }
 
 // We should move these from global scope
-const fileExtension = ".hyperaudio";
+const fileExtension = '.hyperaudio';
 let lastFilename = null;
 
 /*
@@ -22,7 +22,7 @@ let lastFilename = null;
 function renderTranscript(
   hypertranscriptstorage,
   hypertranscriptDomId = 'hypertranscript',
-  videoDomId = 'hyperplayer'
+  videoDomId = 'hyperplayer',
 ) {
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
   document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
@@ -41,7 +41,7 @@ function saveHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
-  storage = window.localStorage
+  storage = window.localStorage,
 ) {
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
@@ -50,13 +50,15 @@ function saveHyperTranscript(
   const fileSaveDialog = document.querySelector('#fileSaveDialog');
   fileSaveDialog.showModal();
 
-  let filenameSave = document.querySelector("#localstorage-fname");
+  let filenameSave = document.querySelector('#localstorage-fname');
 
   //TODO – store .hyperaudio in a const named localStorageExtension or similar
 
   if (lastFilename === null) {
     //by default just the media filename
-    filenameSave.value = transcriptionName.substring(0,transcriptionName.lastIndexOf(fileExtension)).substring(transcriptionName.lastIndexOf("/")+1);
+    filenameSave.value = transcriptionName
+      .substring(0, transcriptionName.lastIndexOf(fileExtension))
+      .substring(transcriptionName.lastIndexOf('/') + 1);
     lastFilename = filenameSave.value;
   } else {
     // if it's been saved before this session, use the last filename
@@ -64,7 +66,7 @@ function saveHyperTranscript(
   }
 
   fileSaveDialog.addEventListener('close', () => {
-    storage.setItem(filenameSave.value+fileExtension, JSON.stringify(hypertranscriptstorage));
+    storage.setItem(filenameSave.value + fileExtension, JSON.stringify(hypertranscriptstorage));
     console.log('HyperTranscript saved');
   });
 }
@@ -73,30 +75,32 @@ function saveHyperTranscript(
  * Select the HyperTranscript saved in the localStorage to display
  */
 function selectLoadHyperTranscript(storage = window.localStorage) {
-
   const fileSelectDialog = document.querySelector('#fileSelectDialog');
   const confirmBtn = fileSelectDialog.querySelector('#confirmBtn');
 
   fileSelectDialog.showModal();
 
-  let fileSelect = document.querySelector("#localstorage-select");
+  let fileSelect = document.querySelector('#localstorage-select');
   let hypertranscriptSavedUrls = '';
   fileSelect.innerHTML = '<option value="default">Select file…</option>';
   for (let i = 0; i < storage.length; i++) {
     if (storage.key(i).indexOf(fileExtension) > 0) {
       hypertranscriptSavedUrls += `\n ${i} - ${storage.key(i)}`;
-      let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
-      fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
+      let filename = storage.key(i).substring(0, storage.key(i).lastIndexOf(fileExtension));
+      fileSelect.insertAdjacentHTML('beforeend', `<option value=${i}>${filename}</option>`);
     }
   }
 
   fileSelect.addEventListener('change', () => {
-    confirmBtn.value = document.querySelector("#localstorage-select").value;
-    lastFilename = document.querySelector("#localstorage-select").options[document.querySelector("#localstorage-select").selectedIndex].innerHTML;
+    confirmBtn.value = document.querySelector('#localstorage-select').value;
+    lastFilename =
+      document.querySelector('#localstorage-select').options[
+        document.querySelector('#localstorage-select').selectedIndex
+      ].innerHTML;
   });
 
   fileSelectDialog.addEventListener('close', () => {
-    if (fileSelectDialog.returnValue !== "cancel") {
+    if (fileSelectDialog.returnValue !== 'cancel') {
       let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileSelectDialog.returnValue)));
       if (hypertranscriptstorage) {
         renderTranscript(hypertranscriptstorage);
@@ -106,4 +110,47 @@ function selectLoadHyperTranscript(storage = window.localStorage) {
       }
     }
   });
+}
+
+function exportHyperTranscript() {
+  function downloadJson(data, filename) {
+    var json = JSON.stringify(data);
+    var blob = new Blob([json], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  var data = {};
+  for (var i = 0; i < localStorage.length; i++) {
+    var key = localStorage.key(i);
+    if (key.endsWith('.hyperaudio')) {
+      data[key] = localStorage.getItem(key);
+    }
+  }
+  downloadJson(data, 'localstorage.hyperaudio.json');
+}
+
+function importHyperTranscript(file) {
+  var reader = new FileReader();
+  reader.onload = function () {
+    var data = JSON.parse(reader.result);
+    for (var key in data) {
+      localStorage.setItem(key, data[key]);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function downloadLocalStorage() {
+  var data = {};
+  for (var i = 0; i < localStorage.length; i++) {
+    var key = localStorage.key(i);
+    data[key] = localStorage.getItem(key);
+  }
+  downloadJson(data, 'localstorage.json');
 }
