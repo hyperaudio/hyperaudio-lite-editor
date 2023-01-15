@@ -114,10 +114,10 @@ function selectLoadHyperTranscript(storage = window.localStorage) {
 
 function exportHyperTranscript() {
   function downloadJson(data, filename) {
-    var json = JSON.stringify(data);
-    var blob = new Blob([json], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
+    let json = JSON.stringify(data);
+    let blob = new Blob([json], { type: 'application/json' });
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
@@ -125,25 +125,48 @@ function exportHyperTranscript() {
     document.body.removeChild(a);
   }
 
-  var data = {};
-  for (var i = 0; i < localStorage.length; i++) {
-    var key = localStorage.key(i);
-    if (key.endsWith('.hyperaudio')) {
+  let data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    let key = localStorage.key(i);
+    if (key.endsWith(fileExtension)) {
       data[key] = localStorage.getItem(key);
     }
   }
   downloadJson(data, 'localstorage.hyperaudio.json');
 }
 
+
 function importHyperTranscript(file) {
-  var reader = new FileReader();
+  let reader = new FileReader();
   reader.onload = function () {
-    var data = JSON.parse(reader.result);
-    for (var key in data) {
-      localStorage.setItem(key, data[key]);
+  let data
+    try {
+      data = JSON.parse(reader.result);
+    }
+    catch (e) {
+      // error is not a valid JSON
+      alert(`It is not a valid hyperaudio.json file: ${e.name}: ${e.message}`);
+      return;
+    }
+
+    //hypertranscriptKey check if there are any hyperaudio data in the json file
+    let hypertranscriptKey = 0;
+    for (let key in data) {
+      if (key.endsWith(fileExtension)) {
+        localStorage.setItem(key, data[key]);
+        hypertranscriptKey = hypertranscriptKey + 1;
+        
+        }
+      }
+    if (hypertranscriptKey === 0) {
+    alert('No hyperaudio data found in the selected file');
     }
   };
+  
   reader.readAsText(file);
+  
+
 }
+
 
 
