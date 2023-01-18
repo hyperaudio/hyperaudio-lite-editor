@@ -1071,6 +1071,7 @@ If you are creating an open source application under a license compatible with t
     });
 
     const sanitisationCheck = function () {
+      
       let time = 0;
       resetTimer();
       window.onload = resetTimer;
@@ -1109,8 +1110,11 @@ If you are creating an open source application under a license compatible with t
         const words = document.querySelectorAll("[data-m]");
         hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
         hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
-        hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
 
+        if (hyperaudioInstance.currentTime !== undefined) {
+          hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
+        }
+        
         const cap1 = caption();
         let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
 
