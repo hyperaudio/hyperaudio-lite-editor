@@ -38,15 +38,15 @@ If you are creating an open source application under a license compatible with t
   cursor: pointer;
   color: #000;
 }*/
-/*
-.hyperaudio-transcript .active ~ span {
-  color: #999;
-}
 
-.hyperaudio-transcript p.active ~ p span {
-  color: #999;
-}
-*/
+/*.hyperaudio-transcript .active ~ span {
+  color: #0000ff !important;;
+}*/
+
+/*.hyperaudio-transcript p.active ~ p span {
+  color: #0000ff !important;;
+}*/
+
 
 .hyperaudio-transcript a, a.link {
   border: 0px;
@@ -57,7 +57,7 @@ If you are creating an open source application under a license compatible with t
 }
 
 .hyperaudio-transcript .unread {
-  color: #999 !important;
+  color: #777 !important;
 }
 
 .hyperaudio-transcript .search-match {
