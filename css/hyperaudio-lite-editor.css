@@ -3,10 +3,11 @@ body {
   line-height: 1.8;
 }
 
-input, output, select, button {
+input, output, select, button, textarea {
   display: inline-block;
   padding: 8px;
   margin-bottom:8px;
+  margin-right:4px;
   font-size: 12pt;
 }
 
