@@ -9,11 +9,17 @@ input, output, select, button, textarea {
   margin-bottom:8px;
   margin-right:4px;
   font-size: 12pt;
+  /*border-radius: 6px;*/
+  border: 1px solid #ddd;
+}
+
+button, input[type="submit"] {
+  border: 1px solid #999;
+  background-color: #ddd;
 }
 
 input[type="number"] {
   width: 42px;
-  border: 1px solid #bbb;
 }
 
 #search {
@@ -34,3 +40,4 @@ input[type="number"] {
 dialog::backdrop {
   backdrop-filter: blur(1px);
 }
+
