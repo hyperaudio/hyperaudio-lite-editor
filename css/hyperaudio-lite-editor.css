@@ -9,7 +9,7 @@ input, output, select, button, textarea {
   margin-bottom:8px;
   margin-right:4px;
   font-size: 12pt;
-  /*border-radius: 6px;*/
+  border-radius: 3px;
   border: 1px solid #ddd;
 }
 
