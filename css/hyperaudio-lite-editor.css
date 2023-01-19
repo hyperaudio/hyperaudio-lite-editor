@@ -13,6 +13,10 @@ input, output, select, button, textarea {
   border: 1px solid #ddd;
 }
 
+video {
+  border-radius: 3px;
+}
+
 button, input[type="submit"] {
   border: 1px solid #ccc;
   background-color: #ddd;
