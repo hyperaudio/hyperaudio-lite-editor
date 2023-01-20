@@ -1,15 +1,29 @@
 body {
   font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Fira Sans','Droid Sans','Helvetica Neue',sans-serif;
+  line-height: 1.8;
 }
 
-input, output, select {
+input, output, select, button, textarea {
   display: inline-block;
   padding: 8px;
+  margin-bottom:8px;
+  margin-right:4px;
+  font-size: 12pt;
+  border-radius: 3px;
+  border: 1px solid #ddd;
+}
+
+video {
+  border-radius: 3px;
+}
+
+button, input[type="submit"] {
+  border: 1px solid #ccc;
+  background-color: #ddd;
 }
 
 input[type="number"] {
   width: 42px;
-  border: 1px solid #bbb;
 }
 
 #search {
@@ -30,3 +44,4 @@ input[type="number"] {
 dialog::backdrop {
   backdrop-filter: blur(1px);
 }
+
