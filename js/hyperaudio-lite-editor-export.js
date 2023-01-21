@@ -1,4 +1,4 @@
-import { LitElement, html } from 'https://cdn.skypack.dev/lit-element';
+import { LitElement, html} from 'https://cdn.skypack.dev/lit-element';
 
 class ExportJson extends LitElement {
   static properties = {
@@ -13,6 +13,10 @@ class ExportJson extends LitElement {
     let hypertranscript = document.getElementById('hypertranscript');
     console.log(hypertranscript);
     // transform in json object with dom elements
+    /* simple innerHTML
+     const jsonData = {};
+     jsonData.data = hypertranscript.innerHTML
+    */
     let jsonData = htmlToJson(hypertranscript);
     jsonData.url = document.querySelector("#hyperplayer").src;
     console.log(jsonData);
@@ -31,9 +35,12 @@ class ImportJson extends LitElement {
     exporter: { state: true },
   };
 
+
   constructor() {
     super();
   }
+
+
 
   importJson() {
 
@@ -49,11 +56,16 @@ class ImportJson extends LitElement {
             console.log
             // transform json object in html
             let hypertranscript = document.getElementById('hypertranscript');
+
+            /* simple innerHTML
+            hypertranscript.innerHTML = jsonData.data;
+            */
             hypertranscript.innerHTML = jsonToHtml(jsonData);
             // set video url
             document.querySelector("#hyperplayer").src = jsonData.url;
         });
         reader.readAsText(file);
+        hyperaudio()
     });
     fileInput.click();
 
@@ -144,6 +156,8 @@ function htmlToJson(html) {
 // Convert JSON to Hypertranscript HTML
 function jsonToHtml(jsonData) {
     // Create an empty <article> element
+    const div = document.createElement('div');
+
     const article = document.createElement('article');
 
     // Create an empty <section> element
@@ -187,9 +201,11 @@ function jsonToHtml(jsonData) {
         p.appendChild(spanElement);
         }
     }
+
+    div.appendChild(article);
     // Return the <article> element
-    console.log(JSON.stringify(article))
-    return article.innerHTML;
+
+    return div.innerHTML;
     }
 
 
