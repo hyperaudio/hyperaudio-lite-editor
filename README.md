@@ -24,7 +24,7 @@ If you are creating an open source application under a license compatible with t
 
 Alternative Deepgram Version
 
-![Screen capture of an alternative layout with Deepgram integration](https://user-images.githubusercontent.com/208756/211601269-38bf82de-317d-4e2a-a65d-d7d6d3bbe865.png)
+![Screen capture of an alternative layout with Deepgram integration](<img width="1322" alt="hyperaudio-lite-editor" src="https://user-images.githubusercontent.com/208756/214853503-f5bb8dae-0fe3-4b8d-977d-00677c4f0059.png">)
 
 [Alternative Deepgram demo](https://lab.hyperaud.io/demos/hle/demo-09/alternative.html)
 
