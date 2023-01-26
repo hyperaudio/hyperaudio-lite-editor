@@ -22,7 +22,8 @@ If you are creating an open source application under a license compatible with t
 Alternative Deepgram Version
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
-![Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited](<img width="1322" alt="hyperaudio-lite-editor" src="https://user-images.githubusercontent.com/208756/214853895-0f3ab4ca-cc8b-416c-a465-ca853e31b656.png">)
+
+<img width="1322" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited" src="https://user-images.githubusercontent.com/208756/214853895-0f3ab4ca-cc8b-416c-a465-ca853e31b656.png">
 
 
 
