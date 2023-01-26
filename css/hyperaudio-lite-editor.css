@@ -45,3 +45,7 @@ dialog::backdrop {
   backdrop-filter: blur(1px);
 }
 
+.vertically-centre{
+  padding-top: 40%;
+}
+
