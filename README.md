@@ -26,6 +26,9 @@ Alternative Deepgram Version
 
 ![Screen capture of an alternative layout with Deepgram integration](<img width="1322" alt="hyperaudio-lite-editor" src="https://user-images.githubusercontent.com/208756/214853503-f5bb8dae-0fe3-4b8d-977d-00677c4f0059.png">)
 
+<img width="1322" alt="hyperaudio-lite-editor" src="https://user-images.githubusercontent.com/208756/214853895-0f3ab4ca-cc8b-416c-a465-ca853e31b656.png">
+
+
 [Alternative Deepgram demo](https://lab.hyperaud.io/demos/hle/demo-09/alternative.html)
 
 
