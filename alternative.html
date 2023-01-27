@@ -1188,6 +1188,30 @@ If you are creating an open source application under a license compatible with t
       }
     };
 
+    //longpress to set playhead on mobile
+
+    function longPress(element, callback) {
+      let pressTimer;
+      element.addEventListener("touchstart", function(e) {
+        pressTimer = setTimeout(function() {
+          callback(e);
+        }, 2000);
+      });
+      element.addEventListener("touchend", function(e) {
+        clearTimeout(pressTimer);
+      });
+    }
+
+    longPress(rootnode, function(e) {
+      const startTime = e.target.getAttribute('data-m');
+      if (startTime !== null) {
+        e.target.classList.add("active");
+        hyperaudioInstance.myPlayer.setTime(startTime/1000);
+        hyperaudioInstance.setPlayHead(e);
+        hyperaudioInstance.checkPlayHead();
+      }
+    });
+
     sanitisationCheck();
 
     const videoElement = document.querySelector("#hyperplayer");
