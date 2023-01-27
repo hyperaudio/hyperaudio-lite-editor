@@ -17,7 +17,7 @@ If you are creating an open source application under a license compatible with t
 [Try the latest demo](https://lab.hyperaud.io/demos/hle/demo-09/)
 ![Screen capture of core Hyperaudio Lite Editor showing a transcript being edited](https://user-images.githubusercontent.com/208756/203117151-f5912633-cd88-4d80-80cd-204076442060.png)
 
-[Deepgram demo (now with localStorage and installable as a Progressive Web App)](https://lab.hyperaud.io/demos/hle/demo-10/alternative.html)
+[Deepgram demo (now with localStorage and installable as a Progressive Web App)](https://lab.hyperaud.io/demos/hle/demo-11/alternative.html)
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
 
