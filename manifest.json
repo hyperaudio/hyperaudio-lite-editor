@@ -1,6 +1,6 @@
 {
   "name":"Hyperaudio Lite Editor",
-  "short_name":"PWA",
+  "short_name":"HLE",
   "start_url":"alternative.html",
   "display":"standalone",
   "background_color":"#ffffff",
