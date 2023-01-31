@@ -49,3 +49,6 @@ dialog::backdrop {
   padding-top: 40%;
 }
 
+.hyperaudio-transcript {
+  font-size: 13pt;
+}
