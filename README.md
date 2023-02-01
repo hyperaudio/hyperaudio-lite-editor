@@ -1,3 +1,4 @@
+
 # Hyperaudio Lite Editor
 A lightweight transcript editor for editing and correcting STT generated timed transcripts.
 
@@ -21,10 +22,7 @@ If you are creating an open source application under a license compatible with t
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
 
-<img width="1322" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited" src="https://user-images.githubusercontent.com/208756/214853895-0f3ab4ca-cc8b-416c-a465-ca853e31b656.png">
-
-
-
+<img width="1175" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited" src="https://user-images.githubusercontent.com/208756/216120493-5ac9acd3-461a-4318-903f-b05782d21c1e.png">
 
 ### How to Use
 
