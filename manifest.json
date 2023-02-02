@@ -5,7 +5,6 @@
   "display":"standalone",
   "background_color":"#6100DF",
   "theme_color":"#6100DF",
-  "scope": ".",
   "description":"A super-lightweight transcript editor",
   "icons":[
   {
