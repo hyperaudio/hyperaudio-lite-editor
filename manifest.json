@@ -3,8 +3,8 @@
   "short_name":"HLE",
   "start_url":"hyperaudio-lite-editor/alternative.html",
   "display":"standalone",
-  "background_color":"#ffffff",
-  "theme_color":"white",
+  "background_color":"#6100DF",
+  "theme_color":"#6100DF",
   "scope": ".",
   "description":"A super-lightweight transcript editor",
   "icons":[
