@@ -3,7 +3,7 @@ var staticCacheName = "pwa";
 self.addEventListener("install", function (e) {
  e.waitUntil(
   caches.open(staticCacheName).then(function (cache) {
-   return cache.addAll(["/hyperaudio-lite-editor/"]);
+   return cache.addAll(["https://hyperaudio.github.io/hyperaudio-lite-editor/"]);
   })
  );
 });
