@@ -40,7 +40,7 @@ class ExportJson extends LitElement {
   }
 
   render() {
-    return html`<button @click="${this.exportJson}">Export Json ⬇</button>`;
+    return html`<button @click="${this.exportJson}">export json ⬇</button>`;
   }
 }
 
@@ -104,7 +104,7 @@ class ImportJson extends LitElement {
   }
 
   render() {
-    return html`<button @click="${this.importJson}">Import Json⬆</button>`;
+    return html`<button @click="${this.importJson}">import json⬆</button>`;
   }
 }
 
