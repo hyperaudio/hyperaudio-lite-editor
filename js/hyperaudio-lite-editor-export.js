@@ -1,9 +1,25 @@
-import { LitElement, html} from 'https://cdn.skypack.dev/lit-element';
+import { LitElement, html, css} from 'https://cdn.skypack.dev/lit-element';
 
 class ExportJson extends LitElement {
   static properties = {
     exporter: { state: true },
   };
+
+  static styles = css`
+  button {
+    border: 1px solid #ccc;
+    background-color: #ddd;
+  }
+  input, output, select, button, textarea {
+    display: inline-block;
+    padding: 8px;
+    margin-bottom:8px;
+    margin-right:4px;
+    font-size: 12pt;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+  }`;
+
 
   constructor() {
     super();
@@ -24,7 +40,7 @@ class ExportJson extends LitElement {
   }
 
   render() {
-    return html`<a style="color: -webkit-link; cursor: pointer; text-decoration: underline;" @click="${this.exportJson}">Export Json ⬇</a>`;
+    return html`<button @click="${this.exportJson}">Export Json ⬇</button>`;
   }
 }
 
@@ -34,6 +50,21 @@ class ImportJson extends LitElement {
   static properties = {
     exporter: { state: true },
   };
+
+  static styles = css`
+  button {
+    border: 1px solid #ccc;
+    background-color: #ddd;
+  }
+  input, output, select, button, textarea {
+    display: inline-block;
+    padding: 8px;
+    margin-bottom:8px;
+    margin-right:4px;
+    font-size: 12pt;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+  }`;
 
 
   constructor() {
@@ -73,7 +104,7 @@ class ImportJson extends LitElement {
   }
 
   render() {
-    return html`<button @click="${this.importJson}">Import Json</button>`;
+    return html`<button @click="${this.importJson}">Import Json⬆</button>`;
   }
 }
 

@@ -1,11 +1,11 @@
 {
   "name":"Hyperaudio Lite Editor",
-  "short_name":"PWA",
-  "start_url":"alternative.html",
+  "short_name":"HLE",
+  "start_url":"/hyperaudio-lite-editor/alternative.html",
+  "scope":"/hyperaudio-lite-editor/",
   "display":"standalone",
-  "background_color":"#ffffff",
-  "theme_color":"white",
-  "scope": ".",
+  "background_color":"#6100DF",
+  "theme_color":"#6100DF",
   "description":"A super-lightweight transcript editor",
   "icons":[
   {
