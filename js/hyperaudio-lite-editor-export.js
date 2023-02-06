@@ -1,9 +1,6 @@
 import { LitElement, html, css} from 'https://cdn.skypack.dev/lit-element';
 
 class ExportJson extends LitElement {
-  static properties = {
-    exporter: { state: true },
-  };
 
   static styles = css`
   button {
@@ -29,10 +26,6 @@ class ExportJson extends LitElement {
     let hypertranscript = document.getElementById('hypertranscript');
     console.log(hypertranscript);
     // transform in json object with dom elements
-    /* simple innerHTML
-     const jsonData = {};
-     jsonData.data = hypertranscript.innerHTML
-    */
     let jsonData = htmlToJson(hypertranscript);
     jsonData.url = document.querySelector("#hyperplayer").src;
     console.log(jsonData);
@@ -47,9 +40,6 @@ class ExportJson extends LitElement {
 customElements.define('export-json', ExportJson);
 
 class ImportJson extends LitElement {
-  static properties = {
-    exporter: { state: true },
-  };
 
   static styles = css`
   button {
