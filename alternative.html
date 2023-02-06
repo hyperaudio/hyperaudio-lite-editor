@@ -93,6 +93,12 @@ If you are creating an open source application under a license compatible with t
     text-decoration-thickness: 3px;
   }
   */
+    
+  #speaker-display {
+    margin-top: -30px;
+    text-align: right;
+    padding-right: 20px;
+  }
 
   </style>
 </head>
@@ -124,7 +130,7 @@ If you are creating an open source application under a license compatible with t
           <iframe id="stt-iframe" width="100%" height="100%" style="border:0" src="stt-deepgram.html"></iframe>
         </div>
 
-        <div>
+        <div id="speaker-display">
           <label for="show-speakers">display speakers</label>
           <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked">
         </div>
