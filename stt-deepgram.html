@@ -101,7 +101,7 @@
   }
 
   function fetchData(token, media, tier, language) {
-    fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&language=${language}`, {
+    fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`, {
       method: 'POST',
       headers: {
         'Authorization': 'Token '+token+'',
@@ -144,6 +144,8 @@
   function parseData(json) {
     this.users = json;
 
+    console.log(json);
+
     const maxWordsInPara = 100;
     const significantGapInSeconds = 0.5;
 
@@ -154,6 +156,7 @@
 
     let previousElementEnd = 0;
     let wordsInPara = 0;
+    let showDiarization = true;
 
     wordData.forEach((element, index) => {
 
@@ -167,8 +170,24 @@
         let previousWordLastChar = previousWord.charAt(previousWord.length-1);
         if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
           hyperTranscript += "\n  </p>\n  <p>\n   ";
-            wordsInPara = 0;
+          wordsInPara = 0;
         }
+      }
+
+      // change of speaker or first word
+      if ((showDiarization === true && index > 0 && element.speaker !== wordData[index-1].speaker) || index === 0) { 
+        let previousWord = punctuatedWords[index-1];
+        let previousWordLastChar = null;
+        
+        if (index > 0) {
+          previousWordLastChar = previousWord.charAt(previousWord.length-1);
+        }
+
+        if (index > 0 && (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!")) {
+          hyperTranscript += "\n  </p>\n  <p>\n   ";
+          wordsInPara = 0;
+        }
+        hyperTranscript += `<span class="speaker" data-m='${element.start.toFixed(2)*1000}' data-d='0'>[speaker-${element.speaker}] </span>`;
       }
 
       hyperTranscript += `<span data-m='${element.start.toFixed(2)*1000}' data-d='${(element.end - element.start).toFixed(2)*1000}'>${currentWord} </span>`;
