@@ -1,5 +1,5 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.1.2 -->
+<!--  Hyperaudio Lite Editor - Version 0.1.3 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
 Commercial license
@@ -22,7 +22,7 @@ If you are creating an open source application under a license compatible with t
     Progressive Web App -->
     <meta name= "apple-mobile-web-app-status-bar" content="#aa7700">
     <meta name="theme-color" content="black">
-  
+
     <!-- Manifest File link -->
     <link rel="manifest" href="manifest.json">
   <style>
@@ -38,11 +38,11 @@ If you are creating an open source application under a license compatible with t
       padding: 8px;
       overflow-y: hidden;
   }
-  
+
   .sidebar h1 {
       color: white;
   }
-  
+
   .transcript-holder {
       background-color: #ececec;
       position: absolute;
@@ -50,24 +50,25 @@ If you are creating an open source application under a license compatible with t
       left: 400px;
       right: 0;
       bottom: 0;
-      
+
       transition: left 0.5s ease;
   }
+
   
-  #sidebar {
+  #slide-sidebar {
      display: none;
   }
-  
-  input:checked ~ .transcript-holder { 
+
+  input:checked ~ .transcript-holder {
       left: 0;
-      
+
   }
-  
+
   input:checked ~ #slide-label {
       left: 0;
       transform: rotate(180deg);
   }
-  
+
   #slide-label {
       z-index: 2;
       position: absolute;
@@ -81,7 +82,7 @@ If you are creating an open source application under a license compatible with t
   #slide-label:hover {
     cursor: pointer;
   }
-    
+
   /*
  .hyperaudio-transcript .active{
     background-color: #efefef;
@@ -92,8 +93,8 @@ If you are creating an open source application under a license compatible with t
     text-decoration-thickness: 3px;
   }
   */
-    
-  </style>  
+
+  </style>
 </head>
 <body>
   <div class="main-wrap">
@@ -109,7 +110,7 @@ If you are creating an open source application under a license compatible with t
             </video>
           </div>
         </div>
-    
+
         <div class="top-bar-item">
           <form id="searchForm">
             <div id="pbr-holder" style="padding-bottom:32px">
@@ -135,10 +136,16 @@ If you are creating an open source application under a license compatible with t
             <a id="download-srt" href="" download="hyperaudio.srt">SRT ⬇</a>
             <a id="download-html" href="" download="hypertranscript.html">HTML ⬇</a>
             <a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript ⬇</a>
+
+          </p>
+          <p>
+            Export/Import options:<br>
+            <export-json></export-json>
+            <import-json></import-json>
           </p>
         </div>
       </div>
-      
+
     </div>
     <div class="transcript-holder" style="display: flex; justify-content: center; background-color: #ffffff; overflow-y:scroll;">
       <div id="hypertranscript" class="hyperaudio-transcript" style="position: absolute; top: 0px; bottom: 0px; background-color: #ffffff; padding-top: 48px; width: 520px; outline: none" contenteditable="true">
@@ -1079,8 +1086,8 @@ If you are creating an open source application under a license compatible with t
       </div>
     </div>
   </div>
-  
-  
+
+
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
   <script src="js/caption.js"></script>
@@ -1114,7 +1121,7 @@ If you are creating an open source application under a license compatible with t
     });
 
     const sanitisationCheck = function () {
-      
+
       let time = 0;
       resetTimer();
       window.onload = resetTimer;
@@ -1157,7 +1164,7 @@ If you are creating an open source application under a license compatible with t
         if (hyperaudioInstance.currentTime !== undefined) {
           hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
         }
-        
+
         const cap1 = caption();
         let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
 
@@ -1216,7 +1223,7 @@ If you are creating an open source application under a license compatible with t
         clearTimeout(time);
         time = setTimeout(sanitise, 1000);
       }
-      
+
       //longpress to set playhead on mobile
 
       function longPress(element, callback) {
@@ -1249,7 +1256,7 @@ If you are creating an open source application under a license compatible with t
 
     document.querySelector('#slide-sidebar').addEventListener('click', (e) => {
       if(
-        document.pictureInPictureEnabled && 
+        document.pictureInPictureEnabled &&
         !videoElement.disablePictureInPicture) {
         try {
           if (sidebarOpen === true) {
@@ -1291,7 +1298,7 @@ If you are creating an open source application under a license compatible with t
       <h4>Save to local storage</h4>
       <p>
         <label for="localstorage-fname">File name:</label>
-        <input type="text" id="localstorage-fname" name="localstorage-fname"> 
+        <input type="text" id="localstorage-fname" name="localstorage-fname">
       </p>
       <div>
         <button value="cancel">Cancel</button>
@@ -1317,7 +1324,7 @@ If you are creating an open source application under a license compatible with t
   <script src="./js/hyperadio-lite-editor-storage.js"></script>
 
   <script>
-    document.querySelector('#controls').insertAdjacentHTML("beforeend", '<p><button id="hyperadio-lite-editor-localstorage-save">save to local storage</button> <button id="hyperadio-lite-editor-localstorage-load">restore from local storage</button></p> ');
+    document.querySelector('#controls').insertAdjacentHTML("beforeend", '<p><button id="hyperadio-lite-editor-localstorage-save">save to local storage</button> <button id="hyperadio-lite-editor-localstorage-load">restore from local storage</button></p>');
 
     document
       .querySelector("#hyperadio-lite-editor-localstorage-save")
@@ -1333,6 +1340,7 @@ If you are creating an open source application under a license compatible with t
       });
   </script>
 
+  <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
   <!-- end of localstorage additions -->
 </body>
 </html>
