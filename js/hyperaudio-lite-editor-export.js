@@ -1,22 +1,4 @@
-import { LitElement, html, css} from 'https://cdn.skypack.dev/lit-element';
-
-class ExportJson extends LitElement {
-
-  static styles = css`
-  button {
-    border: 1px solid #ccc;
-    background-color: #ddd;
-  }
-  input, output, select, button, textarea {
-    display: inline-block;
-    padding: 8px;
-    margin-bottom:8px;
-    margin-right:4px;
-    font-size: 12pt;
-    border-radius: 3px;
-    border: 1px solid #ddd;
-  }`;
-
+class ExportJson extends HTMLElement {
 
   constructor() {
     super();
@@ -32,30 +14,15 @@ class ExportJson extends LitElement {
     downloadJson(jsonData)
   }
 
-  render() {
-    return html`<button @click="${this.exportJson}">export json ⬇</button>`;
+connectedCallback() {
+    this.innerHTML =  `<button onclick="${this.exportJson}">export json ⬆</button>`;
+    this.addEventListener('click', this.exportJson)
   }
 }
 
 customElements.define('export-json', ExportJson);
 
-class ImportJson extends LitElement {
-
-  static styles = css`
-  button {
-    border: 1px solid #ccc;
-    background-color: #ddd;
-  }
-  input, output, select, button, textarea {
-    display: inline-block;
-    padding: 8px;
-    margin-bottom:8px;
-    margin-right:4px;
-    font-size: 12pt;
-    border-radius: 3px;
-    border: 1px solid #ddd;
-  }`;
-
+class ImportJson extends HTMLElement {
 
   constructor() {
     super();
@@ -93,8 +60,9 @@ class ImportJson extends LitElement {
 
   }
 
-  render() {
-    return html`<button @click="${this.importJson}">import json⬆</button>`;
+  connectedCallback() {
+    this.innerHTML =  `<button onclick="${this.importJson}">import json ⬇</button>`;
+    this.addEventListener('click', this.importJson)
   }
 }
 
