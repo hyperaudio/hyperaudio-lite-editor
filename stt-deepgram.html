@@ -201,6 +201,20 @@
     parent.document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
     //document.querySelector("#editor").contentWindow.hyperaudio();
 
+    let showSpeakers = parent.document.querySelector('#show-speakers');
+    let speakers = parent.document.querySelectorAll('.speaker');
+
+    if (showSpeakers.checked === true) {
+      speakers.forEach((speaker) => {
+        speaker.style.display = "inline";
+      });
+    } else {
+      speakers.forEach((speaker) => {
+        speaker.style.display = "none";
+      });
+    }
+
+
     const event = new CustomEvent('hyperaudioInit');
     window.parent.document.dispatchEvent(event);
   }

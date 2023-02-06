@@ -54,7 +54,7 @@ If you are creating an open source application under a license compatible with t
       transition: left 0.5s ease;
   }
   
-  input[type=checkbox] {
+  #sidebar {
      display: none;
   }
   
@@ -123,6 +123,11 @@ If you are creating an open source application under a license compatible with t
           <iframe id="stt-iframe" width="100%" height="100%" style="border:0" src="stt-deepgram.html"></iframe>
         </div>
 
+        <div>
+          <label for="show-speakers">display speakers</label>
+          <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked">
+        </div>
+
         <div id="footer" style="bottom: 0%; position: fixed;">
           <p id="controls">
             Download transcript as <br>
@@ -141,6 +146,7 @@ If you are creating an open source application under a license compatible with t
         <article>
           <section class="active">
           <p>
+            <span class="speaker" data-m="4470" data-d="0">[Doc Searls] </span>
             <span data-m="4470" data-d="270">We </span>
             <span data-m="4740" data-d="240">have </span>
             <span data-m="5010" data-d="300">two </span>
@@ -203,6 +209,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="26280" data-d="440">space. </span>
           </p>
           <p>
+            <span class="speaker" data-m="26940" data-d="0">[Julian Tate] </span>
             <span data-m="26940" data-d="240">We </span>
             <span data-m="27180" data-d="360">are </span>
             <span data-m="27960" data-d="510">as </span>
@@ -248,6 +255,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="44587" data-d="82">environment. </span>
           </p>
           <p>
+            <span class="speaker" data-m="45060" data-d="0">[Adrian McEwan] </span>
             <span data-m="45060" data-d="840">Security </span>
             <span data-m="45900" data-d="120">and </span>
             <span data-m="46020" data-d="470">privacy, </span>
@@ -269,6 +277,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="52020" data-d="150">them. </span>
           </p>
           <p>
+            <span class="speaker" data-m="52890" data-d="0">[Alexandra Deschamps-Sonsino] </span>
             <span data-m="52890" data-d="90">I </span>
             <span data-m="52980" data-d="240">think </span>
             <span data-m="53220" data-d="720">unfortunately </span>
@@ -289,6 +298,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="57360" data-d="510">happen. </span>
           </p>
           <p>
+            <span class="speaker" data-m="52890" data-d="0">[Alex Krotoski] </span>
             <span data-m="58500" data-d="210">It's </span>
             <span data-m="58710" data-d="150">going </span>
             <span data-m="58860" data-d="90">to </span>
@@ -319,6 +329,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="71290" data-d="110">this. </span>
           </p>
           <p>
+            <span class="speaker" data-m="71500" data-d="0">[Alexandra Deschamps-Sonsino] </span>
             <span data-m="71500" data-d="70">And </span>
             <span data-m="71570" data-d="70">I </span>
             <span data-m="71640" data-d="240">think </span>
@@ -373,6 +384,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="91170" data-d="150">of. </span>
           </p>
           <p>
+            <span class="speaker" data-m="91680" data-d="0">[Doug Ward] </span>
             <span data-m="91680" data-d="150">The </span>
             <span data-m="91830" data-d="390">Internet </span>
             <span data-m="92220" data-d="180">is </span>
@@ -403,6 +415,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="103050" data-d="540">accounts. </span>
           </p>
           <p>
+            <span class="speaker" data-m="103710" data-d="0">[Adrian McEwan] </span>
             <span data-m="103710" data-d="90">As </span>
             <span data-m="103800" data-d="990">technologists </span>
             <span data-m="104880" data-d="380">we </span>
@@ -447,6 +460,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="118740" data-d="570">education. </span>
           </p>
           <p>
+            <span class="speaker" data-m="119460" data-d="0">[Julian Tate] </span>
             <span data-m="119460" data-d="90">We </span>
             <span data-m="119550" data-d="175">need </span>
             <span data-m="119725" data-d="87">to </span>
@@ -476,6 +490,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="129910" data-d="790">aggregated. </span>
           </p>
           <p>
+            <span class="speaker" data-m="135060" data-d="0">[Doc Searls] </span>
             <span data-m="135060" data-d="450">Right </span>
             <span data-m="135510" data-d="240">now </span>
             <span data-m="135750" data-d="300">there's </span>
@@ -516,6 +531,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="149220" data-d="300">all. </span>
           </p>
           <p>
+            <span class="speaker" data-m="149850" data-d="0">[Glyn Wintle] </span>
             <span data-m="149850" data-d="300">So </span>
             <span data-m="150150" data-d="140">if </span>
             <span data-m="150290" data-d="70">we're </span>
@@ -558,6 +574,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="163050" data-d="690">information. </span>
           </p>
           <p>
+            <span class="speaker" data-m="164010" data-d="0">[Jon Rogers] </span>
             <span data-m="164010" data-d="150">So </span>
             <span data-m="164160" data-d="90">I </span>
             <span data-m="164250" data-d="240">actually </span>
@@ -678,6 +695,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="201155" data-d="225">goes. </span>
           </p>
           <p>
+            <span class="speaker" data-m="164010" data-d="0">[Jenni Tennison] </span>
             <span data-m="201630" data-d="180">I </span>
             <span data-m="201810" data-d="450">think </span>
             <span data-m="202300" data-d="1090">that, </span>
@@ -712,7 +730,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="213790" data-d="410">all. </span>
           </p>
           <p>
-            <span data-m="218730" data-d="0" class="speaker">Jon: </span>
+            <span data-m="218730" data-d="0" class="speaker">[Jon Rogers] </span>
             <span data-m="218730" data-d="480">We </span>
             <span data-m="219270" data-d="450">need </span>
             <span data-m="220740" data-d="180">to </span>
@@ -740,6 +758,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="229610" data-d="150">role. </span>
           </p>
           <p>
+            <span class="speaker" data-m="230100" data-d="0">[Alexandra Deschamps-Sonsino] </span>
             <span data-m="230100" data-d="150">I </span>
             <span data-m="230250" data-d="270">think </span>
             <span data-m="230520" data-d="120">we </span>
@@ -764,6 +783,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="240900" data-d="690">products. </span>
           </p>
           <p>
+            <span class="speaker" data-m="242190" data-d="0">[Doug Ward] </span>
             <span data-m="242190" data-d="120">I </span>
             <span data-m="242310" data-d="270">think </span>
             <span data-m="242580" data-d="180">we </span>
@@ -803,6 +823,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="258870" data-d="480">system. </span>
           </p>
           <p>
+            <span class="speaker" data-m="259800" data-d="0">[Doc Searls] </span>
             <span data-m="259800" data-d="180">What's </span>
             <span data-m="259980" data-d="210">going </span>
             <span data-m="260190" data-d="90">to </span>
@@ -860,7 +881,8 @@ If you are creating an open source application under a license compatible with t
             <span data-m="275880" data-d="480">computing. </span>
           </p>
           <p>
-            <span data-m="276590" data-d="170">and </span>
+            <span class="speaker" data-m="276590" data-d="0">[Jon Rogers] </span>
+            <span data-m="276590" data-d="170">And </span>
             <span data-m="276760" data-d="110">when </span>
             <span data-m="276870" data-d="60">you </span>
             <span data-m="276990" data-d="180">kind </span>
@@ -879,6 +901,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="284040" data-d="330">stuff. </span>
           </p>
           <p>
+            <span class="speaker" data-m="284760" data-d="0">[Doug Ward] </span>
             <span data-m="284760" data-d="60">I </span>
             <span data-m="284820" data-d="210">don't </span>
             <span data-m="285030" data-d="330">think </span>
@@ -923,6 +946,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="303240" data-d="510">forward. </span>
           </p>
           <p>
+            <span class="speaker" data-m="304260" data-d="0">[Doc Searls] </span>
             <span data-m="304260" data-d="120">The </span>
             <span data-m="304380" data-d="420">trap </span>
             <span data-m="304840" data-d="350">not </span>
@@ -969,6 +993,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="319710" data-d="420">doing. </span>
           </p>
           <p>
+            <span class="speaker" data-m="320370" data-d="0">[Jason Huntley] </span>
             <span data-m="320370" data-d="150">If </span>
             <span data-m="320520" data-d="150">you </span>
             <span data-m="320670" data-d="180">can </span>
@@ -1014,6 +1039,7 @@ If you are creating an open source application under a license compatible with t
             <span data-m="331440" data-d="210">out. </span>
           </p>
           <p>
+            <span class="speaker" data-m="331920" data-d="0">[Doc Searls] </span>
             <span data-m="331920" data-d="180">This </span>
             <span data-m="332100" data-d="150">is </span>
             <span data-m="332640" data-d="90">a </span>
@@ -1238,6 +1264,22 @@ If you are creating an open source application under a license compatible with t
         }
       }
     });
+
+    let showSpeakers = document.querySelector('#show-speakers');
+
+    showSpeakers.addEventListener('change', function(e) {
+      let speakers = document.querySelectorAll('.speaker');
+      if (showSpeakers.checked === true) {
+        speakers.forEach((speaker) => {
+          speaker.style.display = "inline";
+        });
+      } else {
+        speakers.forEach((speaker) => {
+          speaker.style.display = "none";
+        });
+      }
+    });
+
   }
   hyperaudio();
   </script>
