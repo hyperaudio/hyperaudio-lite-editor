@@ -26,8 +26,7 @@ If you want to use `Hyperaudio Lite Editor` to develop commercial sites, tools, 
 
 ### How to Use
 
-Edit in the usual way.
-Double-click on words to navigate. 
+Edit in the usual way – add punctuation, create and merge paragraphs etc. Place speaker names in square brackets ie [Maria]. It's recommended that in order to maintain word timings you don't paste large blocks of text.  Double-click on words to set the playhead at that point.
 
 ### Alternative Versions
 
