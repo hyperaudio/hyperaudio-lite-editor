@@ -1156,6 +1156,8 @@ If you are creating an open source application under a license compatible with t
 
         while (walker.nextNode()) {
 
+          walker.currentNode.textContent.replaceAll(' ', ' ');
+
           if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
               && walker.currentNode.parentElement.tagName !== "SPAN") {
 
