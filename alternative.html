@@ -1336,7 +1336,8 @@ If you are creating an open source application under a license compatible with t
       let speakers = document.querySelectorAll('.speaker');
       if (showSpeakers.checked === true) {
         speakers.forEach((speaker) => {
-          speaker.style.display = "inline";
+          //speaker.style.display = "inline";
+          speaker.removeAttribute("style");
         });
       } else {
         speakers.forEach((speaker) => {
