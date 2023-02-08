@@ -1173,6 +1173,48 @@ If you are creating an open source application under a license compatible with t
           }
         }
 
+        // look for speakers and break them out into their own spans
+
+        walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
+
+        while (walker.nextNode()) {
+          if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
+              && walker.currentNode.parentElement.tagName === "SPAN" && walker.currentNode.textContent.includes('[') && walker.currentNode.textContent.includes(']')) {
+
+            // if previousSibling is a span, add the textContent of currentNode to it
+            if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().endsWith(']') === false) {
+              
+              //look for text in square brackets
+              const regex = / *\[[^\]]*]/g;
+              const found = walker.currentNode.textContent.match(regex);
+
+              let startsWithSpeaker = false;
+              if (walker.currentNode.textContent.trim().startsWith('[') === true){
+                startsWithSpeaker = true;
+              }
+
+              walker.currentNode.textContent = walker.currentNode.textContent.replace(/ *\[[^\]]*]/g, '');
+
+              let span = document.createElement("span");
+              span.textContent = found + ' ';
+              span.classList.add("speaker");
+              // add the classes of the current node
+              span.classList.add(...walker.currentNode.parentNode.classList);
+              //DOMTokenList.prototype.add.apply(span.classList, walker.currentNode.parentNode.classList); 
+
+              span.setAttribute("data-d","0");
+              
+              if (startsWithSpeaker === true) {
+                span.setAttribute("data-m",walker.currentNode.parentNode.getAttribute("data-m"));
+                walker.currentNode.parentNode.before(span);
+              } else {
+                span.setAttribute("data-m",walker.currentNode.parentNode.nextSibling.getAttribute("data-m"));
+                walker.currentNode.parentNode.after(span);
+              }
+            }
+          }
+        }
+
         const words = document.querySelectorAll("[data-m]");
         hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
         hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
