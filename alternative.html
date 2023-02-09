@@ -1,5 +1,5 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.1.3 -->
+<!--  Hyperaudio Lite Editor - Version 0.1.4 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
 Commercial license
@@ -1086,7 +1086,6 @@ If you are creating an open source application under a license compatible with t
             <span data-m="340440" data-d="270">use </span>
             <span data-m="340710" data-d="40">it. </span>
           </p>
-          <footer></footer>
         </section>
         </article>
       </div>
@@ -1193,7 +1192,7 @@ If you are creating an open source application under a license compatible with t
                 startsWithSpeaker = true;
               }
 
-              walker.currentNode.textContent = walker.currentNode.textContent.replace(/ *\[[^\]]*]/g, '');
+              walker.currentNode.textContent = walker.currentNode.textContent.replace(regex, '');
 
               let span = document.createElement("span");
               span.textContent = found + ' ';
@@ -1208,7 +1207,7 @@ If you are creating an open source application under a license compatible with t
                 span.setAttribute("data-m",walker.currentNode.parentNode.getAttribute("data-m"));
                 walker.currentNode.parentNode.before(span);
               } else {
-                span.setAttribute("data-m",walker.currentNode.parentNode.nextSibling.getAttribute("data-m"));
+                span.setAttribute("data-m",walker.currentNode.parentNode.nextElementSibling.getAttribute("data-m"));
                 walker.currentNode.parentNode.after(span);
               }
             }
@@ -1347,6 +1346,9 @@ If you are creating an open source application under a license compatible with t
     });
 
   }
+
+
+
   hyperaudio();
   </script>
 
