@@ -53,7 +53,7 @@ class ImportJson extends HTMLElement {
             document.querySelector("#hyperplayer").src = jsonData.url;
         });
         reader.readAsText(file);
-        hyperaudio()
+        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
     });
     fileInput.click();
 
