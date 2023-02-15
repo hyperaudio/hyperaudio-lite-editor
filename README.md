@@ -22,7 +22,7 @@ If you want to use `Hyperaudio Lite Editor` to develop commercial sites, tools, 
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
 
-<img width="1175" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited" src="https://user-images.githubusercontent.com/208756/216120493-5ac9acd3-461a-4318-903f-b05782d21c1e.png">
+<img width="1175" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited" src="https://user-images.githubusercontent.com/208756/219117821-bc06a4fe-dd35-420e-9488-af09425b52a6.png">
 
 ### How to Use
 
