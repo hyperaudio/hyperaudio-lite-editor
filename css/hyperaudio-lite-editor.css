@@ -45,10 +45,15 @@ dialog::backdrop {
   backdrop-filter: blur(1px);
 }
 
-.vertically-centre{
+.vertically-centre {
   padding-top: 40%;
 }
 
 .hyperaudio-transcript {
   font-size: 13pt;
+}
+
+/* for accessibility */
+.hidden-label-holder {
+  height:0;
 }
