@@ -120,14 +120,15 @@ If you are creating an open source application under a license compatible with t
         <div class="top-bar-item">
           <form id="searchForm">
             <div id="pbr-holder" style="padding-bottom:32px">
-              Playback Rate <input type="number" id="pbr" value="1" step="0.2" min="0.4" max="3">
+              <label for="pbr">Playback Rate</label> <input type="number" id="pbr" name="pbr" value="1" step="0.2" min="0.4" max="3">
             </div>
-            <div><input id="search" type="text"><input type="submit" value="search"></div>
+            <div class="hidden-label-holder"><label for="search">Search</label></div>
+            <div><input id="search" name="search" type="text"><input type="submit" value="search"></div>
           </form>
         </div>
 
         <div id="stt-holder" style="height:300px">
-          <iframe id="stt-iframe" width="100%" height="100%" style="border:0" src="stt-deepgram.html"></iframe>
+          <iframe id="stt-iframe" title="deepgram stt" width="100%" height="100%" style="border:0" src="stt-deepgram.html"></iframe>
         </div>
 
         <div id="speaker-display">

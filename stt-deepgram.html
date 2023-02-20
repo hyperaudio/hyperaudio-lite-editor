@@ -9,12 +9,15 @@
       <form onsubmit="getData(event)">
         <div>
           <span>
+            <div class="hidden-label-holder"><label for="token">Deepgram Token</label></div>
             <input type="text" id="token" name="token" size="30" placeholder="Deepgram token">
           </span>
         </div>
         <div>
-          <input type="text" id="media" name="media" size="30" placeholder="media">
-          <select id="language" id="language" placeholder="language">
+          <div class="hidden-label-holder"><label for="token">link to media</label></div>
+          <input type="text" id="media" name="media" size="30" placeholder="link to media">
+          <div class="hidden-label-holder"><label for="language">link to media</label></div>
+          <select id="language" name="language" placeholder="language">
           </select>
           <input type="submit" value="transcribe">
         </div>
