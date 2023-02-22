@@ -1,4 +1,3 @@
-
 # Hyperaudio Lite Editor
 A lightweight transcript editor for editing and correcting STT generated timed transcripts.
 
@@ -11,26 +10,21 @@ If you are creating an open source application under a license compatible with t
 
 ### Commercial license
 
-If you want to use `Hyperaudio Lite Editor` to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a `Hyperaudio Lite Editor` Commercial License please contact [info@hyperaud.io](mailto:info@hyperaud.io).
+If you'd like to use `Hyperaudio Lite Editor` to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a `Hyperaudio Lite Editor` Commercial License please contact [info@hyperaud.io](mailto:info@hyperaud.io).
 
 
 ## Demos
-[Try the latest demo](https://hyperaudio.github.io/hyperaudio-lite-editor/)
-![Screen capture of core Hyperaudio Lite Editor showing a transcript being edited](https://user-images.githubusercontent.com/208756/203117151-f5912633-cd88-4d80-80cd-204076442060.png)
 
-[Deepgram demo (now with localStorage and installable as a Progressive Web App)](https://hyperaudio.github.io/hyperaudio-lite-editor/alternative.html)
+[Demo (now with localStorage and installable as a Progressive Web App)](https://hyperaudio.github.io/hyperaudio-lite-editor/alternative.html)
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
 
-<img width="1175" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor showing a transcript being edited" src="https://user-images.githubusercontent.com/208756/219117821-bc06a4fe-dd35-420e-9488-af09425b52a6.png">
+<img width="1187" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor" src="https://user-images.githubusercontent.com/208756/220708532-4468bbf4-bbf8-4606-a8ed-ee8dec5e2d1c.png">
 
 ### How to Use
 
 Edit in the usual way – add punctuation, create and merge paragraphs etc. Place speaker names in square brackets ie [Maria]. It's recommended that in order to maintain word timings you don't paste large blocks of text.  Double-click on words to set the playhead at that point.
 
-### Alternative Versions
-
-[Electron](https://github.com/hyperaudio/hyperaudio-lite-editor/tree/electron-build)
 
 ### Commercial Licenses
 
