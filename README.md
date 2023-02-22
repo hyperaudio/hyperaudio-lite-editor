@@ -13,13 +13,13 @@ If you are creating an open source application under a license compatible with t
 If you'd like to use `Hyperaudio Lite Editor` to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a `Hyperaudio Lite Editor` Commercial License please contact [info@hyperaud.io](mailto:info@hyperaud.io).
 
 
-## Demos
+### Try it out!
 
-[Demo (now with localStorage and installable as a Progressive Web App)](https://hyperaudio.github.io/hyperaudio-lite-editor/alternative.html)
+[Demo (now with localStorage and installable as a Progressive Web App)](https://hyperaudio.github.io/hyperaudio-lite-editor/)
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
 
-<img width="1187" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor" src="https://user-images.githubusercontent.com/208756/220708532-4468bbf4-bbf8-4606-a8ed-ee8dec5e2d1c.png">
+[<img width="1187" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor" src="https://user-images.githubusercontent.com/208756/220708532-4468bbf4-bbf8-4606-a8ed-ee8dec5e2d1c.png">](https://hyperaudio.github.io/hyperaudio-lite-editor/)
 
 ### How to Use
 
