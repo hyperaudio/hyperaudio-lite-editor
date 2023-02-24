@@ -24,12 +24,6 @@
       </form>
     </div>
   </div>
-  <dialog id="error-dialog">
-    <p>Token or media URL not valid.</p>
-    <form method="dialog">
-      <button>OK</button>
-    </form>
-  </dialog>
 </body>
 <script>
 
@@ -85,7 +79,7 @@
   function getData(event) {
 
     //document.querySelector("#editor").contentWindow.document.querySelector('#hypertranscript').innerHTML = 'Transcribing...<br/><img src="rings.svg" width="50" alt="" style="margin: auto; display: block;">';
-    parent.document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="" style="margin: auto; display: block;"></div>';
+    parent.document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
     const  media =  document.querySelector('#media').value;
     const  token =  document.querySelector('#token').value;
@@ -97,7 +91,9 @@
       let player = parent.document.querySelector("#hyperplayer");
       player.src = media;
       fetchData(token, media, tier, language);
-    } 
+    } else {
+      parent.document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
+    }
 
     event.preventDefault();
     return false;
@@ -130,14 +126,15 @@
       console.dir("error is : "+error);
       error = error + "";
 
-      if (error.indexOf("401") > 0) {
-        document.querySelector('#error-dialog').showModal();
+      if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
+        parent.document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
       }
       
       if (error.indexOf("400") > 0 && tier === "enhanced") {
         tier = "base";
         fetchData(token, media, tier, language);
       }
+
       this.dataError = true;
       document.querySelector("#editor").contentWindow.document.querySelector('#hypertranscript').innerHTML = ''; 
       parent.document.querySelector('#hypertranscript').innerHTML = ''; 
