@@ -1,5 +1,5 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.1.5 -->
+<!--  Hyperaudio Lite Editor - Version 0.1.7 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
 Commercial license
@@ -19,6 +19,7 @@ If you are creating an open source application under a license compatible with t
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
+  <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
 
   <!-- Meta Tags required for
     Progressive Web App -->
@@ -130,7 +131,8 @@ If you are creating an open source application under a license compatible with t
         </div>
 
         <div id="stt-holder" style="height:300px">
-          <iframe id="stt-iframe" title="deepgram stt" width="100%" height="100%" style="border:0" src="stt-deepgram.html"></iframe>
+          <!--<iframe id="stt-iframe" title="deepgram stt" width="100%" height="100%" style="border:0" src="stt-deepgram.html"></iframe>-->
+          <deepgram-service></deepgram-service>
         </div>
 
         <div id="speaker-display">
@@ -1385,7 +1387,7 @@ If you are creating an open source application under a license compatible with t
     </form>
   </dialog>
 
-  <script src="./js/hyperadio-lite-editor-storage.js"></script>
+  <script src="./js/hyperaudio-lite-editor-storage.js"></script>
 
   <script>
     document.querySelector('#controls').insertAdjacentHTML("beforeend", '<p><button id="hyperadio-lite-editor-localstorage-save">save to local storage</button> <button id="hyperadio-lite-editor-localstorage-load">restore from local storage</button></p>');
@@ -1406,5 +1408,26 @@ If you are creating an open source application under a license compatible with t
 
   <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
   <!-- end of localstorage additions -->
+
+  <!-- service worker script for PWA -->
+  <script>
+    window.addEventListener('load', () => {
+      registerSW();
+    });
+
+    // Register the Service Worker
+    async function registerSW() {
+      if ('serviceWorker' in navigator) {
+        try {
+        await navigator
+            .serviceWorker
+            .register('serviceworker.js');
+        }
+        catch (e) {
+        console.log('SW registration failed');
+        }
+      }
+    }
+  </script>
 </body>
 </html>
