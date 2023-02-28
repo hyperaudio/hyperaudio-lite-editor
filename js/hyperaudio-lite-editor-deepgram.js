@@ -45,9 +45,8 @@ class DeepgramService extends HTMLElement {
       if (counter === 0) {
         option.selected = "selected"
       }
-      select.appendChild(option)
-      counter += 1
-
+      select.appendChild(option);
+      counter += 1;
     } )
   }
 
@@ -60,8 +59,6 @@ class DeepgramService extends HTMLElement {
     let tier = "enhanced";
 
     event.preventDefault();
-
-    console.log(file);
 
     if (file !== undefined) {
       console.log("trying local");
@@ -76,8 +73,6 @@ class DeepgramService extends HTMLElement {
         document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
       }
     }
-
-    
     return false;
   }
 
@@ -162,7 +157,6 @@ function fetchDataLocal(token, file, tier, language) {
   // Create a new FileReader instance
   const reader = new FileReader();
   
-  console.log(file);
   reader.readAsArrayBuffer(file);
   let blob = null;
 
@@ -191,7 +185,6 @@ function fetchDataLocal(token, file, tier, language) {
           } else {
             console.log("response ok");
           }
-          
           return response.json();
         })
         .then(json => {
@@ -202,7 +195,7 @@ function fetchDataLocal(token, file, tier, language) {
           error = error + "";
       
           if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
-            document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
+            document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the token is invalid.</center></div>';
           }
           
           if (error.indexOf("400") > 0 && tier === "enhanced") {
@@ -216,7 +209,6 @@ function fetchDataLocal(token, file, tier, language) {
       }
     });
   });
-    
 }
 
 function parseData(json) {
