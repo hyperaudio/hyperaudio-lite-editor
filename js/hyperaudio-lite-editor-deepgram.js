@@ -121,6 +121,10 @@ class DeepgramService extends HTMLElement {
 customElements.define('deepgram-service', DeepgramService);
 
 function fetchData(token, media, tier, language) {
+  if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
+    media = "https://"+media;
+  }
+  
   fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`, {
     method: 'POST',
     headers: {
