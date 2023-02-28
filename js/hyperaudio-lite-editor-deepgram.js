@@ -55,6 +55,11 @@ class DeepgramService extends HTMLElement {
     document.querySelector('#media').value = "";
   }
 
+  clearFilePicker(event) {
+    event.preventDefault();
+    document.querySelector('#file').value = "";
+  }
+
   getData(event) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
@@ -107,6 +112,7 @@ class DeepgramService extends HTMLElement {
     </div>`;
 
     document.querySelector('#file').addEventListener('change',this.clearMediaUrl);
+    document.querySelector('#media').addEventListener('change',this.clearFilePicker);
     document.querySelector('#deepgram-form').addEventListener('submit', this.getData);
     this.configureLanguage();
   }
