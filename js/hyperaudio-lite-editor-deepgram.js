@@ -63,7 +63,7 @@ class DeepgramService extends HTMLElement {
 
     console.log(file);
 
-    if (file !== undefined && token !== "") {
+    if (file !== undefined) {
       console.log("trying local");
       fetchDataLocal(token, file, tier, language);
     } else {
@@ -167,7 +167,7 @@ function fetchDataLocal(token, file, tier, language) {
   let blob = null;
 
   reader.addEventListener('load', () => {
-    console.log("creating blob");
+
     file.arrayBuffer().then((arrayBuffer) => {
       blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
       console.log(blob);
@@ -175,44 +175,45 @@ function fetchDataLocal(token, file, tier, language) {
       let player = document.querySelector("#hyperplayer");
       player.src = URL.createObjectURL(blob);
 
-      //document.querySelector('audio').setAttribute('src', URL.createObjectURL(blob));
-
-      fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Token ' + apiKey,
-          'Content-Type': file.type
-        },
-        body: blob
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(response.status);
-        } else {
-          console.log("response ok");
-        }
-        
-        return response.json();
-      })
-      .then(json => {
-        parseData(json);
-      })
-      .catch(function (error) {
-        console.dir("error is : "+error);
-        error = error + "";
-    
-        if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
-          document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
-        }
-        
-        if (error.indexOf("400") > 0 && tier === "enhanced") {
-          tier = "base";
-          fetchDataLocal(token, file, tier, language);
-        }
-    
-        this.dataError = true;
-        document.querySelector('#hypertranscript').innerHTML = ''; 
-      })
+      // if the token is not present we just add the media to the player
+      if (token !== "") {
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token ' + apiKey,
+            'Content-Type': file.type
+          },
+          body: blob
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(response.status);
+          } else {
+            console.log("response ok");
+          }
+          
+          return response.json();
+        })
+        .then(json => {
+          parseData(json);
+        })
+        .catch(function (error) {
+          console.dir("error is : "+error);
+          error = error + "";
+      
+          if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
+            document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
+          }
+          
+          if (error.indexOf("400") > 0 && tier === "enhanced") {
+            tier = "base";
+            fetchDataLocal(token, file, tier, language);
+          }
+      
+          this.dataError = true;
+          document.querySelector('#hypertranscript').innerHTML = ''; 
+        })
+      }
     });
   });
     
