@@ -45,10 +45,19 @@ class DeepgramService extends HTMLElement {
       if (counter === 0) {
         option.selected = "selected"
       }
-      select.appendChild(option)
-      counter += 1
-
+      select.appendChild(option);
+      counter += 1;
     } )
+  }
+
+  clearMediaUrl(event) {
+    event.preventDefault();
+    document.querySelector('#media').value = "";
+  }
+
+  clearFilePicker(event) {
+    event.preventDefault();
+    document.querySelector('#file').value = "";
   }
 
   getData(event) {
@@ -56,18 +65,24 @@ class DeepgramService extends HTMLElement {
     const language = document.querySelector('#language').value;
     const media =  document.querySelector('#media').value;
     const token =  document.querySelector('#token').value;
+    const file = document.querySelector('[name=file]').files[0];
     let tier = "enhanced";
 
-    if (media !== "" || token !== "") {
-      let player = document.querySelector("#hyperplayer");
-      player.src = media;
-      console.log(token);
-      fetchData(token, media, tier, language);
-    } else {
-      document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
-    }
-    
     event.preventDefault();
+
+    if (file !== undefined) {
+      fetchDataLocal(token, file, tier, language);
+      document.querySelector('#media').value = "";
+    } else {
+      if (media !== "" || token !== "") {
+        let player = document.querySelector("#hyperplayer");
+        player.src = media;
+        console.log(token);
+        fetchData(token, media, tier, language);
+      } else {
+        document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
+      }
+    }
     return false;
   }
 
@@ -85,7 +100,8 @@ class DeepgramService extends HTMLElement {
           </div>
           <div>
             <div class="hidden-label-holder"><label for="token">link to media</label></div>
-            <input type="text" id="media" name="media" size="30" placeholder="link to media">
+            <input type="text" id="media" name="media" size="30" placeholder="link to media"> or
+            <input type="file" name="file" id="file">
             <div class="hidden-label-holder"><label for="language">link to media</label></div>
             <select id="language" name="language" placeholder="language">
             </select>
@@ -95,6 +111,8 @@ class DeepgramService extends HTMLElement {
       </div>
     </div>`;
 
+    document.querySelector('#file').addEventListener('change',this.clearMediaUrl);
+    document.querySelector('#media').addEventListener('change',this.clearFilePicker);
     document.querySelector('#deepgram-form').addEventListener('submit', this.getData);
     this.configureLanguage();
   }
@@ -103,6 +121,10 @@ class DeepgramService extends HTMLElement {
 customElements.define('deepgram-service', DeepgramService);
 
 function fetchData(token, media, tier, language) {
+  if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
+    media = "https://"+media;
+  }
+  
   fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`, {
     method: 'POST',
     headers: {
@@ -139,8 +161,72 @@ function fetchData(token, media, tier, language) {
     }
 
     this.dataError = true;
-    document.querySelector('#hypertranscript').innerHTML = ''; 
+    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
   })
+}
+
+function fetchDataLocal(token, file, tier, language) {
+
+  const url = `https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`;
+  const apiKey = token;
+
+  // Create a new FileReader instance
+  const reader = new FileReader();
+  
+  reader.readAsArrayBuffer(file);
+  let blob = null;
+
+  reader.addEventListener('load', () => {
+
+    file.arrayBuffer().then((arrayBuffer) => {
+      blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+      console.log(blob);
+
+      let player = document.querySelector("#hyperplayer");
+      player.src = URL.createObjectURL(blob);
+
+      // if the token is not present we just add the media to the player
+      if (token !== "") {
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token ' + apiKey,
+            'Content-Type': file.type
+          },
+          body: blob
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(response.status);
+          } else {
+            console.log("response ok");
+          }
+          return response.json();
+        })
+        .then(json => {
+          parseData(json);
+        })
+        .catch(function (error) {
+          console.dir("error is : "+error);
+          error = error + "";
+      
+          if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
+            document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the token is invalid.</center></div>';
+          }
+          
+          if (error.indexOf("400") > 0 && tier === "enhanced") {
+            tier = "base";
+            fetchDataLocal(token, file, tier, language);
+          }
+      
+          this.dataError = true;
+          document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+        })
+      } else {
+        document.querySelector('#hypertranscript').innerHTML = ''; 
+      }
+    });
+  });
 }
 
 function parseData(json) {
