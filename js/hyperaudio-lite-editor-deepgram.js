@@ -63,12 +63,16 @@ class DeepgramService extends HTMLElement {
   getData(event) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
-    const media =  document.querySelector('#media').value;
+    let media =  document.querySelector('#media').value;
     const token =  document.querySelector('#token').value;
     const file = document.querySelector('[name=file]').files[0];
     let tier = "enhanced";
 
     event.preventDefault();
+
+    if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
+      media = "https://"+media;
+    }
 
     if (file !== undefined) {
       fetchDataLocal(token, file, tier, language);
@@ -121,9 +125,7 @@ class DeepgramService extends HTMLElement {
 customElements.define('deepgram-service', DeepgramService);
 
 function fetchData(token, media, tier, language) {
-  if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
-    media = "https://"+media;
-  }
+
   
   fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`, {
     method: 'POST',
