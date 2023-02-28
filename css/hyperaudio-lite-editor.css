@@ -56,4 +56,5 @@ dialog::backdrop {
 /* for accessibility */
 .hidden-label-holder {
   height:0;
+  opacity: 0;
 }

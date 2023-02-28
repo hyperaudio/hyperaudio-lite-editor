@@ -1,0 +1,62 @@
+<html>
+<body>
+  <form method="POST" enctype="multipart/form-data">
+    <input type="file" name="file">
+    <button type="submit" role="button">Upload File</button>
+  </form>
+  <audio src="" controls></audio>
+</body>
+<script>
+  const url = 'https://api.deepgram.com/v1/listen';
+  const apiKey = '11d130f00564c25bab9adf3af99560a7605ea984';
+  const form = document.querySelector('form');
+
+  form.addEventListener('submit', e => {
+
+    e.preventDefault();
+
+    // Create a new FileReader instance
+    const reader = new FileReader();
+    const file = document.querySelector('[name=file]').files[0];
+    console.log(file);
+    reader.readAsArrayBuffer(file);
+    let blob = null;
+
+    reader.addEventListener('load', () => {
+      console.log("creating blob");
+      file.arrayBuffer().then((arrayBuffer) => {
+        blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+        console.log(blob);
+
+        document.querySelector('audio').setAttribute('src', URL.createObjectURL(blob));
+
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Token ' + apiKey,
+            'Content-Type': file.type
+          },
+          body: blob
+        })
+        .then(response => response.text())
+        .then(data => console.log(data))
+        .catch(error => console.error(error));
+      });
+    });
+  });
+
+</script>
+</html>
+
+<!--
+
+
+curl \
+  --request POST \
+  --header 'Authorization: Token YOUR_DEEPGRAM_API_KEY' \
+  --header 'Content-Type: audio/wav' \
+  --data-binary @youraudio.wav \
+  --url 'https://api.deepgram.com/v1/listen'
+
+
+-->
