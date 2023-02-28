@@ -50,6 +50,11 @@ class DeepgramService extends HTMLElement {
     } )
   }
 
+  clearMediaUrl(event) {
+    event.preventDefault();
+    document.querySelector('#media').value = "";
+  }
+
   getData(event) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
@@ -61,8 +66,8 @@ class DeepgramService extends HTMLElement {
     event.preventDefault();
 
     if (file !== undefined) {
-      console.log("trying local");
       fetchDataLocal(token, file, tier, language);
+      document.querySelector('#media').value = "";
     } else {
       if (media !== "" || token !== "") {
         let player = document.querySelector("#hyperplayer");
@@ -91,8 +96,8 @@ class DeepgramService extends HTMLElement {
           <div>
             <div class="hidden-label-holder"><label for="token">link to media</label></div>
             <input type="text" id="media" name="media" size="30" placeholder="link to media"> or
-            <div class="hidden-label-holder"><label for="language">link to media</label></div>
             <input type="file" name="file" id="file">
+            <div class="hidden-label-holder"><label for="language">link to media</label></div>
             <select id="language" name="language" placeholder="language">
             </select>
             <input type="submit" value="transcribe">
@@ -101,6 +106,7 @@ class DeepgramService extends HTMLElement {
       </div>
     </div>`;
 
+    document.querySelector('#file').addEventListener('change',this.clearMediaUrl);
     document.querySelector('#deepgram-form').addEventListener('submit', this.getData);
     this.configureLanguage();
   }
@@ -145,7 +151,7 @@ function fetchData(token, media, tier, language) {
     }
 
     this.dataError = true;
-    document.querySelector('#hypertranscript').innerHTML = ''; 
+    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
   })
 }
 
@@ -204,8 +210,10 @@ function fetchDataLocal(token, file, tier, language) {
           }
       
           this.dataError = true;
-          document.querySelector('#hypertranscript').innerHTML = ''; 
+          document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
         })
+      } else {
+        document.querySelector('#hypertranscript').innerHTML = ''; 
       }
     });
   });
