@@ -17,9 +17,15 @@ video {
   border-radius: 3px;
 }
 
-button, input[type="submit"] {
+button, input[type="submit"], input[type="file"] {
   border: 1px solid #ccc;
   background-color: #ddd;
+}
+
+button:hover, input[type="submit"]:hover, input[type="file"]:hover {
+  border: 1px solid #999;
+  background-color: #ccc;
+  cursor: pointer;
 }
 
 input[type="number"] {
