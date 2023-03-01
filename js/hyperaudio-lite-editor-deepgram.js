@@ -105,6 +105,7 @@ class DeepgramService extends HTMLElement {
           <div>
             <div class="hidden-label-holder"><label for="token">link to media</label></div>
             <input type="text" id="media" name="media" size="30" placeholder="link to media"> or
+            <div class="hidden-label-holder"><label for="file">local file upload</label></div>
             <input type="file" name="file" id="file">
             <div class="hidden-label-holder"><label for="language">link to media</label></div>
             <select id="language" name="language" placeholder="language">
