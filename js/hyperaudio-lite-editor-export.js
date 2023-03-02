@@ -81,11 +81,11 @@ class ImportSrt extends HTMLElement {
             const srtData = event.target.result;
             // transform json object in html
             let hypertranscript = document.getElementById('hypertranscript');
-
             hypertranscript.innerHTML = srtToHtml(srtData);
+            document.dispatchEvent(new CustomEvent('hyperaudioInit'));
         });
         reader.readAsText(file);
-        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+       
     });
     fileInput.click();
   }

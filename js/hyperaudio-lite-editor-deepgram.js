@@ -59,6 +59,26 @@ class DeepgramService extends HTMLElement {
     event.preventDefault();
     document.querySelector('#file').value = "";
   }
+  
+  updatePlayerWithLocalFile(event) {
+    const file = document.querySelector('[name=file]').files[0];
+    // Create a new FileReader instance
+    const reader = new FileReader();
+    
+    reader.readAsArrayBuffer(file);
+    let blob = null;
+
+    reader.addEventListener('load', () => {
+
+      file.arrayBuffer().then((arrayBuffer) => {
+        blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+        console.log(blob);
+
+        let player = document.querySelector("#hyperplayer");
+        player.src = URL.createObjectURL(blob);
+      });
+    });
+  }
 
   getData(event) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
@@ -119,6 +139,7 @@ class DeepgramService extends HTMLElement {
     document.querySelector('#file').addEventListener('change',this.clearMediaUrl);
     document.querySelector('#media').addEventListener('change',this.clearFilePicker);
     document.querySelector('#deepgram-form').addEventListener('submit', this.getData);
+    document.querySelector('#file').addEventListener('change', this.updatePlayerWithLocalFile);
     this.configureLanguage();
   }
 }
@@ -126,7 +147,6 @@ class DeepgramService extends HTMLElement {
 customElements.define('deepgram-service', DeepgramService);
 
 function fetchData(token, media, tier, language) {
-
   
   fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`, {
     method: 'POST',
