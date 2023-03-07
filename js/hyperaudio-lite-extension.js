@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.1.1 */
+/*! Version 2.1.1b */
 
 'use strict';
 // Example wrapper for hyperaudio-lite with search and playbackRate included
@@ -43,7 +43,7 @@ let searchPhrase = function (phrase) {
 
       // regex removes punctuation - NB for htmlWords case we also remove the space
 
-      if (phraseWords[j].toLowerCase() == htmlWords[wordIndex].innerHTML.toLowerCase().replace(/[\.,-\/#!$%\^&\*;:{}=\-_`~() ]/g,"")) {
+      if (phraseWords[j].toLowerCase() == htmlWords[wordIndex].innerHTML.toLowerCase().replace(/[\.,-\/#!$%\^&\*;:{}=\-_`~()\? ]/g,"")) {
         potentiallyMatched.push(htmlWords[wordIndex].getAttribute('data-m'));
         numWordsMatched++;
       } else {
