@@ -1125,7 +1125,6 @@ If you are creating an open source application under a license compatible with t
 
     const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
-
     let hyperaudioTemplate = "";
 
     fetch('hyperaudio-template.html')
@@ -1183,11 +1182,13 @@ If you are creating an open source application under a license compatible with t
         walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
 
         while (walker.nextNode()) {
-          if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
+          if (walker.currentNode.textContent.replaceAll('\n', '').replaceAll('  ', ' ').trim().length > 0
               && walker.currentNode.parentElement.tagName === "SPAN" && walker.currentNode.textContent.includes('[') && walker.currentNode.textContent.includes(']')) {
 
             // if previousSibling is a span, add the textContent of currentNode to it
             if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().endsWith(']') === false) {
+              console.log(walker.currentNode.textContent.trim());
+            //if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().includes(']') === false) {
               
               //look for text in square brackets
               const regex = / *\[[^\]]*]/g;
@@ -1202,7 +1203,12 @@ If you are creating an open source application under a license compatible with t
 
               let span = document.createElement("span");
               span.textContent = found + ' ';
-              span.classList.add("speaker");
+
+              if (span.textContent.includes('[') && span.textContent.includes(']')) {
+                span.classList.add("speaker");
+                closedSpeaker = false;
+              }
+
               // add the classes of the current node
               span.classList.add(...walker.currentNode.parentNode.classList);
               //DOMTokenList.prototype.add.apply(span.classList, walker.currentNode.parentNode.classList); 
@@ -1212,9 +1218,24 @@ If you are creating an open source application under a license compatible with t
               if (startsWithSpeaker === true) {
                 span.setAttribute("data-m",walker.currentNode.parentNode.getAttribute("data-m"));
                 walker.currentNode.parentNode.before(span);
+                console.log("startsWithSpeaker");
               } else {
-                span.setAttribute("data-m",walker.currentNode.parentNode.nextElementSibling.getAttribute("data-m"));
+                let nextStart = walker.currentNode.parentNode.nextElementSibling.getAttribute("data-m");
+                span.setAttribute("data-m",nextStart);
+                let newSpan = document.createElement("span");
+                newSpan.setAttribute("data-m",nextStart);
+                
+                newSpan.innerHTML = "&nbsp;";
                 walker.currentNode.parentNode.after(span);
+                span.after(newSpan);
+                console.log("setting the cursor");
+                // set the cursor
+                const range = document.createRange();
+                const sel = window.getSelection();
+                range.setStartBefore(newSpan.nextElementSibling);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
               }
             }
           }
