@@ -81,6 +81,9 @@ class DeepgramService extends HTMLElement {
   }
 
   getData(event) {
+
+    console.log("getData");
+    document.querySelector('#close-modal').click();
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
     let media =  document.querySelector('#media').value;
@@ -111,7 +114,7 @@ class DeepgramService extends HTMLElement {
   }
 
   connectedCallback() {
-    this.innerHTML =  `
+    /*this.innerHTML =  `
     <div>
       <h2>Transcribe</h2>
       <div>
@@ -134,11 +137,33 @@ class DeepgramService extends HTMLElement {
           </div>
         </form>
       </div>
-    </div>`;
+    </div>`;*/
+
+    this.innerHTML = `
+    <form id="deepgram-form" name="deepgram-form">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="my-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Transcribe</h3>
+        <input id="token" type="text" placeholder="Deepgram token" class="input input-bordered w-full max-w-xs" />
+        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+        <input id="media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        or
+        <input id="file" name="file" type="file" class="file-input w-full max-w-xs" />
+        <select id="language" name="language" placeholder="language" class="select select-bordered w-full max-w-xs">
+        </select>
+      </div>
+      <div class="modal-action">
+        <!--<input type="submit" class="btn btn-primary btn-active btn-outline" value="transcribe">-->
+        <label id="transcribe-btn" for="my-modal" class="btn btn-primary">Transcribe</label>
+        <!--<a href="#" id="transcribe-btn" class="btn btn-primary">Transcribe</a>-->
+      </div>
+    </form>`;
 
     document.querySelector('#file').addEventListener('change',this.clearMediaUrl);
     document.querySelector('#media').addEventListener('change',this.clearFilePicker);
-    document.querySelector('#deepgram-form').addEventListener('submit', this.getData);
+    document.querySelector('#media').addEventListener('change',this.clearFilePicker);
+    document.querySelector('#transcribe-btn').addEventListener('click', this.getData);
+    //document.querySelector('#deepgram-form').addEventListener('submit', this.getData);
     document.querySelector('#file').addEventListener('change', this.updatePlayerWithLocalFile);
     this.configureLanguage();
   }

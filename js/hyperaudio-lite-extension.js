@@ -13,6 +13,14 @@ if (searchForm) {
   }, false);
 }
 
+document.querySelector('#search-box').addEventListener("keyup", (event) => {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+
+  searchPhrase(document.querySelector('#search-box').value);
+});
+
 
 let searchPhrase = function (phrase) {
 	
