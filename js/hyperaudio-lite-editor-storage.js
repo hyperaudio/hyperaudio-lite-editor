@@ -30,6 +30,57 @@ function renderTranscript(
   hyperaudio();
 }
 
+function getLocalStorageSaveFilename(url){
+  let filename = null;
+
+  if (lastFilename === null) {
+    //by default just the media filename
+    filename = url.substring(url.lastIndexOf("/")+1);
+    lastFilename = filename;
+  } else {
+    // if it's been saved before this session, use the last filename
+    filename = lastFilename;
+  }
+
+  return filename;
+}
+
+
+function saveHyperTranscriptToLocalStorage(
+  filename,
+  hypertranscriptDomId = 'hypertranscript',
+  videoDomId = 'hyperplayer',
+  storage = window.localStorage
+) {
+  console.log("saving");
+  let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
+  let video = document.getElementById(videoDomId).src;
+  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
+
+  storage.setItem(filename+fileExtension, JSON.stringify(hypertranscriptstorage));
+  console.log('HyperTranscript saved');
+}
+
+function loadLocalStorageOptions(storage = window.localStorage) {
+
+  let fileSelect = document.querySelector("#load-localstorage-filename");
+  
+  fileSelect.innerHTML = '<option value="default">Select file…</option>';
+  for (let i = 0; i < storage.length; i++) {
+    if (storage.key(i).indexOf(fileExtension) > 0) {
+      let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
+      fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
+    }
+  }
+}
+
+function loadHyperTranscriptFromLocalStorage(filename, storage = window.localStorage){
+  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(filename+fileExtension)));
+  if (hypertranscriptstorage) {
+    renderTranscript(hypertranscriptstorage);
+  }
+}
+
 /*
  * Save the current HyperTranscript in the local storage
  * @param {string} transcriptionName - the name of the transcription
@@ -37,6 +88,7 @@ function renderTranscript(
  * @param {string} videoDomId - the id of the video dom element
  * @return {void}
  */
+
 function saveHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
