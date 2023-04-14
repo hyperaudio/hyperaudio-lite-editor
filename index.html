@@ -157,30 +157,7 @@ If you are creating an open source application under a license compatible with t
               <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="checkbox checkbox-primary"/>
             </span>
         </div>
-
-        <!--<div id="speaker-display">
-          <label for="show-speakers">display speakers</label>
-          <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked">
-        </div>-->
-
-        <!--<div id="footer" style="bottom: 0%; position: fixed;">
-          <p id="controls">
-            Download transcript as <br>
-            <a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT ⬇</a>
-            <a id="download-srt" href="" download="hyperaudio.srt">SRT ⬇</a>
-            <a id="download-html" href="" download="hypertranscript.html">HTML ⬇</a>
-            <a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript ⬇</a>
-
-          </p>
-          <p>
-            Export/Import options:<br>
-            <export-json></export-json>
-            <import-json></import-json>
-            <import-srt></import-srt>
-          </p>
-        </div>-->
       </div>
-
     </div>
 
     <div id="nav-holder" style="display: flex; position: absolute; width: calc(100% - 400px); top:0; left:400px; z-index: 2;">
@@ -206,15 +183,6 @@ If you are creating an open source application under a license compatible with t
               <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
               <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
               <li><a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript</a></li>
-              <!--<hr
-              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
-              <li class="menu-title">
-                <span>
-                  Local Storage
-                </span>
-              </li>
-              <li><a>Save to Local Storage</a></li>
-              <li><a>Load from Local Storage</a></li>-->
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
               <li class="menu-title">
@@ -241,22 +209,7 @@ If you are creating an open source application under a license compatible with t
           <input type="checkbox" id="my-modal" class="modal-toggle" />
           <div class="modal">
             <div class="modal-box">
-
               <deepgram-service></deepgram-service>
-              
-              <!--<div class="flex flex-col gap-4 w-full">
-                <h3 class="font-bold text-lg">Transcribe</h3>
-                <input type="text" placeholder="Deepgram token" class="input input-bordered w-full max-w-xs" />
-                <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-                <input type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-                or
-                <input type="file" class="file-input w-full max-w-xs" />
-                <select id="language-select" class="select select-bordered w-full max-w-xs">
-                </select>
-              </div>
-              <div class="modal-action">
-                <label for="my-modal" class="btn btn-primary">Go!</label>
-              </div>-->
             </div>
           </div>
         </div>
@@ -1445,25 +1398,6 @@ If you are creating an open source application under a license compatible with t
     const videoElement = document.querySelector("#hyperplayer");
     let sidebarOpen = true;
 
-    //document.querySelector('#slide-sidebar').addEventListener('click', (e) => {
-    /*document.querySelector('#sidebar-toggle').addEventListener('click', (e) => {
-      console.log("checking pip");
-      if(
-        document.pictureInPictureEnabled &&
-        !videoElement.disablePictureInPicture) {
-        try {
-          if (sidebarOpen === true) {
-            videoElement.requestPictureInPicture();
-            sidebarOpen = false;
-          } else {
-            document.exitPictureInPicture();
-            sidebarOpen = true;
-          }
-        } catch(err) {
-            console.error(err);
-        }
-      }
-    });*/
 
     document.querySelector('#sidebar-toggle').addEventListener('click', (e) => {
 
@@ -1515,10 +1449,7 @@ If you are creating an open source application under a license compatible with t
         });
       }
     });
-
   }
-
-
 
   hyperaudio();
   </script>
@@ -1534,10 +1465,8 @@ If you are creating an open source application under a license compatible with t
         <input type="text" id="save-localstorage-filename" name="save-localstorage-filename" placeholder="File name" class="input input-bordered w-full max-w-xs" />
       </div>
       <div class="modal-action">
-        <!--<input type="submit" class="btn btn-primary btn-active btn-outline" value="transcribe">-->
         <label for="file-save-dialog" class="btn btn-ghost">Cancel</label>
         <label id="file-save-localstorage" for="file-save-dialog" class="btn btn-primary">Confirm</label>
-        <!--<a href="#" id="transcribe-btn" class="btn btn-primary">Transcribe</a>-->
       </div>
     </div>
   </div>
@@ -1558,53 +1487,9 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-
-  <!--<input type="checkbox" id="file-save-dialog" class="modal-toggle" />
-  <div class="modal">
-    <div class="flex flex-col gap-4 w-full">
-      <label for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-      <h3 class="text-lg font-bold">Save to local storage</h3>
-      <input type="text" id="localstorage-fname" name="localstorage-fname" placeholder="File name" class="input input-bordered w-full max-w-xs" />
-      <div class="modal-action">
-        <label for="file-save-dialog" class="btn btn-ghost">Cancel</label>
-        <label id="confirmBtn" for="file-save-dialog" class="btn btn-primary">Confirm</label>
-      </div>
-    </div>
-  </div>-->
-
-
-  <dialog id="fileSaveDialog">
-    <form method="dialog">
-      <h4>Save to local storage</h4>
-      <p>
-        <label for="localstorage-fname">File name:</label>
-        <input type="text" id="localstorage-fname" name="localstorage-fname">
-      </p>
-      <div>
-        <button value="cancel">Cancel</button>
-        <button id="confirmBtn" value="default">Confirm</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="fileSelectDialog">
-    <form method="dialog">
-      <h4>Restore from local storage</h4>
-      <p>
-        <select id="localstorage-select">
-        </select>
-      </p>
-      <div>
-        <button value="cancel">Cancel</button>
-        <button id="confirmBtn" value="default">Confirm</button>
-      </div>
-    </form>
-  </dialog>
-
   <script src="./js/hyperaudio-lite-editor-storage.js"></script>
 
   <script>
-    //document.querySelector('#controls').insertAdjacentHTML("beforeend", '<p><button id="hyperadio-lite-editor-localstorage-save">save to local storage</button> <button id="hyperadio-lite-editor-localstorage-load">restore from local storage</button></p>');
 
     document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><spa>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
 
@@ -1626,26 +1511,6 @@ If you are creating an open source application under a license compatible with t
         let filename = document.querySelector('#load-localstorage-filename').value;
         loadHyperTranscriptFromLocalStorage(filename);
       });
-
-    /*document
-      .querySelector("#hyperadio-lite-editor-localstorage-save")
-      .addEventListener("click", function () {
-        let transcriptionName = document.getElementById("hyperplayer").src;
-        saveHyperTranscript(transcriptionName+".hyperaudio");
-      });
-
-    document
-      .querySelector("#hyperadio-lite-editor-localstorage-save")
-      .addEventListener("click", function () {
-        let transcriptionName = document.getElementById("hyperplayer").src;
-        saveHyperTranscript(transcriptionName+".hyperaudio");
-      });
-
-    document
-      .querySelector("#hyperadio-lite-editor-localstorage-load")
-      .addEventListener("click", function () {
-        selectLoadHyperTranscript();
-      });*/
   </script>
 
   <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
