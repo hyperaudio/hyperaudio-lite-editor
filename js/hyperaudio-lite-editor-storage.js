@@ -70,12 +70,14 @@ function saveHyperTranscriptToLocalStorage(
 function loadLocalStorageOptions(storage = window.localStorage) {
 
   let fileSelect = document.querySelector("#load-localstorage-filename");
+  let filePicker = document.querySelector("#file-picker");
   
   fileSelect.innerHTML = '<option value="default">Select file…</option>';
   for (let i = 0; i < storage.length; i++) {
     if (storage.key(i).indexOf(fileExtension) > 0) {
       let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
       fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
+      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" href=${i}>${filename}</a></li>`);
     }
   }
 }
@@ -88,3 +90,6 @@ function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localSt
     document.querySelector('#save-localstorage-filename').value = lastFilename;
   }
 }
+
+
+
