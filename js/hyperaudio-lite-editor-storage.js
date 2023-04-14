@@ -33,6 +33,8 @@ function renderTranscript(
 function getLocalStorageSaveFilename(url){
   let filename = null;
 
+  console.log(">>>>>>>>>>>>>>>>>>>>>>>>>>>> lastFilename = "+lastFilename);
+
   if (lastFilename === null) {
     //by default just the media filename
     filename = url.substring(url.lastIndexOf("/")+1);
@@ -44,6 +46,19 @@ function getLocalStorageSaveFilename(url){
 
   return filename;
 }
+
+function setLocalStorageSaveFilename(filename) {
+  document.querySelector('#save-localstorage-filename').value = getLocalStorageSaveFilename(document.querySelector("#hyperplayer").src);
+}
+
+
+/*
+ * Save the current HyperTranscript in the local storage
+ * @param {string} filename - the name of the transcript file
+ * @param {string} hypertranscriptDomId - the id of the hypertranscript dom element
+ * @param {string} videoDomId - the id of the video dom element
+ * @return {void}
+ */
 
 function saveHyperTranscriptToLocalStorage(
   filename,
@@ -74,10 +89,12 @@ function loadLocalStorageOptions(storage = window.localStorage) {
 }
 
 function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){
-
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
   if (hypertranscriptstorage) {
     renderTranscript(hypertranscriptstorage);
+    lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
+    document.querySelector('#save-localstorage-filename').value = lastFilename;
+    console.log("load .... lastFilename = "+lastFilename);
   }
 }
 
@@ -89,7 +106,7 @@ function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localSt
  * @return {void}
  */
 
-function saveHyperTranscript(
+/*function saveHyperTranscript(
   transcriptionName = 'hypertranscript--last',
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
@@ -119,12 +136,12 @@ function saveHyperTranscript(
     storage.setItem(filenameSave.value+fileExtension, JSON.stringify(hypertranscriptstorage));
     console.log('HyperTranscript saved');
   });
-}
+}*/
 
 /*
  * Select the HyperTranscript saved in the localStorage to display
  */
-function selectLoadHyperTranscript(storage = window.localStorage) {
+/*function selectLoadHyperTranscript(storage = window.localStorage) {
 
   const fileSelectDialog = document.querySelector('#fileSelectDialog');
   const confirmBtn = fileSelectDialog.querySelector('#confirmBtn');
@@ -158,4 +175,4 @@ function selectLoadHyperTranscript(storage = window.localStorage) {
       }
     }
   });
-}
+}*/
