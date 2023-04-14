@@ -81,17 +81,12 @@ class DeepgramService extends HTMLElement {
   }
 
   getData(event) {
-
-    console.log("getData");
-    document.querySelector('#close-modal').click();
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
     let media =  document.querySelector('#media').value;
     const token =  document.querySelector('#token').value;
     const file = document.querySelector('[name=file]').files[0];
     let tier = "enhanced";
-
-    event.preventDefault();
 
     if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
       media = "https://"+media;
@@ -110,39 +105,13 @@ class DeepgramService extends HTMLElement {
         document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
       }
     }
-    return false;
   }
 
   connectedCallback() {
-    /*this.innerHTML =  `
-    <div>
-      <h2>Transcribe</h2>
-      <div>
-        <form id="deepgram-form">
-          <div>
-            <span>
-              <div class="hidden-label-holder"><label for="token">Deepgram Token</label></div>
-              <input type="text" id="token" name="token" size="30" placeholder="Deepgram token">
-            </span>
-          </div>
-          <div>
-            <div class="hidden-label-holder"><label for="token">link to media</label></div>
-            <input type="text" id="media" name="media" size="30" placeholder="link to media"> or
-            <div class="hidden-label-holder"><label for="file">local file upload</label></div>
-            <input type="file" name="file" id="file">
-            <div class="hidden-label-holder"><label for="language">link to media</label></div>
-            <select id="language" name="language" placeholder="language">
-            </select>
-            <input type="submit" value="transcribe">
-          </div>
-        </form>
-      </div>
-    </div>`;*/
-
     this.innerHTML = `
     <form id="deepgram-form" name="deepgram-form">
       <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="my-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label id="close-modal" for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
         <h3 class="font-bold text-lg">Transcribe</h3>
         <input id="token" type="text" placeholder="Deepgram token" class="input input-bordered w-full max-w-xs" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
@@ -153,17 +122,13 @@ class DeepgramService extends HTMLElement {
         </select>
       </div>
       <div class="modal-action">
-        <!--<input type="submit" class="btn btn-primary btn-active btn-outline" value="transcribe">-->
-        <label id="transcribe-btn" for="my-modal" class="btn btn-primary">Transcribe</label>
-        <!--<a href="#" id="transcribe-btn" class="btn btn-primary">Transcribe</a>-->
+        <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary">Transcribe</label>
       </div>
     </form>`;
 
     document.querySelector('#file').addEventListener('change',this.clearMediaUrl);
     document.querySelector('#media').addEventListener('change',this.clearFilePicker);
-    document.querySelector('#media').addEventListener('change',this.clearFilePicker);
     document.querySelector('#transcribe-btn').addEventListener('click', this.getData);
-    //document.querySelector('#deepgram-form').addEventListener('submit', this.getData);
     document.querySelector('#file').addEventListener('change', this.updatePlayerWithLocalFile);
     this.configureLanguage();
   }
