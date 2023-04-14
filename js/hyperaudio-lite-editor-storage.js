@@ -45,7 +45,6 @@ function getLocalStorageSaveFilename(url){
   return filename;
 }
 
-
 function saveHyperTranscriptToLocalStorage(
   filename,
   hypertranscriptDomId = 'hypertranscript',
@@ -74,8 +73,9 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   }
 }
 
-function loadHyperTranscriptFromLocalStorage(filename, storage = window.localStorage){
-  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(filename+fileExtension)));
+function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){
+
+  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
   if (hypertranscriptstorage) {
     renderTranscript(hypertranscriptstorage);
   }
