@@ -73,6 +73,8 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   let filePicker = document.querySelector("#file-picker");
   
   fileSelect.innerHTML = '<option value="default">Select file…</option>';
+  filePicker.innerHTML = "";
+  
   for (let i = 0; i < storage.length; i++) {
     if (storage.key(i).indexOf(fileExtension) > 0) {
       let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
