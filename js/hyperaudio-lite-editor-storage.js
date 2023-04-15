@@ -74,7 +74,7 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   
   fileSelect.innerHTML = '<option value="default">Select file…</option>';
   filePicker.innerHTML = "";
-  
+
   for (let i = 0; i < storage.length; i++) {
     if (storage.key(i).indexOf(fileExtension) > 0) {
       let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
@@ -82,6 +82,28 @@ function loadLocalStorageOptions(storage = window.localStorage) {
       filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" href=${i}>${filename}</a></li>`);
     }
   }
+
+  setFileSelectListeners();
+
+  if (storage.length === 0) {
+    filePicker.insertAdjacentHTML("beforeend", `<li style="padding-left:16px; padding-top:16px">No files saved.</li>`);
+  }
+}
+
+function setFileSelectListeners() {
+  let files = document.querySelectorAll('.file-item');
+
+  files.forEach(file => {
+    file.removeEventListener('click', fileSelectHandleClick);
+    file.addEventListener('click', fileSelectHandleClick);
+  });
+}
+
+function fileSelectHandleClick(event) {
+  console.log(event);
+  loadHyperTranscriptFromLocalStorage(event.target.getAttribute("href"));
+  event.preventDefault();
+  return false;
 }
 
 function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){

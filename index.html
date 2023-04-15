@@ -162,7 +162,7 @@ If you are creating an open source application under a license compatible with t
         </div>
         <div style="display: flex; overflow-y:scroll;">
           <div style="height:400px">
-            <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="width:376px">
+            <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="width:376px; height:400px">
             </ul>
           </div>
         </div>
@@ -1521,16 +1521,8 @@ If you are creating an open source application under a license compatible with t
         loadHyperTranscriptFromLocalStorage(filenameIndex);
       });
 
+    setFileSelectListeners();
     
-    const files = document.querySelectorAll('.file-item');
-
-    files.forEach(file => {
-      file.addEventListener('click', function handleClick(event) {
-        loadHyperTranscriptFromLocalStorage(this.getAttribute("href"));
-        event.preventDefault();
-        return false;
-      });
-    });
   </script>
 
   <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
