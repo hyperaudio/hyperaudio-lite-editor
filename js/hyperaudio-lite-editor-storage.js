@@ -100,8 +100,15 @@ function setFileSelectListeners() {
 }
 
 function fileSelectHandleClick(event) {
-  console.log(event);
   loadHyperTranscriptFromLocalStorage(event.target.getAttribute("href"));
+
+  let files = document.querySelectorAll('.file-item');
+
+  files.forEach(file => {
+    file.classList.remove("active");
+  });
+
+  event.target.classList.add("active");
   event.preventDefault();
   return false;
 }
