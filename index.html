@@ -1,5 +1,5 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.1.8 -->
+<!--  Hyperaudio Lite Editor - Version 0.1.9 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
 Commercial license
@@ -20,6 +20,10 @@ If you are creating an open source application under a license compatible with t
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
   <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
+
+  <!-- DaisyUI / Tailwind -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.5/dist/full.css" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <!-- Meta Tags required for
     Progressive Web App -->
@@ -57,6 +61,10 @@ If you are creating an open source application under a license compatible with t
       transition: left 0.5s ease;
   }
 
+  #nav-holder {
+    transition: left 0.5s ease;
+  }
+
   
   #slide-sidebar {
      display: none;
@@ -64,7 +72,6 @@ If you are creating an open source application under a license compatible with t
 
   input:checked ~ .transcript-holder {
       left: 0;
-
   }
 
   input:checked ~ #slide-label {
@@ -86,16 +93,17 @@ If you are creating an open source application under a license compatible with t
     cursor: pointer;
   }
 
-  /*
- .hyperaudio-transcript .active{
-    background-color: #efefef;
+  
+ /*.hyperaudio-transcript .active{
+    background-color: #ffefff;
+
   }
 
   .hyperaudio-transcript .active > .active {
     text-decoration:  #00f underline;
     text-decoration-thickness: 3px;
-  }
-  */
+  }*/
+  
     
   #speaker-display {
     margin-top: -30px;
@@ -103,12 +111,15 @@ If you are creating an open source application under a license compatible with t
     padding-right: 20px;
   }
 
+  p {
+    padding-bottom: 1.5em;
+    line-height: 1.8;
+  }
+
   </style>
 </head>
-<body>
+<body data-theme="light">
   <div class="main-wrap">
-    <input id="slide-sidebar" type="checkbox" role="button" />
-        <label id="slide-label" for="slide-sidebar"><span>&nbsp;&#8249;&nbsp;</span></label>
     <div class="sidebar">
       <div>
         <div class="top-bar-item">
@@ -121,46 +132,103 @@ If you are creating an open source application under a license compatible with t
         </div>
 
         <div class="top-bar-item">
-          <form id="searchForm">
-            <div id="pbr-holder" style="padding-bottom:32px">
-              <label for="pbr">Playback Rate</label> <input type="number" id="pbr" name="pbr" value="1" step="0.2" min="0.4" max="3">
+          <div id="pbr-holder" style="display: grid; grid-template-columns: 0.65fr 1.05fr 0.3fr; grid-gap: 10px;">
+            <div>
+              <label for="pbr">Playback Rate</label> 
             </div>
-            <div class="hidden-label-holder"><label for="search">Search</label></div>
-            <div><input id="search" name="search" type="text"><input type="submit" value="search"></div>
-          </form>
+            <div>
+              <input id="pbr" type="range" min="0.4" max="2.4" value="1" step="0.2" class="range range-md range-primary" />
+              <!--<div class="w-full flex justify-between text-xs px-2">-->
+            </div>
+              
+            <div style="padding-right: 12px;">
+              <div class="hidden-label-holder">
+                <label style="width:0px" for="currentPbr">Playback Rate Value</label> 
+              </div>
+              <input id="currentPbr" class="input input-bordered input-xs w-full max-w-xs" style="width:60px" type="number" id="pbr" name="pbr" value="1" step="0.2" min="0.4" max="2.4">
+            </div>
+          </div>
         </div>
 
-        <div id="stt-holder" style="height:300px">
-          <!--<iframe id="stt-iframe" title="deepgram stt" width="100%" height="100%" style="border:0" src="stt-deepgram.html"></iframe>-->
-          <deepgram-service></deepgram-service>
+        <div class="form-control">
+          <span style="text-align: right; padding-right: 12px; padding-top: 12px;">
+            <label for="show-speakers">Display speakers </label>
+            <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="checkbox checkbox-primary"/>
+          </span>
         </div>
 
-        <div id="speaker-display">
-          <label for="show-speakers">display speakers</label>
-          <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked">
+        <div class="tabs">
+          <a class="tab tab-lifted tab-active"><strong>Local Storage</strong></a> 
         </div>
-
-        <div id="footer" style="bottom: 0%; position: fixed;">
-          <p id="controls">
-            Download transcript as <br>
-            <a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT ⬇</a>
-            <a id="download-srt" href="" download="hyperaudio.srt">SRT ⬇</a>
-            <a id="download-html" href="" download="hypertranscript.html">HTML ⬇</a>
-            <a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript ⬇</a>
-
-          </p>
-          <p>
-            Export/Import options:<br>
-            <export-json></export-json>
-            <import-json></import-json>
-            <import-srt></import-srt>
-          </p>
+        <div style="display: flex; overflow-y:scroll;">
+          <div style="height:400px">
+            <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="width:376px; height:400px">
+            </ul>
+          </div>
         </div>
       </div>
-
     </div>
+
+    <div id="nav-holder" style="display: flex; position: absolute; width: calc(100% - 400px); top:0; left:400px; z-index: 2;">
+
+      <div class="navbar bg-base-100" style="background-color: #ffffff; opacity:0.95;">
+        <div class="navbar-start">
+          <button id="sidebar-toggle" class="btn btn-square btn-outline" aria-label="Toggle Sidebar">
+            <svg id="sidebar-close-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-close"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
+            <svg id="sidebar-open-icon" style="display: none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-open"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
+          </button>
+          <div class="dropdown menu-compact">
+            <label tabindex="0" class="btn m-1 btn-outline gap-2">
+              File
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </label>
+            <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+              <li class="menu-title">
+                <span>
+                  Download as
+                </span>
+              </li>
+              <li><a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT (Captions)</a></li>
+              <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
+              <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
+              <li><a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript</a></li>
+              <hr
+              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
+              <li class="menu-title">
+                <span>
+                  Export / Import
+                </span>
+              </li>
+              <li><export-json></export-json></li>
+              <li><import-json></import-json></li>
+              <li><import-srt></import-srt></li>
+            </ul>
+          </div>
+        </div>
+        <div class="navbar-center">
+          <div class="form-control">
+            <input id="search-box" type="text" placeholder="Search" class="input input-bordered" />
+          </div>
+        </div>
+        <div class="navbar-end" style="padding-right: 8px;">
+          <label for="transcribe-modal" class="btn btn-primary gap-2">
+            Transcribe
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
+          </label>
+          <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
+          <div class="modal">
+            <div class="modal-box">
+              <deepgram-service></deepgram-service>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
     <div class="transcript-holder" style="display: flex; justify-content: center; background-color: #ffffff; overflow-y:scroll;">
-      <div id="hypertranscript" class="hyperaudio-transcript" style="position: absolute; top: 0px; bottom: 0px; background-color: #ffffff; padding-top: 48px; width: 520px; outline: none" contenteditable="true">
+
+      <div id="hypertranscript" class="hyperaudio-transcript" style="position: absolute; top: 40px; bottom: 0px; background-color: #ffffff; padding-top: 48px; width: 520px; outline: none;" contenteditable="true">
         <!-- example data -->
         <article>
           <section class="active">
@@ -1105,6 +1173,7 @@ If you are creating an open source application under a license compatible with t
   <script>
 
 
+
   let editableDiv = document.querySelector('#hypertranscript');
 
   editableDiv.addEventListener("paste", function(e) {
@@ -1338,17 +1407,35 @@ If you are creating an open source application under a license compatible with t
     const videoElement = document.querySelector("#hyperplayer");
     let sidebarOpen = true;
 
-    document.querySelector('#slide-sidebar').addEventListener('click', (e) => {
+
+    document.querySelector('#sidebar-toggle').addEventListener('click', (e) => {
+
+      if (sidebarOpen === true) {
+        console.log("sidebar open");
+        document.querySelector('.transcript-holder').style.left = 0;
+        document.querySelector('#nav-holder').style.left = 0;
+        document.querySelector('#nav-holder').style.width = "100%";
+        document.querySelector('#sidebar-close-icon').style.display = "none";
+        document.querySelector('#sidebar-open-icon').style.display = "block";
+        sidebarOpen = false;
+      } else {
+        console.log("sidebar closed");
+        document.querySelector('.transcript-holder').style.left = "400px";
+        document.querySelector('#nav-holder').style.left = "400px";
+        document.querySelector('#nav-holder').style.setProperty('width', 'calc(100% - 400px)');
+        document.querySelector('#sidebar-close-icon').style.display = "block";
+        document.querySelector('#sidebar-open-icon').style.display = "none";
+        sidebarOpen = true;
+      }
+
       if(
         document.pictureInPictureEnabled &&
         !videoElement.disablePictureInPicture) {
         try {
-          if (sidebarOpen === true) {
+          if (sidebarOpen === false) {
             videoElement.requestPictureInPicture();
-            sidebarOpen = false;
           } else {
             document.exitPictureInPicture();
-            sidebarOpen = true;
           }
         } catch(err) {
             console.error(err);
@@ -1371,61 +1458,77 @@ If you are creating an open source application under a license compatible with t
         });
       }
     });
-
   }
-
-
 
   hyperaudio();
   </script>
 
   <!-- comment out if localstorage not required -->
 
-  <dialog id="fileSaveDialog">
-    <form method="dialog">
-      <h4>Save to local storage</h4>
-      <p>
-        <label for="localstorage-fname">File name:</label>
-        <input type="text" id="localstorage-fname" name="localstorage-fname">
-      </p>
-      <div>
-        <button value="cancel">Cancel</button>
-        <button id="confirmBtn" value="default">Confirm</button>
+  <div class="hidden-label-holder">
+    <label for="file-save-dialog">Open Save to Local Storage Dialog</label>
+  </div>
+  <input type="checkbox" id="file-save-dialog" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Save to Local Storage</h3>
+        <input type="text" id="save-localstorage-filename" name="save-localstorage-filename" placeholder="File name" class="input input-bordered w-full max-w-xs" />
       </div>
-    </form>
-  </dialog>
+      <div class="modal-action">
+        <label for="file-save-dialog" class="btn btn-ghost">Cancel</label>
+        <label id="file-save-localstorage" for="file-save-dialog" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+  </div>
 
-  <dialog id="fileSelectDialog">
-    <form method="dialog">
-      <h4>Restore from local storage</h4>
-      <p>
-        <select id="localstorage-select">
+  <div class="hidden-label-holder">
+    <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
+  </div>
+  <input type="checkbox" id="file-load-dialog" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Load from Local Storage</h3>
+        <select id="load-localstorage-filename" class="select select-bordered w-full max-w-xs">
         </select>
-      </p>
-      <div>
-        <button value="cancel">Cancel</button>
-        <button id="confirmBtn" value="default">Confirm</button>
       </div>
-    </form>
-  </dialog>
+      <div class="modal-action">
+        <label for="file-load-dialog" class="btn btn-ghost">Cancel</label>
+        <label id="file-load-localstorage" for="file-load-dialog" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+  </div>
 
   <script src="./js/hyperaudio-lite-editor-storage.js"></script>
 
   <script>
-    document.querySelector('#controls').insertAdjacentHTML("beforeend", '<p><button id="hyperadio-lite-editor-localstorage-save">save to local storage</button> <button id="hyperadio-lite-editor-localstorage-load">restore from local storage</button></p>');
+
+    document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><spa>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
+
+    document.querySelector('#save-localstorage-filename').value = getLocalStorageSaveFilename(document.querySelector("#hyperplayer").src);
+
+    loadLocalStorageOptions();
 
     document
-      .querySelector("#hyperadio-lite-editor-localstorage-save")
+      .querySelector("#file-save-localstorage")
       .addEventListener("click", function () {
-        let transcriptionName = document.getElementById("hyperplayer").src;
-        saveHyperTranscript(transcriptionName+".hyperaudio");
+        let filename = document.querySelector('#save-localstorage-filename').value;
+        saveHyperTranscriptToLocalStorage(filename);
+        loadLocalStorageOptions();
       });
 
     document
-      .querySelector("#hyperadio-lite-editor-localstorage-load")
+      .querySelector("#file-load-localstorage")
       .addEventListener("click", function () {
-        selectLoadHyperTranscript();
+        let filenameIndex = document.querySelector('#load-localstorage-filename').value;
+        loadHyperTranscriptFromLocalStorage(filenameIndex);
       });
+
+    setFileSelectListeners();
+    
   </script>
 
   <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>

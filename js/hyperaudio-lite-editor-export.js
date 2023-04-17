@@ -15,7 +15,8 @@ class ExportJson extends HTMLElement {
   }
 
   connectedCallback() {
-    this.innerHTML =  `<button onclick="${this.exportJson}">export json ⬇</button>`;
+    //this.innerHTML =  `<button onclick="${this.exportJson}">export json ⬇</button>`;
+    this.innerHTML = `<a onclick="${this.exportJson}">Export JSON</a>`;
     this.addEventListener('click', this.exportJson);
   }
 }
@@ -56,7 +57,8 @@ class ImportJson extends HTMLElement {
   }
 
   connectedCallback() {
-    this.innerHTML =  `<button onclick="${this.importJson}">import json ⬆</button>`;
+    //this.innerHTML =  `<button onclick="${this.importJson}">import json ⬆</button>`;
+    this.innerHTML = `<a onclick="${this.importJson}">Import JSON</a>`;
     this.addEventListener('click', this.importJson);
   }
 }
@@ -91,7 +93,8 @@ class ImportSrt extends HTMLElement {
   }
 
   connectedCallback() {
-    this.innerHTML =  `<button onclick="${this.importSrt}">import srt ⬆</button>`;
+    //this.innerHTML =  `<button onclick="${this.importSrt}">import srt ⬆</button>`;
+    this.innerHTML = `<a onclick="${this.importSrt}">Import SRT</a>`;
     this.addEventListener('click', this.importSrt);
   }
 }

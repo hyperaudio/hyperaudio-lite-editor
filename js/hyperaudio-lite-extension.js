@@ -1,5 +1,4 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.1.1b */
 
 'use strict';
 // Example wrapper for hyperaudio-lite with search and playbackRate included
@@ -12,6 +11,14 @@ if (searchForm) {
     event.preventDefault();
   }, false);
 }
+
+document.querySelector('#search-box').addEventListener("keyup", (event) => {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+
+  searchPhrase(document.querySelector('#search-box').value);
+});
 
 
 let searchPhrase = function (phrase) {
@@ -63,14 +70,19 @@ let searchPhrase = function (phrase) {
   });
 }
 
-window.onload = function() {
-	const playbackRateCtrl = document.getElementById('pbr');
-	const currentPlaybackRate = document.getElementById('currentPbr');
+const playbackRateCtrl = document.getElementById('pbr');
+const currentPlaybackRate = document.getElementById('currentPbr');
 
-  if (playbackRateCtrl !== null) {
-    playbackRateCtrl.addEventListener('input', function(){
-      currentPlaybackRate.innerHTML = playbackRateCtrl.value;
-      hyperplayer.playbackRate = playbackRateCtrl.value;
-    },false);
-  }
+if (playbackRateCtrl !== null) {
+  playbackRateCtrl.addEventListener('input', function(){
+    currentPlaybackRate.value = playbackRateCtrl.value;
+    hyperplayer.playbackRate = playbackRateCtrl.value;
+  },false);
+}
+
+if (currentPlaybackRate !== null) {
+  currentPlaybackRate.addEventListener('change', function(){
+    playbackRateCtrl.value = currentPlaybackRate.value;
+    hyperplayer.playbackRate = playbackRateCtrl.value;
+  },false);
 }
