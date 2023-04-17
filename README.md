@@ -1,3 +1,4 @@
+
 # Hyperaudio Lite Editor
 A lightweight transcript editor for editing and correcting machine generated transcripts.
 
@@ -27,7 +28,7 @@ Edit in the usual way – add punctuation, create and merge paragraphs etc. Plac
 
 We score very highly on Google Chrome's Lighthouse audit tool
 
-<img width="639" alt="Chrome Lighthouse showing maximum accessibility, performance and best practice scores" src="https://user-images.githubusercontent.com/208756/220897138-fa5652ad-a7d9-426b-8838-33848b67eeef.png">
+<img width="739" alt="Chrome Lighthouse showing maximum accessibility, performance and best practice scores" src="https://user-images.githubusercontent.com/208756/232544023-a3f29e3b-5238-4c06-8404-27ab008012a2.png">
 
 Created as a Progressive Web App, you can install on your desktop or mobile home screen.
 
