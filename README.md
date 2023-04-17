@@ -18,7 +18,8 @@ Export your transcript as text, interactive transcript, captions and subtitles.
 
 (To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
 
-[<img width="1187" alt="Screen capture of Deepgram integration with Hyperaudio Lite Editor" src="https://user-images.githubusercontent.com/208756/220708532-4468bbf4-bbf8-4606-a8ed-ee8dec5e2d1c.png">](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html)
+[<img width="1130" alt="Screen capture of Hyperaudio Lite Editor" src="https://user-images.githubusercontent.com/208756/232547062-c118f610-8f22-4273-899a-f089604ac479.png">](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html)
+
 
 ### How to Use
 
