@@ -7,6 +7,7 @@ class DeepgramService extends HTMLElement {
   configureLanguage() {
     const select = document.querySelector('#language');
     const optionLanguage = {
+      "English": "en",
       "English (United States)": "en-US",
       "English (Great Britain)": "en-GB",
       "Italian": "it",
@@ -33,21 +34,46 @@ class DeepgramService extends HTMLElement {
       "Spanish" : "es",
       "Swedish" : "sv",
       "Turkish" : "tr",
-      "Ukrainian": "uk",
-      }
+      "Ukrainian": "uk"
+    }
 
     let counter = 0
     Object.keys(optionLanguage).forEach( language => {
       //console.log(language)
       let option = document.createElement("option")
       option.value = optionLanguage[language]
-      option.innerHTML = `<span>${language}<span>`
+      option.innerHTML = `${language}`
       if (counter === 0) {
         option.selected = "selected"
       }
       select.appendChild(option);
       counter += 1;
-    } )
+    } );
+
+    const selectModel = document.querySelector('#language-model');
+    const optionLanguageModel = {
+      "General": "general",
+      "Whisper (OpenAI)": "whisper",
+      "Meeting": "meeting",
+      "Phone call": "phonecall",
+      "Voicemail": "voicemail",
+      "Finance": "finance",
+      "Conversational AI": "conversationalai",   
+    }
+
+    counter = 0
+    Object.keys(optionLanguageModel).forEach( model => {
+      //console.log(language)
+      let option = document.createElement("option")
+      option.value = optionLanguageModel[model]
+      option.innerHTML = `${model}`
+      if (counter === 0) {
+        option.selected = "selected"
+      }
+      selectModel.appendChild(option);
+      counter += 1;
+    } );
+    
   }
 
   clearMediaUrl(event) {
@@ -80,9 +106,18 @@ class DeepgramService extends HTMLElement {
     });
   }
 
+  /*toggleAdvancedSettings(event) {
+    if (this.checked === true){
+      document.querySelector("#advanced-settings").style.display = "block";
+    } else {
+      document.querySelector("#advanced-settings").style.display = "none";
+    }
+  }*/
+
   getData(event) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
+    const model = document.querySelector('#language-model').value;
     let media =  document.querySelector('#media').value;
     const token =  document.querySelector('#token').value;
     const file = document.querySelector('[name=file]').files[0];
@@ -93,14 +128,14 @@ class DeepgramService extends HTMLElement {
     }
 
     if (file !== undefined) {
-      fetchDataLocal(token, file, tier, language);
+      fetchDataLocal(token, file, tier, language, model);
       document.querySelector('#media').value = "";
     } else {
       if (media !== "" || token !== "") {
         let player = document.querySelector("#hyperplayer");
         player.src = media;
-        console.log(token);
-        fetchData(token, media, tier, language);
+        //console.log(token);
+        fetchData(token, media, tier, language, model);
       } else {
         document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
       }
@@ -116,10 +151,30 @@ class DeepgramService extends HTMLElement {
         <input id="token" type="text" placeholder="Deepgram token" class="input input-bordered w-full max-w-xs" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        or
+        <span class="label-text">or</span>
         <input id="file" name="file" type="file" class="file-input w-full max-w-xs" />
+        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+        <span class="label-text">Language</span>
         <select id="language" name="language" placeholder="language" class="select select-bordered w-full max-w-xs">
         </select>
+        <!--<div class="form-control w-48">
+          <label class="cursor-pointer label">
+            <span class="label-text">Advanced settings</span> 
+            <input id="advanced-settings-check" type="checkbox" class="toggle toggle-primary" />
+          </label>
+        </div>-->
+
+        <span class="label-text">Model</span>
+        <div>
+          <select id="language-model" name="language-model" placeholder="language-model" class="select select-bordered w-full max-w-xs">
+          </select>
+        </div>
+        <!--<div style="padding-top:16px; padding-bottom:16px"><span class="label-text">Tier</span> </div>
+        <div class="btn-group">
+          <input type="radio" name="options" data-title="base" value="base" class="btn btn-sm" checked />
+          <input type="radio" name="options" data-title="enhanced" value="enhanced" class="btn btn-sm" />
+          <input type="radio" name="options" data-title="nova" value="nova" class="btn btn-sm" />
+        </div>-->
       </div>
       <div class="modal-action">
         <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary">Transcribe</label>
@@ -130,15 +185,24 @@ class DeepgramService extends HTMLElement {
     document.querySelector('#media').addEventListener('change',this.clearFilePicker);
     document.querySelector('#transcribe-btn').addEventListener('click', this.getData);
     document.querySelector('#file').addEventListener('change', this.updatePlayerWithLocalFile);
+    //document.querySelector('#advanced-settings-check').addEventListener('change', this.toggleAdvancedSettings);
+
     this.configureLanguage();
   }
 }
 
 customElements.define('deepgram-service', DeepgramService);
 
-function fetchData(token, media, tier, language) {
+function fetchData(token, media, tier, language, model) {
+
+  let url = null;
+  if (model === "whisper") { // no tier
+    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&smart_format=true`
+  } else {
+    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&language=${language}`
+  }
   
-  fetch(`https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`, {
+  fetch(url, {  
     method: 'POST',
     headers: {
       'Authorization': 'Token '+token+'',
@@ -170,7 +234,7 @@ function fetchData(token, media, tier, language) {
     
     if (error.indexOf("400") > 0 && tier === "enhanced") {
       tier = "base";
-      fetchData(token, media, tier, language);
+      fetchData(token, media, tier, language, model);
     }
 
     this.dataError = true;
@@ -178,9 +242,16 @@ function fetchData(token, media, tier, language) {
   })
 }
 
-function fetchDataLocal(token, file, tier, language) {
+function fetchDataLocal(token, file, tier, language, model) {
 
-  const url = `https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`;
+  //const url = `https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`;
+
+  let url = null;
+  if (model === "whisper") { // no tier
+    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&smart_format=true`
+  } else {
+    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&language=${language}`
+  }
   const apiKey = token;
 
   // Create a new FileReader instance
@@ -229,7 +300,7 @@ function fetchDataLocal(token, file, tier, language) {
           
           if (error.indexOf("400") > 0 && tier === "enhanced") {
             tier = "base";
-            fetchDataLocal(token, file, tier, language);
+            fetchDataLocal(token, file, tier, language, model);
           }
       
           this.dataError = true;
