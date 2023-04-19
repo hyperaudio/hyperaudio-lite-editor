@@ -248,9 +248,9 @@ function fetchDataLocal(token, file, tier, language, model) {
 
   let url = null;
   if (model === "whisper") { // no tier
-    deepgramUrl = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&smart_format=true`
   } else {
-    deepgramUrl = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&language=${language}`
+    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&language=${language}`
   }
   const apiKey = token;
 
