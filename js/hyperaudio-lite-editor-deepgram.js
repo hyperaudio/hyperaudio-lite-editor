@@ -224,6 +224,7 @@ function fetchData(token, media, tier, language, model) {
   .then(json => {
     parseData(json);
     document.querySelector("#summary").innerHTML = extractSummary(json);
+    document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
   })
   .catch(function (error) {
     console.dir("error is : "+error);
@@ -291,6 +292,7 @@ function fetchDataLocal(token, file, tier, language, model) {
         .then(json => {
           parseData(json);
           document.querySelector("#summary").innerHTML = extractSummary(json);
+          document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
         })
         .catch(function (error) {
           console.dir("error is : "+error);
@@ -391,8 +393,6 @@ function extractSummary(json) {
   let summary = "";
   const summaryData = json.results.channels[0].alternatives[0].summaries;
 
-  console.log(summaryData);
-
   summaryData.forEach((element, index) => {
     summary += element.summary;
     if (index < summaryData.length - 1) {
@@ -401,4 +401,17 @@ function extractSummary(json) {
   });
 
   return (summary);
+}
+
+function extractTopics(json) {
+  let topics = [];
+  const topicsData = json.results.channels[0].alternatives[0].topics;
+
+  topicsData.forEach(element => {
+    element.topics.forEach(el => {
+      topics.push(el.topic);
+    });
+  });
+
+  return (topics);
 }

@@ -2,14 +2,16 @@
  * HyperTranscriptStorage class
  * @param {string} hypertranscript - the html of the hypertranscript
  * @param {string} video - the url of the video
- * @param {string} video - the text of the summary
+ * @param {string} summary - the text of the summary
+ * @param {array} summary - an array of topics
  * @return {void}
  */
 class HyperTranscriptStorage {
-  constructor(hypertranscript, video, summary) {
+  constructor(hypertranscript, video, summary, topics) {
     this.hypertranscript = hypertranscript;
     this.video = video;
     this.summary = summary;
+    this.topics = topics;
   }
 }
 
@@ -29,6 +31,7 @@ function renderTranscript(
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
   document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
   document.getElementById("summary").innerHTML = hypertranscriptstorage['summary'];
+  document.getElementById("topics").innerHTML = getTopicsString(hypertranscriptstorage['topics']);
 
   hyperaudio();
 }
@@ -46,6 +49,14 @@ function getLocalStorageSaveFilename(url){
   }
 
   return filename;
+}
+
+function getTopicsString(topics) {
+  let topicsString = "";
+  if (topics && topics !== "undefined" && Object.keys(topics).length > 0) {
+    topicsString = topics.join(", ");
+  }
+  return topicsString;
 }
 
 /*
@@ -66,7 +77,8 @@ function saveHyperTranscriptToLocalStorage(
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
   let summary = document.getElementById("summary").innerHTML;
-  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary);
+  let topics = document.getElementById("topics").innerHTML.split(", ");
+  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary, topics);
 
   storage.setItem(filename+fileExtension, JSON.stringify(hypertranscriptstorage));
 }
@@ -139,14 +151,16 @@ function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localSt
 }
 
 function loadSummaryFromLocalStorage(fileindex, target, storage = window.localStorage){
-  console.log(fileindex);
+  
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
 
+  console.log("hypertranscriptstorage");
+  console.log(hypertranscriptstorage);
+
+  console.log("topics");
+  console.log(hypertranscriptstorage.topics);
+
   if (hypertranscriptstorage) {
-    console.log(hypertranscriptstorage.summary);
-    target.setAttribute("title", hypertranscriptstorage.summary); 
+    target.setAttribute("title", hypertranscriptstorage.summary + "\n\nTopics: " + getTopicsString(hypertranscriptstorage.topics)); 
   }
 }
-
-
-
