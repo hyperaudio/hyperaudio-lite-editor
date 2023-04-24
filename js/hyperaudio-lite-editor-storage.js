@@ -1,13 +1,15 @@
 /*
  * HyperTranscriptStorage class
  * @param {string} hypertranscript - the html of the hypertranscript
- * @param {string} video - the html of the video
+ * @param {string} video - the url of the video
+ * @param {string} video - the text of the summary
  * @return {void}
  */
 class HyperTranscriptStorage {
-  constructor(hypertranscript, video) {
+  constructor(hypertranscript, video, summary) {
     this.hypertranscript = hypertranscript;
     this.video = video;
+    this.summary = summary;
   }
 }
 
@@ -26,6 +28,7 @@ function renderTranscript(
 ) {
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
   document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
+  document.getElementById("summary").innerHTML = hypertranscriptstorage['summary'];
 
   hyperaudio();
 }
@@ -62,7 +65,8 @@ function saveHyperTranscriptToLocalStorage(
   console.log("saving");
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
-  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
+  let summary = document.getElementById("summary").innerHTML;
+  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary);
 
   storage.setItem(filename+fileExtension, JSON.stringify(hypertranscriptstorage));
 }
@@ -79,7 +83,7 @@ function loadLocalStorageOptions(storage = window.localStorage) {
     if (storage.key(i).indexOf(fileExtension) > 0) {
       let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
       fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
-      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" href=${i}>${filename}</a></li>`);
+      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" title="..." href=${i}>${filename}</a></li>`);
     }
   }
 
@@ -93,9 +97,13 @@ function loadLocalStorageOptions(storage = window.localStorage) {
 function setFileSelectListeners() {
   let files = document.querySelectorAll('.file-item');
 
+  console.log("setting listeners");
+
   files.forEach(file => {
     file.removeEventListener('click', fileSelectHandleClick);
     file.addEventListener('click', fileSelectHandleClick);
+    file.removeEventListener('mouseover', fileSelectHandleHover);
+    file.addEventListener('mouseover', fileSelectHandleHover);
   });
 }
 
@@ -113,12 +121,30 @@ function fileSelectHandleClick(event) {
   return false;
 }
 
+function fileSelectHandleHover(event) {
+  console.log("hover");
+  loadSummaryFromLocalStorage(event.target.getAttribute("href"), event.target);
+  event.preventDefault();
+  return false;
+}
+
 function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
+
   if (hypertranscriptstorage) {
     renderTranscript(hypertranscriptstorage);
     lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
     document.querySelector('#save-localstorage-filename').value = lastFilename;
+  }
+}
+
+function loadSummaryFromLocalStorage(fileindex, target, storage = window.localStorage){
+  console.log(fileindex);
+  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
+
+  if (hypertranscriptstorage) {
+    console.log(hypertranscriptstorage.summary);
+    target.setAttribute("title", hypertranscriptstorage.summary); 
   }
 }
 
