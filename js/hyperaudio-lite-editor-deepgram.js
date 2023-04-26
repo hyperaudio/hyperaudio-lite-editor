@@ -197,9 +197,9 @@ function fetchData(token, media, tier, language, model) {
 
   let url = null;
   if (model === "whisper") { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&language=${language}`
+    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&summarize=true&detect_topics=true&language=${language}`
   }
   
   fetch(url, {  
@@ -223,6 +223,8 @@ function fetchData(token, media, tier, language, model) {
   })
   .then(json => {
     parseData(json);
+    document.querySelector("#summary").innerHTML = extractSummary(json);
+    document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
   })
   .catch(function (error) {
     console.dir("error is : "+error);
@@ -248,9 +250,9 @@ function fetchDataLocal(token, file, tier, language, model) {
 
   let url = null;
   if (model === "whisper") { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&language=${language}`
+    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&summarize=true&detect_topics=true&language=${language}`
   }
   const apiKey = token;
 
@@ -289,6 +291,8 @@ function fetchDataLocal(token, file, tier, language, model) {
         })
         .then(json => {
           parseData(json);
+          document.querySelector("#summary").innerHTML = extractSummary(json);
+          document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
         })
         .catch(function (error) {
           console.dir("error is : "+error);
@@ -314,9 +318,6 @@ function fetchDataLocal(token, file, tier, language, model) {
 }
 
 function parseData(json) {
-  this.users = json;
-
-  console.log(json);
 
   const maxWordsInPara = 100;
   const significantGapInSeconds = 0.5;
@@ -386,4 +387,31 @@ function parseData(json) {
 
   const event = new CustomEvent('hyperaudioInit');
   document.dispatchEvent(event);
+}
+
+function extractSummary(json) {
+  let summary = "";
+  const summaryData = json.results.channels[0].alternatives[0].summaries;
+
+  summaryData.forEach((element, index) => {
+    summary += element.summary;
+    if (index < summaryData.length - 1) {
+      summary += "\n\n";
+    }
+  });
+
+  return (summary);
+}
+
+function extractTopics(json) {
+  let topics = [];
+  const topicsData = json.results.channels[0].alternatives[0].topics;
+
+  topicsData.forEach(element => {
+    element.topics.forEach(el => {
+      topics.push(el.topic);
+    });
+  });
+
+  return (topics);
 }

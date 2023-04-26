@@ -1,13 +1,17 @@
 /*
  * HyperTranscriptStorage class
  * @param {string} hypertranscript - the html of the hypertranscript
- * @param {string} video - the html of the video
+ * @param {string} video - the url of the video
+ * @param {string} summary - the text of the summary
+ * @param {array} summary - an array of topics
  * @return {void}
  */
 class HyperTranscriptStorage {
-  constructor(hypertranscript, video) {
+  constructor(hypertranscript, video, summary, topics) {
     this.hypertranscript = hypertranscript;
     this.video = video;
+    this.summary = summary;
+    this.topics = topics;
   }
 }
 
@@ -26,6 +30,8 @@ function renderTranscript(
 ) {
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
   document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
+  document.getElementById("summary").innerHTML = hypertranscriptstorage['summary'];
+  document.getElementById("topics").innerHTML = getTopicsString(hypertranscriptstorage['topics']);
 
   hyperaudio();
 }
@@ -45,6 +51,14 @@ function getLocalStorageSaveFilename(url){
   return filename;
 }
 
+function getTopicsString(topics) {
+  let topicsString = "";
+  if (topics && topics !== "undefined" && Object.keys(topics).length > 0) {
+    topicsString = topics.join(", ");
+  }
+  return topicsString;
+}
+
 /*
  * Save the current HyperTranscript in the local storage
  * @param {string} filename - the name of the transcript file
@@ -62,7 +76,9 @@ function saveHyperTranscriptToLocalStorage(
   console.log("saving");
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
-  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video);
+  let summary = document.getElementById("summary").innerHTML;
+  let topics = document.getElementById("topics").innerHTML.split(", ");
+  let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary, topics);
 
   storage.setItem(filename+fileExtension, JSON.stringify(hypertranscriptstorage));
 }
@@ -79,7 +95,7 @@ function loadLocalStorageOptions(storage = window.localStorage) {
     if (storage.key(i).indexOf(fileExtension) > 0) {
       let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
       fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
-      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" href=${i}>${filename}</a></li>`);
+      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" title="..." href=${i}>${filename}</a></li>`);
     }
   }
 
@@ -93,9 +109,13 @@ function loadLocalStorageOptions(storage = window.localStorage) {
 function setFileSelectListeners() {
   let files = document.querySelectorAll('.file-item');
 
+  console.log("setting listeners");
+
   files.forEach(file => {
     file.removeEventListener('click', fileSelectHandleClick);
     file.addEventListener('click', fileSelectHandleClick);
+    file.removeEventListener('mouseover', fileSelectHandleHover);
+    file.addEventListener('mouseover', fileSelectHandleHover);
   });
 }
 
@@ -113,8 +133,16 @@ function fileSelectHandleClick(event) {
   return false;
 }
 
+function fileSelectHandleHover(event) {
+  console.log("hover");
+  loadSummaryFromLocalStorage(event.target.getAttribute("href"), event.target);
+  event.preventDefault();
+  return false;
+}
+
 function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
+
   if (hypertranscriptstorage) {
     renderTranscript(hypertranscriptstorage);
     lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
@@ -122,5 +150,17 @@ function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localSt
   }
 }
 
+function loadSummaryFromLocalStorage(fileindex, target, storage = window.localStorage){
+  
+  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
 
+  console.log("hypertranscriptstorage");
+  console.log(hypertranscriptstorage);
 
+  console.log("topics");
+  console.log(hypertranscriptstorage.topics);
+
+  if (hypertranscriptstorage) {
+    target.setAttribute("title", hypertranscriptstorage.summary + "\n\nTopics: " + getTopicsString(hypertranscriptstorage.topics)); 
+  }
+}

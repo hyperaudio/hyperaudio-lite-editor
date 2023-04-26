@@ -211,6 +211,19 @@ If you are creating an open source application under a license compatible with t
               <li><import-srt></import-srt></li>
             </ul>
           </div>
+          <label for="info-modal" class="btn btn-ghost btn-primary gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
+          </label>
+          <input type="checkbox" id="info-modal" class="modal-toggle" />
+          <div class="modal">
+            <div class="modal-box relative">
+              <label for="info-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+              <h3 class="text-lg font-bold">Summary</h3>
+              <p id="summary" class="py-4"></p>
+              <h3 class="text-lg font-bold">Topics</h3>
+              <p id="topics" class="py-4"></p>
+            </div>
+          </div>
         </div>
         <div class="navbar-center">
           <div class="form-control">
