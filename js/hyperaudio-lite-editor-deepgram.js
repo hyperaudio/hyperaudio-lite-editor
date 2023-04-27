@@ -6,54 +6,18 @@ class DeepgramService extends HTMLElement {
 
   configureLanguage() {
     const select = document.querySelector('#language');
-    const optionLanguage = {
-      "English": "en",
-      "English (United States)": "en-US",
-      "English (Great Britain)": "en-GB",
-      "Italian": "it",
-      "Spanish": "es",
-      "Chinese, Simplified Mandarin (China)": "zh-CN",
-      "Chinese, Traditional Mandarin (Taiwan)": "zh-TW",
-      "Dutch": "nl",
-      "English (Australia)": "en-AU",
-      "English (India)" : "en-IN",
-      "English (New Zealand)" : "en-NZ",
-      "French" : "fr",
-      "French (Canada)" : "fr-CA",
-      "German" : "de",
-      "Hindi" : "hi",
-      "Hindi (Latin Script)" : "hi-Latn",
-      "Indonesian" : "id",
-      "Japanese" : "ja",
-      "Korean" : "ko",
-      "Polish" : "pl",
-      "Portuguese": "pt",
-      "Portuguese (Brazil)" : "pt-BR",
-      "Portuguese (Portugal)" : "pt-PT",
-      "Russian" : "ru",
-      "Spanish" : "es",
-      "Swedish" : "sv",
-      "Turkish" : "tr",
-      "Ukrainian": "uk"
-    }
+    
 
-    let counter = 0
-    Object.keys(optionLanguage).forEach( language => {
-      //console.log(language)
-      let option = document.createElement("option")
-      option.value = optionLanguage[language]
-      option.innerHTML = `${language}`
-      if (counter === 0) {
-        option.selected = "selected"
-      }
-      select.appendChild(option);
-      counter += 1;
-    } );
+    populateLanguageDeepgram();
 
     const selectModel = document.querySelector('#language-model');
     const optionLanguageModel = {
       "General": "general",
-      "Whisper (OpenAI)": "whisper",
+      "Whisper (Tiny)": "whisper-tiny",
+      "Whisper (Base)": "whisper-base",
+      "Whisper (Small)": "whisper-small",
+      "Whisper (Medium)": "whisper-medium",
+      "Whisper (Large)": "whisper-large",
       "Meeting": "meeting",
       "Phone call": "phonecall",
       "Voicemail": "voicemail",
@@ -61,7 +25,7 @@ class DeepgramService extends HTMLElement {
       "Conversational AI": "conversationalai",   
     }
 
-    counter = 0
+    let counter = 0
     Object.keys(optionLanguageModel).forEach( model => {
       //console.log(language)
       let option = document.createElement("option")
@@ -76,6 +40,7 @@ class DeepgramService extends HTMLElement {
     
   }
 
+  
   clearMediaUrl(event) {
     event.preventDefault();
     document.querySelector('#media').value = "";
@@ -106,13 +71,86 @@ class DeepgramService extends HTMLElement {
     });
   }
 
-  /*toggleAdvancedSettings(event) {
-    if (this.checked === true){
-      document.querySelector("#advanced-settings").style.display = "block";
+  updateDropdowns(event) {
+    let model = document.querySelector('#language-model').value;
+
+    // update languages depending on model
+    if (model.startsWith("whisper")){
+      populateLanguageWhisper();
     } else {
-      document.querySelector("#advanced-settings").style.display = "none";
+      if (model === "general") {
+        populateLanguageDeepgram();
+      } else {
+        populateLanguageDeepgramRestricted();
+      }
     }
-  }*/
+  }
+
+  updateTierDropdown(event) {
+
+    const deepgramModelCompatibility = {
+      "zh_general": ["base"],
+      "zh-CN_general": ["base"],
+      "zh-TW_general": ["base"],
+      "da_general": ["enhanced", "base"],
+      "nl_general":	["enhanced", "base"],
+      "en_general": ["nova", "enhanced", "base"],
+      "en_meeting": ["enhanced", "base"],
+      "en_phonecall": ["nova", "enhanced", "base"],
+      "en_voicemail": ["base"],
+      "en_finance": ["enhanced", "base"],
+      "en_conversationalai": ["base"],
+      "en_video": ["base"],
+      "en-AU_general": ["nova", "base"],
+      "en-GB_general": ["nova", "base"],
+      "en-IN_general": ["nova", "base"],
+      "en-NZ_general": ["nova", "base"],
+      "en-US_general": ["nova", "enhanced", "base"],
+      "en-US_meeting": ["enhanced", "base"],
+      "en-US_phonecall": ["nova", "enhanced", "base"],
+      "en-US_voicemail": ["base"],
+      "en-US_finance": ["enhanced", "base"],
+      "en-US_conversationalai": ["base"],
+      "en-US_video": ["base"],
+      "nl_general": ["enhanced", "base"],
+      "fr_general": ["enhanced" , "base"],
+      "fr-CA_general": ["base"],
+      "de_general": ["enhanced", "base"],
+      "hi_general":	["enhanced", "base"],
+      "hi-Latn_general": ["base"],
+      "id_general":	["base"],
+      "it_general": ["enhanced", "base"],
+      "ja_general": ["enhanced", "base"],
+      "ko_general": ["enhanced", "base"],
+      "no_general":["enhanced", "base"],
+      "pl_general":["enhanced", "base"],
+      "pt_general":	["enhanced", "base"],
+      "pt-BR_general": ["enhanced", "base"],
+      "pt-PT_general": ["enhanced", "base"],
+      "ru_general": ["base"],
+      "es_general": ["enhanced", "base"],
+      "es-419_general": ["enhanced", "base"],
+      "sv_general": ["enhanced", "base"],
+      "ta_general":	["enhanced"],
+      "tr_general": ["base"],
+      "uk_general": ["base"]
+    }
+
+    let model = document.querySelector('#language-model').value;
+    let lang = document.querySelector('#language').value;
+    let tiers = deepgramModelCompatibility[lang+"_"+model];
+
+    let options = document.querySelector('#tier').options;
+    console.log(options);
+
+    for (let option of options) {
+      option.disabled = true;
+      if (typeof tiers !== "undefined" && tiers.length > 0 && tiers.includes(option.value)) {
+        option.disabled = false;
+      }
+    };
+  }
+
 
   getData(event) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
@@ -121,7 +159,7 @@ class DeepgramService extends HTMLElement {
     let media =  document.querySelector('#media').value;
     const token =  document.querySelector('#token').value;
     const file = document.querySelector('[name=file]').files[0];
-    let tier = "enhanced";
+    let tier = document.querySelector('#tier').value;
 
     if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
       media = "https://"+media;
@@ -154,9 +192,7 @@ class DeepgramService extends HTMLElement {
         <span class="label-text">or</span>
         <input id="file" name="file" type="file" class="file-input w-full max-w-xs" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-        <span class="label-text">Language</span>
-        <select id="language" name="language" placeholder="language" class="select select-bordered w-full max-w-xs">
-        </select>
+        
         <!--<div class="form-control w-48">
           <label class="cursor-pointer label">
             <span class="label-text">Advanced settings</span> 
@@ -169,10 +205,23 @@ class DeepgramService extends HTMLElement {
           <select id="language-model" name="language-model" placeholder="language-model" class="select select-bordered w-full max-w-xs">
           </select>
         </div>
+
+        <span class="label-text">Language</span>
+        <select id="language" name="language" placeholder="language" class="select select-bordered w-full max-w-xs">
+        </select>
+
+        <span class="label-text">Quality</span>
+        <select id="tier" name="tier" placeholder="tier" class="select select-bordered w-full max-w-xs">
+          <option value="base">Base</option>
+          <option value="enhanced">Enhanced (Better)</option>
+          <option value="nova">Nova (Best)</option>
+        </select>
+
+
         <!--<div style="padding-top:16px; padding-bottom:16px"><span class="label-text">Tier</span> </div>
         <div class="btn-group">
           <input type="radio" name="options" data-title="base" value="base" class="btn btn-sm" checked />
-          <input type="radio" name="options" data-title="enhanced" value="enhanced" class="btn btn-sm" />
+          <input type="radio" name="options" data-title="enhanced" value="enhanced" class="btn btn-sm" disabled />
           <input type="radio" name="options" data-title="nova" value="nova" class="btn btn-sm" />
         </div>-->
       </div>
@@ -186,6 +235,10 @@ class DeepgramService extends HTMLElement {
     document.querySelector('#transcribe-btn').addEventListener('click', this.getData);
     document.querySelector('#file').addEventListener('change', this.updatePlayerWithLocalFile);
     //document.querySelector('#advanced-settings-check').addEventListener('change', this.toggleAdvancedSettings);
+    document.querySelector('#language-model').addEventListener('change', this.updateDropdowns);
+    document.querySelector('#language-model').addEventListener('change', this.updateTierDropdown);
+    document.querySelector('#language').addEventListener('change', this.updateTierDropdown);
+
 
     this.configureLanguage();
   }
@@ -196,8 +249,14 @@ customElements.define('deepgram-service', DeepgramService);
 function fetchData(token, media, tier, language, model) {
 
   let url = null;
-  if (model === "whisper") { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
+  let languageParam = `&language=${language}`;
+  if (language === "xx") {
+    //signifies autodetect
+    languageParam  = "&detect_language=true";
+  }
+
+  if (model.startsWith("whisper")) { // no tier
+    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
     url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&summarize=true&detect_topics=true&language=${language}`
   }
@@ -239,6 +298,11 @@ function fetchData(token, media, tier, language, model) {
       fetchData(token, media, tier, language, model);
     }
 
+    if (error.indexOf("400") > 0 && tier === "nova") {
+      tier = "enhanced";
+      fetchData(token, media, tier, language, model);
+    }
+
     this.dataError = true;
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
   })
@@ -246,11 +310,16 @@ function fetchData(token, media, tier, language, model) {
 
 function fetchDataLocal(token, file, tier, language, model) {
 
-  //const url = `https://api.deepgram.com/v1/listen?model=general&tier=${tier}&punctuate=true&diarize=true&language=${language}`;
 
   let url = null;
-  if (model === "whisper") { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=whisper&language=${language}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
+  let languageParam = `&language=${language}`;
+  if (language === "xx") {
+    //signifies autodetect
+    languageParam  = "&detect_language=true";
+  }
+
+  if (model.startsWith("whisper")) { // no tier
+    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
     url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&summarize=true&detect_topics=true&language=${language}`
   }
@@ -415,3 +484,146 @@ function extractTopics(json) {
 
   return (topics);
 }
+
+function populateLanguageDeepgram() {
+
+  const select = document.querySelector('#language');
+  select.innerHTML = "";
+
+  const optionLanguage = {
+    "English": "en",
+    "English (United States)": "en-US",
+    "English (Great Britain)": "en-GB",
+    "English (Australia)": "en-AU",
+    "English (India)" : "en-IN",
+    "English (New Zealand)" : "en-NZ",
+    "Chinese": "zh",
+    "Chinese, Simplified Mandarin (China)": "zh-CN",
+    "Chinese, Traditional Mandarin (Taiwan)": "zh-TW",
+    "Dutch": "nl",
+    "French" : "fr",
+    "French (Canada)" : "fr-CA",
+    "German" : "de",
+    "Hindi" : "hi",
+    "Hindi (Latin Script)" : "hi-Latn",
+    "Indonesian" : "id",
+    "Italian": "it",
+    "Japanese" : "ja",
+    "Korean" : "ko",
+    "Polish" : "pl",
+    "Portuguese": "pt",
+    "Portuguese (Brazil)" : "pt-BR",
+    "Portuguese (Portugal)" : "pt-PT",
+    "Russian" : "ru",
+    "Spanish" : "es",
+    "Swedish" : "sv",
+    "Turkish" : "tr",
+    "Ukrainian": "uk"
+  }
+
+  Object.keys(optionLanguage).forEach( language => {
+    let option = document.createElement("option")
+    option.value = optionLanguage[language]
+    option.innerHTML = `${language}`
+    select.appendChild(option);
+  } );
+
+  document.querySelector("#tier").disabled=false;
+}
+
+function populateLanguageWhisper() {
+
+  const select = document.querySelector('#language');
+  select.innerHTML = "";
+
+  const optionLanguage = {
+    "Auto Detect": "xx",
+    "English": "en",
+    "Afrikaans": "af",
+    "Arabic": "ar",
+    "Armenian": "hy",
+    "Azerbaijani": "az",
+    "Belarusian": "be",
+    "Bosnian": "bs",
+    "Bulgarian": "bg",
+    "Catalan": "ca",
+    "Chinese": "zh",
+    "Croatian": "hr",
+    "Czech": "cs",
+    "Danish": "da",
+    "Dutch": "nl",
+    "Estonian": "et",
+    "Finnish": "fi",
+    "French": "fr",
+    "Galician": "gl",
+    "German": "de",
+    "Greek": "el",
+    "Hebrew": "he",
+    "Hindi": "hi",
+    "Hungarian": "hu",
+    "Icelandic": "is",
+    "Indonesian": "id",
+    "Italian": "it",
+    "Japanese": "ja",
+    "Kannada": "kn",
+    "Kazakh": "kk",
+    "Korean": "ko",
+    "Latvian": "lv",
+    "Lithuanian": "lt",
+    "Macedonian": "mk",
+    "Malay": "ms",
+    "Marathi": "mr",
+    "Maori": "mi",
+    "Nepali": "ne",
+    "Norwegian": "no",
+    "Persian": "fa",
+    "Polish": "pl",
+    "Portuguese": "pt",
+    "Romanian": "ro",
+    "Russian": "ru",
+    "Serbian": "sr",
+    "Slovak": "sk",
+    "Slovenian": "sl",
+    "Spanish": "es",
+    "Swahili": "sw",
+    "Swedish": "sv",
+    "Tagalog": "tl",
+    "Tamil": "ta",
+    "Thai": "th",
+    "Turkish": "tr",
+    "Ukrainian": "uk",
+    "Urdu": "ur",
+    "Vietnamese": "vi",
+    "Welsh": "cy"
+  };
+
+  Object.keys(optionLanguage).forEach( language => {
+    let option = document.createElement("option")
+    option.value = optionLanguage[language]
+    option.innerHTML = `${language}`
+    select.appendChild(option);
+  } );
+
+  document.querySelector("#tier").disabled=true;
+}
+
+function populateLanguageDeepgramRestricted() {
+
+  const select = document.querySelector('#language');
+  select.innerHTML = "";
+
+  const optionLanguage = {
+    "English": "en",
+    "English (United States)": "en-US"
+  }
+
+  Object.keys(optionLanguage).forEach( language => {
+    let option = document.createElement("option")
+    option.value = optionLanguage[language]
+    option.innerHTML = `${language}`
+    select.appendChild(option);
+  } );
+
+  document.querySelector("#tier").disabled=false;
+}
+
