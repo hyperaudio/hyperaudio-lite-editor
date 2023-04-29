@@ -76,6 +76,11 @@ export function convertAmznJsonToHyprJson(j) {
     current_speaker_label = speaker_label;
   }
 
+  // handle last d_span
+  if (Object.keys(d_span).length !== 0) {
+    d_hypr['article']['section']['paragraphs'].push(d_span);
+  }
+
   // console.log(d_hypr);
   return d_hypr;
 }
