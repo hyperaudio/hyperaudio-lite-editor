@@ -42,7 +42,7 @@ export function convertAmznJsonToHyprJson(j) {
     }
 
     // Amazon Transcribe data
-    const speaker_label = dict['speaker_label'];
+    const speaker_label = dict['speaker_label'] ?? 'spk_0'; // return "spk_0" if 'speaker_label' not in dict (i.e., no Speaker Partitioning, single speaker)
     const start_time = dict['start_time'];
     const end_time = dict['end_time'];
 
