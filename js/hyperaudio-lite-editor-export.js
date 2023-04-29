@@ -1,3 +1,8 @@
+import {
+  isAmazonTranscribeJsonFormat,
+  convertAmznJsonToHyprJson,
+} from './amazon-transcribe-json-to-hyperaudio-lite-json-converter.js';
+
 class ExportJson extends HTMLElement {
 
   constructor() {
@@ -39,7 +44,16 @@ class ImportJson extends HTMLElement {
       const file = event.target.files[0];
       const reader = new FileReader();
       reader.addEventListener('load', (event) => {
-        const jsonData = JSON.parse(event.target.result);
+        var jsonData = JSON.parse(event.target.result);
+
+        // check if JSON is Amazon Transcribe format, if so, then
+        // convert to hyperaudio-lite format
+        if (isAmazonTranscribeJsonFormat(jsonData)) {
+          jsonData = convertAmznJsonToHyprJson(jsonData);
+          if (typeof jsonData === 'undefined')
+            return;
+        }
+
         // transform json object in html
         let hypertranscript = document.getElementById('hypertranscript');
 
