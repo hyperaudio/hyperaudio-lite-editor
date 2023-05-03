@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hyperaudio Lite Editor</title>
+  <link rel="apple-touch-icon" href="images/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
+  <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
+  <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
+  <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
+
+  <!-- DaisyUI / Tailwind -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.5/dist/full.css" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Meta Tags required for
+    Progressive Web App -->
+  <meta name= "apple-mobile-web-app-status-bar" content="#aa7700">
+  <meta name="theme-color" content="black">
+
+  <!-- Manifest File link -->
+  <link rel="manifest" href="manifest.json">
+  <style>
+    .container {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      transition: grid-template-columns 0.5s ease-in-out;
+    }
+  
+    .container.hide-column {
+      grid-template-columns: 0 1fr;
+    }
+  
+    .container .side-panel {
+      grid-column: 1;
+      background-color: aqua;
+      width: 400px;
+    }
+  
+    .container.hide-column .side-panel {
+      display: none;
+    }
+  
+    .container .main-panel {
+      grid-column: 2;
+      background-color: blueviolet;
+      width: auto;
+    }
+  </style>
+</head>
+<body>
+  
+  <button id="toggle-btn">Toggle Column</button>
+
+  <div class="container">
+    
+    <div class="side-panel">Fixed width column</div>
+    <div class="main-panel">
+      <div class="navbar bg-base-100" style="background-color: #ffffff; opacity:0.95;">
+        <div class="navbar-start">
+          <button id="sidebar-toggle" class="btn btn-square btn-outline" aria-label="Toggle Sidebar">
+            <svg id="sidebar-close-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-close"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
+            <svg id="sidebar-open-icon" style="display: none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-open"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
+          </button>
+          <div class="dropdown menu-compact">
+            <label tabindex="0" class="btn m-1 btn-outline gap-2">
+              File
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </label>
+            <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
+              <li class="menu-title">
+                <span>
+                  Download as
+                </span>
+              </li>
+              <li><a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT (Captions)</a></li>
+              <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
+              <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
+              <li><a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript</a></li>
+              <hr
+              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
+              <li class="menu-title">
+                <span>
+                  Export / Import
+                </span>
+              </li>
+              <li><export-json></export-json></li>
+              <li><import-json></import-json></li>
+              <li><import-srt></import-srt></li>
+            </ul>
+          </div>
+          <label for="info-modal" class="btn btn-ghost btn-primary gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
+          </label>
+          <input type="checkbox" id="info-modal" class="modal-toggle" />
+          <div class="modal">
+            <div class="modal-box relative">
+              <label for="info-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+              <h3 class="text-lg font-bold">Summary</h3>
+              <p id="summary" class="py-4"></p>
+              <h3 class="text-lg font-bold">Topics</h3>
+              <p id="topics" class="py-4"></p>
+            </div>
+          </div>
+        </div>
+        <div class="navbar-center">
+          <div class="form-control">
+            <input id="search-box" type="text" placeholder="Search" class="input input-bordered" />
+          </div>
+        </div>
+        <div class="navbar-end" style="padding-right: 8px;">
+          <label for="transcribe-modal" class="btn btn-primary gap-2">
+            Transcribe
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
+          </label>
+          <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
+          <div class="modal">
+            <div class="modal-box">
+              <deepgram-service></deepgram-service>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const toggleBtn = document.getElementById('toggle-btn');
+  const container = document.querySelector('.container');
+
+  toggleBtn.addEventListener('click', function() {
+    container.classList.toggle('hide-column');
+  });
+</script>
+</body>
+</html>
