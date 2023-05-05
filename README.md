@@ -8,6 +8,8 @@ Accessible :couple_with_heart:
 Installable :computer: 
 Portable :iphone: 
 
+:new: Hyperaudio Lite Editor now also supports importing of Amazon Transcribe (Medical) JSON output files ([speaker partitioning](https://docs.aws.amazon.com/transcribe/latest/dg/diarization.html))
+
 ### Formats
 
 Export your transcript as text, interactive transcript, captions and subtitles.
