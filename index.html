@@ -1,15 +1,18 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.2.4 -->
+<!--  Hyperaudio Lite Editor - Version 0.2.5 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
+
 Commercial license
 ------------------
 If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact info@hyperaud.io
+
 Open source license
 -------------------
 If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use Hyperaudio Lite Editor under the terms of the AGPL-3.0 License.
 -->
 <!-- Example index.html Copyright (C) BBC Research & Development - content used with kind permission of Ian Forrester https://twitter.com/cubicgarden/ -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -29,30 +32,42 @@ If you are creating an open source application under a license compatible with t
 
   <!-- Meta Tags required for
     Progressive Web App -->
-    <meta name= "apple-mobile-web-app-status-bar" content="#aa7700">
-    <meta name="theme-color" content="black">
+  <meta name= "apple-mobile-web-app-status-bar" content="#aa7700">
+  <meta name="theme-color" content="black">
 
-    <!-- Manifest File link -->
-    <link rel="manifest" href="manifest.json">
+  <!-- Manifest File link -->
+  <link rel="manifest" href="manifest.json">
   <style>
-  .sidebar {
-      /*background-color: #cecece;*/
-      /*background-color:#cee1ee;*/
+
+    p {
+      padding-bottom: 1.5em;
+      line-height: 1.8;
+    }
+
+    .side-panel {
       background-color: #efefef;
-      width: 400px;
       position: absolute;
       top: 0;
       left: 0;
       bottom: 0;
       padding: 8px;
       overflow-y: hidden;
-  }
+      width: 400px;
+      transition: left 0.5s ease;
+    }
 
-  .sidebar h1 {
+    .side-panel h1 {
       color: white;
-  }
+    }
 
-  .transcript-holder {
+    .main-panel {
+      position: absolute; 
+      left:400px; 
+      right:0;
+      transition: left 0.5s ease;
+    }
+
+    .transcript-holder {
       background-color: #ececec;
       position: absolute;
       top: 0;
@@ -61,68 +76,19 @@ If you are creating an open source application under a license compatible with t
       bottom: 0;
 
       transition: left 0.5s ease;
-  }
+    }
 
-  #nav-holder {
-    transition: left 0.5s ease;
-  }
-
-
-  #slide-sidebar {
-     display: none;
-  }
-
-  input:checked ~ .transcript-holder {
-      left: 0;
-  }
-
-  input:checked ~ #slide-label {
-      left: 0;
-      transform: rotate(180deg);
-  }
-
-  #slide-label {
-      z-index: 2;
-      position: absolute;
-      top: 0;
-      left: 440px;
-      /*background-color: #cecece;*/
-      transition: left 0.5s ease;
-      font-size: 72px;
-  }
-
-  #slide-label:hover {
-    cursor: pointer;
-  }
-
-
- /*.hyperaudio-transcript .active{
-    background-color: #ffefff;
-
-  }
-
-  .hyperaudio-transcript .active > .active {
-    text-decoration:  #00f underline;
-    text-decoration-thickness: 3px;
-  }*/
-
-
-  #speaker-display {
-    margin-top: -30px;
-    text-align: right;
-    padding-right: 20px;
-  }
-
-  p {
-    padding-bottom: 1.5em;
-    line-height: 1.8;
-  }
-
+    #speaker-display {
+      margin-top: -30px;
+      text-align: right;
+      padding-right: 20px;
+    }
+    
   </style>
 </head>
 <body data-theme="light">
-  <div class="main-wrap">
-    <div class="sidebar">
+  <div class="holder grid grid-flow-col auto-cols-max">
+    <div class="side-panel">
       <div>
         <div class="top-bar-item">
           <!-- example src -->
@@ -177,9 +143,7 @@ If you are creating an open source application under a license compatible with t
         </div>
       </div>
     </div>
-
-    <div id="nav-holder" style="display: flex; position: absolute; width: calc(100% - 400px); top:0; left:400px; z-index: 2;">
-
+    <div class="main-panel" style="z-index: 2">
       <div class="navbar bg-base-100" style="background-color: #ffffff; opacity:0.95;">
         <div class="navbar-start">
           <button id="sidebar-toggle" class="btn btn-square btn-outline" aria-label="Toggle Sidebar">
@@ -246,8 +210,6 @@ If you are creating an open source application under a license compatible with t
         </div>
       </div>
     </div>
-
-
     <div class="transcript-holder" style="display: flex; justify-content: center; background-color: #ffffff; overflow-y:scroll;">
 
       <div id="hypertranscript" class="hyperaudio-transcript" style="position: absolute; top: 40px; bottom: 0px; background-color: #ffffff; padding-top: 48px; width: 520px; outline: none;" contenteditable="true">
@@ -1189,6 +1151,7 @@ If you are creating an open source application under a license compatible with t
   </div>
 
 
+
   <script src="js/hyperaudio-push-notification.js"></script>
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
@@ -1430,22 +1393,21 @@ If you are creating an open source application under a license compatible with t
     const videoElement = document.querySelector("#hyperplayer");
     let sidebarOpen = true;
 
-
     document.querySelector('#sidebar-toggle').addEventListener('click', (e) => {
 
       if (sidebarOpen === true) {
         console.log("sidebar open");
+        document.querySelector('.holder').style.left = 0;
+        document.querySelector('.main-panel').style.left = 0;
         document.querySelector('.transcript-holder').style.left = 0;
-        document.querySelector('#nav-holder').style.left = 0;
-        document.querySelector('#nav-holder').style.width = "100%";
         document.querySelector('#sidebar-close-icon').style.display = "none";
         document.querySelector('#sidebar-open-icon').style.display = "block";
         sidebarOpen = false;
       } else {
         console.log("sidebar closed");
+        document.querySelector('.holder').style.left = "400px";
+        document.querySelector('.main-panel').style.left = "400px";
         document.querySelector('.transcript-holder').style.left = "400px";
-        document.querySelector('#nav-holder').style.left = "400px";
-        document.querySelector('#nav-holder').style.setProperty('width', 'calc(100% - 400px)');
         document.querySelector('#sidebar-close-icon').style.display = "block";
         document.querySelector('#sidebar-open-icon').style.display = "none";
         sidebarOpen = true;
@@ -1465,7 +1427,6 @@ If you are creating an open source application under a license compatible with t
         }
       }
     });
-
     let showSpeakers = document.querySelector('#show-speakers');
 
     showSpeakers.addEventListener('change', function(e) {
@@ -1481,18 +1442,18 @@ If you are creating an open source application under a license compatible with t
         });
       }
     });
-  }
+    }
 
-  hyperaudio();
-  </script>
+    hyperaudio();
+    </script>
 
-  <!-- comment out if localstorage not required -->
+    <!-- comment out if localstorage not required -->
 
-  <div class="hidden-label-holder">
+    <div class="hidden-label-holder">
     <label for="file-save-dialog">Open Save to Local Storage Dialog</label>
-  </div>
-  <input type="checkbox" id="file-save-dialog" class="modal-toggle" />
-  <div class="modal">
+    </div>
+    <input type="checkbox" id="file-save-dialog" class="modal-toggle" />
+    <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
         <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
@@ -1504,13 +1465,13 @@ If you are creating an open source application under a license compatible with t
         <label id="file-save-localstorage" for="file-save-dialog" class="btn btn-primary">Confirm</label>
       </div>
     </div>
-  </div>
+    </div>
 
-  <div class="hidden-label-holder">
+    <div class="hidden-label-holder">
     <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
-  </div>
-  <input type="checkbox" id="file-load-dialog" class="modal-toggle" />
-  <div class="modal">
+    </div>
+    <input type="checkbox" id="file-load-dialog" class="modal-toggle" />
+    <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
         <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
@@ -1523,11 +1484,11 @@ If you are creating an open source application under a license compatible with t
         <label id="file-load-localstorage" for="file-load-dialog" class="btn btn-primary">Confirm</label>
       </div>
     </div>
-  </div>
+    </div>
 
-  <script src="./js/hyperaudio-lite-editor-storage.js"></script>
+    <script src="./js/hyperaudio-lite-editor-storage.js"></script>
 
-  <script>
+    <script>
 
     document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><spa>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
 
@@ -1552,13 +1513,13 @@ If you are creating an open source application under a license compatible with t
 
     setFileSelectListeners();
 
-  </script>
+    </script>
 
-  <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
-  <!-- end of localstorage additions -->
+    <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
+    <!-- end of localstorage additions -->
 
-  <!-- service worker script for PWA -->
-  <script>
+    <!-- service worker script for PWA -->
+    <script>
     window.addEventListener('load', () => {
       registerSW();
     });
