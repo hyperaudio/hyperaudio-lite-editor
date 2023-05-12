@@ -316,7 +316,7 @@ var caption = function () {
       video.textTracks[0].mode = "showing";
     }
 
-    function captionsObj(vtt, srt) {
+    function captionsObj(vtt, srt, data) {
       // clean up – remove any double blank lines 
       // and blank line at the start of srt
 
@@ -326,9 +326,10 @@ var caption = function () {
 
       this.vtt = vtt.replaceAll("\n\n\n","\n\n");
       this.srt = srt.replaceAll("\n\n\n","\n\n");
+      this.data = captions;
     }
 
-    return new captionsObj(captionsVtt, captionsSrt);
+    return new captionsObj(captionsVtt, captionsSrt, captions);
   };
 
   return cap;

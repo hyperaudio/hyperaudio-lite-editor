@@ -25,6 +25,7 @@ If you are creating an open source application under a license compatible with t
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
   <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
+  <!--<script src="js/hyperaudio-lite-editor-captions.js"></script>-->
 
   <!-- DaisyUI / Tailwind -->
   <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.5/dist/full.css" rel="stylesheet" type="text/css" />
@@ -197,6 +198,19 @@ If you are creating an open source application under a license compatible with t
           </div>
         </div>
         <div class="navbar-end" style="padding-right: 8px;">
+          <label for="captions-modal" class="btn btn-outline gap-2" style="margin-right:4px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
+          </label>
+          <input type="checkbox" id="captions-modal" class="modal-toggle" />
+          <div class="modal">
+            <div class="modal-box relative">
+              <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+              <div id="caption-editor">
+                <center>Preparing captions....</center>
+              </div>
+              <!--<caption-service></caption-service>-->
+            </div>
+          </div>
           <label for="transcribe-modal" class="btn btn-primary gap-2">
             Transcribe
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
@@ -207,6 +221,7 @@ If you are creating an open source application under a license compatible with t
               <deepgram-service></deepgram-service>
             </div>
           </div>
+          
         </div>
       </div>
     </div>
@@ -1517,6 +1532,128 @@ If you are creating an open source application under a license compatible with t
 
     <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
     <!-- end of localstorage additions -->
+
+    <!-- caption editor additions -->
+    <style>
+      input.line1 {
+        width: 36ch;
+      }
+
+      input.line2 {
+        width: 36ch;
+      }
+
+      div.caption {
+        padding: 16px;
+      }
+
+      .caption-row {
+        padding: 4px;
+      }
+
+    </style>
+    <script>
+      const cap2 = caption();
+      let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+      let captionModal = document.querySelector('#caption-editor');
+      captionModal.innerHTML = "";
+      let template = null;
+
+      fetch('caption-editor-row-template.html')
+        .then(function(response) {
+            // When the page is loaded convert it to text
+            return response.text()
+        })
+        .then(function(html) {
+            // Initialize the DOM parser
+            let parser = new DOMParser();
+
+            // Parse the text
+            template = parser.parseFromString(html, "text/html");
+            console.log(template);
+
+            subs.data.forEach(cap => {
+              console.log("subs...");
+              let line1 = cap.text.split('\n')[0];
+              let line2 = cap.text.split('\n')[1];
+
+              if (line2 === undefined || typeof line2 === "undefined") {
+                line2 = "";
+              }
+
+              let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+              captionTempl.querySelector('.start').value = cap.start;
+              captionTempl.querySelector('.end').value = cap.stop;
+              captionTempl.querySelector('.line1').value = line1;
+              captionTempl.querySelector('.line2').value = line2;
+              captionModal.insertAdjacentElement('beforeEnd', captionTempl);
+            });
+        })
+        .catch(function(err) {  
+            console.log('Template error: ', err);  
+        });
+
+      const countSeconds = (str) => {
+        const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
+        const hour = parseInt(hh, 10) || 0;
+        const minute = parseInt(mm, 10) || 0;
+        const second = parseFloat(ss);
+        return (hour*3600) + (minute*60) + (second);
+      };
+
+      function playClip(elem) {
+
+        // this is a little brittle
+        // better to check each parent until you find the elements required
+
+        let startTime = countSeconds(elem.parentElement.parentElement.querySelector('.start').value);
+        let endTime = countSeconds(elem.parentElement.parentElement.querySelector('.end').value);
+        let duration = endTime - startTime;
+
+        document.querySelector('video').currentTime = startTime;
+        document.querySelector('video').play();
+
+        setTimeout(() => {
+          document.querySelector('video').pause();
+        }, duration*1000);
+      }
+
+      function seekTo(elem) {
+        let seekTime = countSeconds(elem.nextElementSibling.value);
+        if (elem.className == "play-end") {
+          seekTime -= 0.1;
+        }
+        document.querySelector('video').currentTime = seekTime;
+      }
+
+      function addCaption(elem) {
+        let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+        captionTempl.getElementsByClassName('line1')[0].value = "";
+        captionTempl.getElementsByClassName('line2')[0].value = "";
+        captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
+        captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
+        elem.parentElement.parentNode.insertAdjacentElement('afterend', captionTempl);
+      }
+
+      function deleteCaption(elem) {
+        let thisCaption = elem.parentNode.parentNode;
+        thisCaption.parentNode.removeChild(thisCaption);
+      }
+
+      function mergeCaption(elem) {
+        let thisCaption = elem.parentNode.parentNode;
+        let belowCaption = thisCaption.nextElementSibling;
+
+        thisCaption.querySelector('.end').value = belowCaption.querySelector('.end').value;
+        thisCaption.querySelector('.line2').value += 
+          ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
+
+        belowCaption.parentNode.removeChild(belowCaption);
+      }
+
+      
+    </script>
+    <!-- end of caption editor additions -->
 
     <!-- service worker script for PWA -->
     <script>
