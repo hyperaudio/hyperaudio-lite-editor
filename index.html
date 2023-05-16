@@ -95,7 +95,7 @@ If you are creating an open source application under a license compatible with t
           <!-- example src -->
           <div>
             <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls poster="images/poster.png" style="width:400px; margin-left: -8px;">
-              <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="">
+              <track id="hyperplayer-vtt" label="preview" kind="subtitles" src="">
             </video>
           </div>
         </div>
@@ -1491,8 +1491,8 @@ If you are creating an open source application under a license compatible with t
       );
 
     track.kind = "captions";
-    track.label = "English";
-    track.srclang = "en";
+    //track.label = "English";
+    //track.srclang = "en";
     track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
 
     // check to see if it's an mp3, in which case we don't display captions
@@ -1595,46 +1595,51 @@ If you are creating an open source application under a license compatible with t
 
     </style>
     <script>
-      const cap2 = caption();
-      let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-      let captionModal = document.querySelector('#caption-editor');
-      captionModal.innerHTML = "";
-      let template = null;
+      window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
 
-      fetch('caption-editor-row-template.html')
-        .then(function(response) {
-            // When the page is loaded convert it to text
-            return response.text()
-        })
-        .then(function(html) {
-            // Initialize the DOM parser
-            let parser = new DOMParser();
+      function populateCaptionEditor() {
+        const cap2 = caption();
+        let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+        let captionModal = document.querySelector('#caption-editor');
+        captionModal.innerHTML = "";
+        let template = null;
 
-            // Parse the text
-            template = parser.parseFromString(html, "text/html");
-            console.log(template);
+        fetch('caption-editor-row-template.html')
+          .then(function(response) {
+              // When the page is loaded convert it to text
+              return response.text()
+          })
+          .then(function(html) {
+              // Initialize the DOM parser
+              let parser = new DOMParser();
 
-            subs.data.forEach(cap => {
-              console.log("subs...");
-              let line1 = cap.text.split('\n')[0];
-              let line2 = cap.text.split('\n')[1];
+              // Parse the text
+              template = parser.parseFromString(html, "text/html");
 
-              if (line2 === undefined || typeof line2 === "undefined") {
-                line2 = "";
-              }
+              subs.data.forEach(cap => {
+                console.log("subs...");
+                let line1 = cap.text.split('\n')[0];
+                let line2 = cap.text.split('\n')[1];
 
-              let captionTempl = template.querySelector('#caption-template').cloneNode(true);
-              captionTempl.querySelector('.start').value = cap.start;
-              captionTempl.querySelector('.end').value = cap.stop;
-              captionTempl.querySelector('.line1').value = line1;
-              captionTempl.querySelector('.line2').value = line2;
-              captionModal.insertAdjacentElement('beforeEnd', captionTempl);
-            });
-        })
-        .catch(function(err) {  
-            console.log('Template error: ', err);  
-        });
+                if (line2 === undefined || typeof line2 === "undefined") {
+                  line2 = "";
+                }
 
+                let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+                captionTempl.querySelector('.start').value = cap.start;
+                captionTempl.querySelector('.end').value = cap.stop;
+                captionTempl.querySelector('.line1').value = line1;
+                captionTempl.querySelector('.line2').value = line2;
+                captionModal.insertAdjacentElement('beforeEnd', captionTempl);
+              });
+          })
+          .catch(function(err) {  
+              console.log('Template error: ', err);  
+          });
+      }
+
+      populateCaptionEditor();
+      
       const countSeconds = (str) => {
         const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
         const hour = parseInt(hh, 10) || 0;

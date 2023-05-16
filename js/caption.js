@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.1.1 (patch) */
+/*! Version 2.1.3 */
 'use strict';
 
 var caption = function () {
@@ -20,7 +20,7 @@ var caption = function () {
     return timecode.substring(0,8) + "," + timecode.substring(9,12);
   }
 
-  cap.init = function (transcriptId, playerId, maxLength, minLength) {
+  cap.init = function (transcriptId, playerId, maxLength, minLength, label, srclang) {
     var transcript = document.getElementById(transcriptId);
     var words = transcript.querySelectorAll('[data-m]');
     var data = {};
@@ -307,8 +307,20 @@ var caption = function () {
         //var track = document.createElement("track");
         var track = document.getElementById(playerId+'-vtt');
         track.kind = "captions";
-        track.label = "English";
-        track.srclang = "en";
+
+        console.log("label = "+label);
+
+        if (label !== undefined) {
+          console.log("setting label as "+label);
+          track.label = label;
+        }
+
+        if (srclang !== undefined) {
+          console.log("setting srclang as "+srclang);
+          track.srclang = srclang;
+        }
+        //track.label = "English";
+        //track.srclang = "en";
         track.src = "data:text/vtt,"+encodeURIComponent(captionsVtt);
         video.textTracks[0].mode = "showing";
       });

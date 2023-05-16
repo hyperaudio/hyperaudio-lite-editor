@@ -283,31 +283,17 @@ function fetchData(token, media, tier, language, model) {
     document.querySelector("#summary").innerHTML = extractSummary(json);
     document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
 
-    
-
     // prepare the VTT track so that the correct language is defined
 
-    /*let video = document.querySelector('video');
-    let detectedLanguage = extractLanguage(json);
-
-    let track = video.textTracks[0];
-    console.log("setting caption data...");
-    console.log("language = "+language);
-    console.log(track);
-
     if (language === undefined) {
-      track.label = detectedLanguage;
-      track.language = detectedLanguage;
-    } else {
-      console.log("setting track details");
-      track.label = language;
-      track.language = language;
-      console.log("track label");
-      console.log(track.label);
-    }
-    track.mode.showing;*/
+      let detectedLanguage = extractLanguage(json);
+      language = detectedLanguage;
+      language = detectedLanguage;
+    } 
 
-    //console.log(track);
+    let track = document.querySelector('#hyperplayer-vtt');
+    track.label = language;
+    track.srcLang = language;
   })
   .catch(function (error) {
     console.dir("error is : "+error);
@@ -482,6 +468,8 @@ function parseData(json) {
   document.dispatchEvent(initEvent);
   const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
   document.dispatchEvent(capEvent);
+  const capEditEvent = new CustomEvent('hyperaudioPopulateCaptionEditor');
+  document.dispatchEvent(capEditEvent);
 }
 
 function extractSummary(json) {
