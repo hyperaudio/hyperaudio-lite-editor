@@ -1185,6 +1185,21 @@ If you are creating an open source application under a license compatible with t
   });
 
   window.document.addEventListener('hyperaudioInit', hyperaudio, false);
+  window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
+
+  let hyperaudioTemplate = "";
+
+  fetch('hyperaudio-template.html')
+  .then(function(response) {
+      // When the page is loaded convert it to text
+      return response.text()
+  })
+  .then(function(html) {
+    hyperaudioTemplate = html;
+  })
+  .catch(function(err) {
+      console.log('Failed to fetch page: ', err);
+  });
 
   function hyperaudio() {
     const minimizedMode = false;
@@ -1194,20 +1209,6 @@ If you are creating an open source application under a license compatible with t
     const playOnClick = false;
 
     const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
-
-    let hyperaudioTemplate = "";
-
-    fetch('hyperaudio-template.html')
-    .then(function(response) {
-        // When the page is loaded convert it to text
-        return response.text()
-    })
-    .then(function(html) {
-      hyperaudioTemplate = html;
-    })
-    .catch(function(err) {
-        console.log('Failed to fetch page: ', err);
-    });
 
     const sanitisationCheck = function () {
 
@@ -1319,29 +1320,29 @@ If you are creating an open source application under a license compatible with t
           hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
         }
 
-        const cap1 = caption();
-        let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-
         let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
+        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
+
+        generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
+
+        /*const cap1 = caption();
+        let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
 
         document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
         document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
-        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
 
-        document.querySelector('#download-hypertranscript').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperaudioTemplate.replace('{hypertranscript}',hypertranscript).replace('{sourcemedia}',sourceMedia).replace('{sourcevtt}', track.src)));
-
-            document
-              .querySelector("#download-hypertranscript")
-              .setAttribute(
-                "href",
-                "data:text/html," +
-                  encodeURIComponent(
-                    hyperaudioTemplate
-                      .replace("{hypertranscript}", hypertranscript)
-                      .replace("{sourcemedia}", sourceMedia)
-                      .replace("{sourcevtt}", track.src)
-                  )
-              );
+        document
+          .querySelector("#download-hypertranscript")
+          .setAttribute(
+            "href",
+            "data:text/html," +
+              encodeURIComponent(
+                hyperaudioTemplate
+                  .replace("{hypertranscript}", hypertranscript)
+                  .replace("{sourcemedia}", sourceMedia)
+                  .replace("{sourcevtt}", track.src)
+              )
+          );*/
 
         //instead of regexp to remove classes we could use something like...
 
@@ -1356,7 +1357,7 @@ If you are creating an open source application under a license compatible with t
         }*/
 
 
-        track.kind = "captions";
+        /*track.kind = "captions";
         track.label = "English";
         track.srclang = "en";
         track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
@@ -1366,7 +1367,7 @@ If you are creating an open source application under a license compatible with t
           document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
         } else {
           document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
-        }
+        }*/
 
         d = new Date();
         console.log("sanitising took "+(d.getTime() - starttime)+"ms");
@@ -1457,10 +1458,51 @@ If you are creating an open source application under a license compatible with t
         });
       }
     });
-    }
+  }
 
-    hyperaudio();
-    </script>
+  hyperaudio();
+
+  function hyperaudioGenerateCaptionsFromTranscript() {
+    let rootnode = document.querySelector("#hypertranscript");
+    let sourceMedia = document.querySelector("#hyperplayer").src;
+    let track = document.querySelector('#hyperplayer-vtt');
+    let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
+    generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
+  }
+
+  function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
+    const cap1 = caption();
+    let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+
+    document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
+    document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
+
+    document
+      .querySelector("#download-hypertranscript")
+      .setAttribute(
+        "href",
+        "data:text/html," +
+          encodeURIComponent(
+            hyperaudioTemplate
+              .replace("{hypertranscript}", hypertranscript)
+              .replace("{sourcemedia}", sourceMedia)
+              .replace("{sourcevtt}", track.src)
+          )
+      );
+
+    track.kind = "captions";
+    track.label = "English";
+    track.srclang = "en";
+    track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
+
+    // check to see if it's an mp3, in which case we don't display captions
+    if (document.querySelector('#hyperplayer').src.split('.').pop() === "mp3") {
+      document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
+    } else {
+      document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
+    }
+  }
+  </script>
 
     <!-- comment out if localstorage not required -->
 
@@ -1650,6 +1692,31 @@ If you are creating an open source application under a license compatible with t
 
         belowCaption.parentNode.removeChild(belowCaption);
       }
+
+      /*setInterval(function(){ 
+        let track = document.querySelector("video").textTracks[0];
+        console.log(document.querySelector("video").textTracks);
+        console.dir(track);
+        if (track) {
+          let starts = $$('.start');
+          let ends = $$('.end');
+
+          let line1s = $$('.line1'); 
+          let line2s = $$('.line2'); 
+
+          // there has to be a better way to reset - track.cues = null did not work for me
+
+          track.mode = "hidden";
+          video.textTracks = null;
+
+          track = video.addTextTrack("captions", "Español", "es");
+          track.mode = "showing";
+
+          starts.forEach(function(elem, index) {
+            track.addCue(new VTTCue(countSeconds(starts[index].value), countSeconds(ends[index].value), line1s[index].value + "\n" + line2s[index].value));
+          });
+
+        }*/
 
       
     </script>

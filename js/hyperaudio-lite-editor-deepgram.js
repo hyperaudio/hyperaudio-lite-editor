@@ -37,10 +37,8 @@ class DeepgramService extends HTMLElement {
       selectModel.appendChild(option);
       counter += 1;
     } );
-    
   }
 
-  
   clearMediaUrl(event) {
     event.preventDefault();
     document.querySelector('#media').value = "";
@@ -284,6 +282,32 @@ function fetchData(token, media, tier, language, model) {
     parseData(json);
     document.querySelector("#summary").innerHTML = extractSummary(json);
     document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
+
+    
+
+    // prepare the VTT track so that the correct language is defined
+
+    /*let video = document.querySelector('video');
+    let detectedLanguage = extractLanguage(json);
+
+    let track = video.textTracks[0];
+    console.log("setting caption data...");
+    console.log("language = "+language);
+    console.log(track);
+
+    if (language === undefined) {
+      track.label = detectedLanguage;
+      track.language = detectedLanguage;
+    } else {
+      console.log("setting track details");
+      track.label = language;
+      track.language = language;
+      console.log("track label");
+      console.log(track.label);
+    }
+    track.mode.showing;*/
+
+    //console.log(track);
   })
   .catch(function (error) {
     console.dir("error is : "+error);
@@ -454,8 +478,10 @@ function parseData(json) {
     });
   }
 
-  const event = new CustomEvent('hyperaudioInit');
-  document.dispatchEvent(event);
+  const initEvent = new CustomEvent('hyperaudioInit');
+  document.dispatchEvent(initEvent);
+  const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
+  document.dispatchEvent(capEvent);
 }
 
 function extractSummary(json) {
@@ -483,6 +509,11 @@ function extractTopics(json) {
   });
 
   return (topics);
+}
+
+function extractLanguage(json) {
+  let language = json.results.channels[0].detected_language;
+  return (language);
 }
 
 function populateLanguageDeepgram() {
