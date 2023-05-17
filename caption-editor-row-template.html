@@ -6,16 +6,16 @@
     <button class="play btn btn-primary btn-sm" onclick="playClip(this)">play clip <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>
   </div>
   <div class="caption-row">
-    <button class="play-start btn btn-outline btn-xs" onclick="seekTo(this)" style="margin-right:4px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="start" value="">(In)
+    <button class="play-start btn btn-outline btn-xs" onclick="seekTo(this)" style="margin-right:4px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="start" value="" oninput="captionChange()">(In)
   </div>
   <div class="caption-row">
-    <button class="play-end btn btn-outline btn-xs" onclick="seekTo(this)" style="margin-right:4px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="end" value="">(Out)
+    <button class="play-end btn btn-outline btn-xs" onclick="seekTo(this)" style="margin-right:4px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="end" value="" oninput="captionChange()">(Out)
   </div>
   <div class="caption-row">
-    <input class="line1" value="">
+    <input class="line1" value="" oninput="captionChange()">
   </div>
   <div class="caption-row">
-    <input class="line2" value="">
+    <input class="line2" value="" oninput="captionChange()">
   </div>
   <div class="caption-row btn-group btn-group-horizontal">
     <button class="btn btn-outline btn-xs" onclick="addCaption(this)">insert <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-down-to-line"><line x1="12" x2="12" y1="17" y2="3"></line><polyline points="6 11 12 17 18 11"></polyline><path d="M19 21H5"></path></svg></button>

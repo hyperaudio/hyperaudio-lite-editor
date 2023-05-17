@@ -205,7 +205,7 @@ If you are creating an open source application under a license compatible with t
           <div class="modal">
             <div class="modal-box relative">
               <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-              <button id="regenerate-btn" class="btn btn-outline btn-primary">Re-generate Captions from Transcript <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
+              <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
               <div id="caption-editor">
                 <center>Preparing captions....</center>
               </div>
@@ -1174,7 +1174,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/caption.js"></script>
   <script>
 
-
+  let updateCaptionsFromTranscript = true;
 
   let editableDiv = document.querySelector('#hypertranscript');
 
@@ -1227,6 +1227,25 @@ If you are creating an open source application under a license compatible with t
         let d = new Date();
         let starttime = d.getTime();
         console.log(starttime);
+
+        // check that transcript has the focus
+
+        // check for focus
+        let isTranscriptFocused = false;
+        let isCaptionEditorFocused = false;
+
+        
+        if (document.activeElement === rootnode) {
+          isTranscriptFocused = true;
+        }
+
+        /*if (hasParent(document.activeElement, document.querySelector('#caption-editor')) === true) {
+          isCaptionEditorFocused = true;
+        }*/
+
+        console.log("isTranscriptFocused = "+isTranscriptFocused);
+        //console.log("isCaptionEditorFocused = "+isCaptionEditorFocused);
+
 
         let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
 
@@ -1313,62 +1332,24 @@ If you are creating an open source application under a license compatible with t
           }
         }
 
-        const words = document.querySelectorAll("[data-m]");
-        hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
-        hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
+        if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
+          const words = document.querySelectorAll("[data-m]");
+          hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
+          hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
 
-        if (hyperaudioInstance.currentTime !== undefined) {
-          hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
+          if (hyperaudioInstance.currentTime !== undefined) {
+            hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
+          }
+
+          let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
+          document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
+
+          generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
         }
 
-        let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
-
-        generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
-
-        /*const cap1 = caption();
-        let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-
-        document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
-        document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
-
-        document
-          .querySelector("#download-hypertranscript")
-          .setAttribute(
-            "href",
-            "data:text/html," +
-              encodeURIComponent(
-                hyperaudioTemplate
-                  .replace("{hypertranscript}", hypertranscript)
-                  .replace("{sourcemedia}", sourceMedia)
-                  .replace("{sourcevtt}", track.src)
-              )
-          );*/
-
-        //instead of regexp to remove classes we could use something like...
-
-        // remove all class attributes from html string
-        /*const removeClass = html => {
-          const doc = new DOMParser().parseFromString(html, 'text/html');
-          const elements = doc.querySelectorAll('*');
-          elements.forEach(element => {
-            element.removeAttribute('class');
-          });
-          return doc.body.innerHTML;
-        }*/
-
-
-        /*track.kind = "captions";
-        track.label = "English";
-        track.srclang = "en";
-        track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
-        // check to see if it's an mp3, in which case we don't display captions
-        if (document.querySelector('#hyperplayer').src.split('.').pop() === "mp3") {
-          document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
-        } else {
-          document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
-        }*/
+        if (isCaptionEditorFocused === true && updateCaptionsFromTranscript === false) {
+          generateCaptionsFromCaptionEditor();
+        }
 
         d = new Date();
         console.log("sanitising took "+(d.getTime() - starttime)+"ms");
@@ -1478,6 +1459,11 @@ If you are creating an open source application under a license compatible with t
     document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
     document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
 
+    track.kind = "captions";
+    //track.label = "English";
+    //track.srclang = "en";
+    track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
+
     document
       .querySelector("#download-hypertranscript")
       .setAttribute(
@@ -1491,17 +1477,26 @@ If you are creating an open source application under a license compatible with t
           )
       );
 
-    track.kind = "captions";
-    //track.label = "English";
-    //track.srclang = "en";
-    track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
     // check to see if it's an mp3, in which case we don't display captions
     if (document.querySelector('#hyperplayer').src.split('.').pop() === "mp3") {
       document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
     } else {
       document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
     }
+  }
+
+  function hasParent(element, parent) {
+    let currentElement = element.parentNode;
+    
+    while (currentElement !== null) {
+      if (currentElement === parent) {
+        return true;
+      }
+      
+      currentElement = currentElement.parentNode;
+    }
+    
+    return false;
   }
   </script>
 
@@ -1598,6 +1593,8 @@ If you are creating an open source application under a license compatible with t
     <script>
       window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
 
+      console.log("updateCaptionsFromTranscript = "+updateCaptionsFromTranscript);
+
       function populateCaptionEditor() {
         const cap2 = caption();
         let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
@@ -1637,6 +1634,8 @@ If you are creating an open source application under a license compatible with t
           .catch(function(err) {  
               console.log('Template error: ', err);  
           });
+
+          document.querySelector('#regenerate-btn').classList.add("btn-disabled");
       }
 
       populateCaptionEditor();
@@ -1681,11 +1680,13 @@ If you are creating an open source application under a license compatible with t
         captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
         captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
         elem.parentElement.parentNode.insertAdjacentElement('afterend', captionTempl);
+        makeCaptionEditorActive();
       }
 
       function deleteCaption(elem) {
         let thisCaption = elem.parentNode.parentNode;
         thisCaption.parentNode.removeChild(thisCaption);
+        makeCaptionEditorActive();
       }
 
       function mergeCaption(elem) {
@@ -1697,6 +1698,66 @@ If you are creating an open source application under a license compatible with t
           ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
 
         belowCaption.parentNode.removeChild(belowCaption);
+        makeCaptionEditorActive();
+      }
+
+      function captionChange() {
+        makeCaptionEditorActive();
+      }
+
+      function makeCaptionEditorActive() {
+        updateCaptionsFromTranscript = false;
+        document.querySelector('#regenerate-btn').classList.remove("btn-disabled");
+        generateCaptionsFromCaptionEditor();
+      }
+
+      function generateCaptionsFromCaptionEditor() {
+
+        let vttCaptions = "WEBVTT\n\n";
+        let srtCaptions = "";
+
+        document.querySelectorAll('.caption').forEach((caption, index) => {
+          if (caption.querySelector('.start').value.length > 0){
+            vttCaptions += caption.querySelector('.start').value + " --> " + caption.querySelector('.end').value + "\n";
+            vttCaptions += caption.querySelector('.line1').value + "\n";
+            if (caption.querySelector('.line2').value.length > 0) {
+              vttCaptions += caption.querySelector('.line2').value + "\n";
+            }
+            vttCaptions += "\n";
+
+            srtCaptions += (index + 1) + "\n";
+            srtCaptions += convertTimecodeToSrt(caption.querySelector('.start').value) + " --> " + convertTimecodeToSrt(caption.querySelector('.end').value) + "\n";
+            srtCaptions += caption.querySelector('.line1').value + "\n";
+            if (caption.querySelector('.line2').value.length > 0) {
+              srtCaptions += caption.querySelector('.line2').value + "\n";
+            }
+            srtCaptions += "\n";
+          }
+        });
+
+        let track = document.querySelector('#hyperplayer-vtt');
+        track.src = "data:text/vtt,"+encodeURIComponent(vttCaptions);
+
+        document
+          .querySelector("#download-hypertranscript")
+          .setAttribute(
+            "href",
+            "data:text/html," +
+              encodeURIComponent(
+                hyperaudioTemplate
+                  .replace("{hypertranscript}", document.querySelector('#hypertranscript').innerHTML.replace(/ class=".*?"/g, ''))
+                  .replace("{sourcemedia}", document.querySelector("#hyperplayer").src)
+                  .replace("{sourcevtt}", track.src)
+              )
+          );
+
+        document.querySelector('#download-vtt').setAttribute('href', "data:text/vtt,"+encodeURIComponent(vttCaptions));
+        document.querySelector('#download-srt').setAttribute('href', "data:text/srt,"+encodeURIComponent(srtCaptions));
+      }
+
+      function convertTimecodeToSrt(timecode) {
+        //the same as VTT format but milliseconds separated by a comma
+        return timecode.substring(0,8) + "," + timecode.substring(9,12);
       }
 
       document.querySelector('#regenerate-btn').addEventListener('click', populateCaptionEditor);
