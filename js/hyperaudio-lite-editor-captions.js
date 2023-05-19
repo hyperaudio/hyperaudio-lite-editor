@@ -1,5 +1,57 @@
+class CaptionService extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  connectedCallback() {
+
+    const captions = caption();
+    let subs = captions.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+    let hypertranscript = document.querySelector("#hypertranscript").innerHTML.replace(/ class=".*?"/g, '');
+
+    subs.captions.array.forEach(cap => {
+      this.innerHTML += `
+      <div class="caption" id="caption-templ" style="display:none">
+        <button class="play" onclick="playClip(this)">play clip</button>
+        <div>
+          <button class="play-start" onclick="seekTo(this)">start</button><input class="start" value="${cap.start}">
+        </div>
+        <div>
+          <button class="play-end" onclick="seekTo(this)">end</button><input class="end" value="${cap.stop}">
+        </div>
+        <div>
+          <input class="line1" oninput="resize(this)" value="${cap.text.split('\n')[0]}">
+        </div>
+        <div>
+          <input class="line2" oninput="resize(this)" value="${cap.text.split('\n')[1]}">
+        </div>
+        <div>
+          <button class="add-caption" onclick="addCaption(this)">insert ⇩</button><button class="merge-caption" onclick="mergeCaption(this)">merge ⇕</button><button class="delete-caption" onclick="deleteCaption(this)">delete 🗑</button>
+        </div>
+      </div>`;
+    });
+
+    
+
+    /*document.querySelector('#file').addEventListener('change',this.clearMediaUrl);
+    document.querySelector('#media').addEventListener('change',this.clearFilePicker);
+    document.querySelector('#transcribe-btn').addEventListener('click', this.getData);
+    document.querySelector('#file').addEventListener('change', this.updatePlayerWithLocalFile);
+    document.querySelector('#language-model').addEventListener('change', this.updateDropdowns);
+    document.querySelector('#language-model').addEventListener('change', this.updateTierDropdown);
+    document.querySelector('#language').addEventListener('change', this.updateTierDropdown);*/
+
+
+    //this.configureLanguage();
+  }
+}
+
+customElements.define('caption-service', CaptionService);
+
+
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.1.3 */
+/*! Version 2.1.1 (patch) */
 'use strict';
 
 var caption = function () {
@@ -20,7 +72,8 @@ var caption = function () {
     return timecode.substring(0,8) + "," + timecode.substring(9,12);
   }
 
-  cap.init = function (transcriptId, playerId, maxLength, minLength, label, srclang) {
+  cap.init = function (transcriptId, playerId, maxLength, minLength) {
+    
     var transcript = document.getElementById(transcriptId);
     var words = transcript.querySelectorAll('[data-m]');
     var data = {};
@@ -303,28 +356,15 @@ var caption = function () {
     var video = document.getElementById(playerId);
 
     if (video !== null) {
-      video.addEventListener("loadedmetadata", function listener() {
+      video.addEventListener("loadedmetadata", function() {
         //var track = document.createElement("track");
         var track = document.getElementById(playerId+'-vtt');
         track.kind = "captions";
-
-        console.log("label = "+label);
-
-        if (label !== undefined) {
-          console.log("setting label as "+label);
-          track.label = label;
-        }
-
-        if (srclang !== undefined) {
-          console.log("setting srclang as "+srclang);
-          track.srclang = srclang;
-        }
-        //track.label = "English";
-        //track.srclang = "en";
+        track.label = "English";
+        track.srclang = "en";
         track.src = "data:text/vtt,"+encodeURIComponent(captionsVtt);
         video.textTracks[0].mode = "showing";
-        video.removeEventListener("loadedmetadata", listener, true);
-      }, true);
+      });
   
       video.textTracks[0].mode = "showing";
     }

@@ -222,7 +222,6 @@ If you are creating an open source application under a license compatible with t
               <deepgram-service></deepgram-service>
             </div>
           </div>
-          
         </div>
       </div>
     </div>
@@ -1164,9 +1163,16 @@ If you are creating an open source application under a license compatible with t
         </article>
       </div>
     </div>
+    <div id="captionsource-alert" class="alert alert-info shadow-lg" style="visibility:hidden; z-index:2; position:absolute; top:50%; left:50%; width:480px; margin: -240px 0 0 -240px;">
+      <div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+        <span>Captions generated from Caption Editor.</span>
+      </div>
+      <div class="flex-none">
+        <button id="captionsource-alert-ok" class="btn btn-sm btn-primary">ok</button>
+      </div>
+    </div>
   </div>
-
-
 
   <script src="js/hyperaudio-push-notification.js"></script>
   <script src="js/hyperaudio-lite.js"></script>
@@ -1175,6 +1181,12 @@ If you are creating an open source application under a license compatible with t
   <script>
 
   let updateCaptionsFromTranscript = true;
+
+  let alertOkBtn = document.querySelector('#captionsource-alert-ok');
+
+  alertOkBtn.addEventListener('click', function() {
+    document.querySelector('#captionsource-alert').style.visibility = "hidden";
+  });
 
   let editableDiv = document.querySelector('#hypertranscript');
 
@@ -1332,6 +1344,9 @@ If you are creating an open source application under a license compatible with t
           }
         }
 
+        console.log("****************************************");
+        console.log("updateCaptionsFromTranscript = "+updateCaptionsFromTranscript);
+
         if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
           const words = document.querySelectorAll("[data-m]");
           hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
@@ -1345,6 +1360,9 @@ If you are creating an open source application under a license compatible with t
           document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
 
           generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
+          const cap2 = caption();
+          let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+          populateCaptionEditor(subs.data);
         }
 
         if (isCaptionEditorFocused === true && updateCaptionsFromTranscript === false) {
@@ -1449,7 +1467,7 @@ If you are creating an open source application under a license compatible with t
     let sourceMedia = document.querySelector("#hyperplayer").src;
     let track = document.querySelector('#hyperplayer-vtt');
     let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-    generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
+    populateCaptionEditor(generateCaptionsFromTranscript(hypertranscript, sourceMedia, track));
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
@@ -1483,6 +1501,8 @@ If you are creating an open source application under a license compatible with t
     } else {
       document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
     }
+
+    return subs.data;
   }
 
   function hasParent(element, parent) {
@@ -1595,10 +1615,12 @@ If you are creating an open source application under a license compatible with t
 
       console.log("updateCaptionsFromTranscript = "+updateCaptionsFromTranscript);
 
-      function populateCaptionEditor() {
-        const cap2 = caption();
-        let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+      function populateCaptionEditor(data) {
+
         let captionModal = document.querySelector('#caption-editor');
+        console.log("=========================");
+        console.dir(data);
+        console.log("-------------------------");
         captionModal.innerHTML = "";
         let template = null;
 
@@ -1614,7 +1636,7 @@ If you are creating an open source application under a license compatible with t
               // Parse the text
               template = parser.parseFromString(html, "text/html");
 
-              subs.data.forEach(cap => {
+              data.forEach(cap => {
                 console.log("subs...");
                 let line1 = cap.text.split('\n')[0];
                 let line2 = cap.text.split('\n')[1];
@@ -1638,7 +1660,43 @@ If you are creating an open source application under a license compatible with t
           document.querySelector('#regenerate-btn').classList.add("btn-disabled");
       }
 
-      populateCaptionEditor();
+      function populateCaptionEditorFromVtt(vtt) {
+        //updateCaptionsFromTranscript = false;
+        console.log("++++++++++++++++");
+        console.log(vtt);
+        const data = [];
+        vtt = vtt.replace("WEBVTT\n\n","");
+        vtt = vtt.replaceAll("\n\n","\n");
+        console.log(vtt);
+        let lines = vtt.split('\n');
+        console.dir(lines);
+        let start, stop, text;
+        lines.forEach((line, index) => {
+          let lineIsNumber = !isNaN(line.trim().replace(' --> ','').replaceAll('.','').replaceAll(':',''));
+          if (lineIsNumber === true && line.indexOf(' --> ') === 12 && line.length === 29) {
+            if (index > 0) {
+              data.push({start, stop, text});
+            }
+            start = line.split(' --> ')[0];
+            stop = line.split(' --> ')[1].trim();
+            text = "";
+          } else {
+            text += line.trim() + "\n";
+          }
+        });
+
+        console.dir(data);
+
+        populateCaptionEditor(data);
+
+        if (updateCaptionsFromTranscript === false) {
+          document.querySelector('#captionsource-alert').style.visibility = 'visible';
+        }
+      }
+
+      const cap2 = caption();
+      let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+      populateCaptionEditor(subs.data);
       
       const countSeconds = (str) => {
         const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
@@ -1736,6 +1794,7 @@ If you are creating an open source application under a license compatible with t
         });
 
         let track = document.querySelector('#hyperplayer-vtt');
+        console.log("2.!!!!!#########################");
         track.src = "data:text/vtt,"+encodeURIComponent(vttCaptions);
 
         document
@@ -1760,34 +1819,8 @@ If you are creating an open source application under a license compatible with t
         return timecode.substring(0,8) + "," + timecode.substring(9,12);
       }
 
-      document.querySelector('#regenerate-btn').addEventListener('click', populateCaptionEditor);
+      document.querySelector('#regenerate-btn').addEventListener('click', hyperaudioGenerateCaptionsFromTranscript);
 
-      /*setInterval(function(){ 
-        let track = document.querySelector("video").textTracks[0];
-        console.log(document.querySelector("video").textTracks);
-        console.dir(track);
-        if (track) {
-          let starts = $$('.start');
-          let ends = $$('.end');
-
-          let line1s = $$('.line1'); 
-          let line2s = $$('.line2'); 
-
-          // there has to be a better way to reset - track.cues = null did not work for me
-
-          track.mode = "hidden";
-          video.textTracks = null;
-
-          track = video.addTextTrack("captions", "Español", "es");
-          track.mode = "showing";
-
-          starts.forEach(function(elem, index) {
-            track.addCue(new VTTCue(countSeconds(starts[index].value), countSeconds(ends[index].value), line1s[index].value + "\n" + line2s[index].value));
-          });
-
-        }*/
-
-      
     </script>
     <!-- end of caption editor additions -->
 

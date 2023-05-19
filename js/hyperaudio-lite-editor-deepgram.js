@@ -468,8 +468,8 @@ function parseData(json) {
   document.dispatchEvent(initEvent);
   const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
   document.dispatchEvent(capEvent);
-  const capEditEvent = new CustomEvent('hyperaudioPopulateCaptionEditor');
-  document.dispatchEvent(capEditEvent);
+  //const capEditEvent = new CustomEvent('hyperaudioPopulateCaptionEditor');
+  //document.dispatchEvent(capEditEvent);
 }
 
 function extractSummary(json) {
