@@ -39,20 +39,10 @@ function renderTranscript(
 
   // backward compatibility – check that captions exist, if not generate
 
-  console.dir(document.getElementById(vttId));
-
-  //console.log(hypertranscriptstorage['captions']);
-
   if (hypertranscriptstorage['captions'] === undefined) { //backward compatibility for transcripts without captions
-    console.log("captions not defined");
     const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
     document.dispatchEvent(capEvent);
-    //const capEditEvent = new CustomEvent('hyperaudioPopulateCaptionEditor');
-    //document.dispatchEvent(capEditEvent);
   } else {
-    console.log("==========> hypertranscriptstorage['captions']");
-    console.log(hypertranscriptstorage['captions']);
-
     // stop caption.js inserting VTT upon insertion of new video
 
     //document.getElementById(videoDomId).removeEventListener('loadedmetadata', listener, true);
@@ -60,8 +50,7 @@ function renderTranscript(
     document.getElementById(vttId).src = hypertranscriptstorage['captions'];
     //remove data:text/vtt, and decode
     let plainVtt = decodeURIComponent(hypertranscriptstorage['captions'].split(',')[1]);
-    //console.log(plainVtt);
-    console.log(hypertranscriptstorage['meta']);
+
     if (hypertranscriptstorage['meta'] !== undefined && hypertranscriptstorage['meta'].updateCaptionsFromTranscript !== undefined) {
       updateCaptionsFromTranscript = hypertranscriptstorage['meta'].updateCaptionsFromTranscript;
     } else {
@@ -69,8 +58,6 @@ function renderTranscript(
     }
     
     populateCaptionEditorFromVtt(plainVtt);
-    console.log("captions present!!!");
-
   }
 
   //maybe better called using hyperaudioInit event?
@@ -115,13 +102,11 @@ function saveHyperTranscriptToLocalStorage(
   vttId = 'hyperplayer-vtt',
   storage = window.localStorage
 ) {
-  console.log("saving");
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
   let summary = document.getElementById("summary").innerHTML;
   let topics = document.getElementById("topics").innerHTML.split(", ");
   let captions = document.getElementById(vttId).src;
-  console.log("updateCaptionsFromTranscript = "+updateCaptionsFromTranscript);
   let meta = {"updateCaptionsFromTranscript": updateCaptionsFromTranscript};
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary, topics, captions, meta);
 
@@ -153,8 +138,6 @@ function loadLocalStorageOptions(storage = window.localStorage) {
 
 function setFileSelectListeners() {
   let files = document.querySelectorAll('.file-item');
-
-  console.log("setting listeners");
 
   files.forEach(file => {
     file.removeEventListener('click', fileSelectHandleClick);

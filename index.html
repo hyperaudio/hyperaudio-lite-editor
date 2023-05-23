@@ -1242,7 +1242,6 @@ If you are creating an open source application under a license compatible with t
       function sanitise() {
         let d = new Date();
         let starttime = d.getTime();
-        console.log(starttime);
 
         // check that transcript has the focus
 
@@ -1254,13 +1253,6 @@ If you are creating an open source application under a license compatible with t
         if (document.activeElement === rootnode) {
           isTranscriptFocused = true;
         }
-
-        /*if (hasParent(document.activeElement, document.querySelector('#caption-editor')) === true) {
-          isCaptionEditorFocused = true;
-        }*/
-
-        console.log("isTranscriptFocused = "+isTranscriptFocused);
-        //console.log("isCaptionEditorFocused = "+isCaptionEditorFocused);
 
 
         let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
@@ -1294,8 +1286,7 @@ If you are creating an open source application under a license compatible with t
 
             // if previousSibling is a span, add the textContent of currentNode to it
             if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().endsWith(']') === false) {
-              console.log(walker.currentNode.textContent.trim());
-            //if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().includes(']') === false) {
+             
 
               //look for text in square brackets
               const regex = / *\[[^\]]*]/g;
@@ -1325,7 +1316,6 @@ If you are creating an open source application under a license compatible with t
               if (startsWithSpeaker === true) {
                 span.setAttribute("data-m",walker.currentNode.parentNode.getAttribute("data-m"));
                 walker.currentNode.parentNode.before(span);
-                console.log("startsWithSpeaker");
               } else {
                 let nextStart = walker.currentNode.parentNode.nextElementSibling.getAttribute("data-m");
                 span.setAttribute("data-m",nextStart);
@@ -1335,7 +1325,7 @@ If you are creating an open source application under a license compatible with t
                 newSpan.innerHTML = "&nbsp;";
                 walker.currentNode.parentNode.after(span);
                 span.after(newSpan);
-                console.log("setting the cursor");
+
                 // set the cursor
                 const range = document.createRange();
                 const sel = window.getSelection();
@@ -1347,9 +1337,6 @@ If you are creating an open source application under a license compatible with t
             }
           }
         }
-
-        console.log("****************************************");
-        console.log("updateCaptionsFromTranscript = "+updateCaptionsFromTranscript);
 
         if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
           const words = document.querySelectorAll("[data-m]");
@@ -1416,7 +1403,6 @@ If you are creating an open source application under a license compatible with t
     document.querySelector('#sidebar-toggle').addEventListener('click', (e) => {
 
       if (sidebarOpen === true) {
-        console.log("sidebar open");
         document.querySelector('.holder').style.left = 0;
         document.querySelector('.main-panel').style.left = 0;
         document.querySelector('.transcript-holder').style.left = 0;
@@ -1424,7 +1410,6 @@ If you are creating an open source application under a license compatible with t
         document.querySelector('#sidebar-open-icon').style.display = "block";
         sidebarOpen = false;
       } else {
-        console.log("sidebar closed");
         document.querySelector('.holder').style.left = "400px";
         document.querySelector('.main-panel').style.left = "400px";
         document.querySelector('.transcript-holder').style.left = "400px";
@@ -1617,14 +1602,9 @@ If you are creating an open source application under a license compatible with t
     <script>
       window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
 
-      console.log("updateCaptionsFromTranscript = "+updateCaptionsFromTranscript);
-
       function populateCaptionEditor(data) {
 
         let captionModal = document.querySelector('#caption-editor');
-        console.log("=========================");
-        console.dir(data);
-        console.log("-------------------------");
         captionModal.innerHTML = "";
         let template = null;
 
@@ -1641,7 +1621,6 @@ If you are creating an open source application under a license compatible with t
               template = parser.parseFromString(html, "text/html");
 
               data.forEach(cap => {
-                console.log("subs...");
                 let line1 = cap.text.split('\n')[0];
                 let line2 = cap.text.split('\n')[1];
 
@@ -1665,16 +1644,13 @@ If you are creating an open source application under a license compatible with t
       }
 
       function populateCaptionEditorFromVtt(vtt) {
-        //updateCaptionsFromTranscript = false;
-        console.log("++++++++++++++++");
-        console.log(vtt);
         const data = [];
         vtt = vtt.replace("WEBVTT\n\n","");
         vtt = vtt.replaceAll("\n\n","\n");
-        console.log(vtt);
+
         let lines = vtt.split('\n');
-        console.dir(lines);
         let start, stop, text;
+
         lines.forEach((line, index) => {
           let lineIsNumber = !isNaN(line.trim().replace(' --> ','').replaceAll('.','').replaceAll(':',''));
           if (lineIsNumber === true && line.indexOf(' --> ') === 12 && line.length === 29) {
@@ -1688,8 +1664,6 @@ If you are creating an open source application under a license compatible with t
             text += line.trim() + "\n";
           }
         });
-
-        console.dir(data);
 
         populateCaptionEditor(data);
 
@@ -1798,7 +1772,6 @@ If you are creating an open source application under a license compatible with t
         });
 
         let track = document.querySelector('#hyperplayer-vtt');
-        console.log("2.!!!!!#########################");
         track.src = "data:text/vtt,"+encodeURIComponent(vttCaptions);
 
         document
