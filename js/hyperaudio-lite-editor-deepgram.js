@@ -264,11 +264,16 @@ function fetchData(token, media, tier, language, model) {
 
     // prepare the VTT track so that the correct language is defined
 
-    if (language === undefined) {
+    /*if (language === undefined) {
       let detectedLanguage = extractLanguage(json);
-      language = detectedLanguage;
-      language = detectedLanguage;
-    } 
+      if (detectedLanguage !== undefined) {
+        language = detectedLanguage;
+      } else {
+        language = "unknown";
+      }
+    } */
+
+    language = getLanguageCode();
 
     let track = document.querySelector('#hyperplayer-vtt');
     track.label = language;
@@ -350,6 +355,12 @@ function fetchDataLocal(token, file, tier, language, model) {
           parseData(json);
           document.querySelector("#summary").innerHTML = extractSummary(json);
           document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
+
+          language = getLanguageCode();
+
+          let track = document.querySelector('#hyperplayer-vtt');
+          track.label = language;
+          track.srcLang = language;
         })
         .catch(function (error) {
           console.dir("error is : "+error);
@@ -372,6 +383,21 @@ function fetchDataLocal(token, file, tier, language, model) {
       }
     });
   });
+}
+
+function getLanguageCode(language){
+  // prepare the VTT track so that the correct language is defined
+
+  if (language === undefined) {
+    let detectedLanguage = extractLanguage(json);
+    if (detectedLanguage !== undefined) {
+      language = detectedLanguage;
+    } else {
+      language = "language unknown";
+    }
+  } 
+
+  return (language);
 }
 
 function parseData(json) {
