@@ -27,7 +27,6 @@ class DeepgramService extends HTMLElement {
 
     let counter = 0
     Object.keys(optionLanguageModel).forEach( model => {
-      //console.log(language)
       let option = document.createElement("option")
       option.value = optionLanguageModel[model]
       option.innerHTML = `${model}`
@@ -37,10 +36,8 @@ class DeepgramService extends HTMLElement {
       selectModel.appendChild(option);
       counter += 1;
     } );
-    
   }
 
-  
   clearMediaUrl(event) {
     event.preventDefault();
     document.querySelector('#media').value = "";
@@ -63,7 +60,6 @@ class DeepgramService extends HTMLElement {
 
       file.arrayBuffer().then((arrayBuffer) => {
         blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-        console.log(blob);
 
         let player = document.querySelector("#hyperplayer");
         player.src = URL.createObjectURL(blob);
@@ -141,7 +137,6 @@ class DeepgramService extends HTMLElement {
     let tiers = deepgramModelCompatibility[lang+"_"+model];
 
     let options = document.querySelector('#tier').options;
-    console.log(options);
 
     for (let option of options) {
       option.disabled = true;
@@ -150,7 +145,6 @@ class DeepgramService extends HTMLElement {
       }
     };
   }
-
 
   getData(event) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="rings.svg" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
@@ -172,7 +166,6 @@ class DeepgramService extends HTMLElement {
       if (media !== "" || token !== "") {
         let player = document.querySelector("#hyperplayer");
         player.src = media;
-        //console.log(token);
         fetchData(token, media, tier, language, model);
       } else {
         document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
@@ -192,13 +185,6 @@ class DeepgramService extends HTMLElement {
         <span class="label-text">or</span>
         <input id="file" name="file" type="file" class="file-input w-full max-w-xs" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-        
-        <!--<div class="form-control w-48">
-          <label class="cursor-pointer label">
-            <span class="label-text">Advanced settings</span> 
-            <input id="advanced-settings-check" type="checkbox" class="toggle toggle-primary" />
-          </label>
-        </div>-->
 
         <span class="label-text">Model</span>
         <div>
@@ -217,13 +203,6 @@ class DeepgramService extends HTMLElement {
           <option value="nova">Nova (Best)</option>
         </select>
 
-
-        <!--<div style="padding-top:16px; padding-bottom:16px"><span class="label-text">Tier</span> </div>
-        <div class="btn-group">
-          <input type="radio" name="options" data-title="base" value="base" class="btn btn-sm" checked />
-          <input type="radio" name="options" data-title="enhanced" value="enhanced" class="btn btn-sm" disabled />
-          <input type="radio" name="options" data-title="nova" value="nova" class="btn btn-sm" />
-        </div>-->
       </div>
       <div class="modal-action">
         <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary">Transcribe</label>
@@ -234,11 +213,9 @@ class DeepgramService extends HTMLElement {
     document.querySelector('#media').addEventListener('change',this.clearFilePicker);
     document.querySelector('#transcribe-btn').addEventListener('click', this.getData);
     document.querySelector('#file').addEventListener('change', this.updatePlayerWithLocalFile);
-    //document.querySelector('#advanced-settings-check').addEventListener('change', this.toggleAdvancedSettings);
     document.querySelector('#language-model').addEventListener('change', this.updateDropdowns);
     document.querySelector('#language-model').addEventListener('change', this.updateTierDropdown);
     document.querySelector('#language').addEventListener('change', this.updateTierDropdown);
-
 
     this.configureLanguage();
   }
@@ -284,6 +261,23 @@ function fetchData(token, media, tier, language, model) {
     parseData(json);
     document.querySelector("#summary").innerHTML = extractSummary(json);
     document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
+
+    // prepare the VTT track so that the correct language is defined
+
+    /*if (language === undefined) {
+      let detectedLanguage = extractLanguage(json);
+      if (detectedLanguage !== undefined) {
+        language = detectedLanguage;
+      } else {
+        language = "unknown";
+      }
+    } */
+
+    language = getLanguageCode();
+
+    let track = document.querySelector('#hyperplayer-vtt');
+    track.label = language;
+    track.srcLang = language;
   })
   .catch(function (error) {
     console.dir("error is : "+error);
@@ -335,7 +329,6 @@ function fetchDataLocal(token, file, tier, language, model) {
 
     file.arrayBuffer().then((arrayBuffer) => {
       blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-      console.log(blob);
 
       let player = document.querySelector("#hyperplayer");
       player.src = URL.createObjectURL(blob);
@@ -362,6 +355,12 @@ function fetchDataLocal(token, file, tier, language, model) {
           parseData(json);
           document.querySelector("#summary").innerHTML = extractSummary(json);
           document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
+
+          language = getLanguageCode();
+
+          let track = document.querySelector('#hyperplayer-vtt');
+          track.label = language;
+          track.srcLang = language;
         })
         .catch(function (error) {
           console.dir("error is : "+error);
@@ -384,6 +383,21 @@ function fetchDataLocal(token, file, tier, language, model) {
       }
     });
   });
+}
+
+function getLanguageCode(language){
+  // prepare the VTT track so that the correct language is defined
+
+  if (language === undefined) {
+    let detectedLanguage = extractLanguage(json);
+    if (detectedLanguage !== undefined) {
+      language = detectedLanguage;
+    } else {
+      language = "language unknown";
+    }
+  } 
+
+  return (language);
 }
 
 function parseData(json) {
@@ -454,8 +468,10 @@ function parseData(json) {
     });
   }
 
-  const event = new CustomEvent('hyperaudioInit');
-  document.dispatchEvent(event);
+  const initEvent = new CustomEvent('hyperaudioInit');
+  document.dispatchEvent(initEvent);
+  const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
+  document.dispatchEvent(capEvent);
 }
 
 function extractSummary(json) {
@@ -483,6 +499,11 @@ function extractTopics(json) {
   });
 
   return (topics);
+}
+
+function extractLanguage(json) {
+  let language = json.results.channels[0].detected_language;
+  return (language);
 }
 
 function populateLanguageDeepgram() {
