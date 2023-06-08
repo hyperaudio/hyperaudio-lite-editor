@@ -93,28 +93,56 @@ dialog::backdrop {
   display: none;
 }
 
-@media screen and (max-width: 480px) {
+@media screen and (max-width: 1120px) {
+  #file-dropdown-symbol-mobile {
+    display: block;
+  }
+
+  #file-dropdown-text, #file-dropdown-symbol {
+    display: none;
+  }
+
+  .hyperaudio-transcript {
+    position: relative;
+    width: 520px;
+  }
+
   .transcript-holder {
     display: block;
     justify-content: center; 
     background-color: #ffffff; 
     overflow-y:scroll;
-    left: 0;
     top: 0;
     right: 0;
     bottom: 0;
     width: 100%;
     padding: 8px;
   }
+
+  #transcribe-label {
+    display: none;
+  }
+
+  #transcribe-label-mobile {
+    display: block;
+  }
+
+
+}
+
+@media screen and (max-width: 480px) {
   
   .hyperaudio-transcript {
-    position: relative;
     top: 40px; 
     bottom: 0px; 
     background-color: #ffffff; 
     padding-top: 48px; 
     width: 100%; 
     outline: none;
+  }
+
+  .transcript-holder {
+    left: 0px;
   }
 
   .side-panel, #transcribe-label {
@@ -129,12 +157,8 @@ dialog::backdrop {
     left: 0;
   }
 
-  #search-box, #sidebar-toggle, #file-dropdown-text, #file-dropdown-symbol, #transcribe-label {
+  #search-box, #sidebar-toggle {
     display: none;
-  }
-
-  #file-dropdown-symbol-mobile, #transcribe-label-mobile {
-    display: block;
   }
 
   /*.navbar-start {
