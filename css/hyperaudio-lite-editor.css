@@ -88,3 +88,39 @@ dialog::backdrop {
   width: 520px; 
   outline: none;
 }
+
+@media screen and (max-width: 480px) {
+  .transcript-holder {
+    display: block;
+    justify-content: center; 
+    background-color: #ffffff; 
+    overflow-y:scroll;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 320px;
+  }
+  
+  .hyperaudio-transcript {
+    position: relative;
+    top: 40px; 
+    bottom: 0px; 
+    background-color: #ffffff; 
+    padding-top: 48px; 
+    width: 320px; 
+    outline: none;
+  }
+
+  .side-panel {
+    display: none;
+  }
+
+  .main-panel {
+    left: 0;
+  }
+
+  .holder {
+    left: 0;
+  }
+}
