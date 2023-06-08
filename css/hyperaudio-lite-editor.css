@@ -64,3 +64,27 @@ dialog::backdrop {
   height:0;
   opacity: 0;
 }
+
+/* former inline styles */
+.transcript-holder {
+  display: flex; 
+  justify-content: center; 
+  background-color: #ffffff; 
+  overflow-y:scroll;
+  position: absolute;
+  top: 0;
+  left: 400px;
+  right: 0;
+  bottom: 0;
+  transition: left 0.5s ease;
+}
+
+.hyperaudio-transcript {
+  position: absolute; 
+  top: 40px; 
+  bottom: 0px; 
+  background-color: #ffffff; 
+  padding-top: 48px; 
+  width: 520px; 
+  outline: none;
+}

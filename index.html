@@ -68,17 +68,6 @@ If you are creating an open source application under a license compatible with t
       transition: left 0.5s ease;
     }
 
-    .transcript-holder {
-      background-color: #ececec;
-      position: absolute;
-      top: 0;
-      left: 400px;
-      right: 0;
-      bottom: 0;
-
-      transition: left 0.5s ease;
-    }
-
     #speaker-display {
       margin-top: -30px;
       text-align: right;
@@ -225,9 +214,9 @@ If you are creating an open source application under a license compatible with t
         </div>
       </div>
     </div>
-    <div class="transcript-holder" style="display: flex; justify-content: center; background-color: #ffffff; overflow-y:scroll;">
+    <div class="transcript-holder">
 
-      <div id="hypertranscript" class="hyperaudio-transcript" style="position: absolute; top: 40px; bottom: 0px; background-color: #ffffff; padding-top: 48px; width: 520px; outline: none;" contenteditable="true">
+      <div id="hypertranscript" class="hyperaudio-transcript" contenteditable="true">
         <!-- example data -->
         <article>
           <section class="active">
