@@ -143,8 +143,9 @@ If you are creating an open source application under a license compatible with t
           </button>
           <div class="dropdown menu-compact">
             <label tabindex="0" class="btn m-1 btn-outline gap-2">
-              File
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <span id="file-dropdown-text">File</span>
+              <svg id="file-dropdown-symbol" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <svg id="file-dropdown-symbol-mobile" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
             </label>
             <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
               <li class="menu-title">
@@ -203,8 +204,9 @@ If you are creating an open source application under a license compatible with t
             </div>
           </div>
           <label for="transcribe-modal" class="btn btn-primary gap-2">
-            Transcribe
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
+            <span id="transcribe-label">Transcribe</span>
+            <span id="transcribe-label-mobile">New</span>
+            <svg id="transcribe-logo" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
           </label>
           <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
           <div class="modal">
