@@ -196,7 +196,7 @@ If you are creating an open source application under a license compatible with t
           <div class="modal">
             <div class="modal-box relative">
               <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-              <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
+              <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
               <div id="caption-editor">
                 <center>Preparing captions....</center>
               </div>
@@ -217,7 +217,12 @@ If you are creating an open source application under a license compatible with t
         </div>
       </div>
     </div>
+    
     <div class="transcript-holder">
+
+      <!--<video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls poster="images/poster.png" style="width:100%; margin-top:72px">
+        <track id="hyperplayer-vtt" label="preview" kind="subtitles" src="">
+      </video>-->
 
       <div id="hypertranscript" class="hyperaudio-transcript" contenteditable="true">
         <!-- example data -->
@@ -1385,6 +1390,7 @@ If you are creating an open source application under a license compatible with t
           hyperaudioInstance.checkPlayHead();
         }
       });
+
     };
 
     sanitisationCheck();
@@ -1441,7 +1447,35 @@ If you are creating an open source application under a license compatible with t
     });
   }
 
+  console.log("window.matchMedia");
+  console.log(window.matchMedia("(max-width: 480px)"));
+
+  if (window.matchMedia("(max-width: 480px)").matches === true){
+    let elem = document.querySelector("#hyperplayer");
+
+    // Create a copy of it
+    let clone = elem.cloneNode(true);
+    
+    /*clone.classList.remove('margin-left');
+    clone.setAttribute("width", "100%");
+    clone.setAttribute("padding-top", "72px");*/
+
+    console.dir(clone);
+    
+
+    // Inject it into the DOM
+    //document.querySelector('.transcript-holder').before(clone);
+    document.querySelector('.transcript-holder').prepend(clone);
+    elem.remove();
+    document.querySelector("#hyperplayer").style.marginLeft = "0px";
+    document.querySelector("#hyperplayer").style.width = "100%";
+    document.querySelector("#hyperplayer").style.paddingTop = "72px";
+  }
+
   hyperaudio();
+
+
+  
 
   function hyperaudioGenerateCaptionsFromTranscript() {
     let rootnode = document.querySelector("#hypertranscript");
@@ -1812,6 +1846,9 @@ If you are creating an open source application under a license compatible with t
         }
       }
     }
+
+    
+    
   </script>
 </body>
 </html>

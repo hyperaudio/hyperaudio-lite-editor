@@ -157,7 +157,7 @@ dialog::backdrop {
     left: 0;
   }
 
-  #search-box, #sidebar-toggle {
+  #search-box, #sidebar-toggle, #regenerate-icon{
     display: none;
   }
 
@@ -165,5 +165,16 @@ dialog::backdrop {
     width: 36%;
   }*/
 
+  .modal-box {
+    width:300px;
+  }
+
+  .caption-row input.line1, .caption-row input.line2 {
+    width: 24ch;
+  }
+
+  .caption-row input.start, .caption-row input.end {
+    width: 12ch;
+  }
 
 }
