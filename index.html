@@ -1447,35 +1447,23 @@ If you are creating an open source application under a license compatible with t
     });
   }
 
-  console.log("window.matchMedia");
-  console.log(window.matchMedia("(max-width: 480px)"));
-
   if (window.matchMedia("(max-width: 480px)").matches === true){
     let elem = document.querySelector("#hyperplayer");
 
     // Create a copy of it
     let clone = elem.cloneNode(true);
     
-    /*clone.classList.remove('margin-left');
-    clone.setAttribute("width", "100%");
-    clone.setAttribute("padding-top", "72px");*/
-
-    console.dir(clone);
-    
+    clone.style.width = "100%";
+    clone.style.paddingTop = "72px";
 
     // Inject it into the DOM
-    //document.querySelector('.transcript-holder').before(clone);
+
     document.querySelector('.transcript-holder').prepend(clone);
     elem.remove();
-    document.querySelector("#hyperplayer").style.marginLeft = "0px";
-    document.querySelector("#hyperplayer").style.width = "100%";
-    document.querySelector("#hyperplayer").style.paddingTop = "72px";
   }
 
   hyperaudio();
 
-
-  
 
   function hyperaudioGenerateCaptionsFromTranscript() {
     let rootnode = document.querySelector("#hypertranscript");
