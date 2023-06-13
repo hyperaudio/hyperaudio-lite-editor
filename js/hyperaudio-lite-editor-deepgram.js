@@ -273,7 +273,7 @@ function fetchData(token, media, tier, language, model) {
       }
     } */
 
-    language = getLanguageCode();
+    language = getLanguageCode(json);
 
     let track = document.querySelector('#hyperplayer-vtt');
     track.label = language;
@@ -356,7 +356,7 @@ function fetchDataLocal(token, file, tier, language, model) {
           document.querySelector("#summary").innerHTML = extractSummary(json);
           document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
 
-          language = getLanguageCode();
+          language = getLanguageCode(json);
 
           let track = document.querySelector('#hyperplayer-vtt');
           track.label = language;
@@ -385,8 +385,10 @@ function fetchDataLocal(token, file, tier, language, model) {
   });
 }
 
-function getLanguageCode(language){
+function getLanguageCode(json){
   // prepare the VTT track so that the correct language is defined
+
+  let language = document.querySelector('#language').value;
 
   if (language === undefined) {
     let detectedLanguage = extractLanguage(json);
@@ -619,8 +621,8 @@ function populateLanguageWhisper() {
   };
 
   Object.keys(optionLanguage).forEach( language => {
-    let option = document.createElement("option")
-    option.value = optionLanguage[language]
+    let option = document.createElement("option");
+    option.value = optionLanguage[language];
     option.innerHTML = `${language}`
     select.appendChild(option);
   } );

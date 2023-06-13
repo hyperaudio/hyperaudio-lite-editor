@@ -64,3 +64,117 @@ dialog::backdrop {
   height:0;
   opacity: 0;
 }
+
+/* former inline styles */
+.transcript-holder {
+  display: flex; 
+  justify-content: center; 
+  background-color: #ffffff; 
+  overflow-y:scroll;
+  position: absolute;
+  top: 0;
+  left: 400px;
+  right: 0;
+  bottom: 0;
+  transition: left 0.5s ease;
+}
+
+.hyperaudio-transcript {
+  position: absolute; 
+  top: 40px; 
+  bottom: 0px; 
+  background-color: #ffffff; 
+  padding-top: 48px; 
+  width: 520px; 
+  outline: none;
+}
+
+#file-dropdown-mobile, #file-dropdown-symbol-mobile, #transcribe-label-mobile {
+  display: none;
+}
+
+@media screen and (max-width: 1120px) {
+  #file-dropdown-symbol-mobile {
+    display: block;
+  }
+
+  #file-dropdown-text, #file-dropdown-symbol {
+    display: none;
+  }
+
+  .hyperaudio-transcript {
+    position: relative;
+    width: 520px;
+  }
+
+  .transcript-holder {
+    display: block;
+    justify-content: center; 
+    background-color: #ffffff; 
+    overflow-y:scroll;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    padding: 8px;
+  }
+
+  #transcribe-label {
+    display: none;
+  }
+
+  #transcribe-label-mobile {
+    display: block;
+  }
+
+
+}
+
+@media screen and (max-width: 480px) {
+  
+  .hyperaudio-transcript {
+    top: 40px; 
+    bottom: 0px; 
+    background-color: #ffffff; 
+    padding-top: 48px; 
+    width: 100%; 
+    outline: none;
+  }
+
+  .transcript-holder {
+    left: 0px;
+  }
+
+  .side-panel, #transcribe-label {
+    display: none;
+  }
+
+  .main-panel {
+    left: 0;
+  }
+
+  .holder {
+    left: 0;
+  }
+
+  #search-box, #sidebar-toggle, #regenerate-icon{
+    display: none;
+  }
+
+  /*.navbar-start {
+    width: 36%;
+  }*/
+
+  .modal-box {
+    width:300px;
+  }
+
+  .caption-row input.line1, .caption-row input.line2 {
+    width: 24ch;
+  }
+
+  .caption-row input.start, .caption-row input.end {
+    width: 12ch;
+  }
+
+}

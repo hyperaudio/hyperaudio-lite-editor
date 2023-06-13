@@ -23,7 +23,7 @@ If you are creating an open source application under a license compatible with t
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
-  <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
+ 
   <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
   <!--<script src="js/hyperaudio-lite-editor-captions.js"></script>-->
 
@@ -68,17 +68,6 @@ If you are creating an open source application under a license compatible with t
       transition: left 0.5s ease;
     }
 
-    .transcript-holder {
-      background-color: #ececec;
-      position: absolute;
-      top: 0;
-      left: 400px;
-      right: 0;
-      bottom: 0;
-
-      transition: left 0.5s ease;
-    }
-
     #speaker-display {
       margin-top: -30px;
       text-align: right;
@@ -86,6 +75,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
 </head>
 <body data-theme="light">
   <div class="holder grid grid-flow-col auto-cols-max">
@@ -153,8 +143,9 @@ If you are creating an open source application under a license compatible with t
           </button>
           <div class="dropdown menu-compact">
             <label tabindex="0" class="btn m-1 btn-outline gap-2">
-              File
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <span id="file-dropdown-text">File</span>
+              <svg id="file-dropdown-symbol" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              <svg id="file-dropdown-symbol-mobile" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
             </label>
             <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
               <li class="menu-title">
@@ -205,7 +196,7 @@ If you are creating an open source application under a license compatible with t
           <div class="modal">
             <div class="modal-box relative">
               <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-              <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
+              <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
               <div id="caption-editor">
                 <center>Preparing captions....</center>
               </div>
@@ -213,8 +204,9 @@ If you are creating an open source application under a license compatible with t
             </div>
           </div>
           <label for="transcribe-modal" class="btn btn-primary gap-2">
-            Transcribe
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
+            <span id="transcribe-label">Transcribe</span>
+            <span id="transcribe-label-mobile">New</span>
+            <svg id="transcribe-logo" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
           </label>
           <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
           <div class="modal">
@@ -225,9 +217,14 @@ If you are creating an open source application under a license compatible with t
         </div>
       </div>
     </div>
-    <div class="transcript-holder" style="display: flex; justify-content: center; background-color: #ffffff; overflow-y:scroll;">
+    
+    <div class="transcript-holder">
 
-      <div id="hypertranscript" class="hyperaudio-transcript" style="position: absolute; top: 40px; bottom: 0px; background-color: #ffffff; padding-top: 48px; width: 520px; outline: none;" contenteditable="true">
+      <!--<video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls poster="images/poster.png" style="width:100%; margin-top:72px">
+        <track id="hyperplayer-vtt" label="preview" kind="subtitles" src="">
+      </video>-->
+
+      <div id="hypertranscript" class="hyperaudio-transcript" contenteditable="true">
         <!-- example data -->
         <article>
           <section class="active">
@@ -1393,6 +1390,7 @@ If you are creating an open source application under a license compatible with t
           hyperaudioInstance.checkPlayHead();
         }
       });
+
     };
 
     sanitisationCheck();
@@ -1449,7 +1447,23 @@ If you are creating an open source application under a license compatible with t
     });
   }
 
+  if (window.matchMedia("(max-width: 480px)").matches === true){
+    let elem = document.querySelector("#hyperplayer");
+
+    // Create a copy of it
+    let clone = elem.cloneNode(true);
+    
+    clone.style.width = "100%";
+    clone.style.paddingTop = "72px";
+
+    // Inject it into the DOM
+
+    document.querySelector('.transcript-holder').prepend(clone);
+    elem.remove();
+  }
+
   hyperaudio();
+
 
   function hyperaudioGenerateCaptionsFromTranscript() {
     let rootnode = document.querySelector("#hypertranscript");
@@ -1820,6 +1834,9 @@ If you are creating an open source application under a license compatible with t
         }
       }
     }
+
+    
+    
   </script>
 </body>
 </html>
