@@ -7,7 +7,7 @@ This document outlines the steps to install and configure Tailwind CSS for your 
 Tailwind CSS relies on a few dependencies. To install these, run the following command in your project directory:
 
 ```bash
-npm install -D tailwindcss postcss autoprefixer cssnano
+npm install -D tailwindcss postcss autoprefixer cssnano daisyui@latest
 ```
 
 This will install Tailwind CSS, PostCSS, Autoprefixer, and CSSNano. These tools are used to process your CSS files.
