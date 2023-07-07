@@ -23,13 +23,13 @@ If you are creating an open source application under a license compatible with t
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
- 
+
   <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
   <!--<script src="js/hyperaudio-lite-editor-captions.js"></script>-->
 
   <!-- DaisyUI / Tailwind -->
-  <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.5/dist/full.css" rel="stylesheet" type="text/css" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="css/tailwind-min.css" rel="stylesheet">
+
 
   <!-- Meta Tags required for
     Progressive Web App -->
@@ -62,8 +62,8 @@ If you are creating an open source application under a license compatible with t
     }
 
     .main-panel {
-      position: absolute; 
-      left:400px; 
+      position: absolute;
+      left:400px;
       right:0;
       transition: left 0.5s ease;
     }
@@ -77,7 +77,7 @@ If you are creating an open source application under a license compatible with t
     [contenteditable]:focus {
       outline: 0px solid transparent;
     }
-    
+
   </style>
    <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
 </head>
@@ -221,7 +221,7 @@ If you are creating an open source application under a license compatible with t
         </div>
       </div>
     </div>
-    
+
     <div class="transcript-holder">
 
       <!--<video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/video/BBC/education.mp4" type="video/mp4" controls poster="images/poster.png" style="width:100%; margin-top:72px">
@@ -1250,7 +1250,7 @@ If you are creating an open source application under a license compatible with t
         let isTranscriptFocused = false;
         let isCaptionEditorFocused = false;
 
-        
+
         if (document.activeElement === rootnode) {
           isTranscriptFocused = true;
         }
@@ -1287,7 +1287,7 @@ If you are creating an open source application under a license compatible with t
 
             // if previousSibling is a span, add the textContent of currentNode to it
             if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().endsWith(']') === false) {
-             
+
 
               //look for text in square brackets
               const regex = / *\[[^\]]*]/g;
@@ -1456,7 +1456,7 @@ If you are creating an open source application under a license compatible with t
 
     // Create a copy of it
     let clone = elem.cloneNode(true);
-    
+
     clone.style.width = "100%";
     clone.style.paddingTop = "72px";
 
@@ -1514,15 +1514,15 @@ If you are creating an open source application under a license compatible with t
 
   function hasParent(element, parent) {
     let currentElement = element.parentNode;
-    
+
     while (currentElement !== null) {
       if (currentElement === parent) {
         return true;
       }
-      
+
       currentElement = currentElement.parentNode;
     }
-    
+
     return false;
   }
   </script>
@@ -1654,8 +1654,8 @@ If you are creating an open source application under a license compatible with t
                 captionModal.insertAdjacentElement('beforeEnd', captionTempl);
               });
           })
-          .catch(function(err) {  
-              console.log('Template error: ', err);  
+          .catch(function(err) {
+              console.log('Template error: ', err);
           });
 
           document.querySelector('#regenerate-btn').classList.add("btn-disabled");
@@ -1693,7 +1693,7 @@ If you are creating an open source application under a license compatible with t
       const cap2 = caption();
       let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
       populateCaptionEditor(subs.data);
-      
+
       const countSeconds = (str) => {
         const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
         const hour = parseInt(hh, 10) || 0;
@@ -1748,7 +1748,7 @@ If you are creating an open source application under a license compatible with t
         let belowCaption = thisCaption.nextElementSibling;
 
         thisCaption.querySelector('.end').value = belowCaption.querySelector('.end').value;
-        thisCaption.querySelector('.line2').value += 
+        thisCaption.querySelector('.line2').value +=
           ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
 
         belowCaption.parentNode.removeChild(belowCaption);
@@ -1839,8 +1839,8 @@ If you are creating an open source application under a license compatible with t
       }
     }
 
-    
-    
+
+
   </script>
 </body>
 </html>
