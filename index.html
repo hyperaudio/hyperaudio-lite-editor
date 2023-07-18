@@ -170,7 +170,8 @@ If you are creating an open source application under a license compatible with t
               </li>
               <li><export-json></export-json></li>
               <li><import-json></import-json></li>
-              <li><import-deepgram-json></import-deepgram-json></li>
+              <!--<li><import-deepgram-json></import-deepgram-json></li>-->
+              <li><label for="file-import-deepgram-json-dialog">Import Deepgram JSON</label></li>
               <li><import-srt></import-srt></li>
             </ul>
           </div>
@@ -1528,6 +1529,64 @@ If you are creating an open source application under a license compatible with t
   }
   </script>
 
+    <div class="hidden-label-holder">
+    <label for="file-import-deepgram-json-dialog">Import Deepgram JSON Dialog</label>
+    </div>
+    <input type="checkbox" id="file-import-deepgram-json-dialog" class="modal-toggle" />
+    <div class="modal">
+    <div class="modal-box">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Import Deepgram JSON Dialog</h3>
+        <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <span class="label-text">or</span>
+        <input id="deepgram-json-file" name="deepgram-json-file" type="file" class="file-input w-full max-w-xs" />
+      </div>
+      <div class="modal-action">
+        <label for="file-import-deepgram-json-dialog" class="btn btn-ghost">Cancel</label>
+        <label id="file-import-deepgram-json-dialog" for="file-import-deepgram-json-dialog" class="btn btn-primary"><import-deepgram-json></import-deepgram-json></label>
+      </div>
+    </div>
+    </div>
+
+    <script>
+      document.querySelector('#deepgram-json-file').addEventListener('change',clearDeepgramJsonMediaUrl);
+      document.querySelector('#deepgram-json-media').addEventListener('change',clearDeepgramJsonFilePicker);
+
+      function clearDeepgramJsonMediaUrl(event) {
+        event.preventDefault();
+        document.querySelector('#deepgram-json-media').value = "";
+        updatePlayerWithLocalDeepgramJsonFile(event);
+      }
+
+      function clearDeepgramJsonFilePicker(event) {
+        event.preventDefault();
+        document.querySelector('#deepgram-json-file').value = "";
+        let player = document.querySelector("#hyperplayer");
+        player.src = document.querySelector('#deepgram-json-media').value;
+      }
+
+      function updatePlayerWithLocalDeepgramJsonFile(event) {
+        const file = document.querySelector('[name=deepgram-json-file]').files[0];
+        // Create a new FileReader instance
+        const reader = new FileReader();
+        
+        reader.readAsArrayBuffer(file);
+        let blob = null;
+
+        reader.addEventListener('load', () => {
+
+          file.arrayBuffer().then((arrayBuffer) => {
+            blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+
+            let player = document.querySelector("#hyperplayer");
+            player.src = URL.createObjectURL(blob);
+          });
+        });
+      }
+    </script>
+
+
     <!-- comment out if localstorage not required -->
 
     <div class="hidden-label-holder">
@@ -1548,6 +1607,7 @@ If you are creating an open source application under a license compatible with t
     </div>
     </div>
 
+
     <div class="hidden-label-holder">
     <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
     </div>
@@ -1555,7 +1615,7 @@ If you are creating an open source application under a license compatible with t
     <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label id="close-modal" for="file-load-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
         <h3 class="font-bold text-lg">Load from Local Storage</h3>
         <select id="load-localstorage-filename" class="select select-bordered w-full max-w-xs">
         </select>
@@ -1571,7 +1631,7 @@ If you are creating an open source application under a license compatible with t
 
     <script>
 
-    document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><spa>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
+    document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><span>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
 
     document.querySelector('#save-localstorage-filename').value = getLocalStorageSaveFilename(document.querySelector("#hyperplayer").src);
 
