@@ -16,7 +16,7 @@ class ExportJson extends HTMLElement {
 
   connectedCallback() {
     //this.innerHTML =  `<button onclick="${this.exportJson}">export json ⬇</button>`;
-    this.innerHTML = `<a onclick="${this.exportJson}">Export JSON</a>`;
+    this.innerHTML = `<a onclick="${this.exportJson}">Export Hyperaudio JSON</a>`;
     this.addEventListener('click', this.exportJson);
   }
 }
@@ -58,12 +58,44 @@ class ImportJson extends HTMLElement {
 
   connectedCallback() {
     //this.innerHTML =  `<button onclick="${this.importJson}">import json ⬆</button>`;
-    this.innerHTML = `<a onclick="${this.importJson}">Import JSON</a>`;
+    this.innerHTML = `<a onclick="${this.importJson}">Import Hyperaudio JSON</a>`;
     this.addEventListener('click', this.importJson);
   }
 }
 
 customElements.define('import-json', ImportJson);
+
+class ImportDeepgramJson extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  importDeepgramJson() {
+
+    //import data from json file when click on import button
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'application/json';
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.addEventListener('load', (event) => {
+        console.dir(JSON.parse(event.target.result));
+        parseData(JSON.parse(event.target.result));
+      });
+      reader.readAsText(file);
+    });
+    fileInput.click();
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a onclick="${this.importDeepgramJson}">Import Deepgram JSON</a>`;
+    this.addEventListener('click', this.importDeepgramJson);
+  }
+}
+
+customElements.define('import-deepgram-json', ImportDeepgramJson);
 
 
 class ImportSrt extends HTMLElement {
