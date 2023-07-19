@@ -74,7 +74,7 @@ class ImportDeepgramJson extends HTMLElement {
   importDeepgramJson() {
 
     //import data from json file when click on import button
-    const fileInput = document.createElement('input');
+    /*const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'application/json';
     fileInput.addEventListener('change', (event) => {
@@ -86,11 +86,13 @@ class ImportDeepgramJson extends HTMLElement {
       });
       reader.readAsText(file);
     });
-    fileInput.click();
+    fileInput.click();*/
+    console.log("clicked");
   }
 
   connectedCallback() {
-    this.innerHTML = `<a onclick="${this.importDeepgramJson}">Import Deepgram JSON</a>`;
+    this.innerHTML = `<input id="deepgram-json" name="deepgram-json" type="file" class="file-input w-full max-w-xs" />`;
+    //this.innerHTML = `<a onclick="${this.importDeepgramJson}">Import Deepgram JSON</a>`;
     this.addEventListener('click', this.importDeepgramJson);
   }
 }

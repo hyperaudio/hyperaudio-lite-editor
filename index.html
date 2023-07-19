@@ -1539,12 +1539,14 @@ If you are creating an open source application under a license compatible with t
         <label id="close-modal" for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
         <h3 class="font-bold text-lg">Import Deepgram JSON Dialog</h3>
         <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or</span>
+        <span class="label-text">or use local media file</span>
         <input id="deepgram-json-file" name="deepgram-json-file" type="file" class="file-input w-full max-w-xs" />
+        <span class="label-text">select local JSON file</span>
+        <import-deepgram-json></import-deepgram-json>
       </div>
       <div class="modal-action">
         <label for="file-import-deepgram-json-dialog" class="btn btn-ghost">Cancel</label>
-        <label id="file-import-deepgram-json-dialog" for="file-import-deepgram-json-dialog" class="btn btn-primary"><import-deepgram-json></import-deepgram-json></label>
+        <label id="file-import-deepgram-json" for="file-import-deepgram-json-dialog" class="btn btn-primary">Confirm</label>
       </div>
     </div>
     </div>
@@ -1552,37 +1554,45 @@ If you are creating an open source application under a license compatible with t
     <script>
       document.querySelector('#deepgram-json-file').addEventListener('change',clearDeepgramJsonMediaUrl);
       document.querySelector('#deepgram-json-media').addEventListener('change',clearDeepgramJsonFilePicker);
+      document.querySelector('#file-import-deepgram-json').addEventListener('click',confirmDeepgramJson);
 
       function clearDeepgramJsonMediaUrl(event) {
         event.preventDefault();
         document.querySelector('#deepgram-json-media').value = "";
-        updatePlayerWithLocalDeepgramJsonFile(event);
       }
 
       function clearDeepgramJsonFilePicker(event) {
         event.preventDefault();
         document.querySelector('#deepgram-json-file').value = "";
-        let player = document.querySelector("#hyperplayer");
-        player.src = document.querySelector('#deepgram-json-media').value;
       }
 
-      function updatePlayerWithLocalDeepgramJsonFile(event) {
-        const file = document.querySelector('[name=deepgram-json-file]').files[0];
-        // Create a new FileReader instance
-        const reader = new FileReader();
-        
-        reader.readAsArrayBuffer(file);
-        let blob = null;
+      function confirmDeepgramJson() {
+        let player = document.querySelector("#hyperplayer");
+        if (document.querySelector('#deepgram-json-file').value == ""){
+          player.src = document.querySelector('#deepgram-json-media').value;
+        } else {
+          const file = document.querySelector('[name=deepgram-json-file]').files[0];
+          // Create a new FileReader instance
+          const reader = new FileReader();
+          reader.readAsArrayBuffer(file);
+          let blob = null;
 
-        reader.addEventListener('load', () => {
+          reader.addEventListener('load', () => {
 
-          file.arrayBuffer().then((arrayBuffer) => {
-            blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-
-            let player = document.querySelector("#hyperplayer");
-            player.src = URL.createObjectURL(blob);
+            file.arrayBuffer().then((arrayBuffer) => {
+              blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+              player.src = URL.createObjectURL(blob);
+            });
           });
+        }
+
+        const file = document.querySelector('[name=deepgram-json]').files[0];
+        const reader = new FileReader();
+        reader.addEventListener('load', (event) => {
+          parseData(JSON.parse(event.target.result));
         });
+        reader.readAsText(file);
+
       }
     </script>
 
