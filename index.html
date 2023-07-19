@@ -1529,389 +1529,321 @@ If you are creating an open source application under a license compatible with t
   }
   </script>
 
-    <div class="hidden-label-holder">
-    <label for="file-import-deepgram-json-dialog">Import Deepgram JSON Dialog</label>
+  <import-deepgram-json></import-deepgram-json>
+  
+  <!-- comment out if localstorage not required -->
+
+  <div class="hidden-label-holder">
+  <label for="file-save-dialog">Open Save to Local Storage Dialog</label>
+  </div>
+  <input type="checkbox" id="file-save-dialog" class="modal-toggle" />
+  <div class="modal">
+  <div class="modal-box">
+    <div class="flex flex-col gap-4 w-full">
+      <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <h3 class="font-bold text-lg">Save to Local Storage</h3>
+      <input type="text" id="save-localstorage-filename" name="save-localstorage-filename" placeholder="File name" class="input input-bordered w-full max-w-xs" />
     </div>
-    <input type="checkbox" id="file-import-deepgram-json-dialog" class="modal-toggle" />
-    <div class="modal">
-    <div class="modal-box">
-      <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-        <h3 class="font-bold text-lg">Import Deepgram JSON Dialog</h3>
-        <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or use local media file</span>
-        <input id="deepgram-json-file" name="deepgram-json-file" type="file" class="file-input w-full max-w-xs" />
-        <span class="label-text">select local JSON file</span>
-        <import-deepgram-json></import-deepgram-json>
-      </div>
-      <div class="modal-action">
-        <label for="file-import-deepgram-json-dialog" class="btn btn-ghost">Cancel</label>
-        <label id="file-import-deepgram-json" for="file-import-deepgram-json-dialog" class="btn btn-primary">Confirm</label>
-      </div>
+    <div class="modal-action">
+      <label for="file-save-dialog" class="btn btn-ghost">Cancel</label>
+      <label id="file-save-localstorage" for="file-save-dialog" class="btn btn-primary">Confirm</label>
     </div>
+  </div>
+  </div>
+
+
+  <div class="hidden-label-holder">
+  <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
+  </div>
+  <input type="checkbox" id="file-load-dialog" class="modal-toggle" />
+  <div class="modal">
+  <div class="modal-box">
+    <div class="flex flex-col gap-4 w-full">
+      <label id="close-modal" for="file-load-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <h3 class="font-bold text-lg">Load from Local Storage</h3>
+      <select id="load-localstorage-filename" class="select select-bordered w-full max-w-xs">
+      </select>
     </div>
-
-    <script>
-      document.querySelector('#deepgram-json-file').addEventListener('change',clearDeepgramJsonMediaUrl);
-      document.querySelector('#deepgram-json-media').addEventListener('change',clearDeepgramJsonFilePicker);
-      document.querySelector('#file-import-deepgram-json').addEventListener('click',confirmDeepgramJson);
-
-      function clearDeepgramJsonMediaUrl(event) {
-        event.preventDefault();
-        document.querySelector('#deepgram-json-media').value = "";
-      }
-
-      function clearDeepgramJsonFilePicker(event) {
-        event.preventDefault();
-        document.querySelector('#deepgram-json-file').value = "";
-      }
-
-      function confirmDeepgramJson() {
-        let player = document.querySelector("#hyperplayer");
-        if (document.querySelector('#deepgram-json-file').value == ""){
-          player.src = document.querySelector('#deepgram-json-media').value;
-        } else {
-          const file = document.querySelector('[name=deepgram-json-file]').files[0];
-          // Create a new FileReader instance
-          const reader = new FileReader();
-          reader.readAsArrayBuffer(file);
-          let blob = null;
-
-          reader.addEventListener('load', () => {
-
-            file.arrayBuffer().then((arrayBuffer) => {
-              blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-              player.src = URL.createObjectURL(blob);
-            });
-          });
-        }
-
-        const file = document.querySelector('[name=deepgram-json]').files[0];
-        const reader = new FileReader();
-        reader.addEventListener('load', (event) => {
-          parseData(JSON.parse(event.target.result));
-        });
-        reader.readAsText(file);
-
-      }
-    </script>
-
-
-    <!-- comment out if localstorage not required -->
-
-    <div class="hidden-label-holder">
-    <label for="file-save-dialog">Open Save to Local Storage Dialog</label>
+    <div class="modal-action">
+      <label for="file-load-dialog" class="btn btn-ghost">Cancel</label>
+      <label id="file-load-localstorage" for="file-load-dialog" class="btn btn-primary">Confirm</label>
     </div>
-    <input type="checkbox" id="file-save-dialog" class="modal-toggle" />
-    <div class="modal">
-    <div class="modal-box">
-      <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-        <h3 class="font-bold text-lg">Save to Local Storage</h3>
-        <input type="text" id="save-localstorage-filename" name="save-localstorage-filename" placeholder="File name" class="input input-bordered w-full max-w-xs" />
-      </div>
-      <div class="modal-action">
-        <label for="file-save-dialog" class="btn btn-ghost">Cancel</label>
-        <label id="file-save-localstorage" for="file-save-dialog" class="btn btn-primary">Confirm</label>
-      </div>
-    </div>
-    </div>
+  </div>
+  </div>
 
+  <script src="./js/hyperaudio-lite-editor-storage.js"></script>
 
-    <div class="hidden-label-holder">
-    <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
-    </div>
-    <input type="checkbox" id="file-load-dialog" class="modal-toggle" />
-    <div class="modal">
-    <div class="modal-box">
-      <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="file-load-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-        <h3 class="font-bold text-lg">Load from Local Storage</h3>
-        <select id="load-localstorage-filename" class="select select-bordered w-full max-w-xs">
-        </select>
-      </div>
-      <div class="modal-action">
-        <label for="file-load-dialog" class="btn btn-ghost">Cancel</label>
-        <label id="file-load-localstorage" for="file-load-dialog" class="btn btn-primary">Confirm</label>
-      </div>
-    </div>
-    </div>
+  <script>
 
-    <script src="./js/hyperaudio-lite-editor-storage.js"></script>
+  document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><span>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
 
-    <script>
+  document.querySelector('#save-localstorage-filename').value = getLocalStorageSaveFilename(document.querySelector("#hyperplayer").src);
 
-    document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><span>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
+  loadLocalStorageOptions();
 
-    document.querySelector('#save-localstorage-filename').value = getLocalStorageSaveFilename(document.querySelector("#hyperplayer").src);
-
-    loadLocalStorageOptions();
-
-    document
-      .querySelector("#file-save-localstorage")
-      .addEventListener("click", function () {
-        let filename = document.querySelector('#save-localstorage-filename').value;
-        saveHyperTranscriptToLocalStorage(filename);
-        loadLocalStorageOptions();
-      });
-
-    document
-      .querySelector("#file-load-localstorage")
-      .addEventListener("click", function () {
-        let filenameIndex = document.querySelector('#load-localstorage-filename').value;
-        loadHyperTranscriptFromLocalStorage(filenameIndex);
-      });
-
-    setFileSelectListeners();
-
-    </script>
-
-    <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
-    <!-- end of localstorage additions -->
-
-    <!-- caption editor additions -->
-    <style>
-      input.line1 {
-        width: 36ch;
-      }
-
-      input.line2 {
-        width: 36ch;
-      }
-
-      div.caption {
-        padding: 16px;
-      }
-
-      .caption-row {
-        padding: 4px;
-      }
-
-    </style>
-    <script>
-      window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
-
-      function populateCaptionEditor(data) {
-
-        let captionModal = document.querySelector('#caption-editor');
-        captionModal.innerHTML = "";
-        let template = null;
-
-        fetch('caption-editor-row-template.html')
-          .then(function(response) {
-              // When the page is loaded convert it to text
-              return response.text()
-          })
-          .then(function(html) {
-              // Initialize the DOM parser
-              let parser = new DOMParser();
-
-              // Parse the text
-              template = parser.parseFromString(html, "text/html");
-
-              data.forEach(cap => {
-                let line1 = cap.text.split('\n')[0];
-                let line2 = cap.text.split('\n')[1];
-
-                if (line2 === undefined || typeof line2 === "undefined") {
-                  line2 = "";
-                }
-
-                let captionTempl = template.querySelector('#caption-template').cloneNode(true);
-                captionTempl.querySelector('.start').value = cap.start;
-                captionTempl.querySelector('.end').value = cap.stop;
-                captionTempl.querySelector('.line1').value = line1;
-                captionTempl.querySelector('.line2').value = line2;
-                captionModal.insertAdjacentElement('beforeEnd', captionTempl);
-              });
-          })
-          .catch(function(err) {  
-              console.log('Template error: ', err);  
-          });
-
-          document.querySelector('#regenerate-btn').classList.add("btn-disabled");
-      }
-
-      function populateCaptionEditorFromVtt(vtt) {
-        const data = [];
-        vtt = vtt.replace("WEBVTT\n\n","");
-        vtt = vtt.replaceAll("\n\n","\n");
-
-        let lines = vtt.split('\n');
-        let start, stop, text;
-
-        lines.forEach((line, index) => {
-          let lineIsNumber = !isNaN(line.trim().replace(' --> ','').replaceAll('.','').replaceAll(':',''));
-          if (lineIsNumber === true && line.indexOf(' --> ') === 12 && line.length === 29) {
-            if (index > 0) {
-              data.push({start, stop, text});
-            }
-            start = line.split(' --> ')[0];
-            stop = line.split(' --> ')[1].trim();
-            text = "";
-          } else {
-            text += line.trim() + "\n";
-          }
-        });
-
-        populateCaptionEditor(data);
-
-        if (updateCaptionsFromTranscript === false) {
-          document.querySelector('#captionsource-alert').style.visibility = 'visible';
-        }
-      }
-
-      const cap2 = caption();
-      let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-      populateCaptionEditor(subs.data);
-      
-      const countSeconds = (str) => {
-        const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
-        const hour = parseInt(hh, 10) || 0;
-        const minute = parseInt(mm, 10) || 0;
-        const second = parseFloat(ss);
-        return (hour*3600) + (minute*60) + (second);
-      };
-
-      function playClip(elem) {
-
-        // this is a little brittle
-        // better to check each parent until you find the elements required
-
-        let startTime = countSeconds(elem.parentElement.parentElement.querySelector('.start').value);
-        let endTime = countSeconds(elem.parentElement.parentElement.querySelector('.end').value);
-        let duration = endTime - startTime;
-
-        document.querySelector('video').currentTime = startTime;
-        document.querySelector('video').play();
-
-        setTimeout(() => {
-          document.querySelector('video').pause();
-        }, duration*1000);
-      }
-
-      function seekTo(elem) {
-        let seekTime = countSeconds(elem.nextElementSibling.value);
-        if (elem.className == "play-end") {
-          seekTime -= 0.1;
-        }
-        document.querySelector('video').currentTime = seekTime;
-      }
-
-      function addCaption(elem) {
-        let captionTempl = template.querySelector('#caption-template').cloneNode(true);
-        captionTempl.getElementsByClassName('line1')[0].value = "";
-        captionTempl.getElementsByClassName('line2')[0].value = "";
-        captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
-        captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
-        elem.parentElement.parentNode.insertAdjacentElement('afterend', captionTempl);
-        makeCaptionEditorActive();
-      }
-
-      function deleteCaption(elem) {
-        let thisCaption = elem.parentNode.parentNode;
-        thisCaption.parentNode.removeChild(thisCaption);
-        makeCaptionEditorActive();
-      }
-
-      function mergeCaption(elem) {
-        let thisCaption = elem.parentNode.parentNode;
-        let belowCaption = thisCaption.nextElementSibling;
-
-        thisCaption.querySelector('.end').value = belowCaption.querySelector('.end').value;
-        thisCaption.querySelector('.line2').value += 
-          ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
-
-        belowCaption.parentNode.removeChild(belowCaption);
-        makeCaptionEditorActive();
-      }
-
-      function captionChange() {
-        makeCaptionEditorActive();
-      }
-
-      function makeCaptionEditorActive() {
-        updateCaptionsFromTranscript = false;
-        document.querySelector('#regenerate-btn').classList.remove("btn-disabled");
-        generateCaptionsFromCaptionEditor();
-      }
-
-      function generateCaptionsFromCaptionEditor() {
-
-        let vttCaptions = "WEBVTT\n\n";
-        let srtCaptions = "";
-
-        document.querySelectorAll('.caption').forEach((caption, index) => {
-          if (caption.querySelector('.start').value.length > 0){
-            vttCaptions += caption.querySelector('.start').value + " --> " + caption.querySelector('.end').value + "\n";
-            vttCaptions += caption.querySelector('.line1').value + "\n";
-            if (caption.querySelector('.line2').value.length > 0) {
-              vttCaptions += caption.querySelector('.line2').value + "\n";
-            }
-            vttCaptions += "\n";
-
-            srtCaptions += (index + 1) + "\n";
-            srtCaptions += convertTimecodeToSrt(caption.querySelector('.start').value) + " --> " + convertTimecodeToSrt(caption.querySelector('.end').value) + "\n";
-            srtCaptions += caption.querySelector('.line1').value + "\n";
-            if (caption.querySelector('.line2').value.length > 0) {
-              srtCaptions += caption.querySelector('.line2').value + "\n";
-            }
-            srtCaptions += "\n";
-          }
-        });
-
-        let track = document.querySelector('#hyperplayer-vtt');
-        track.src = "data:text/vtt,"+encodeURIComponent(vttCaptions);
-
-        document
-          .querySelector("#download-hypertranscript")
-          .setAttribute(
-            "href",
-            "data:text/html," +
-              encodeURIComponent(
-                hyperaudioTemplate
-                  .replace("{hypertranscript}", document.querySelector('#hypertranscript').innerHTML.replace(/ class=".*?"/g, ''))
-                  .replace("{sourcemedia}", document.querySelector("#hyperplayer").src)
-                  .replace("{sourcevtt}", track.src)
-              )
-          );
-
-        document.querySelector('#download-vtt').setAttribute('href', "data:text/vtt,"+encodeURIComponent(vttCaptions));
-        document.querySelector('#download-srt').setAttribute('href', "data:text/srt,"+encodeURIComponent(srtCaptions));
-      }
-
-      function convertTimecodeToSrt(timecode) {
-        //the same as VTT format but milliseconds separated by a comma
-        return timecode.substring(0,8) + "," + timecode.substring(9,12);
-      }
-
-      document.querySelector('#regenerate-btn').addEventListener('click', hyperaudioGenerateCaptionsFromTranscript);
-
-    </script>
-    <!-- end of caption editor additions -->
-
-    <!-- service worker script for PWA -->
-    <script>
-    window.addEventListener('load', () => {
-      registerSW();
+  document
+    .querySelector("#file-save-localstorage")
+    .addEventListener("click", function () {
+      let filename = document.querySelector('#save-localstorage-filename').value;
+      saveHyperTranscriptToLocalStorage(filename);
+      loadLocalStorageOptions();
     });
 
-    // Register the Service Worker
-    async function registerSW() {
-      if ('serviceWorker' in navigator) {
-        try {
-        await navigator
-            .serviceWorker
-            .register('serviceworker.js');
+  document
+    .querySelector("#file-load-localstorage")
+    .addEventListener("click", function () {
+      let filenameIndex = document.querySelector('#load-localstorage-filename').value;
+      loadHyperTranscriptFromLocalStorage(filenameIndex);
+    });
+
+  setFileSelectListeners();
+
+  </script>
+
+  <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
+  <!-- end of localstorage additions -->
+
+  <!-- caption editor additions -->
+  <style>
+    input.line1 {
+      width: 36ch;
+    }
+
+    input.line2 {
+      width: 36ch;
+    }
+
+    div.caption {
+      padding: 16px;
+    }
+
+    .caption-row {
+      padding: 4px;
+    }
+
+  </style>
+  <script>
+    window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
+
+    function populateCaptionEditor(data) {
+
+      let captionModal = document.querySelector('#caption-editor');
+      captionModal.innerHTML = "";
+      let template = null;
+
+      fetch('caption-editor-row-template.html')
+        .then(function(response) {
+            // When the page is loaded convert it to text
+            return response.text()
+        })
+        .then(function(html) {
+            // Initialize the DOM parser
+            let parser = new DOMParser();
+
+            // Parse the text
+            template = parser.parseFromString(html, "text/html");
+
+            data.forEach(cap => {
+              let line1 = cap.text.split('\n')[0];
+              let line2 = cap.text.split('\n')[1];
+
+              if (line2 === undefined || typeof line2 === "undefined") {
+                line2 = "";
+              }
+
+              let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+              captionTempl.querySelector('.start').value = cap.start;
+              captionTempl.querySelector('.end').value = cap.stop;
+              captionTempl.querySelector('.line1').value = line1;
+              captionTempl.querySelector('.line2').value = line2;
+              captionModal.insertAdjacentElement('beforeEnd', captionTempl);
+            });
+        })
+        .catch(function(err) {  
+            console.log('Template error: ', err);  
+        });
+
+        document.querySelector('#regenerate-btn').classList.add("btn-disabled");
+    }
+
+    function populateCaptionEditorFromVtt(vtt) {
+      const data = [];
+      vtt = vtt.replace("WEBVTT\n\n","");
+      vtt = vtt.replaceAll("\n\n","\n");
+
+      let lines = vtt.split('\n');
+      let start, stop, text;
+
+      lines.forEach((line, index) => {
+        let lineIsNumber = !isNaN(line.trim().replace(' --> ','').replaceAll('.','').replaceAll(':',''));
+        if (lineIsNumber === true && line.indexOf(' --> ') === 12 && line.length === 29) {
+          if (index > 0) {
+            data.push({start, stop, text});
+          }
+          start = line.split(' --> ')[0];
+          stop = line.split(' --> ')[1].trim();
+          text = "";
+        } else {
+          text += line.trim() + "\n";
         }
-        catch (e) {
-        console.log('SW registration failed');
-        }
+      });
+
+      populateCaptionEditor(data);
+
+      if (updateCaptionsFromTranscript === false) {
+        document.querySelector('#captionsource-alert').style.visibility = 'visible';
       }
     }
 
+    const cap2 = caption();
+    let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+    populateCaptionEditor(subs.data);
     
-    
+    const countSeconds = (str) => {
+      const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
+      const hour = parseInt(hh, 10) || 0;
+      const minute = parseInt(mm, 10) || 0;
+      const second = parseFloat(ss);
+      return (hour*3600) + (minute*60) + (second);
+    };
+
+    function playClip(elem) {
+
+      // this is a little brittle
+      // better to check each parent until you find the elements required
+
+      let startTime = countSeconds(elem.parentElement.parentElement.querySelector('.start').value);
+      let endTime = countSeconds(elem.parentElement.parentElement.querySelector('.end').value);
+      let duration = endTime - startTime;
+
+      document.querySelector('video').currentTime = startTime;
+      document.querySelector('video').play();
+
+      setTimeout(() => {
+        document.querySelector('video').pause();
+      }, duration*1000);
+    }
+
+    function seekTo(elem) {
+      let seekTime = countSeconds(elem.nextElementSibling.value);
+      if (elem.className == "play-end") {
+        seekTime -= 0.1;
+      }
+      document.querySelector('video').currentTime = seekTime;
+    }
+
+    function addCaption(elem) {
+      let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+      captionTempl.getElementsByClassName('line1')[0].value = "";
+      captionTempl.getElementsByClassName('line2')[0].value = "";
+      captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
+      captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
+      elem.parentElement.parentNode.insertAdjacentElement('afterend', captionTempl);
+      makeCaptionEditorActive();
+    }
+
+    function deleteCaption(elem) {
+      let thisCaption = elem.parentNode.parentNode;
+      thisCaption.parentNode.removeChild(thisCaption);
+      makeCaptionEditorActive();
+    }
+
+    function mergeCaption(elem) {
+      let thisCaption = elem.parentNode.parentNode;
+      let belowCaption = thisCaption.nextElementSibling;
+
+      thisCaption.querySelector('.end').value = belowCaption.querySelector('.end').value;
+      thisCaption.querySelector('.line2').value += 
+        ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
+
+      belowCaption.parentNode.removeChild(belowCaption);
+      makeCaptionEditorActive();
+    }
+
+    function captionChange() {
+      makeCaptionEditorActive();
+    }
+
+    function makeCaptionEditorActive() {
+      updateCaptionsFromTranscript = false;
+      document.querySelector('#regenerate-btn').classList.remove("btn-disabled");
+      generateCaptionsFromCaptionEditor();
+    }
+
+    function generateCaptionsFromCaptionEditor() {
+
+      let vttCaptions = "WEBVTT\n\n";
+      let srtCaptions = "";
+
+      document.querySelectorAll('.caption').forEach((caption, index) => {
+        if (caption.querySelector('.start').value.length > 0){
+          vttCaptions += caption.querySelector('.start').value + " --> " + caption.querySelector('.end').value + "\n";
+          vttCaptions += caption.querySelector('.line1').value + "\n";
+          if (caption.querySelector('.line2').value.length > 0) {
+            vttCaptions += caption.querySelector('.line2').value + "\n";
+          }
+          vttCaptions += "\n";
+
+          srtCaptions += (index + 1) + "\n";
+          srtCaptions += convertTimecodeToSrt(caption.querySelector('.start').value) + " --> " + convertTimecodeToSrt(caption.querySelector('.end').value) + "\n";
+          srtCaptions += caption.querySelector('.line1').value + "\n";
+          if (caption.querySelector('.line2').value.length > 0) {
+            srtCaptions += caption.querySelector('.line2').value + "\n";
+          }
+          srtCaptions += "\n";
+        }
+      });
+
+      let track = document.querySelector('#hyperplayer-vtt');
+      track.src = "data:text/vtt,"+encodeURIComponent(vttCaptions);
+
+      document
+        .querySelector("#download-hypertranscript")
+        .setAttribute(
+          "href",
+          "data:text/html," +
+            encodeURIComponent(
+              hyperaudioTemplate
+                .replace("{hypertranscript}", document.querySelector('#hypertranscript').innerHTML.replace(/ class=".*?"/g, ''))
+                .replace("{sourcemedia}", document.querySelector("#hyperplayer").src)
+                .replace("{sourcevtt}", track.src)
+            )
+        );
+
+      document.querySelector('#download-vtt').setAttribute('href', "data:text/vtt,"+encodeURIComponent(vttCaptions));
+      document.querySelector('#download-srt').setAttribute('href', "data:text/srt,"+encodeURIComponent(srtCaptions));
+    }
+
+    function convertTimecodeToSrt(timecode) {
+      //the same as VTT format but milliseconds separated by a comma
+      return timecode.substring(0,8) + "," + timecode.substring(9,12);
+    }
+
+    document.querySelector('#regenerate-btn').addEventListener('click', hyperaudioGenerateCaptionsFromTranscript);
+
   </script>
+  <!-- end of caption editor additions -->
+
+  <!-- service worker script for PWA -->
+  <script>
+  window.addEventListener('load', () => {
+    registerSW();
+  });
+
+  // Register the Service Worker
+  async function registerSW() {
+    if ('serviceWorker' in navigator) {
+      try {
+      await navigator
+          .serviceWorker
+          .register('serviceworker.js');
+      }
+      catch (e) {
+      console.log('SW registration failed');
+      }
+    }
+  }
+
+</script>
 </body>
 </html>
