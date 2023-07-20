@@ -16,7 +16,7 @@ class ExportJson extends HTMLElement {
 
   connectedCallback() {
     //this.innerHTML =  `<button onclick="${this.exportJson}">export json ⬇</button>`;
-    this.innerHTML = `<a onclick="${this.exportJson}">Export JSON</a>`;
+    this.innerHTML = `<a onclick="${this.exportJson}">Export Hyperaudio JSON</a>`;
     this.addEventListener('click', this.exportJson);
   }
 }
@@ -58,12 +58,89 @@ class ImportJson extends HTMLElement {
 
   connectedCallback() {
     //this.innerHTML =  `<button onclick="${this.importJson}">import json ⬆</button>`;
-    this.innerHTML = `<a onclick="${this.importJson}">Import JSON</a>`;
+    this.innerHTML = `<a onclick="${this.importJson}">Import Hyperaudio JSON</a>`;
     this.addEventListener('click', this.importJson);
   }
 }
 
 customElements.define('import-json', ImportJson);
+
+class ImportDeepgramJson extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  clearDeepgramJsonMediaUrl(event) {
+    event.preventDefault();
+    document.querySelector('#deepgram-json-media').value = "";
+  }
+
+  clearDeepgramJsonFilePicker(event) {
+    event.preventDefault();
+    document.querySelector('#deepgram-json-file').value = "";
+  }
+
+  confirmDeepgramJson() {
+    let player = document.querySelector("#hyperplayer");
+    if (document.querySelector('#deepgram-json-file').value == ""){
+      player.src = document.querySelector('#deepgram-json-media').value;
+    } else {
+      const file = document.querySelector('[name=deepgram-json-file]').files[0];
+      // Create a new FileReader instance
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+      let blob = null;
+
+      reader.addEventListener('load', () => {
+
+        file.arrayBuffer().then((arrayBuffer) => {
+          blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+          player.src = URL.createObjectURL(blob);
+        });
+      });
+    }
+
+    const file = document.querySelector('[name=deepgram-json]').files[0];
+    const reader = new FileReader();
+    reader.addEventListener('load', (event) => {
+      parseData(JSON.parse(event.target.result));
+    });
+    
+    reader.readAsText(file);
+  }
+
+  connectedCallback() {
+    this.innerHTML = `
+    <div class="hidden-label-holder">
+      <label for="file-import-deepgram-json-dialog">Import Deepgram JSON Dialog</label>
+    </div>
+    <input type="checkbox" id="file-import-deepgram-json-dialog" class="modal-toggle" />
+    <div class="modal">
+    <div class="modal-box">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Import Deepgram JSON Dialog</h3>
+        <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <span class="label-text">or use local media file</span>
+        <input id="deepgram-json-file" name="deepgram-json-file" type="file" class="file-input w-full max-w-xs" />
+        <span class="label-text">select local JSON file</span>
+        <input id="deepgram-json" name="deepgram-json" type="file" class="file-input w-full max-w-xs" />
+      </div>
+      <div class="modal-action">
+        <label for="file-import-deepgram-json-dialog" class="btn btn-ghost">Cancel</label>
+        <label id="file-import-deepgram-json" for="file-import-deepgram-json-dialog" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+    </div>`;
+
+    document.querySelector('#deepgram-json-file').addEventListener('change',this.clearDeepgramJsonMediaUrl);
+    document.querySelector('#deepgram-json-media').addEventListener('change',this.clearDeepgramJsonFilePicker);
+    document.querySelector('#file-import-deepgram-json').addEventListener('click',this.confirmDeepgramJson);
+  }
+}
+
+customElements.define('import-deepgram-json', ImportDeepgramJson);
 
 
 class ImportSrt extends HTMLElement {

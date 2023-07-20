@@ -258,6 +258,7 @@ function fetchData(token, media, tier, language, model) {
     return response.json();
   })
   .then(json => {
+    console.dir(json);
     parseData(json);
     document.querySelector("#summary").innerHTML = extractSummary(json);
     document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
@@ -352,6 +353,7 @@ function fetchDataLocal(token, file, tier, language, model) {
           return response.json();
         })
         .then(json => {
+          console.dir(json);
           parseData(json);
           document.querySelector("#summary").innerHTML = extractSummary(json);
           document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
