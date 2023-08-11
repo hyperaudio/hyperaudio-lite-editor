@@ -233,9 +233,9 @@ function fetchData(token, media, tier, language, model) {
   }
 
   if (model.startsWith("whisper")) { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&summarize=true&detect_topics=true&language=${language}`
+    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
   }
   
   fetch(url, {  
@@ -314,9 +314,9 @@ function fetchDataLocal(token, file, tier, language, model) {
   }
 
   if (model.startsWith("whisper")) { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&punctuate=true&diarize=true&summarize=true&detect_topics=true&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&punctuate=true&diarize=true&summarize=true&detect_topics=true&language=${language}`
+    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
   }
   const apiKey = token;
 
