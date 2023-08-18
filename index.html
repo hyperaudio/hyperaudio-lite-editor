@@ -1,5 +1,5 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.2.10 -->
+<!--  Hyperaudio Lite Editor - Version 0.2.11 -->
 
 <!--   Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -1211,6 +1211,7 @@ If you are creating an open source application under a license compatible with t
 
   window.document.addEventListener('hyperaudioInit', hyperaudio, false);
   window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
+  window.document.addEventListener('hyperaudioUpdateInteractiveTranscriptDownloadLink', updateInteractiveTranscriptDownloadLink, false);
 
   let hyperaudioTemplate = "";
 
@@ -1346,6 +1347,10 @@ If you are creating an open source application under a license compatible with t
           }
         }
 
+        let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
+        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
+        updateInteractiveTranscriptDownloadLink();
+
         if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
           const words = document.querySelectorAll("[data-m]");
           hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
@@ -1355,8 +1360,8 @@ If you are creating an open source application under a license compatible with t
             hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
           }
 
-          let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-          document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
+          /*let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
+          document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));*/
 
           generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
           const cap2 = caption();
@@ -1517,6 +1522,24 @@ If you are creating an open source application under a license compatible with t
     }
 
     return subs.data;
+  }
+
+  function updateInteractiveTranscriptDownloadLink() {
+
+    let isAudio = document.querySelector('#hyperplayer').src.split('.').pop() === "mp3";
+    document
+      .querySelector("#download-hypertranscript")
+      .setAttribute(
+        "href",
+        "data:text/html," +
+          encodeURIComponent(
+            hyperaudioTemplate
+              .replace("{hypertranscript}", document.querySelector("#hypertranscript").innerHTML.replace(/ class=".*?"/g, ''))
+              // check to see if it's an mp3, in which case we don't display captions
+              .replace("{sourcemedia}", document.querySelector("#hyperplayer").src) 
+              .replace("{sourcevtt}", isAudio ? "" : document.querySelector("#hyperplayer-vtt").src)
+          )
+      );
   }
 
   function hasParent(element, parent) {

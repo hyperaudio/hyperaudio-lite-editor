@@ -472,6 +472,25 @@ function parseData(json) {
     });
   }
 
+  console.log("updating download html link");
+  document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperTranscript));
+
+  /*let hyperaudioTemplate = "";
+
+  fetch('hyperaudio-template.html')
+  .then(function(response) {
+      // When the page is loaded convert it to text
+      return response.text()
+  })
+  .then(function(html) {
+    hyperaudioTemplate = html;
+  })
+  .catch(function(err) {
+      console.log('Failed to fetch page: ', err);
+  });*/
+
+
+
   const initEvent = new CustomEvent('hyperaudioInit');
   document.dispatchEvent(initEvent);
   const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
