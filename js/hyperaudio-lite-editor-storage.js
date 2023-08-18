@@ -45,8 +45,6 @@ function renderTranscript(
   } else {
     // stop caption.js inserting VTT upon insertion of new video
 
-    //document.getElementById(videoDomId).removeEventListener('loadedmetadata', listener, true);
-
     document.getElementById(vttId).src = hypertranscriptstorage['captions'];
     //remove data:text/vtt, and decode
     let plainVtt = decodeURIComponent(hypertranscriptstorage['captions'].split(',')[1]);
@@ -60,6 +58,12 @@ function renderTranscript(
     populateCaptionEditorFromVtt(plainVtt);
   }
 
+  let hypertranscript = document.querySelector("#hypertranscript").innerHTML.replace(/ class=".*?"/g, '');
+  document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
+
+  const itDownloadEvent = new CustomEvent('hyperaudioUpdateInteractiveTranscriptDownloadLink');
+  document.dispatchEvent(itDownloadEvent);
+  
   //maybe better called using hyperaudioInit event?
   //hyperaudio();
 }
