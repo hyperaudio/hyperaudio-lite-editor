@@ -6,7 +6,6 @@ class DeepgramService extends HTMLElement {
 
   configureLanguage() {
     const select = document.querySelector('#language');
-    
 
     populateLanguageDeepgram();
 
@@ -259,26 +258,20 @@ function fetchData(token, media, tier, language, model) {
   })
   .then(json => {
     console.dir(json);
-    parseData(json);
-    document.querySelector("#summary").innerHTML = extractSummary(json);
-    document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
 
-    // prepare the VTT track so that the correct language is defined
+    if (json.results.channels[0] === undefined || json.results.channels[0].alternatives[0].words.length === 0) {
+      document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
+    } else {
+      parseData(json);
+      document.querySelector("#summary").innerHTML = extractSummary(json);
+      document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
 
-    /*if (language === undefined) {
-      let detectedLanguage = extractLanguage(json);
-      if (detectedLanguage !== undefined) {
-        language = detectedLanguage;
-      } else {
-        language = "unknown";
-      }
-    } */
+      language = getLanguageCode(json);
 
-    language = getLanguageCode(json);
-
-    let track = document.querySelector('#hyperplayer-vtt');
-    track.label = language;
-    track.srcLang = language;
+      let track = document.querySelector('#hyperplayer-vtt');
+      track.label = language;
+      track.srcLang = language;
+    }
   })
   .catch(function (error) {
     console.dir("error is : "+error);
@@ -353,16 +346,20 @@ function fetchDataLocal(token, file, tier, language, model) {
           return response.json();
         })
         .then(json => {
-          console.dir(json);
-          parseData(json);
-          document.querySelector("#summary").innerHTML = extractSummary(json);
-          document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
-
-          language = getLanguageCode(json);
-
-          let track = document.querySelector('#hyperplayer-vtt');
-          track.label = language;
-          track.srcLang = language;
+          // check to see if any transcript data has come back before proceeding, give error message if not
+          if (json.results.channels[0] === undefined || json.results.channels[0].alternatives[0].words.length === 0) {
+            document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
+          } else {
+            parseData(json);
+            document.querySelector("#summary").innerHTML = extractSummary(json);
+            document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
+  
+            language = getLanguageCode(json);
+  
+            let track = document.querySelector('#hyperplayer-vtt');
+            track.label = language;
+            track.srcLang = language;
+          }
         })
         .catch(function (error) {
           console.dir("error is : "+error);
@@ -411,6 +408,8 @@ function parseData(json) {
 
   const punctuatedWords = json.results.channels[0].alternatives[0].transcript.split(' ');
   const wordData = json.results.channels[0].alternatives[0].words;
+  console.log("wordData...");
+  console.log(wordData);
 
   let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
 
@@ -474,22 +473,6 @@ function parseData(json) {
 
   console.log("updating download html link");
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperTranscript));
-
-  /*let hyperaudioTemplate = "";
-
-  fetch('hyperaudio-template.html')
-  .then(function(response) {
-      // When the page is loaded convert it to text
-      return response.text()
-  })
-  .then(function(html) {
-    hyperaudioTemplate = html;
-  })
-  .catch(function(err) {
-      console.log('Failed to fetch page: ', err);
-  });*/
-
-
 
   const initEvent = new CustomEvent('hyperaudioInit');
   document.dispatchEvent(initEvent);
