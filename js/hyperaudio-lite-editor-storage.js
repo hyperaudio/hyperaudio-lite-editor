@@ -115,14 +115,15 @@ function getMedia(id) {
           console.error("Error retrieving media:", getRequest.error);
       };
       getRequest.onsuccess = function() {
-        //let videoBlob = getRequest.result;
-        //console.dir(videoBlob);
+
         const base64String = getRequest.result; // Base64 string
-        const binaryString = atob(base64String.split(',')[1]); // Binary data string
-        console.log(binaryString);
-        const blob = new Blob([binaryString], { type: 'video/mp4' }); // Create a BLOB object
+
+        /* The following commented lines should work (but don't) for a more elegant solution */
+        /*const binaryString = atob(base64String.split(',')[1]); // Binary data string
+        const blob = new Blob([binaryString], { type: 'audio/mpeg' }); // Create a BLOB object
         let videoURL = URL.createObjectURL(blob);
-        document.querySelector("#hyperplayer").src = videoURL;
+        document.querySelector("#hyperplayer").src = videoURL;*/
+        document.querySelector("#hyperplayer").src = base64String;
       };
   };
 }
