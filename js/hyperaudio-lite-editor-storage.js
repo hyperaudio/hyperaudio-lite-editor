@@ -28,12 +28,21 @@ let lastFilename = null;
  */
 function renderTranscript(
   hypertranscriptstorage,
+  key,
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
   vttId = 'hyperplayer-vtt'
 ) {
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
-  document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
+
+  // check to see if file is local
+  if (hypertranscriptstorage['video'].startsWith("http") === true) { 
+    document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
+  } else {
+    //load from indexedDB
+    getMedia(key);
+  }
+  
   document.getElementById("summary").innerHTML = hypertranscriptstorage['summary'];
   document.getElementById("topics").innerHTML = getTopicsString(hypertranscriptstorage['topics']);
 
@@ -93,6 +102,30 @@ function getTopicsString(topics) {
 
 
 /* IndexedDB for more permanent storage of local media */
+
+function getMedia(id) {
+  console.log("id = "+id);
+  let openRequest = indexedDB.open("hyperaudioMedia", 1);
+  openRequest.onsuccess = function() {
+      let db = openRequest.result;
+      let transaction = db.transaction("media", "readonly");
+      let videosStore = transaction.objectStore("media");
+      let getRequest = videosStore.get(id);
+      getRequest.onerror = function() {
+          console.error("Error retrieving media:", getRequest.error);
+      };
+      getRequest.onsuccess = function() {
+        //let videoBlob = getRequest.result;
+        //console.dir(videoBlob);
+        const base64String = getRequest.result; // Base64 string
+        const binaryString = atob(base64String.split(',')[1]); // Binary data string
+        console.log(binaryString);
+        const blob = new Blob([binaryString], { type: 'video/mp4' }); // Create a BLOB object
+        let videoURL = URL.createObjectURL(blob);
+        document.querySelector("#hyperplayer").src = videoURL;
+      };
+  };
+}
 
 function saveVideoFromBlobURL(filename, blobData) {
   
@@ -273,21 +306,15 @@ function fileSelectHandleHover(event) {
 function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
 
+
   if (hypertranscriptstorage) {
-    /*if (hypertranscriptstorage("video").startsWith(":blob") === true) {
-      
-      
-    } else {
-
-    }*/
-
 
     console.log("------- hypertranscriptstorage ---------");
     console.dir(hypertranscriptstorage);
 
-
-    renderTranscript(hypertranscriptstorage);
     lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
+    renderTranscript(hypertranscriptstorage, lastFilename);
+    
     document.querySelector('#save-localstorage-filename').value = lastFilename;
   }
 }
