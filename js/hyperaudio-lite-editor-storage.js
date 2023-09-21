@@ -133,10 +133,14 @@ function initializeDatabase() {
   return new Promise((resolve, reject) => {
       let openRequest = indexedDB.open("hyperaudioMedia", 1);
 
+      console.log("initialising the database...");
+
       openRequest.onupgradeneeded = function() {
+          console.log("openRequest.onupgradeneeded");
           let db = openRequest.result;
-          if (!db.objectStoreNames.contains("videos")) {
-              db.createObjectStore("videos");
+          if (!db.objectStoreNames.contains("media")) {
+              console.log("creating media objectstore");
+              db.createObjectStore("media");
           }
       };
 
@@ -270,6 +274,18 @@ function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localSt
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
 
   if (hypertranscriptstorage) {
+    /*if (hypertranscriptstorage("video").startsWith(":blob") === true) {
+      
+      
+    } else {
+
+    }*/
+
+
+    console.log("------- hypertranscriptstorage ---------");
+    console.dir(hypertranscriptstorage);
+
+
     renderTranscript(hypertranscriptstorage);
     lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
     document.querySelector('#save-localstorage-filename').value = lastFilename;
