@@ -220,18 +220,18 @@ function saveHyperTranscriptToLocalStorage(
       let blobURL = video;
 
       fetch(blobURL)
-        .then(response => response.blob())
-        .then(videoBlob => {
-          const reader = new FileReader();
-          let blobData = "not defined";
-          reader.onloadend = function() {
-            blobData = reader.result;
-            saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName);
-          }
-          reader.readAsDataURL(videoBlob);
-        })
-        .catch(error => {
-          console.error("Error fetching the video from the blob URL:", error);
+      .then(response => response.blob())
+      .then(videoBlob => {
+        const reader = new FileReader();
+        let blobData = "not defined";
+        reader.onloadend = function() {
+          blobData = reader.result;
+          saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName);
+        }
+        reader.readAsDataURL(videoBlob);
+      })
+      .catch(error => {
+        console.error("Error fetching the video from the blob URL:", error);
       });
     })
     .catch(error => {
