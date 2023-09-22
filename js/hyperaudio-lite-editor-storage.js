@@ -40,7 +40,9 @@ function renderTranscript(
     document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
   } else {
     //load from indexedDB
-    getMedia(key);
+    let databaseName = "hyperaudioMedia";
+    let objectStoreName = "media";
+    getMedia(databaseName, objectStoreName, key);
   }
   
   document.getElementById("summary").innerHTML = hypertranscriptstorage['summary'];
@@ -104,13 +106,13 @@ function getTopicsString(topics) {
 /* IndexedDB for more permanent storage of local media */
 /*******************************************************/
 
-function getMedia(id) {
-  console.log("id = "+id);
-  let openRequest = indexedDB.open("hyperaudioMedia", 1);
+function getMedia(databaseName, objectStoreName, id) {
+
+  let openRequest = indexedDB.open(databaseName, 1);
   openRequest.onsuccess = function() {
     let db = openRequest.result;
-    let transaction = db.transaction("media", "readonly");
-    let videosStore = transaction.objectStore("media");
+    let transaction = db.transaction(objectStoreName, "readonly");
+    let videosStore = transaction.objectStore(objectStoreName);
     let getRequest = videosStore.get(id);
 
     getRequest.onerror = function() {
@@ -126,21 +128,21 @@ function getMedia(id) {
       const blob = new Blob([binaryString], { type: 'audio/mpeg' }); // Create a BLOB object
       let videoURL = URL.createObjectURL(blob);
       document.querySelector("#hyperplayer").src = videoURL;*/
-      
+
       document.querySelector("#hyperplayer").src = base64String;
     }
   }
 }
 
-function saveVideoFromBlobURL(filename, blobData) {
+function saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName) {
   
   // Open a connection to IndexedDB
-  let openRequest = indexedDB.open("hyperaudioMedia", 1);
+  let openRequest = indexedDB.open(databaseName, 1);
 
   openRequest.onupgradeneeded = function() {
     let db = openRequest.result;
-    if (!db.objectStoreNames.contains("media")) {
-        db.createObjectStore("media");
+    if (!db.objectStoreNames.contains(objectStoreName)) {
+        db.createObjectStore(objectStoreName);
     }
   }
 
@@ -152,8 +154,8 @@ function saveVideoFromBlobURL(filename, blobData) {
     let db = openRequest.result;
 
     // Save the video using the provided filename as the key
-    let transaction = db.transaction("media", "readwrite");
-    let videosStore = transaction.objectStore("media");
+    let transaction = db.transaction(objectStoreName, "readwrite");
+    let videosStore = transaction.objectStore(objectStoreName);
     let request = videosStore.put(blobData, filename);
 
     request.onerror = function() {
@@ -166,14 +168,14 @@ function saveVideoFromBlobURL(filename, blobData) {
   }    
 }
 
-function initializeDatabase() {
+function initializeDatabase(database, objectStoreName) {
   return new Promise((resolve, reject) => {
-    let openRequest = indexedDB.open("hyperaudioMedia", 1);
+    let openRequest = indexedDB.open(database, 1);
 
     openRequest.onupgradeneeded = function() {
       let db = openRequest.result;
-      if (!db.objectStoreNames.contains("media")) {
-          db.createObjectStore("media");
+      if (!db.objectStoreNames.contains(objectStoreName)) {
+          db.createObjectStore(objectStoreName);
       }
     }
 
@@ -211,7 +213,9 @@ function saveHyperTranscriptToLocalStorage(
   // we need to save the media to indexdb so that we can retrieve outside the session
 
   if (video.startsWith("blob:") === true) {
-    initializeDatabase()
+    let objectStoreName = "media";
+    let databaseName = "hyperaudioMedia";
+    initializeDatabase(databaseName, objectStoreName)
     .then(() => {
       let blobURL = video;
 
@@ -222,7 +226,7 @@ function saveHyperTranscriptToLocalStorage(
           let blobData = "not defined";
           reader.onloadend = function() {
             blobData = reader.result;
-            saveVideoFromBlobURL(filename, blobData);
+            saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName);
           }
           reader.readAsDataURL(videoBlob);
         })
