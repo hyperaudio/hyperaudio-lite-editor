@@ -28,12 +28,23 @@ let lastFilename = null;
  */
 function renderTranscript(
   hypertranscriptstorage,
+  key,
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
   vttId = 'hyperplayer-vtt'
 ) {
   document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
-  document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
+
+  // check to see if file is local
+  if (hypertranscriptstorage['video'].startsWith("http") === true) { 
+    document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
+  } else {
+    //load from indexedDB
+    let databaseName = "hyperaudioMedia";
+    let objectStoreName = "media";
+    getMedia(databaseName, objectStoreName, key);
+  }
+  
   document.getElementById("summary").innerHTML = hypertranscriptstorage['summary'];
   document.getElementById("topics").innerHTML = getTopicsString(hypertranscriptstorage['topics']);
 
@@ -91,6 +102,95 @@ function getTopicsString(topics) {
   return topicsString;
 }
 
+/*******************************************************/
+/* IndexedDB for more permanent storage of local media */
+/*******************************************************/
+
+function getMedia(databaseName, objectStoreName, id) {
+
+  let openRequest = indexedDB.open(databaseName, 1);
+  openRequest.onsuccess = function() {
+    let db = openRequest.result;
+    let transaction = db.transaction(objectStoreName, "readonly");
+    let videosStore = transaction.objectStore(objectStoreName);
+    let getRequest = videosStore.get(id);
+
+    getRequest.onerror = function() {
+      console.error("Error retrieving media:", getRequest.error);
+    }
+    
+    getRequest.onsuccess = function() {
+
+      const base64String = getRequest.result; // Base64 string
+
+      /* The following commented lines should work (but don't) for a more elegant solution */
+      /*const binaryString = atob(base64String.split(',')[1]); // Binary data string
+      const blob = new Blob([binaryString], { type: 'audio/mpeg' }); // Create a BLOB object
+      let videoURL = URL.createObjectURL(blob);
+      document.querySelector("#hyperplayer").src = videoURL;*/
+
+      document.querySelector("#hyperplayer").src = base64String;
+    }
+  }
+}
+
+function saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName) {
+  
+  // Open a connection to IndexedDB
+  let openRequest = indexedDB.open(databaseName, 1);
+
+  openRequest.onupgradeneeded = function() {
+    let db = openRequest.result;
+    if (!db.objectStoreNames.contains(objectStoreName)) {
+        db.createObjectStore(objectStoreName);
+    }
+  }
+
+  openRequest.onerror = function() {
+    console.error("Error opening the database", openRequest.error);
+  }
+
+  openRequest.onsuccess = function() {
+    let db = openRequest.result;
+
+    // Save the video using the provided filename as the key
+    let transaction = db.transaction(objectStoreName, "readwrite");
+    let videosStore = transaction.objectStore(objectStoreName);
+    let request = videosStore.put(blobData, filename);
+
+    request.onerror = function() {
+        console.error("Error saving the video", request.error);
+    }
+
+    request.onsuccess = function() {
+        console.log("Video saved successfully!");
+    }
+  }    
+}
+
+function initializeDatabase(database, objectStoreName) {
+  return new Promise((resolve, reject) => {
+    let openRequest = indexedDB.open(database, 1);
+
+    openRequest.onupgradeneeded = function() {
+      let db = openRequest.result;
+      if (!db.objectStoreNames.contains(objectStoreName)) {
+          db.createObjectStore(objectStoreName);
+      }
+    }
+
+    openRequest.onerror = function() {
+        console.error("Error opening the database", openRequest.error);
+        reject(openRequest.error);
+    }
+
+    openRequest.onsuccess = function() {
+        resolve();
+    }
+  });
+}
+
+
 /*
  * Save the current HyperTranscript in the local storage
  * @param {string} filename - the name of the transcript file
@@ -108,6 +208,37 @@ function saveHyperTranscriptToLocalStorage(
 ) {
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
+
+  // if media url begins with blob it means it's locally cached only for the session
+  // we need to save the media to indexdb so that we can retrieve outside the session
+
+  if (video.startsWith("blob:") === true) {
+    let objectStoreName = "media";
+    let databaseName = "hyperaudioMedia";
+    initializeDatabase(databaseName, objectStoreName)
+    .then(() => {
+      let blobURL = video;
+
+      fetch(blobURL)
+      .then(response => response.blob())
+      .then(videoBlob => {
+        const reader = new FileReader();
+        let blobData = "not defined";
+        reader.onloadend = function() {
+          blobData = reader.result;
+          saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName);
+        }
+        reader.readAsDataURL(videoBlob);
+      })
+      .catch(error => {
+        console.error("Error fetching the video from the blob URL:", error);
+      });
+    })
+    .catch(error => {
+      console.error("Error initializing the database:", error);
+    });
+  }
+
   let summary = document.getElementById("summary").innerHTML;
   let topics = document.getElementById("topics").innerHTML.split(", ");
   let captions = document.getElementById(vttId).src;
@@ -175,8 +306,10 @@ function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localSt
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
 
   if (hypertranscriptstorage) {
-    renderTranscript(hypertranscriptstorage);
+
     lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
+    renderTranscript(hypertranscriptstorage, lastFilename);
+    
     document.querySelector('#save-localstorage-filename').value = lastFilename;
   }
 }
