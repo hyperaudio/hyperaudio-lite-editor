@@ -76,7 +76,7 @@ function renderTranscript(
   document.dispatchEvent(itDownloadEvent);
   
   //maybe better called using hyperaudioInit event?
-  //hyperaudio();
+  hyperaudio();
 }
 
 function getLocalStorageSaveFilename(url){
