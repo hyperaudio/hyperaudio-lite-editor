@@ -100,32 +100,36 @@ function getTopicsString(topics) {
   return topicsString;
 }
 
-
+/*******************************************************/
 /* IndexedDB for more permanent storage of local media */
+/*******************************************************/
 
 function getMedia(id) {
   console.log("id = "+id);
   let openRequest = indexedDB.open("hyperaudioMedia", 1);
   openRequest.onsuccess = function() {
-      let db = openRequest.result;
-      let transaction = db.transaction("media", "readonly");
-      let videosStore = transaction.objectStore("media");
-      let getRequest = videosStore.get(id);
-      getRequest.onerror = function() {
-          console.error("Error retrieving media:", getRequest.error);
-      };
-      getRequest.onsuccess = function() {
+    let db = openRequest.result;
+    let transaction = db.transaction("media", "readonly");
+    let videosStore = transaction.objectStore("media");
+    let getRequest = videosStore.get(id);
 
-        const base64String = getRequest.result; // Base64 string
+    getRequest.onerror = function() {
+      console.error("Error retrieving media:", getRequest.error);
+    }
+    
+    getRequest.onsuccess = function() {
 
-        /* The following commented lines should work (but don't) for a more elegant solution */
-        /*const binaryString = atob(base64String.split(',')[1]); // Binary data string
-        const blob = new Blob([binaryString], { type: 'audio/mpeg' }); // Create a BLOB object
-        let videoURL = URL.createObjectURL(blob);
-        document.querySelector("#hyperplayer").src = videoURL;*/
-        document.querySelector("#hyperplayer").src = base64String;
-      };
-  };
+      const base64String = getRequest.result; // Base64 string
+
+      /* The following commented lines should work (but don't) for a more elegant solution */
+      /*const binaryString = atob(base64String.split(',')[1]); // Binary data string
+      const blob = new Blob([binaryString], { type: 'audio/mpeg' }); // Create a BLOB object
+      let videoURL = URL.createObjectURL(blob);
+      document.querySelector("#hyperplayer").src = videoURL;*/
+      
+      document.querySelector("#hyperplayer").src = base64String;
+    }
+  }
 }
 
 function saveVideoFromBlobURL(filename, blobData) {
@@ -138,11 +142,11 @@ function saveVideoFromBlobURL(filename, blobData) {
     if (!db.objectStoreNames.contains("media")) {
         db.createObjectStore("media");
     }
-  };
+  }
 
   openRequest.onerror = function() {
     console.error("Error opening the database", openRequest.error);
-  };
+  }
 
   openRequest.onsuccess = function() {
     let db = openRequest.result;
@@ -150,42 +154,37 @@ function saveVideoFromBlobURL(filename, blobData) {
     // Save the video using the provided filename as the key
     let transaction = db.transaction("media", "readwrite");
     let videosStore = transaction.objectStore("media");
-    //let request = videosStore.put(videoBlob, filename);
     let request = videosStore.put(blobData, filename);
 
     request.onerror = function() {
         console.error("Error saving the video", request.error);
-    };
+    }
 
     request.onsuccess = function() {
         console.log("Video saved successfully!");
-    };
-  };    
+    }
+  }    
 }
 
 function initializeDatabase() {
   return new Promise((resolve, reject) => {
-      let openRequest = indexedDB.open("hyperaudioMedia", 1);
+    let openRequest = indexedDB.open("hyperaudioMedia", 1);
 
-      console.log("initialising the database...");
+    openRequest.onupgradeneeded = function() {
+      let db = openRequest.result;
+      if (!db.objectStoreNames.contains("media")) {
+          db.createObjectStore("media");
+      }
+    }
 
-      openRequest.onupgradeneeded = function() {
-          console.log("openRequest.onupgradeneeded");
-          let db = openRequest.result;
-          if (!db.objectStoreNames.contains("media")) {
-              console.log("creating media objectstore");
-              db.createObjectStore("media");
-          }
-      };
+    openRequest.onerror = function() {
+        console.error("Error opening the database", openRequest.error);
+        reject(openRequest.error);
+    }
 
-      openRequest.onerror = function() {
-          console.error("Error opening the database", openRequest.error);
-          reject(openRequest.error);
-      };
-
-      openRequest.onsuccess = function() {
-          resolve();
-      };
+    openRequest.onsuccess = function() {
+        resolve();
+    }
   });
 }
 
@@ -208,9 +207,6 @@ function saveHyperTranscriptToLocalStorage(
   let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
   let video = document.getElementById(videoDomId).src;
 
-  console.log("========== video url =========");
-  console.log(video);
-
   // if media url begins with blob it means it's locally cached only for the session
   // we need to save the media to indexdb so that we can retrieve outside the session
 
@@ -225,8 +221,6 @@ function saveHyperTranscriptToLocalStorage(
           const reader = new FileReader();
           let blobData = "not defined";
           reader.onloadend = function() {
-            console.log("blob contents");
-            console.log(reader.result); // Questo mostrerà il contenuto del blob come base64
             blobData = reader.result;
             saveVideoFromBlobURL(filename, blobData);
           }
@@ -307,11 +301,7 @@ function fileSelectHandleHover(event) {
 function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){
   let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
 
-
   if (hypertranscriptstorage) {
-
-    console.log("------- hypertranscriptstorage ---------");
-    console.dir(hypertranscriptstorage);
 
     lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
     renderTranscript(hypertranscriptstorage, lastFilename);
