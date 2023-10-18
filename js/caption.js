@@ -23,6 +23,8 @@ var caption = function () {
   cap.init = function (transcriptId, playerId, maxLength, minLength, label, srclang) {
     var transcript = document.getElementById(transcriptId);
     var words = transcript.querySelectorAll('[data-m]');
+    console.log("words");
+    console.log(words);
     var data = {};
     data.segments = [];
 
