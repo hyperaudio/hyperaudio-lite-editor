@@ -604,7 +604,6 @@ If you are creating an open source application under a license compatible with t
           generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
           const cap2 = caption();
           let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-          console.log(subs.data);
           populateCaptionEditor(subs.data);
         }
 
@@ -760,9 +759,6 @@ If you are creating an open source application under a license compatible with t
       document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
     }
 
-    console.log("subs.data = "+subs.data);
-    console.dir(subs.data);
-    console.log(subs);
     return subs.data;
   }
 
