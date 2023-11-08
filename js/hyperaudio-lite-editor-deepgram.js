@@ -260,7 +260,7 @@ function fetchData(token, media, tier, language, model) {
     console.dir(json);
 
     if (json.results.channels[0] === undefined || json.results.channels[0].alternatives[0].words.length === 0) {
-      document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
+      displayNoWordsError();
     } else {
       parseData(json);
       document.querySelector("#summary").innerHTML = extractSummary(json);
@@ -277,9 +277,7 @@ function fetchData(token, media, tier, language, model) {
     console.dir("error is : "+error);
     error = error + "";
 
-    if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
-      document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
-    }
+    let errorDisplayed = displayError(error, tier);
     
     if (error.indexOf("400") > 0 && tier === "enhanced") {
       tier = "base";
@@ -292,7 +290,10 @@ function fetchData(token, media, tier, language, model) {
     }
 
     this.dataError = true;
-    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+
+    if (errorDisplayed === false) {
+      displayGenericError();
+    }
   })
 }
 
@@ -348,7 +349,7 @@ function fetchDataLocal(token, file, tier, language, model) {
         .then(json => {
           // check to see if any transcript data has come back before proceeding, give error message if not
           if (json.results.channels[0] === undefined || json.results.channels[0].alternatives[0].words.length === 0) {
-            document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
+            displayNoWordsError();
           } else {
             parseData(json);
             document.querySelector("#summary").innerHTML = extractSummary(json);
@@ -365,9 +366,7 @@ function fetchDataLocal(token, file, tier, language, model) {
           console.dir("error is : "+error);
           error = error + "";
       
-          if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
-            document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the token is invalid.</center></div>';
-          }
+          let errorDisplayed = displayError(error, tier);
           
           if (error.indexOf("400") > 0 && tier === "enhanced") {
             tier = "base";
@@ -375,13 +374,36 @@ function fetchDataLocal(token, file, tier, language, model) {
           }
       
           this.dataError = true;
-          document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+
+          if (errorDisplayed === false) {
+            displayGenericError();
+          }
         })
       } else {
         document.querySelector('#hypertranscript').innerHTML = ''; 
       }
     });
   });
+}
+
+function displayError(error, tier) {
+  if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
+    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
+    return true;
+  }
+  if (error.indexOf("402") > 0) {
+    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the token is invalid.</center></div>';
+    return true;
+  }
+  return false;
+}
+
+function displayGenericError() {
+  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+}
+
+function displayNoWordsError() {
+  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="error.svg" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
 }
 
 function getLanguageCode(json){
