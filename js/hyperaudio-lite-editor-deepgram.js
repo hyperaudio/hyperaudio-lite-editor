@@ -1,3 +1,6 @@
+/*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
+/*! Version 1.0.1 */
+
 class DeepgramService extends HTMLElement {
 
   constructor() {
@@ -250,14 +253,6 @@ function fetchData(token, media, tier, language, model) {
       displayNoWordsError();
     } else {
       parseData(json);
-      document.querySelector("#summary").innerHTML = extractSummary(json);
-      document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
-
-      language = getLanguageCode(json);
-
-      let track = document.querySelector('#hyperplayer-vtt');
-      track.label = language;
-      track.srcLang = language;
     }
   })
   .catch(function (error) {
@@ -339,14 +334,6 @@ function fetchDataLocal(token, file, tier, language, model) {
             displayNoWordsError();
           } else {
             parseData(json);
-            document.querySelector("#summary").innerHTML = extractSummary(json);
-            document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
-  
-            language = getLanguageCode(json);
-  
-            let track = document.querySelector('#hyperplayer-vtt');
-            track.label = language;
-            track.srcLang = language;
           }
         })
         .catch(function (error) {
@@ -393,6 +380,7 @@ function displayNoWordsError() {
   document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
 }
 
+
 function getLanguageCode(json){
   // prepare the VTT track so that the correct language is defined
 
@@ -425,6 +413,20 @@ function parseData(json) {
   let previousElementEnd = 0;
   let wordsInPara = 0;
   let showDiarization = true;
+
+  if (document.querySelector("#summary") !== null) {
+    document.querySelector("#summary").innerHTML = extractSummary(json);
+  }
+
+  if (document.querySelector("#topics") !== null) {
+    document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
+  }
+
+  language = getLanguageCode(json);
+  
+  let track = document.querySelector('#hyperplayer-vtt');
+  track.label = language;
+  track.srcLang = language;
 
   wordData.forEach((element, index) => {
 
