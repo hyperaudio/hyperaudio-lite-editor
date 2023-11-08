@@ -8,11 +8,10 @@ class DeepgramService extends HTMLElement {
   }
 
   configureLanguage() {
-    const select = document.querySelector('#language');
 
     populateLanguageDeepgram();
 
-    const selectModel = document.querySelector('#language-model');
+    const selectModel = document.querySelector('#deepgram-form #language-model');
     const optionLanguageModel = {
       "General": "general",
       "Whisper (Tiny)": "whisper-tiny",
@@ -70,7 +69,7 @@ class DeepgramService extends HTMLElement {
   }
 
   updateDropdowns(event) {
-    let model = document.querySelector('#language-model').value;
+    let model = document.querySelector('#deepgram-form #language-model').value;
 
     // update languages depending on model
     if (model.startsWith("whisper")){
@@ -134,8 +133,8 @@ class DeepgramService extends HTMLElement {
       "uk_general": ["base"]
     }
 
-    let model = document.querySelector('#language-model').value;
-    let lang = document.querySelector('#language').value;
+    let model = document.querySelector('#deepgram-form #language-model').value;
+    let lang = document.querySelector('#deepgram-form #language').value;
     let tiers = deepgramModelCompatibility[lang+"_"+model];
 
     let options = document.querySelector('#tier').options;
@@ -180,37 +179,52 @@ class DeepgramService extends HTMLElement {
     let template = null;
     let modal = this;
 
-    fetch('hyperaudio-deepgram-modal.html')
-      .then(function(response) {
-          // When the page is loaded convert it to text
-          return response.text()
-      })
-      .then(function(html) {
-        // Initialize the DOM parser
-        let parser = new DOMParser();
+    const templateUrl = this.getAttribute("templateUrl");
+    const templateSelector = this.getAttribute("templateSelector");
 
-        // Parse the text
-        template = parser.parseFromString(html, "text/html");
-        let deepgramTempl = template.querySelector('#deepgram-modal-template').cloneNode(true);
-        modal.innerHTML = deepgramTempl.innerHTML;
+    console.log(templateUrl);
+    console.log(templateSelector);
 
-        document.querySelector('#file').addEventListener('change',modal.clearMediaUrl);
-        document.querySelector('#media').addEventListener('change',modal.clearFilePicker);
-        document.querySelector('#transcribe-btn').addEventListener('click', modal.getData);
-        document.querySelector('#file').addEventListener('change', modal.updatePlayerWithLocalFile);
-        document.querySelector('#language-model').addEventListener('change', modal.updateDropdowns);
-        document.querySelector('#language-model').addEventListener('change', modal.updateTierDropdown);
-        document.querySelector('#language').addEventListener('change', modal.updateTierDropdown);
+    if (templateUrl !== null) {
+      fetch(templateUrl)
+        .then(function(response) {
+            // When the page is loaded convert it to text
+            return response.text()
+        })
+        .then(function(html) {
+          // Initialize the DOM parser
+          let parser = new DOMParser();
 
-        modal.configureLanguage();
-      })
-      .catch(function(err) {  
-        console.log('Template error: ', err);  
-      });
+          // Parse the text
+          template = parser.parseFromString(html, "text/html");
+          let deepgramTempl = template.querySelector('#deepgram-modal-template').cloneNode(true);
+          modal.innerHTML = deepgramTempl.innerHTML;
+          modal.configureLanguage();
+          addModalEventListeners(modal);
+        })
+        .catch(function(err) {  
+          console.log('Template error: ', err);  
+        });
+    } else {
+      modal.innerHTML = document.querySelector(templateSelector).innerHTML;
+      document.querySelector(templateSelector).remove();
+      modal.configureLanguage();
+      addModalEventListeners(modal);
+    }
   }
 }
 
 customElements.define('deepgram-service', DeepgramService);
+
+function addModalEventListeners(modal) {
+  document.querySelector('#file').addEventListener('change',modal.clearMediaUrl);
+  document.querySelector('#media').addEventListener('change',modal.clearFilePicker);
+  document.querySelector('#transcribe-btn').addEventListener('click', modal.getData);
+  document.querySelector('#file').addEventListener('change', modal.updatePlayerWithLocalFile);
+  document.querySelector('#language-model').addEventListener('change', modal.updateDropdowns);
+  document.querySelector('#language-model').addEventListener('change', modal.updateTierDropdown);
+  document.querySelector('#language').addEventListener('change', modal.updateTierDropdown);
+}
 
 function fetchData(token, media, tier, language, model) {
 
