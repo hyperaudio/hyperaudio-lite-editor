@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 1.0.1 */
+/*! Version 1.0.2 */
 
 class DeepgramService extends HTMLElement {
 
@@ -148,6 +148,12 @@ class DeepgramService extends HTMLElement {
   }
 
   getData(event) {
+
+    if (document.querySelector('#deepgram-dialog') !== null){
+      document.querySelector('#deepgram-dialog').close();
+      event.preventDefault();
+    }
+
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
     const model = document.querySelector('#language-model').value;
@@ -159,6 +165,8 @@ class DeepgramService extends HTMLElement {
     if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
       media = "https://"+media;
     }
+
+    //console.log(file);
 
     if (file !== undefined) {
       fetchDataLocal(token, file, tier, language, model);
@@ -182,9 +190,6 @@ class DeepgramService extends HTMLElement {
     const templateUrl = this.getAttribute("templateUrl");
     const templateSelector = this.getAttribute("templateSelector");
 
-    console.log(templateUrl);
-    console.log(templateSelector);
-
     if (templateUrl !== null) {
       fetch(templateUrl)
         .then(function(response) {
@@ -203,7 +208,7 @@ class DeepgramService extends HTMLElement {
           addModalEventListeners(modal);
         })
         .catch(function(err) {  
-          console.log('Template error: ', err);  
+          console.warn('Template error: ', err);  
         });
     } else {
       modal.innerHTML = document.querySelector(templateSelector).innerHTML;
@@ -255,13 +260,13 @@ function fetchData(token, media, tier, language, model) {
     if (!response.ok) {
       throw new Error(response.status);
     } else {
-      console.log("response ok");
+      console.info("response ok");
     }
     
     return response.json();
   })
   .then(json => {
-    console.dir(json);
+    //console.dir(json);
 
     if (json.results.channels[0] === undefined || json.results.channels[0].alternatives[0].words.length === 0) {
       displayNoWordsError();
@@ -270,7 +275,7 @@ function fetchData(token, media, tier, language, model) {
     }
   })
   .catch(function (error) {
-    console.dir("error is : "+error);
+    console.warn("error is : "+error);
     error = error + "";
 
     let errorDisplayed = displayError(error, tier);
@@ -294,7 +299,6 @@ function fetchData(token, media, tier, language, model) {
 }
 
 function fetchDataLocal(token, file, tier, language, model) {
-
 
   let url = null;
   let languageParam = `&language=${language}`;
@@ -338,7 +342,7 @@ function fetchDataLocal(token, file, tier, language, model) {
           if (!response.ok) {
             throw new Error(response.status);
           } else {
-            console.log("response ok");
+            //console.log("response ok");
           }
           return response.json();
         })
@@ -351,7 +355,7 @@ function fetchDataLocal(token, file, tier, language, model) {
           }
         })
         .catch(function (error) {
-          console.dir("error is : "+error);
+          console.warn("error is : "+error);
           error = error + "";
       
           let errorDisplayed = displayError(error, tier);
@@ -419,8 +423,8 @@ function parseData(json) {
 
   const punctuatedWords = json.results.channels[0].alternatives[0].transcript.split(' ');
   const wordData = json.results.channels[0].alternatives[0].words;
-  console.log("wordData...");
-  console.log(wordData);
+  //console.log("wordData...");
+  //console.log(wordData);
 
   let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
 
@@ -496,9 +500,10 @@ function parseData(json) {
     });
   }
 
-  console.log("updating download html link");
-  document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperTranscript));
-
+  if (document.querySelector('#download-html') !== null) {
+    document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperTranscript));
+  }
+ 
   const initEvent = new CustomEvent('hyperaudioInit');
   document.dispatchEvent(initEvent);
   const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
