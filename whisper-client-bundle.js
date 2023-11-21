@@ -113,13 +113,19 @@
         timecode += interval*1000;
       });
 
-      RESULTS_CONTAINER.innerHTML = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
+      // new para every 5 sentences
+      if (result.index % 5 === 0 && result.index !== 0) {
+        hypertranscript += "\n  </p>\n  <p>\n";
+      }
 
-      const initEvent = new CustomEvent('hyperaudioInit');
-      document.dispatchEvent(initEvent);
-      const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
-      document.dispatchEvent(capEvent);
+      console.log(hypertranscript);
     });
+    RESULTS_CONTAINER.innerHTML = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
+
+    const initEvent = new CustomEvent('hyperaudioInit');
+    document.dispatchEvent(initEvent);
+    const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
+    document.dispatchEvent(capEvent);
   }
 
   async function handleFormSubmission() {
