@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<body>
+<div id="whisper-client-template">
+  <form>
+    <div class="mb-3">
+      <input id="media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" disabled />
+      <span style="display:block; padding:16px" class="label-text">or</span>
+      <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" />
+      <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+
+      <!--<label for="file-input" class="form-label">Which video/audio file should be transcribed?</label>
+      <input class="form-control" type="file" id="file-input" accept=".mp3,.wav,.mp4,.mov,.avi,.flv,.wmv,.mpeg,.mpg,.webm,.opus">
+      <div class="form-text">We only support audio and video files.</div>-->
+    </div>
+    <div class="mb-3">
+      <label for="model-name-input" class="form-label label-text">Which model should be used?</label>
+      <div>
+        <select class="form-select select select-bordered w-full max-w-xs" aria-label="Default select example" id="model-name-input">
+          <option selected="" value="whisper-tiny.en">Whisper (Tiny) English</option>
+          <option value="whisper-tiny">Whisper (Tiny)</option>
+          <option value="whisper-base">Whisper (Base) English</option>
+          <option value="whisper-base">Whisper (Base)</option>
+          <option value="whisper-small.en">Whisper (Small) English</option>
+          <option value="whisper-small">Whisper (Small)</option>
+        </select>
+      </div>
+      <div class="form-text" style="font-size: 90%;">
+        <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p> 
+        <p>The English models are slightly more accurate (for the English language only).</p>
+      </div>
+    </div>
+    <div class="modal-action">
+      <label id="form-submit-btn" for="transcribe-modal" class="btn btn-primary">TRANSCRIBE</label>
+    </div>
+    <!--<button id="form-submit-btn" class="btn btn-primary" disabled="">Submit</button>-->
+  </form>
+</div>
+</body>
+</html>
