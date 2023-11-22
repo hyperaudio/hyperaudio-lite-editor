@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 0.0.2 */
+/*! Version 0.0.3 */
 
 class WhisperService extends HTMLElement {
 
@@ -54,7 +54,7 @@ customElements.define('client-whisper-service', WhisperService);
 }*/
 
 function loadWhisperClient(modal) {
-  
+
   const fileUploadBtn = document.getElementById("file-input");
   const formSubmitBtn = document.getElementById("form-submit-btn");
   const modelNameSelectionInput = document.getElementById("model-name-input");
@@ -64,7 +64,7 @@ function loadWhisperClient(modal) {
 
   console.log("....... about to create worker");
 
-  const whisperWorkerPath = "whisper.worker.js";
+  const whisperWorkerPath = "./js/whisper.worker.js";
 
   const MessageTypes = {
     DOWNLOADING: "DOWNLOADING",
@@ -90,7 +90,7 @@ function loadWhisperClient(modal) {
     WHISPER_SMALL_EN: "openai/whisper-small.en"
   };
 
-  let WORKER;
+  let webWorker;
 
   console.log("starting....");
   formSubmitBtn.disabled = true;
@@ -98,7 +98,7 @@ function loadWhisperClient(modal) {
     await handleFormSubmission();
   });
 
-  WORKER = createWorker();
+  webWorker = createWorker();
 
   function createWorker() {
     console.log("In createWorker()");
@@ -195,9 +195,9 @@ function loadWhisperClient(modal) {
     const model_name = `openai/${modelNameSelectionInput.value}`;
     const file = fileUploadBtn.files[0];
     const audio = await readAudioFrom(file);
-    console.log("WORKER.postMessage");
+    console.log("webWorker.postMessage");
     console.dir(MessageTypes.INFERENCE_REQUEST);
-    WORKER.postMessage({
+    webWorker.postMessage({
       type: MessageTypes.INFERENCE_REQUEST,
       audio,
       model_name
