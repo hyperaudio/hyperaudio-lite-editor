@@ -4,8 +4,8 @@ Notification.requestPermission().then(perm => {
 
 
 const notifyTrasciptionReady = () => {
-    let notification = new Notification("Transcription is ready", {
-        body: "Click here to see the transcription"
+    let notification = new Notification("Your Hyperaudio transcript is ready!", {
+        body: "Click here to see your transcript."
     })
 
     notification.onclick = () => {
