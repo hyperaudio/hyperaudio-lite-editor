@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 0.0.3 */
+/*! Version 0.0.4 */
 
 class WhisperService extends HTMLElement {
 
@@ -13,9 +13,6 @@ class WhisperService extends HTMLElement {
     let modal = this;
 
     const templateUrl = "hyperaudio-client-whisper-template.html";
-
-    console.log("whisper wc connected callback");
-
 
     if (templateUrl !== null) {
       fetch(templateUrl)
@@ -42,17 +39,6 @@ class WhisperService extends HTMLElement {
 
 customElements.define('client-whisper-service', WhisperService);
 
-/*function loadWhisperClient(modal) {
-  console.log("load whisper client");
-  let scriptElement = document.createElement('script');
-  scriptElement.src = 'whisper-client-bundle.js';
-  scriptElement.id = 'whisperClientScript';
-  document.body.appendChild(scriptElement);
-  const script = document.querySelector("#whisperClientScript");
-  console.log(script);
-  (0, eval)(script.textContent);
-}*/
-
 function loadWhisperClient(modal) {
 
   const fileUploadBtn = document.getElementById("file-input");
@@ -62,9 +48,10 @@ function loadWhisperClient(modal) {
   const resultsContainer = document.getElementById("hypertranscript");
   const loadingMessageContainer = document.getElementById("hypertranscript");
 
-  console.log("....... about to create worker");
-
   const whisperWorkerPath = "./js/whisper.worker.js";
+
+  // leave the following three consts as is as they are shared by 
+  // web.worker.js
 
   const MessageTypes = {
     DOWNLOADING: "DOWNLOADING",
@@ -90,23 +77,17 @@ function loadWhisperClient(modal) {
     WHISPER_SMALL_EN: "openai/whisper-small.en"
   };
 
-  let webWorker;
+  let webWorker = createWorker();
 
-  console.log("starting....");
   formSubmitBtn.disabled = true;
   formSubmitBtn.addEventListener("click", async (event2) => {
     await handleFormSubmission();
   });
 
-  webWorker = createWorker();
-
   function createWorker() {
-    console.log("In createWorker()");
     const worker = new Worker(whisperWorkerPath);
     let results = [];
     worker.onmessage = (event2) => {
-      console.log("worker.onmessage event...");
-      console.dir(event2.data);
       const { type } = event2.data;
       if (type === MessageTypes.LOADING) {
         handleLoadingMessage(event2.data);
@@ -125,8 +106,7 @@ function loadWhisperClient(modal) {
         handleInferenceDone(results);
       }
     };
-    console.log("returning worker...");
-    console.dir(worker);
+
     return worker;
   }
 
@@ -146,8 +126,6 @@ function loadWhisperClient(modal) {
   
   function handleResultMessage(data) {
     const { results, completedUntilTimestamp } = data;
-    console.log("==== data ====")
-    console.log(data);
     const totalDuration = videoPlayer.duration;
     const progress = completedUntilTimestamp / totalDuration * 100;
     document.querySelector("#transcription-progress").innerHTML = Math.round(progress);
@@ -187,7 +165,7 @@ function loadWhisperClient(modal) {
   }
 
   async function handleFormSubmission() {
-    console.log("In handleFormSubmission()");
+
     if (!isFileUploaded() || !isModelNameSelected()) {
       return;
     }
@@ -195,8 +173,7 @@ function loadWhisperClient(modal) {
     const model_name = `openai/${modelNameSelectionInput.value}`;
     const file = fileUploadBtn.files[0];
     const audio = await readAudioFrom(file);
-    console.log("webWorker.postMessage");
-    console.dir(MessageTypes.INFERENCE_REQUEST);
+
     webWorker.postMessage({
       type: MessageTypes.INFERENCE_REQUEST,
       audio,
