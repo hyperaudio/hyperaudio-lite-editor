@@ -3,7 +3,7 @@ Notification.requestPermission().then(perm => {
 })
 
 
-const notifyTrasciptionReady = () => {
+const notifyTranscriptionReady = () => {
     let notification = new Notification("Your Hyperaudio transcript is ready!", {
         body: "Click here to see your transcript."
     })
@@ -14,4 +14,4 @@ const notifyTrasciptionReady = () => {
 
 }
 
-window.document.addEventListener('hyperaudioInit', notifyTrasciptionReady, false);
+window.document.addEventListener('hyperaudioInit', notifyTranscriptionReady, false);
