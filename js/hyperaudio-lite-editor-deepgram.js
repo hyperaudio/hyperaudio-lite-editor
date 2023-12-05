@@ -229,23 +229,7 @@ function addModalEventListeners(modal) {
 
 function fetchData(token, media, tier, language, model) {
 
-  let url = null;
-  let languageParam = `&language=${language}`;
-  if (language === "xx") {
-    //signifies autodetect
-    languageParam  = "&detect_language=true";
-  }
-
-  let novaPrefix = "";
-  if (tier === "nova") {
-    novaPrefix = "2-";
-  }
-
-  if (model.startsWith("whisper")) { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
-  } else {
-    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
-  }
+  let url = getApiUrl(tier, language, model);
   
   fetch(url, {  
     method: 'POST',
@@ -301,24 +285,6 @@ function fetchData(token, media, tier, language, model) {
 
 function fetchDataLocal(token, file, tier, language, model) {
 
-
-  let url = null;
-  let languageParam = `&language=${language}`;
-  if (language === "xx") {
-    //signifies autodetect
-    languageParam  = "&detect_language=true";
-  }
-
-  let novaPrefix = "";
-  if (tier === "nova") {
-    novaPrefix = "2-";
-  }
-
-  if (model.startsWith("whisper")) { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
-  } else {
-    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
-  }
   const apiKey = token;
 
   // Create a new FileReader instance
@@ -334,6 +300,8 @@ function fetchDataLocal(token, file, tier, language, model) {
 
       let player = document.querySelector("#hyperplayer");
       player.src = URL.createObjectURL(blob);
+
+      let url = getApiUrl(tier, language, model);
 
       // if the token is not present we just add the media to the player
       if (token !== "") {
@@ -371,6 +339,11 @@ function fetchDataLocal(token, file, tier, language, model) {
             tier = "base";
             fetchDataLocal(token, file, tier, language, model);
           }
+
+          if (error.indexOf("400") > 0 && tier === "nova") {
+            tier = "enhanced";
+            fetchDataLocal(token, media, tier, language, model);
+          }
       
           this.dataError = true;
 
@@ -383,6 +356,27 @@ function fetchDataLocal(token, file, tier, language, model) {
       }
     });
   });
+}
+
+function getApiUrl(tier, language, model) {
+  let url = null;
+  let languageParam = `&language=${language}`;
+  if (language === "xx") {
+    //signifies autodetect
+    languageParam  = "&detect_language=true";
+  }
+
+  let novaPrefix = "";
+  if (tier === "nova") {
+    novaPrefix = "2-";
+  }
+
+  if (model.startsWith("whisper")) { // no tier
+    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
+  } else {
+    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
+  }
+  return (url);
 }
 
 function displayError(error, tier) {
