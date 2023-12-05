@@ -23,7 +23,9 @@ class DeepgramService extends HTMLElement {
       "Phone call": "phonecall",
       "Voicemail": "voicemail",
       "Finance": "finance",
-      "Conversational AI": "conversationalai",   
+      "Conversational AI": "conversationalai", 
+      "Video": "video",
+      "Medical": "medical"   
     }
 
     let counter = 0
@@ -92,23 +94,25 @@ class DeepgramService extends HTMLElement {
       "da_general": ["enhanced", "base"],
       "nl_general":	["enhanced", "base"],
       "en_general": ["nova", "enhanced", "base"],
-      "en_meeting": ["enhanced", "base"],
+      "en_meeting": ["nova", "enhanced", "base"],
       "en_phonecall": ["nova", "enhanced", "base"],
-      "en_voicemail": ["base"],
-      "en_finance": ["enhanced", "base"],
-      "en_conversationalai": ["base"],
-      "en_video": ["base"],
+      "en_voicemail": ["nova", "base"],
+      "en_finance": ["nova", "enhanced", "base"],
+      "en_conversationalai": ["nova", "base"],
+      "en_video": ["nova","base"],
+      "en_medical": ["nova"],
       "en-AU_general": ["nova", "base"],
       "en-GB_general": ["nova", "base"],
       "en-IN_general": ["nova", "base"],
       "en-NZ_general": ["nova", "base"],
       "en-US_general": ["nova", "enhanced", "base"],
-      "en-US_meeting": ["enhanced", "base"],
+      "en-US_meeting": ["nova","enhanced", "base"],
       "en-US_phonecall": ["nova", "enhanced", "base"],
-      "en-US_voicemail": ["base"],
-      "en-US_finance": ["enhanced", "base"],
-      "en-US_conversationalai": ["base"],
-      "en-US_video": ["base"],
+      "en-US_voicemail": ["nova","base"],
+      "en-US_finance": ["nova","enhanced", "base"],
+      "en-US_conversationalai": ["nova","base"],
+      "en-US_video": ["nova", "base"],
+      "en-US_medical": ["nova"],
       "nl_general": ["enhanced", "base"],
       "fr_general": ["enhanced" , "base"],
       "fr-CA_general": ["base"],
@@ -232,10 +236,15 @@ function fetchData(token, media, tier, language, model) {
     languageParam  = "&detect_language=true";
   }
 
+  let novaPrefix = "";
+  if (tier === "nova") {
+    novaPrefix = "2-";
+  }
+
   if (model.startsWith("whisper")) { // no tier
     url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
   }
   
   fetch(url, {  
@@ -300,10 +309,15 @@ function fetchDataLocal(token, file, tier, language, model) {
     languageParam  = "&detect_language=true";
   }
 
+  let novaPrefix = "";
+  if (tier === "nova") {
+    novaPrefix = "2-";
+  }
+
   if (model.startsWith("whisper")) { // no tier
     url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
   } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
   }
   const apiKey = token;
 
