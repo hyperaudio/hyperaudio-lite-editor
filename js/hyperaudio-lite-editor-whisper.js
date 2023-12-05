@@ -1,6 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 0.0.5 */
-
+/*! Version 0.0.5 (wp patch) */
 
 class WhisperService extends HTMLElement {
 
@@ -15,6 +14,7 @@ class WhisperService extends HTMLElement {
 
     const templateUrl = this.getAttribute("templateUrl");
     const templateSelector = this.getAttribute("templateSelector");
+    const workerBaseUrl = this.getAttribute("workerBaseUrl");
 
     if (templateUrl !== null) {
       fetch(templateUrl)
@@ -30,22 +30,22 @@ class WhisperService extends HTMLElement {
           template = parser.parseFromString(html, "text/html");
           let whisperTempl = template.querySelector('#whisper-client-template').cloneNode(true);
           modal.innerHTML = whisperTempl.innerHTML;
-          loadWhisperClient(modal);
+          loadWhisperClient(modal, workerBaseUrl);
         })
         .catch(function(err) {  
           console.log('Template error: ', err);  
         });
     } else {
       modal.innerHTML = document.querySelector(templateSelector).innerHTML;
-      //document.querySelector(templateSelector).remove();
-      loadWhisperClient(modal);
+      document.querySelector(templateSelector).remove();
+      loadWhisperClient(modal, workerBaseUrl);
     }
   }
 }
 
 customElements.define('client-whisper-service', WhisperService);
 
-function loadWhisperClient(modal) {
+function loadWhisperClient(modal, workerBaseUrl) {
 
   const fileUploadBtn = document.getElementById("file-input");
   const formSubmitBtn = document.getElementById("form-submit-btn");
@@ -54,11 +54,14 @@ function loadWhisperClient(modal) {
   const resultsContainer = document.getElementById("hypertranscript");
   const loadingMessageContainer = document.getElementById("hypertranscript");
 
-  const whisperWorkerPath = "./js/whisper.worker.js";
+  if (workerBaseUrl === undefined || workerBaseUrl === null) {
+    workerBaseUrl = "./";
+  }
+  
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js";
 
   let webWorker = createWorker();
 
-  formSubmitBtn.disabled = true;
   formSubmitBtn.addEventListener("click", async (event2) => {
     await handleFormSubmission();
   });
@@ -130,11 +133,13 @@ function loadWhisperClient(modal) {
       model_name
     });
 
-    console.log("web worker");
-    console.log(webWorker);
     videoPlayer.src = URL.createObjectURL(file);
 
-    loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center>Transcribing.... </center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
+    if (document.querySelector('#transcribe-dialog') !== null){
+      document.querySelector('#transcribe-dialog').close();
+    }
+
+    loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Transcribing.... </center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
   }
 
   async function readAudioFrom(file) {
