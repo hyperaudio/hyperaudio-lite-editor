@@ -182,9 +182,6 @@ class DeepgramService extends HTMLElement {
     const templateUrl = this.getAttribute("templateUrl");
     const templateSelector = this.getAttribute("templateSelector");
 
-    console.log(templateUrl);
-    console.log(templateSelector);
-
     if (templateUrl !== null) {
       fetch(templateUrl)
         .then(function(response) {

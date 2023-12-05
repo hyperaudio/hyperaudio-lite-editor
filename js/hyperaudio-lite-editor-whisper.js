@@ -13,7 +13,8 @@ class WhisperService extends HTMLElement {
     let template = null;
     let modal = this;
 
-    const templateUrl = "hyperaudio-client-whisper-template.html";
+    const templateUrl = this.getAttribute("templateUrl");
+    const templateSelector = this.getAttribute("templateSelector");
 
     if (templateUrl !== null) {
       fetch(templateUrl)
@@ -34,6 +35,10 @@ class WhisperService extends HTMLElement {
         .catch(function(err) {  
           console.log('Template error: ', err);  
         });
+    } else {
+      modal.innerHTML = document.querySelector(templateSelector).innerHTML;
+      //document.querySelector(templateSelector).remove();
+      loadWhisperClient(modal);
     }
   }
 }
@@ -70,8 +75,6 @@ function loadWhisperClient(modal) {
   }
 
   function handleInferenceDone(results) {
-
-    console.log(results);
 
     videoPlayer.currentTime = 0;
 
