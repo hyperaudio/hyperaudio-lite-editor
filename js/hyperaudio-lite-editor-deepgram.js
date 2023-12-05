@@ -85,6 +85,20 @@ class DeepgramService extends HTMLElement {
     }
   }
 
+  updateLanguageDropdown(event) {
+    let tier = document.querySelector('#deepgram-form #tier').value;
+
+    console.log(tier);
+
+    if (tier === "base" || tier === "enhanced" ){
+      populateLanguageDeepgram();
+    }
+
+    if (tier === "nova"){
+      populateLanguageDeepgramRestricted();
+    }
+  }
+
   updateTierDropdown(event) {
 
     const deepgramModelCompatibility = {
@@ -225,6 +239,7 @@ function addModalEventListeners(modal) {
   document.querySelector('#language-model').addEventListener('change', modal.updateDropdowns);
   document.querySelector('#language-model').addEventListener('change', modal.updateTierDropdown);
   document.querySelector('#language').addEventListener('change', modal.updateTierDropdown);
+  document.querySelector('#tier').addEventListener('change', modal.updateLanguageDropdown);
 }
 
 function fetchData(token, media, tier, language, model) {
