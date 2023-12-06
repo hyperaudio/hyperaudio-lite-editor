@@ -275,26 +275,7 @@ function fetchData(token, media, tier, language, model) {
     }
   })
   .catch(function (error) {
-    console.dir("error is : "+error);
-    error = error + "";
-
-    let errorDisplayed = displayError(error, tier);
-    
-    if (error.indexOf("400") > 0 && tier === "enhanced") {
-      tier = "base";
-      fetchData(token, media, tier, language, model);
-    }
-
-    if (error.indexOf("400") > 0 && tier === "nova") {
-      tier = "enhanced";
-      fetchData(token, media, tier, language, model);
-    }
-
-    this.dataError = true;
-
-    if (errorDisplayed === false) {
-      displayGenericError();
-    }
+    displayAppropriateErrorMessage(error, token, file, tier, language, model, false);
   })
 }
 
@@ -345,26 +326,7 @@ function fetchDataLocal(token, file, tier, language, model) {
           }
         })
         .catch(function (error) {
-          console.dir("error is : "+error);
-          error = error + "";
-      
-          let errorDisplayed = displayError(error, tier);
-          
-          if (error.indexOf("400") > 0 && tier === "enhanced") {
-            tier = "base";
-            fetchDataLocal(token, file, tier, language, model);
-          }
-
-          if (error.indexOf("400") > 0 && tier === "nova") {
-            tier = "enhanced";
-            fetchDataLocal(token, media, tier, language, model);
-          }
-      
-          this.dataError = true;
-
-          if (errorDisplayed === false) {
-            displayGenericError();
-          }
+          displayAppropriateErrorMessage(error, token, file, tier, language, model, true);
         })
       } else {
         document.querySelector('#hypertranscript').innerHTML = ''; 
@@ -394,6 +356,44 @@ function getApiUrl(tier, language, model) {
   return (url);
 }
 
+function displayAppropriateErrorMessage(error, token, file, tier, language, model, isLocal) {
+  console.dir("error is : "+error);
+  
+  error = error + "";
+
+  let errorDisplayed = displayError(error, tier);
+  
+  if (error.indexOf("400") > 0 && tier === "enhanced") {
+    tier = "base";
+    if (isLocal === true) {
+      fetchDataLocal(token, file, tier, language, model);
+    } else {
+      fetchData(token, file, tier, language, model);
+    }
+    
+    displayRetryError();
+    errorDisplayed = true;
+  }
+
+  if (error.indexOf("400") > 0 && tier === "nova") {
+    tier = "enhanced";
+    if (isLocal === true) {
+      fetchDataLocal(token, file, tier, language, model);
+    } else {
+      fetchData(token, file, tier, language, model);
+    }
+
+    displayRetryError();
+    errorDisplayed = true;
+  }
+
+  this.dataError = true;
+
+  if (errorDisplayed === false) {
+    displayGenericError();
+  }
+}
+
 function displayError(error, tier) {
   if (error.indexOf("401") > 0 || (error.indexOf("400") > 0 && tier === "base")) {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
@@ -408,6 +408,10 @@ function displayError(error, tier) {
 
 function displayGenericError() {
   document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+}
+
+function displayRetryError() {
+  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+transcribingSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>There appears to be a language / model incompatibility. Retrying with a different model.</center></div>';
 }
 
 function displayNoWordsError() {
