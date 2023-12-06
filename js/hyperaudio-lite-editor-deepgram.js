@@ -23,7 +23,9 @@ class DeepgramService extends HTMLElement {
       "Phone call": "phonecall",
       "Voicemail": "voicemail",
       "Finance": "finance",
-      "Conversational AI": "conversationalai",   
+      "Conversational AI": "conversationalai", 
+      "Video": "video",
+      "Medical": "medical"   
     }
 
     let counter = 0
@@ -83,6 +85,20 @@ class DeepgramService extends HTMLElement {
     }
   }
 
+  updateLanguageDropdown(event) {
+    let tier = document.querySelector('#deepgram-form #tier').value;
+
+    console.log(tier);
+
+    if (tier === "base" || tier === "enhanced" ){
+      populateLanguageDeepgram();
+    }
+
+    if (tier === "nova"){
+      populateLanguageDeepgramRestricted();
+    }
+  }
+
   updateTierDropdown(event) {
 
     const deepgramModelCompatibility = {
@@ -92,23 +108,25 @@ class DeepgramService extends HTMLElement {
       "da_general": ["enhanced", "base"],
       "nl_general":	["enhanced", "base"],
       "en_general": ["nova", "enhanced", "base"],
-      "en_meeting": ["enhanced", "base"],
+      "en_meeting": ["nova", "enhanced", "base"],
       "en_phonecall": ["nova", "enhanced", "base"],
-      "en_voicemail": ["base"],
-      "en_finance": ["enhanced", "base"],
-      "en_conversationalai": ["base"],
-      "en_video": ["base"],
+      "en_voicemail": ["nova", "base"],
+      "en_finance": ["nova", "enhanced", "base"],
+      "en_conversationalai": ["nova", "base"],
+      "en_video": ["nova","base"],
+      "en_medical": ["nova"],
       "en-AU_general": ["nova", "base"],
       "en-GB_general": ["nova", "base"],
       "en-IN_general": ["nova", "base"],
       "en-NZ_general": ["nova", "base"],
       "en-US_general": ["nova", "enhanced", "base"],
-      "en-US_meeting": ["enhanced", "base"],
+      "en-US_meeting": ["nova","enhanced", "base"],
       "en-US_phonecall": ["nova", "enhanced", "base"],
-      "en-US_voicemail": ["base"],
-      "en-US_finance": ["enhanced", "base"],
-      "en-US_conversationalai": ["base"],
-      "en-US_video": ["base"],
+      "en-US_voicemail": ["nova","base"],
+      "en-US_finance": ["nova","enhanced", "base"],
+      "en-US_conversationalai": ["nova","base"],
+      "en-US_video": ["nova", "base"],
+      "en-US_medical": ["nova"],
       "nl_general": ["enhanced", "base"],
       "fr_general": ["enhanced" , "base"],
       "fr-CA_general": ["base"],
@@ -221,22 +239,12 @@ function addModalEventListeners(modal) {
   document.querySelector('#language-model').addEventListener('change', modal.updateDropdowns);
   document.querySelector('#language-model').addEventListener('change', modal.updateTierDropdown);
   document.querySelector('#language').addEventListener('change', modal.updateTierDropdown);
+  document.querySelector('#tier').addEventListener('change', modal.updateLanguageDropdown);
 }
 
 function fetchData(token, media, tier, language, model) {
 
-  let url = null;
-  let languageParam = `&language=${language}`;
-  if (language === "xx") {
-    //signifies autodetect
-    languageParam  = "&detect_language=true";
-  }
-
-  if (model.startsWith("whisper")) { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
-  } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
-  }
+  let url = getApiUrl(tier, language, model);
   
   fetch(url, {  
     method: 'POST',
@@ -267,44 +275,12 @@ function fetchData(token, media, tier, language, model) {
     }
   })
   .catch(function (error) {
-    console.dir("error is : "+error);
-    error = error + "";
-
-    let errorDisplayed = displayError(error, tier);
-    
-    if (error.indexOf("400") > 0 && tier === "enhanced") {
-      tier = "base";
-      fetchData(token, media, tier, language, model);
-    }
-
-    if (error.indexOf("400") > 0 && tier === "nova") {
-      tier = "enhanced";
-      fetchData(token, media, tier, language, model);
-    }
-
-    this.dataError = true;
-
-    if (errorDisplayed === false) {
-      displayGenericError();
-    }
+    displayAppropriateErrorMessage(error, token, file, tier, language, model, false);
   })
 }
 
 function fetchDataLocal(token, file, tier, language, model) {
 
-
-  let url = null;
-  let languageParam = `&language=${language}`;
-  if (language === "xx") {
-    //signifies autodetect
-    languageParam  = "&detect_language=true";
-  }
-
-  if (model.startsWith("whisper")) { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
-  } else {
-    url = `https://api.deepgram.com/v1/listen?model=${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
-  }
   const apiKey = token;
 
   // Create a new FileReader instance
@@ -320,6 +296,8 @@ function fetchDataLocal(token, file, tier, language, model) {
 
       let player = document.querySelector("#hyperplayer");
       player.src = URL.createObjectURL(blob);
+
+      let url = getApiUrl(tier, language, model);
 
       // if the token is not present we just add the media to the player
       if (token !== "") {
@@ -348,27 +326,72 @@ function fetchDataLocal(token, file, tier, language, model) {
           }
         })
         .catch(function (error) {
-          console.dir("error is : "+error);
-          error = error + "";
-      
-          let errorDisplayed = displayError(error, tier);
-          
-          if (error.indexOf("400") > 0 && tier === "enhanced") {
-            tier = "base";
-            fetchDataLocal(token, file, tier, language, model);
-          }
-      
-          this.dataError = true;
-
-          if (errorDisplayed === false) {
-            displayGenericError();
-          }
+          displayAppropriateErrorMessage(error, token, file, tier, language, model, true);
         })
       } else {
         document.querySelector('#hypertranscript').innerHTML = ''; 
       }
     });
   });
+}
+
+function getApiUrl(tier, language, model) {
+  let url = null;
+  let languageParam = `&language=${language}`;
+  if (language === "xx") {
+    //signifies autodetect
+    languageParam  = "&detect_language=true";
+  }
+
+  let novaPrefix = "";
+  if (tier === "nova") {
+    novaPrefix = "2-";
+  }
+
+  if (model.startsWith("whisper")) { // no tier
+    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
+  } else {
+    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
+  }
+  return (url);
+}
+
+function displayAppropriateErrorMessage(error, token, file, tier, language, model, isLocal) {
+  console.dir("error is : "+error);
+  
+  error = error + "";
+
+  let errorDisplayed = displayError(error, tier);
+  
+  if (error.indexOf("400") > 0 && tier === "enhanced") {
+    tier = "base";
+    if (isLocal === true) {
+      fetchDataLocal(token, file, tier, language, model);
+    } else {
+      fetchData(token, file, tier, language, model);
+    }
+    
+    displayRetryError();
+    errorDisplayed = true;
+  }
+
+  if (error.indexOf("400") > 0 && tier === "nova") {
+    tier = "enhanced";
+    if (isLocal === true) {
+      fetchDataLocal(token, file, tier, language, model);
+    } else {
+      fetchData(token, file, tier, language, model);
+    }
+
+    displayRetryError();
+    errorDisplayed = true;
+  }
+
+  this.dataError = true;
+
+  if (errorDisplayed === false) {
+    displayGenericError();
+  }
 }
 
 function displayError(error, tier) {
@@ -385,6 +408,10 @@ function displayError(error, tier) {
 
 function displayGenericError() {
   document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+}
+
+function displayRetryError() {
+  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+transcribingSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>There appears to be a language / model incompatibility. Retrying with a different model.</center></div>';
 }
 
 function displayNoWordsError() {
