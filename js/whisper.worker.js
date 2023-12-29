@@ -1,4 +1,4 @@
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.9.0";
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.11.0";
 
 self.addEventListener("message", async (event) => {
   const { type, audio, model_name } = event.data;

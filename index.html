@@ -132,10 +132,11 @@ If you are creating an open source application under a license compatible with t
           <select class="form-select select select-bordered w-full max-w-xs" aria-label="Default select example" id="model-name-input">
             <option selected="" value="Xenova/whisper-tiny.en">Whisper (Tiny) English</option>
             <option value="Xenova/whisper-tiny">Whisper (Tiny)</option>
-            <option value="Xenova/whisper-base">Whisper (Base) English</option>
+            <option value="Xenova/whisper-base.en">Whisper (Base) English</option>
             <option value="Xenova/whisper-base">Whisper (Base)</option>
             <option value="Xenova/whisper-small.en">Whisper (Small) English</option>
             <option value="Xenova/whisper-small">Whisper (Small)</option>
+            <!--<option value="distil-whisper/distil-small.en">Whisper Distil (Small) English</option>-->
           </select>
         </div>
         <div class="form-text" style="font-size: 90%;">
@@ -241,6 +242,10 @@ If you are creating an open source application under a license compatible with t
           <button id="sidebar-toggle" class="btn btn-square btn-outline" aria-label="Toggle Sidebar">
             <svg id="sidebar-close-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-close"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
             <svg id="sidebar-open-icon" style="display: none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-open"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
+          </button>
+          &nbsp;
+          <button id="strikethrough" class="btn btn-square btn-outline" aria-label="Strike through text">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-strikethrough"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg>
           </button>
           <div class="dropdown menu-compact">
             <label tabindex="0" class="btn m-1 btn-outline gap-2">
@@ -793,6 +798,32 @@ If you are creating an open source application under a license compatible with t
         }
       }
     });
+
+    document.querySelector('#strikethrough').addEventListener('click', (e) => {
+      let selection = null;
+
+      if (window.getSelection) {
+        selection = window.getSelection();
+      } else if (document.selection) {
+        selection = document.selection.createRange();
+      }
+
+      console.log(selection);
+
+      if (selection.toString() !== '' && selection.focusNode !== null) {
+        let fNode = selection.focusNode.parentNode;
+        let aNode = selection.anchorNode.parentNode;
+        fNode.style.setProperty("text-decoration", "line-through");
+        aNode.style.setProperty("text-decoration", "line-through");
+        let nextNode = aNode.nextElementSibling;
+        while (nextNode !== fNode){
+          nextNode.style.setProperty("text-decoration", "line-through");
+          nextNode = nextNode.nextElementSibling;
+        }
+      }
+      
+    });
+    
     let showSpeakers = document.querySelector('#show-speakers');
 
     showSpeakers.addEventListener('change', function(e) {
