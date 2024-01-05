@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 1.0.1 */
+/*! Version 1.0.2 */
 
 class DeepgramService extends HTMLElement {
 
