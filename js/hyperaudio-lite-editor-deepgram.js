@@ -43,7 +43,7 @@ class DeepgramService extends HTMLElement {
 
   clearMediaUrl(event) {
     event.preventDefault();
-    document.querySelector('#media').value = "";
+    document.querySelector('#deepgram-media').value = "";
   }
 
   clearFilePicker(event) {
@@ -169,7 +169,7 @@ class DeepgramService extends HTMLElement {
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     const language = document.querySelector('#language').value;
     const model = document.querySelector('#language-model').value;
-    let media =  document.querySelector('#media').value;
+    let media =  document.querySelector('#deepgram-media').value;
     const token =  document.querySelector('#token').value;
     const file = document.querySelector('#deepgram-file').files[0];
     let tier = document.querySelector('#tier').value;
@@ -180,7 +180,7 @@ class DeepgramService extends HTMLElement {
 
     if (file !== undefined) {
       fetchDataLocal(token, file, tier, language, model);
-      document.querySelector('#media').value = "";
+      document.querySelector('#deepgram-media').value = "";
     } else {
       if (media !== "" || token !== "") {
         let player = document.querySelector("#hyperplayer");
@@ -233,7 +233,7 @@ customElements.define('deepgram-service', DeepgramService);
 
 function addModalEventListeners(modal) {
   document.querySelector('#deepgram-file').addEventListener('change',modal.clearMediaUrl);
-  document.querySelector('#media').addEventListener('change',modal.clearFilePicker);
+  document.querySelector('#deepgram-media').addEventListener('change',modal.clearFilePicker);
   document.querySelector('#transcribe-btn').addEventListener('click', modal.getData);
   document.querySelector('#deepgram-file').addEventListener('change', modal.updatePlayerWithLocalFile);
   document.querySelector('#language-model').addEventListener('change', modal.updateDropdowns);
@@ -275,7 +275,7 @@ function fetchData(token, media, tier, language, model) {
     }
   })
   .catch(function (error) {
-    displayAppropriateErrorMessage(error, token, file, tier, language, model, false);
+    displayAppropriateErrorMessage(error, token, media, tier, language, model, false);
   })
 }
 
