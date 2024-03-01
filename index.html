@@ -1235,11 +1235,14 @@ If you are creating an open source application under a license compatible with t
   import { AudioData, cutAudioApp } from "./js/audio-cut.js";
 
   let struckRanges = [];
-  let sections = [];
-  let audioDataArray = [];
+  let sections;
+  let audioDataArray;
 
 
   document.querySelector('#strikethrough').addEventListener('click', (e) => {
+
+    audioDataArray = [];
+    sections = [];
 
     // TODO ensure this works when highlighting just a word
 
@@ -1272,6 +1275,10 @@ If you are creating an open source application under a license compatible with t
 
       let nextNode = aNode.nextElementSibling;
 
+      if (nextNode === null) {
+        nextNode = aNode;
+      }
+
       // check to see whether the range already has a strike through 
 
       while (nextNode !== fNode){
@@ -1290,6 +1297,7 @@ If you are creating an open source application under a license compatible with t
         struckRanges.push(hyperaudioInstance.getSelectionRange());
       }
 
+      console.log("struckRanges");
       console.log(struckRanges);
       console.log(struckRanges.sort());
 
@@ -1299,6 +1307,10 @@ If you are creating an open source application under a license compatible with t
       aNode.style.setProperty("text-decoration", textDecoration);
 
       nextNode = aNode.nextElementSibling;
+
+      if (nextNode === null) {
+        nextNode = aNode;
+      }
 
       while (nextNode !== fNode){
         nextNode.style.setProperty("text-decoration", textDecoration);
@@ -1347,11 +1359,13 @@ If you are creating an open source application under a license compatible with t
     });
     console.log(sections);*/
 
+    
+
     struckRanges.forEach((element, index) => {
       let section = {};
       if (index > 0) {
         section.start = parseFloat(struckRanges[index-1].split(",")[1]);
-        console.log()
+        console.log("section start = "+section.start);
         section.end = parseFloat(element.split(",")[0]);
       } else {
         section.start = 0;
@@ -1366,8 +1380,9 @@ If you are creating an open source application under a license compatible with t
     section.end = document.getElementById("hyperplayer").duration;
 
     sections.push(section);
+    console.log("sections");
     console.log(sections);
-    console.log("djkjkdjdjkdj");
+    
 
     console.log("here");
 
