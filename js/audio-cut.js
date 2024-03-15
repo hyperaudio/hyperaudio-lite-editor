@@ -1,5 +1,7 @@
 /**
  * Asynchronously cuts a section from an audio file.
+ * 
+ * Version 0.1.1
  *
  * @param {ArrayBuffer} audioData - The ArrayBuffer of the audio file.
  * @param {number} startTime - The start time in seconds for the cut.
@@ -163,6 +165,10 @@ export class AudioData {
     this.audioBuffer = null; // AudioBuffer, initially set to null
   }
 
+  static clearAudioBuffers() {
+    AudioData.audioBuffers = [];
+  }
+
   /**
    * Sets the AudioBuffer for this audio data.
    * @param {AudioBuffer} audioBuffer - The AudioBuffer to be associated with this audio data.
@@ -283,22 +289,22 @@ export function printAudioBuffersDetails() {
 export async function cutAudio(audioDataArray) {
   await fetchAudioBuffer(audioDataArray);
   console.log(audioDataArray);
-
   console.log(`allAudioBuffer ${AudioData.getAllAudioBuffers()} --- `);
   printAudioBuffersDetails();
 
   const cutBuffer = concatenateAudioBuffers(AudioData.getAllAudioBuffers());
   const wavBlob = await convertAudioBufferToWavBlob(cutBuffer);
+  AudioData.clearAudioBuffers();
   return wavBlob;
 }
 
-export function to_wav(wavBlob, donwload_name) {
+export function to_wav(wavBlob, download_name) {
   const url = URL.createObjectURL(wavBlob);
 
   // Crea un elemento <a> per il download
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${donwload_name}.wav`; // Nota: il file sarà WAV, non MP3
+  a.download = `${download_name}.wav`; // Nota: il file sarà WAV, non MP3
   document.body.appendChild(a);
   a.click();
 
