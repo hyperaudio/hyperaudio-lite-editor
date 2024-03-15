@@ -1234,17 +1234,13 @@ If you are creating an open source application under a license compatible with t
 <script type="module">
   import { AudioData, cutAudioApp } from "./js/audio-cut.js";
 
-  let struckRanges = [];
-  let sections;
+
   let audioDataArray;
-  
 
   document.querySelector('#strikethrough').addEventListener('click', (e) => {
 
     audioDataArray = [];
-    sections = [];
     let transcript = document.querySelector("#hypertranscript");
-
 
     // TODO ensure this works when highlighting just a word
 
@@ -1303,9 +1299,6 @@ If you are creating an open source application under a license compatible with t
         if (nextNode.nextElementSibling !== null) {
           nextNode = nextNode.nextElementSibling;
         } else {
-          console.log(nextNode);
-          console.log(aNode);
-          console.log(fNode);
           nextNode = nextNode.parentElement.nextElementSibling.children[0];
         }
       } 
@@ -1313,14 +1306,7 @@ If you are creating an open source application under a license compatible with t
       let textDecoration = "line-through";
       if (allSelectionStruckThrough === true) {
         textDecoration = "";
-      } else {
-        struckRanges.push(hyperaudioInstance.getSelectionRange());
       }
-
-      console.log("struckRanges");
-      console.log(struckRanges);
-
-      struckRanges = struckRanges.sort(function(a, b){return a - b});
 
       fNode.style.setProperty("text-decoration", textDecoration);
       aNode.style.setProperty("text-decoration", textDecoration);
@@ -1328,14 +1314,11 @@ If you are creating an open source application under a license compatible with t
       nextNode = aNode.nextElementSibling;
 
       if (nextNode == null) {
-        console.log("setting nextNode to aNode");
         nextNode = aNode;
       }
 
       while (nextNode !== fNode){
         nextNode.style.setProperty("text-decoration", textDecoration);
-        console.log(nextNode);
-        console.log(nextNode.nextElementSibling);
         
         if (nextNode.nextElementSibling !== null) {
           nextNode = nextNode.nextElementSibling;
@@ -1345,20 +1328,12 @@ If you are creating an open source application under a license compatible with t
       }
     }
 
-    // Get all elements with text-decoration: line-through
-    let elementsStruckThrough = document.querySelectorAll('[style*="text-decoration: line-through"]');
-
-    // Log the elements or perform further actions
-    let previousElement = null;
-    let contigiousElements = true;
-    
-    let lastStart = 0;
+    // detect the ranges to be cut
 
     let newSections = [];
     let words = transcript.querySelectorAll('[data-m]');
     let isPreviousWordStruckThru = false;
     let previousWordStruckThruEnd;
-    let currentStartTime = 0;
     let newSection = {};
     newSection.start = 0;
 
@@ -1403,15 +1378,12 @@ If you are creating an open source application under a license compatible with t
     console.log(audioDataArray);
   });
 
-  
   document
     .getElementById("download-wav")
     .addEventListener("click", async () => {
 
       let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
       cutAudioApp.to_wav(wavBlob)
-      //cutAudioApp.playAudio(wavBlob, "audioElement");
-
 
     });
 </script>
