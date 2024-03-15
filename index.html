@@ -1239,7 +1239,6 @@ If you are creating an open source application under a license compatible with t
   let audioDataArray;
   
 
-
   document.querySelector('#strikethrough').addEventListener('click', (e) => {
 
     audioDataArray = [];
@@ -1282,20 +1281,13 @@ If you are creating an open source application under a license compatible with t
 
       let allSelectionStruckThrough = true;
 
-      console.log("fNode.style.textDecoration = "+fNode.style.textDecoration);
-
       if (fNode.style.textDecoration !== "line-through" || aNode.style.textDecoration !== "line-through") {
         allSelectionStruckThrough = false;
       } 
       
-      /*if (aNode.style.textDecoration !== "line-through") {
-        allSelectionStruckThrough = false;
-      }*/
-
       let nextNode = aNode.nextElementSibling;
 
       if (nextNode == null) {
-        console.log("setting nextNode to aNode");
         nextNode = aNode;
       }
 
@@ -1318,7 +1310,6 @@ If you are creating an open source application under a license compatible with t
         }
       } 
 
-      
       let textDecoration = "line-through";
       if (allSelectionStruckThrough === true) {
         textDecoration = "";
@@ -1328,11 +1319,7 @@ If you are creating an open source application under a license compatible with t
 
       console.log("struckRanges");
       console.log(struckRanges);
-      //console.log(struckRanges.sort());
 
-      //struckRanges = struckRanges.sort();
-
-      // numerical sort (ascending)
       struckRanges = struckRanges.sort(function(a, b){return a - b});
 
       fNode.style.setProperty("text-decoration", textDecoration);
@@ -1356,17 +1343,6 @@ If you are creating an open source application under a license compatible with t
           nextNode = nextNode.parentElement.nextElementSibling.children[0];
         } 
       }
-
-      //let transcript = document.querySelector("#hypertranscript");
-
-      // Get all elements with text-decoration: line-through
-      let elementsStruckThrough = transcript.querySelectorAll('[style*="text-decoration: line-through"]');
-
-      // Log the elements or perform further actions
-      elementsStruckThrough.forEach(function (element) {
-        console.log(element);
-      });
-      
     }
 
     // Get all elements with text-decoration: line-through
@@ -1377,27 +1353,6 @@ If you are creating an open source application under a license compatible with t
     let contigiousElements = true;
     
     let lastStart = 0;
-
-    /*elementsStruckThrough.forEach((element, index) => {
-      if (index > 0) {
-        if (element.previousSibling === previousElement) {
-          contigiousElements = true;
-        } else {
-          let section = {};
-          section.start = lastStart;
-          section.end = previousElement.getAttribute("data-d");
-          sections.push(section);
-          lastStart = section.end;
-        }
-      } else {
-        let section = {};
-        section.start = 0;
-        section.end = element.getAttribute("data-m");
-      }
-      previousElement = element;
-      console.log(element);
-    });
-    console.log(sections);*/
 
     let newSections = [];
     let words = transcript.querySelectorAll('[data-m]');
@@ -1435,47 +1390,19 @@ If you are creating an open source application under a license compatible with t
     newSection.start = previousWordStruckThruEnd;
     newSection.end = document.getElementById("hyperplayer").duration;
     newSections.push(newSection);
-    
 
     console.log("=============================================");
     console.log(newSections);
 
-    struckRanges.forEach((element, index) => {
-      let section = {};
-      if (index > 0) {
-        section.start = parseFloat(struckRanges[index-1].split(",")[1]);
-        console.log("section start = "+section.start);
-        section.end = parseFloat(element.split(",")[0]);
-      } else {
-        section.start = 0;
-        section.end = parseFloat(element.split(",")[0]); //start time of first strikethru block
-      }
-      sections.push(section);
-    });
-
-    // add last range
-    let section = {};
-    section.start = parseFloat(struckRanges[struckRanges.length-1].split(",")[1]);
-    section.end = document.getElementById("hyperplayer").duration;
-
-    sections.push(section);
-    console.log("sections");
-    console.log(sections);
-    
-
     let mediaUrl = document.querySelector("#hyperplayer").src;
-
-    console.log(mediaUrl);
     
-    sections.forEach(section => {
+    newSections.forEach(section => {
       audioDataArray.push(new AudioData(mediaUrl, section.start, section.end));
     });
 
     console.log(audioDataArray);
-    
   });
 
-  
   
   document
     .getElementById("download-wav")
