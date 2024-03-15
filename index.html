@@ -1289,19 +1289,18 @@ If you are creating an open source application under a license compatible with t
 
       // check to see whether the range already has a strike through 
 
-      while (nextNode !== fNode){
+      /*while (nextNode !== fNode){
         if (nextNode.style.textDecoration !== "line-through") {
           allSelectionStruckThrough = false;
         }
-        console.log(nextNode);
-        console.log(nextNode.nextElementSibling);
         
         if (nextNode.nextElementSibling !== null) {
           nextNode = nextNode.nextElementSibling;
         } else {
+          console.log(nextNode);
           nextNode = nextNode.parentElement.nextElementSibling.children[0];
         }
-      } 
+      }*/
 
       let textDecoration = "line-through";
       if (allSelectionStruckThrough === true) {
@@ -1317,7 +1316,8 @@ If you are creating an open source application under a license compatible with t
         nextNode = aNode;
       }
 
-      while (nextNode !== fNode){
+      while (aNode !== fNode && nextNode !== fNode){
+
         nextNode.style.setProperty("text-decoration", textDecoration);
         
         if (nextNode.nextElementSibling !== null) {
