@@ -263,7 +263,7 @@ If you are creating an open source application under a license compatible with t
               <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
               <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
               <li><a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript</a></li>
-              <li><a id="download-wav" href="" download="hyperaudio.wav">WAV</a></li>
+              <li><a id="download-wav-cut">WAV</a></li>
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
               <li class="menu-title">
@@ -1379,13 +1379,24 @@ If you are creating an open source application under a license compatible with t
   });
 
   document
-    .getElementById("download-wav")
-    .addEventListener("click", async () => {
+        .getElementById("download-wav-cut")
+        .addEventListener("click", async () => {
+          const elemento = document.querySelector(".file-item.active");
+          const fileName = elemento.textContent;
 
-      let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
-      cutAudioApp.to_wav(wavBlob)
-
-    });
+          if (typeof audioDataArray === "undefined") {
+            audioDataArray = [];
+            audioDataArray.push(
+              new AudioData(
+                document.querySelector("#hyperplayer").src,
+                0,
+                document.getElementById("hyperplayer").duration
+              )
+            );
+          }
+          let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
+          cutAudioApp.to_wav(wavBlob, fileName);
+        });
 </script>
 
 <script>

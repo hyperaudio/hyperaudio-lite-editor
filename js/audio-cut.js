@@ -292,13 +292,13 @@ export async function cutAudio(audioDataArray) {
   return wavBlob;
 }
 
-export function to_wav(wavBlob) {
+export function to_wav(wavBlob, donwload_name) {
   const url = URL.createObjectURL(wavBlob);
 
   // Crea un elemento <a> per il download
   const a = document.createElement("a");
   a.href = url;
-  a.download = "test_2.wav"; // Nota: il file sarà WAV, non MP3
+  a.download = `${donwload_name}.wav`; // Nota: il file sarà WAV, non MP3
   document.body.appendChild(a);
   a.click();
 
