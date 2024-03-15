@@ -1237,12 +1237,15 @@ If you are creating an open source application under a license compatible with t
   let struckRanges = [];
   let sections;
   let audioDataArray;
+  
 
 
   document.querySelector('#strikethrough').addEventListener('click', (e) => {
 
     audioDataArray = [];
     sections = [];
+    let transcript = document.querySelector("#hypertranscript");
+
 
     // TODO ensure this works when highlighting just a word
 
@@ -1325,9 +1328,12 @@ If you are creating an open source application under a license compatible with t
 
       console.log("struckRanges");
       console.log(struckRanges);
-      console.log(struckRanges.sort());
+      //console.log(struckRanges.sort());
 
-      struckRanges = struckRanges.sort();
+      //struckRanges = struckRanges.sort();
+
+      // numerical sort (ascending)
+      struckRanges = struckRanges.sort(function(a, b){return a - b});
 
       fNode.style.setProperty("text-decoration", textDecoration);
       aNode.style.setProperty("text-decoration", textDecoration);
@@ -1351,7 +1357,7 @@ If you are creating an open source application under a license compatible with t
         } 
       }
 
-      let transcript = document.querySelector("#hypertranscript");
+      //let transcript = document.querySelector("#hypertranscript");
 
       // Get all elements with text-decoration: line-through
       let elementsStruckThrough = transcript.querySelectorAll('[style*="text-decoration: line-through"]');
@@ -1393,7 +1399,46 @@ If you are creating an open source application under a license compatible with t
     });
     console.log(sections);*/
 
+    let newSections = [];
+    let words = transcript.querySelectorAll('[data-m]');
+    let isPreviousWordStruckThru = false;
+    let previousWordStruckThruEnd;
+    let currentStartTime = 0;
+    let newSection = {};
+    newSection.start = 0;
+
+    words.forEach((word, index) => {
+      //console.log(word);
+      let isStrikethrough = word.style.textDecoration === "line-through";
+
+      if (isStrikethrough) {
+        console.log("struck");
+        if (isPreviousWordStruckThru === false){
+          newSection.end = word.getAttribute("data-m")/1000;
+          console.log("newSection");
+          console.log(newSection);
+          newSections.push(newSection);
+        }
+        isPreviousWordStruckThru = true;
+        previousWordStruckThruEnd = word.getAttribute("data-m")/1000 + word.getAttribute("data-d")/1000;
+      } else {
+        if (isPreviousWordStruckThru === true){
+          newSection = {};
+          newSection.start = words[index-1].getAttribute("data-m")/1000 + words[index-1].getAttribute("data-d")/1000;
+        }
+        isPreviousWordStruckThru = false;
+      }
+    });
+
+    // add last range
+    newSection = {};
+    newSection.start = previousWordStruckThruEnd;
+    newSection.end = document.getElementById("hyperplayer").duration;
+    newSections.push(newSection);
     
+
+    console.log("=============================================");
+    console.log(newSections);
 
     struckRanges.forEach((element, index) => {
       let section = {};
@@ -1417,16 +1462,6 @@ If you are creating an open source application under a license compatible with t
     console.log("sections");
     console.log(sections);
     
-
-    console.log("here");
-
-
-    /*const audioDataArray = [
-      new AudioData("test/test.mp3", 6, 12),
-      new AudioData("test/test.mp3", 0, 6),
-    ];*/
-
-    console.log(sections);
 
     let mediaUrl = document.querySelector("#hyperplayer").src;
 
