@@ -1256,23 +1256,49 @@ If you are creating an open source application under a license compatible with t
 
     if (selection.toString() !== '' && selection.focusNode !== null) {
 
-      let fNode = selection.focusNode.parentNode;
-      let aNode = selection.anchorNode.parentNode;
+      let fNodeChar = selection.focusNode;
+      let aNodeChar = selection.anchorNode;
+      let fNode = fNodeChar.parentNode;
+      let aNode = aNodeChar.parentNode;
+      let selectionAnchorOffset = selection.anchorOffset;
 
       console.log("SELECTION");
       console.log(selection);
 
+      console.log("fNodeChar");
+      console.log(fNodeChar);
+
       console.log("fNode");
       console.log(fNode);
+
+      console.log("aNodeChar");
+      console.log(aNodeChar);
 
       console.log("aNode");
       console.log(aNode);
 
       // Deal with selection from right to left
-      if (aNode.getAttribute("data-m") > fNode.getAttribute("data-m")) {
-        let temp = aNode;
+      if (Number(aNode.getAttribute("data-m")) > Number(fNode.getAttribute("data-m"))) {
+        let tempNode = aNode;
+        let tempChar = aNodeChar;
         aNode = fNode;
-        fNode = temp;
+        aNodeChar = fNodeChar;
+        fNode = tempNode;
+        fNodeChar = tempChar;
+        selectionAnchorOffset = selection.focusOffset
+      }
+
+      console.log("selectionAnchorOffset");
+      console.log(selectionAnchorOffset);
+      console.log(aNodeChar.length - 1);
+      console.log(aNodeChar);
+      console.log(aNodeChar.textContent.endsWith(" "));
+
+      // Check that last char of startNodeText is a space and we selected that char
+      // if so make the startNode its next sibling 
+      // (as we have selected the trailing space of the previous word)
+      if (aNodeChar.textContent.endsWith(" ") && selectionAnchorOffset === aNodeChar.length - 1 ) {
+        aNode = aNode.nextElementSibling;
       }
 
       let allSelectionStruckThrough = true;
@@ -1316,9 +1342,13 @@ If you are creating an open source application under a license compatible with t
         nextNode = aNode;
       }
 
-      console.log("anode, fnode, nextnode");
+      console.log("anode");
       console.log(aNode);
+      console.log("fNode");
       console.log(fNode);
+      console.log("fNode.nextElementSibling");
+      console.log(fNode.nextElementSibling);
+      console.log("nextNode");
       console.log(nextNode);
 
       while (aNode !== fNode && nextNode !== fNode){
@@ -1329,9 +1359,16 @@ If you are creating an open source application under a license compatible with t
 
         nextNode.style.setProperty("text-decoration", textDecoration);
         
+        // check not end of paragraph
         if (nextNode.nextElementSibling !== null) {
+          console.log("no sibling");
+          console.log("nextNode");
+          console.log(nextNode);
           nextNode = nextNode.nextElementSibling;
         } else {
+          console.log("nextNode");
+          console.log("========");
+          console.log(nextNode);
           nextNode = nextNode.parentElement.nextElementSibling.children[0];
         } 
       }
