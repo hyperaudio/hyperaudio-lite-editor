@@ -1316,7 +1316,16 @@ If you are creating an open source application under a license compatible with t
         nextNode = aNode;
       }
 
+      console.log("anode, fnode, nextnode");
+      console.log(aNode);
+      console.log(fNode);
+      console.log(nextNode);
+
       while (aNode !== fNode && nextNode !== fNode){
+        /*console.log("anode, fnode, nextnode");
+        console.log(aNode);
+        console.log(fNode);
+        console.log(nextNode);*/
 
         nextNode.style.setProperty("text-decoration", textDecoration);
         
