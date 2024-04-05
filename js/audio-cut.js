@@ -324,3 +324,34 @@ export const cutAudioApp = {
   to_wav: to_wav,
   playAudio: playAudio,
 };
+
+export function convertMediaSrcToBlob(mediaElementId) {
+  const mediaElement = document.getElementById(mediaElementId);
+
+  // Check if the URL is already a Blob
+  function isBlobUrl(url) {
+      return url.startsWith('blob:');
+  }
+
+  // Fetch the media and convert it to a Blob
+  function fetchMediaAsBlob(url) {
+      return fetch(url)
+          .then(response => response.blob());
+  }
+
+  // Update the media element's `src` with the Blob
+  function updateMediaSrc(element, blob) {
+      const blobUrl = URL.createObjectURL(blob);
+      element.src = blobUrl;
+  }
+
+  // Coordinate the conversion and update process
+  if (!isBlobUrl(mediaElement.src)) {
+      fetchMediaAsBlob(mediaElement.src)
+          .then(blob => {
+              updateMediaSrc(mediaElement, blob);
+          })
+          .catch(error => console.error('Error fetching the media:', error));
+  }
+}
+
