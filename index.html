@@ -1234,16 +1234,12 @@ If you are creating an open source application under a license compatible with t
 <script type="module">
   import { AudioData, cutAudioApp } from "./js/audio-cut.js";
 
-
   let audioDataArray;
 
   document.querySelector('#strikethrough').addEventListener('click', (e) => {
 
     audioDataArray = [];
     let transcript = document.querySelector("#hypertranscript");
-
-    // TODO ensure this works when highlighting just a word
-
     let selection = null;
 
     if (window.getSelection) {
@@ -1254,67 +1250,57 @@ If you are creating an open source application under a license compatible with t
 
     if (selection.toString() !== '' && selection.focusNode !== null) {
 
-      let fNodeChar = selection.focusNode;
-      let aNodeChar = selection.anchorNode;
-      let fNode = fNodeChar.parentNode;
-      let aNode = aNodeChar.parentNode;
+      let endNodeText = selection.focusNode;
+      let startNodeText = selection.anchorNode;
+      let endNode = endNodeText.parentNode;
+      let startNode = startNodeText.parentNode;
       let selectionAnchorOffset = selection.anchorOffset;
       let selectionFocusOffset = selection.focusOffset;
 
-      console.log(fNode);
-      console.log(aNode);
-
       //Detect one word selection
-      if (aNode === fNode) {
-        if (aNode.style.textDecoration === "line-through") {
-          aNode.style.setProperty("text-decoration", "");
+      if (startNode === endNode) {
+        if (startNode.style.textDecoration === "line-through") {
+          startNode.style.setProperty("text-decoration", "");
         } else {
-          aNode.style.setProperty("text-decoration", "line-through");
+          startNode.style.setProperty("text-decoration", "line-through");
         }
       } else {
         // Deal with selection from right to left
-        if (Number(aNode.getAttribute("data-m")) > Number(fNode.getAttribute("data-m"))) {
-          let tempNode = aNode;
-          let tempChar = aNodeChar;
-          aNode = fNode;
-          aNodeChar = fNodeChar;
-          fNode = tempNode;
-          fNodeChar = tempChar;
+        if (Number(startNode.getAttribute("data-m")) > Number(endNode.getAttribute("data-m"))) {
+          let tempNode = startNode;
+          let tempText = startNodeText;
+          startNode = endNode;
+          startNodeText = endNodeText;
+          endNode = tempNode;
+          endNodeText = tempText;
 
           selectionFocusOffset  = selection.anchorOffset;
           selectionAnchorOffset = selection.focusOffset;
         }
 
-        console.log("selectionAnchorOffset")
-        console.log(selectionAnchorOffset);
-
         // Check that last char of startNodeText is a space and we selected that char
         // if so make the startNode its next sibling 
         // (as we have selected the trailing space of the previous word)
-        if (aNodeChar.textContent.endsWith(" ") && selectionAnchorOffset === aNodeChar.length - 1 ) {
-          aNode = aNode.nextElementSibling;
+        if (startNodeText.textContent.endsWith(" ") && selectionAnchorOffset === startNodeText.length - 1 ) {
+          startNode = startNode.nextElementSibling;
           console.log("grabbing next element");
         }
 
-        console.log(selectionFocusOffset);
-        console.log(fNodeChar.length - 1);
-
-
-        if (fNodeChar.textContent.endsWith(" ") && selectionFocusOffset === 0 ) {
-          fNode = fNode.previousElementSibling;
+        if (endNodeText.textContent.endsWith(" ") && selectionFocusOffset === 0 ) {
+          endNode = endNode.previousElementSibling;
           console.log("grabbing previous element");
         }
 
         let allSelectionStruckThrough = true;
 
-        if (fNode.style.textDecoration !== "line-through" || aNode.style.textDecoration !== "line-through") {
+        if (endNode.style.textDecoration !== "line-through" || startNode.style.textDecoration !== "line-through") {
           allSelectionStruckThrough = false;
         } 
         
-        let nextNode = aNode.nextElementSibling;
+        let nextNode = startNode.nextElementSibling;
 
         if (nextNode == null) {
-          nextNode = aNode;
+          nextNode = startNode;
         }
 
         let textDecoration = "line-through";
@@ -1322,16 +1308,16 @@ If you are creating an open source application under a license compatible with t
           textDecoration = "";
         }
 
-        fNode.style.setProperty("text-decoration", textDecoration);
-        aNode.style.setProperty("text-decoration", textDecoration);
+        endNode.style.setProperty("text-decoration", textDecoration);
+        startNode.style.setProperty("text-decoration", textDecoration);
 
-        nextNode = aNode.nextElementSibling;
+        nextNode = startNode.nextElementSibling;
 
         if (nextNode == null) {
-          nextNode = aNode;
+          nextNode = startNode;
         }
 
-        while (aNode !== fNode && nextNode !== fNode){
+        while (startNode !== endNode && nextNode !== endNode){
 
           nextNode.style.setProperty("text-decoration", textDecoration);
           
@@ -1344,6 +1330,8 @@ If you are creating an open source application under a license compatible with t
         }
       }
     }
+
+    // TODO: skip the struck-out ranges clientside
 
     // detect the ranges to be cut
 
@@ -1362,8 +1350,6 @@ If you are creating an open source application under a license compatible with t
         console.log("struck");
         if (isPreviousWordStruckThru === false){
           newSection.end = word.getAttribute("data-m")/1000;
-          console.log("newSection");
-          console.log(newSection);
           newSections.push(newSection);
         }
         isPreviousWordStruckThru = true;
@@ -1383,16 +1369,12 @@ If you are creating an open source application under a license compatible with t
     newSection.end = document.getElementById("hyperplayer").duration;
     newSections.push(newSection);
 
-    console.log("=============================================");
-    console.log(newSections);
-
     let mediaUrl = document.querySelector("#hyperplayer").src;
     
     newSections.forEach(section => {
       audioDataArray.push(new AudioData(mediaUrl, section.start, section.end));
     });
 
-    console.log(audioDataArray);
   });
 
   document
