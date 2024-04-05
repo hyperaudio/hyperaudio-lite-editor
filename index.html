@@ -1252,8 +1252,6 @@ If you are creating an open source application under a license compatible with t
       selection = document.selection.createRange();
     }
 
-    console.log(selection);
-
     if (selection.toString() !== '' && selection.focusNode !== null) {
 
       let fNodeChar = selection.focusNode;
@@ -1261,116 +1259,89 @@ If you are creating an open source application under a license compatible with t
       let fNode = fNodeChar.parentNode;
       let aNode = aNodeChar.parentNode;
       let selectionAnchorOffset = selection.anchorOffset;
+      let selectionFocusOffset = selection.focusOffset;
 
-      console.log("SELECTION");
-      console.log(selection);
-
-      console.log("fNodeChar");
-      console.log(fNodeChar);
-
-      console.log("fNode");
       console.log(fNode);
-
-      console.log("aNodeChar");
-      console.log(aNodeChar);
-
-      console.log("aNode");
       console.log(aNode);
 
-      // Deal with selection from right to left
-      if (Number(aNode.getAttribute("data-m")) > Number(fNode.getAttribute("data-m"))) {
-        let tempNode = aNode;
-        let tempChar = aNodeChar;
-        aNode = fNode;
-        aNodeChar = fNodeChar;
-        fNode = tempNode;
-        fNodeChar = tempChar;
-        selectionAnchorOffset = selection.focusOffset
-      }
+      //Detect one word selection
+      if (aNode === fNode) {
+        if (aNode.style.textDecoration === "line-through") {
+          aNode.style.setProperty("text-decoration", "");
+        } else {
+          aNode.style.setProperty("text-decoration", "line-through");
+        }
+      } else {
+        // Deal with selection from right to left
+        if (Number(aNode.getAttribute("data-m")) > Number(fNode.getAttribute("data-m"))) {
+          let tempNode = aNode;
+          let tempChar = aNodeChar;
+          aNode = fNode;
+          aNodeChar = fNodeChar;
+          fNode = tempNode;
+          fNodeChar = tempChar;
 
-      console.log("selectionAnchorOffset");
-      console.log(selectionAnchorOffset);
-      console.log(aNodeChar.length - 1);
-      console.log(aNodeChar);
-      console.log(aNodeChar.textContent.endsWith(" "));
+          selectionFocusOffset  = selection.anchorOffset;
+          selectionAnchorOffset = selection.focusOffset;
+        }
 
-      // Check that last char of startNodeText is a space and we selected that char
-      // if so make the startNode its next sibling 
-      // (as we have selected the trailing space of the previous word)
-      if (aNodeChar.textContent.endsWith(" ") && selectionAnchorOffset === aNodeChar.length - 1 ) {
-        aNode = aNode.nextElementSibling;
-      }
+        console.log("selectionAnchorOffset")
+        console.log(selectionAnchorOffset);
 
-      let allSelectionStruckThrough = true;
+        // Check that last char of startNodeText is a space and we selected that char
+        // if so make the startNode its next sibling 
+        // (as we have selected the trailing space of the previous word)
+        if (aNodeChar.textContent.endsWith(" ") && selectionAnchorOffset === aNodeChar.length - 1 ) {
+          aNode = aNode.nextElementSibling;
+          console.log("grabbing next element");
+        }
 
-      if (fNode.style.textDecoration !== "line-through" || aNode.style.textDecoration !== "line-through") {
-        allSelectionStruckThrough = false;
-      } 
-      
-      let nextNode = aNode.nextElementSibling;
+        console.log(selectionFocusOffset);
+        console.log(fNodeChar.length - 1);
 
-      if (nextNode == null) {
-        nextNode = aNode;
-      }
 
-      // check to see whether the range already has a strike through 
+        if (fNodeChar.textContent.endsWith(" ") && selectionFocusOffset === 0 ) {
+          fNode = fNode.previousElementSibling;
+          console.log("grabbing previous element");
+        }
 
-      /*while (nextNode !== fNode){
-        if (nextNode.style.textDecoration !== "line-through") {
+        let allSelectionStruckThrough = true;
+
+        if (fNode.style.textDecoration !== "line-through" || aNode.style.textDecoration !== "line-through") {
           allSelectionStruckThrough = false;
-        }
-        
-        if (nextNode.nextElementSibling !== null) {
-          nextNode = nextNode.nextElementSibling;
-        } else {
-          console.log(nextNode);
-          nextNode = nextNode.parentElement.nextElementSibling.children[0];
-        }
-      }*/
-
-      let textDecoration = "line-through";
-      if (allSelectionStruckThrough === true) {
-        textDecoration = "";
-      }
-
-      fNode.style.setProperty("text-decoration", textDecoration);
-      aNode.style.setProperty("text-decoration", textDecoration);
-
-      nextNode = aNode.nextElementSibling;
-
-      if (nextNode == null) {
-        nextNode = aNode;
-      }
-
-      console.log("anode");
-      console.log(aNode);
-      console.log("fNode");
-      console.log(fNode);
-      console.log("fNode.nextElementSibling");
-      console.log(fNode.nextElementSibling);
-      console.log("nextNode");
-      console.log(nextNode);
-
-      while (aNode !== fNode && nextNode !== fNode){
-        /*console.log("anode, fnode, nextnode");
-        console.log(aNode);
-        console.log(fNode);
-        console.log(nextNode);*/
-
-        nextNode.style.setProperty("text-decoration", textDecoration);
-        
-        // check not end of paragraph
-        if (nextNode.nextElementSibling !== null) {
-          console.log("no sibling");
-          console.log("nextNode");
-          console.log(nextNode);
-          nextNode = nextNode.nextElementSibling;
-        } else {
-          console.log("nextNode");
-          console.log("========");
-          console.log(nextNode);
-          nextNode = nextNode.parentElement.nextElementSibling.children[0];
         } 
+        
+        let nextNode = aNode.nextElementSibling;
+
+        if (nextNode == null) {
+          nextNode = aNode;
+        }
+
+        let textDecoration = "line-through";
+        if (allSelectionStruckThrough === true) {
+          textDecoration = "";
+        }
+
+        fNode.style.setProperty("text-decoration", textDecoration);
+        aNode.style.setProperty("text-decoration", textDecoration);
+
+        nextNode = aNode.nextElementSibling;
+
+        if (nextNode == null) {
+          nextNode = aNode;
+        }
+
+        while (aNode !== fNode && nextNode !== fNode){
+
+          nextNode.style.setProperty("text-decoration", textDecoration);
+          
+          // check not end of paragraph
+          if (nextNode.nextElementSibling !== null) {
+            nextNode = nextNode.nextElementSibling;
+          } else {
+            nextNode = nextNode.parentElement.nextElementSibling.children[0];
+          } 
+        }
       }
     }
 
