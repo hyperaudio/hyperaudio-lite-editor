@@ -1375,7 +1375,34 @@ If you are creating an open source application under a license compatible with t
       audioDataArray.push(new AudioData(mediaUrl, section.start, section.end));
     });
 
+    if (typeof audioDataArray !== "undefined") {
+      let myPlayer = window.hyperaudioInstance.player;
+      console.dir(audioDataArray);
+      myPlayer.removeEventListener("timeupdate", checkStrikeThrus);
+      myPlayer.addEventListener("timeupdate", () => {
+        checkStrikeThrus(audioDataArray, myPlayer);
+      });
+    }
   });
+
+  function checkStrikeThrus(audioDataArray, myPlayer){
+    //let myPlayer = window.hyperaudioInstance.player;
+    console.log(myPlayer.currentTime);
+    audioDataArray.forEach((element, index) => {
+      console.log("index = "+index);
+      console.log("audioDataArray.length = "+audioDataArray.length);
+      console.log("start = "+element.stop);
+      //console.log("stop = "+audioDataArray[index+1].start);
+      if ((index+1) < audioDataArray.length  && parseFloat(element.stop) < parseFloat(myPlayer.currentTime) && parseFloat(myPlayer.currentTime) < parseFloat(audioDataArray[index+1].start)) {
+        console.log("-------------------------------------------");
+        console.log("START = "+element.stop);
+        console.log("NOW   = "+myPlayer.currentTime);
+        console.log("STOP  = "+audioDataArray[index+1].start);
+        console.log("-------------------------------------------");
+        myPlayer.currentTime = audioDataArray[index+1].start;
+      }
+    });
+  }
 
   document
     .getElementById("download-wav-cut")
@@ -1404,6 +1431,7 @@ If you are creating an open source application under a license compatible with t
       
     });
 </script>
+
 
 <script>
   // SVGs
