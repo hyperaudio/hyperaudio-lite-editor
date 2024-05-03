@@ -264,12 +264,31 @@ export async function fetchAudioBuffer(audioDataArray) {
       processedAudioBuffers.push(cutBuffer);
     } catch (error) {
       console.error("Errore durante l'elaborazione dei dati audio:", error);
+      alert("File must exist, be referenced locally or CORS enabled on the server.");
+      break;
       // Aggiungi qui eventuali logiche di gestione degli errori
     }
   }
 
   // Restituisce l'array di buffer audio processati, mantenendo l'ordine
   return processedAudioBuffers;
+}
+
+async function testData(url) {
+  try {
+      const response = await fetch(url);
+      if (!response.ok) {
+          throw new Error(`HTTP error, status = ${response.status}`);
+      }
+      return await response.json();
+  } catch (error) {
+      console.error("Error fetching data:", error);
+      if (error.name === "TypeError" && error.message.includes("fetch")) {
+          console.error("This error may be related to CORS.");
+      }
+      // Handle error appropriately
+      return null;
+  }
 }
 
 export function printAudioBuffersDetails() {
