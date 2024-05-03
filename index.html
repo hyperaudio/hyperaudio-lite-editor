@@ -1378,9 +1378,33 @@ If you are creating an open source application under a license compatible with t
     if (typeof audioDataArray !== "undefined") {
       let myPlayer = window.hyperaudioInstance.player;
       console.dir(audioDataArray);
-      myPlayer.removeEventListener("timeupdate", checkStrikeThrus);
+      /*myPlayer.removeEventListener("timeupdate", checkStrikeThrus);
       myPlayer.addEventListener("timeupdate", () => {
         checkStrikeThrus(audioDataArray, myPlayer);
+      });*/
+
+      let animationFrameId;
+
+      function update() {
+          // Call the `checkStrikeThrus` function with `audioDataArray` and `myPlayer`
+          checkStrikeThrus(audioDataArray, myPlayer);
+
+          // Continue the loop
+          animationFrameId = requestAnimationFrame(update);
+      }
+
+      // Optional: Stop the animation frame loop when the player is not playing
+      myPlayer.addEventListener("pause", () => {
+          if (animationFrameId) {
+              cancelAnimationFrame(animationFrameId);
+          }
+      });
+
+      myPlayer.addEventListener("play", () => {
+          // Ensure the loop is running only when the player is playing
+          if (!animationFrameId) {
+              animationFrameId = requestAnimationFrame(update);
+          }
       });
     }
   });
