@@ -72,7 +72,7 @@ function renderTranscript(
   let hypertranscript = document.querySelector("#hypertranscript").innerHTML.replace(/ class=".*?"/g, '');
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
 
-  const itDownloadEvent = new CustomEvent('hyperaudioUpdateInteractiveTranscriptDownloadLink');
+  const itDownloadEvent = new CustomEvent('hyperaudioTranscriptLoaded');
   document.dispatchEvent(itDownloadEvent);
   
   //maybe better called using hyperaudioInit event?

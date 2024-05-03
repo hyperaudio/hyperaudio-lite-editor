@@ -564,7 +564,7 @@ If you are creating an open source application under a license compatible with t
 
   window.document.addEventListener('hyperaudioInit', hyperaudio, false);
   window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
-  window.document.addEventListener('hyperaudioUpdateInteractiveTranscriptDownloadLink', updateInteractiveTranscriptDownloadLink, false);
+  window.document.addEventListener('hyperaudioTranscriptLoaded', updateInteractiveTranscriptDownloadLink, false);
 
   let hyperaudioTemplate = "";
 
@@ -1331,10 +1331,32 @@ If you are creating an open source application under a license compatible with t
       }
     }
 
-    // TODO: skip the struck-out ranges clientside
+    // detect the ranges to be cut
+    audioDataArray = createArrayOfGaps(transcript);
+
+    // skip the text that is struck thru
+    skipStrikeThrus(audioDataArray);
+    
+  });
+
+  registerStrikeThrus();
+
+  window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
+
+  
+
+  function registerStrikeThrus() {
+    audioDataArray = [];
 
     // detect the ranges to be cut
+    audioDataArray = createArrayOfGaps(document.querySelector("#hypertranscript"));
 
+    // skip the text that is struck thru
+    skipStrikeThrus(audioDataArray);
+  }
+
+  // creates an array of non struck thru ranges
+  function createArrayOfGaps(transcript) {
     let newSections = [];
     let words = transcript.querySelectorAll('[data-m]');
     let isPreviousWordStruckThru = false;
@@ -1375,39 +1397,39 @@ If you are creating an open source application under a license compatible with t
       audioDataArray.push(new AudioData(mediaUrl, section.start, section.end));
     });
 
+    return(audioDataArray);
+  }
+
+  function skipStrikeThrus(audioDataArray) {
     if (typeof audioDataArray !== "undefined") {
       let myPlayer = window.hyperaudioInstance.player;
       console.dir(audioDataArray);
-      /*myPlayer.removeEventListener("timeupdate", checkStrikeThrus);
-      myPlayer.addEventListener("timeupdate", () => {
-        checkStrikeThrus(audioDataArray, myPlayer);
-      });*/
 
       let animationFrameId;
 
       function update() {
-          // Call the `checkStrikeThrus` function with `audioDataArray` and `myPlayer`
-          checkStrikeThrus(audioDataArray, myPlayer);
+        // Call the `checkStrikeThrus` function with `audioDataArray` and `myPlayer`
+        checkStrikeThrus(audioDataArray, myPlayer);
 
-          // Continue the loop
-          animationFrameId = requestAnimationFrame(update);
+        // Continue the loop
+        animationFrameId = requestAnimationFrame(update);
       }
 
       // Optional: Stop the animation frame loop when the player is not playing
       myPlayer.addEventListener("pause", () => {
-          if (animationFrameId) {
-              cancelAnimationFrame(animationFrameId);
-          }
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
       });
 
       myPlayer.addEventListener("play", () => {
-          // Ensure the loop is running only when the player is playing
-          if (!animationFrameId) {
-              animationFrameId = requestAnimationFrame(update);
-          }
+        // Ensure the loop is running only when the player is playing
+        if (!animationFrameId) {
+          animationFrameId = requestAnimationFrame(update);
+        }
       });
     }
-  });
+  }
 
   function checkStrikeThrus(audioDataArray, myPlayer){
     //let myPlayer = window.hyperaudioInstance.player;
