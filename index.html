@@ -1453,12 +1453,18 @@ If you are creating an open source application under a license compatible with t
   document
     .getElementById("download-wav-cut")
     .addEventListener("click", async () => {
+      // grab the filename if saved
       const element = document.querySelector(".file-item.active");
 
-      if (element === null){
+      /*if (element === null){
         alert("File must be referenced locally or CORS enabled on the server.");
-      } else {
-        const fileName = element.textContent;
+      } else {*/
+        let fileName;
+        if (typeof element === "undefined"){
+          fileName = "default";
+        } else {
+          fileName = element.textContent;
+        }
 
         if (typeof audioDataArray === "undefined") {
           audioDataArray = [];
@@ -1473,7 +1479,7 @@ If you are creating an open source application under a license compatible with t
 
         let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
         cutAudioApp.to_wav(wavBlob, fileName);
-      }
+      //}
       
     });
 </script>

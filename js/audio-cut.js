@@ -186,10 +186,15 @@ export class AudioData {
 }
 export function concatenateAudioBuffers(audioBuffers) {
   // Assicurati che ci siano AudioBuffer da concatenare
-  if (audioBuffers.length === 0) {
-    throw new Error("No audio buffers to concatenate");
+  try {
+    if (audioBuffers.length === 0) {
+      throw new Error("No audio buffers to concatenate");
+    }
+  } catch (error) {
+    console.log(error);
   }
 
+ 
   // Calcola la lunghezza totale dei buffer
   const totalLength = audioBuffers.reduce(
     (sum, buffer) => sum + buffer.length,
