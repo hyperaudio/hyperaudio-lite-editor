@@ -1,7 +1,7 @@
 /**
- * Asynchronously cuts a section from an audio file.
+ * Asynchronously cuts sections from an audio file.
  * 
- * Version 0.1.1
+ * Version 0.1.2
  *
  * @param {ArrayBuffer} audioData - The ArrayBuffer of the audio file.
  * @param {number} startTime - The start time in seconds for the cut.
@@ -26,7 +26,7 @@
 export async function cutAudioFileAsync(audioData, startTime, endTime) {
   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-  // Funzione per decodificare in modo asincrono l'audio
+  // Decode the audio asynchronously
   function decodeAudioDataAsync(audioContext, audioData) {
     return new Promise((resolve, reject) => {
       audioContext.decodeAudioData(audioData, resolve, reject);
@@ -39,14 +39,14 @@ export async function cutAudioFileAsync(audioData, startTime, endTime) {
     const startOffset = startTime * sampleRate;
     const endOffset = endTime * sampleRate;
 
-    // Crea un nuovo buffer per la porzione desiderata dell'audio
+    // Create a new buffer for the desired part of the audio
     const cutBuffer = audioContext.createBuffer(
       decodedData.numberOfChannels,
       endOffset - startOffset,
       sampleRate
     );
 
-    // Copia i dati audio nel nuovo buffer
+    // Copy the data into the new buffer
     for (let channel = 0; channel < decodedData.numberOfChannels; channel++) {
       const channelData = decodedData.getChannelData(channel);
       cutBuffer.copyToChannel(
@@ -70,7 +70,7 @@ export async function convertAudioBufferToWavBlob(audioBuffer) {
   const format = 1; // PCM
   const bitDepth = 16;
 
-  let bufferLength = 44; // Lunghezza dell'header WAV
+  let bufferLength = 44; // Length of the WAV header
   for (let i = 0; i < numberOfChannels; i++) {
     bufferLength += audioBuffer.getChannelData(i).length * 2; // 2 bytes per sample
   }
@@ -93,7 +93,7 @@ export async function convertAudioBufferToWavBlob(audioBuffer) {
   writeString(view, 36, "data"); // Subchunk2ID
   view.setUint32(40, bufferLength - 44, true); // Subchunk2Size
 
-  // Scrivi i campioni audio
+  // Write the audio samples
   let offset = 44;
   for (let channel = 0; channel < numberOfChannels; channel++) {
     const channelData = audioBuffer.getChannelData(channel);
@@ -195,21 +195,21 @@ export function concatenateAudioBuffers(audioBuffers) {
   }
 
  
-  // Calcola la lunghezza totale dei buffer
+  // Calculate the total length of the buffer
   const totalLength = audioBuffers.reduce(
     (sum, buffer) => sum + buffer.length,
     0
   );
 
-  // Crea un nuovo AudioBuffer per contenere i dati concatenati
-  const sampleRate = audioBuffers[0].sampleRate; // Assumi che tutti i buffer abbiano la stessa frequenza di campionamento
+  // Create a ew AuidoBuffer to contain the concatenated data
+  const sampleRate = audioBuffers[0].sampleRate; // Assume all buffers have the same sample frequency
   const concatenatedBuffer = new AudioContext().createBuffer(
     audioBuffers[0].numberOfChannels,
     totalLength,
     sampleRate
   );
 
-  // Copia i dati audio in un unico buffer
+  // Copy the data into one buffer
   let offset = 0;
   audioBuffers.forEach((buffer) => {
     for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
@@ -246,36 +246,34 @@ export function concatenateAudioBuffers(audioBuffers) {
 // }
 
 export async function fetchAudioBuffer(audioDataArray) {
-  // Array per tenere traccia dei buffer audio elaborati
+  // Arrays to keep track of processed audio buffers
   let processedAudioBuffers = [];
 
   for (const audiodata of audioDataArray) {
     try {
-      // Scarica i dati audio come ArrayBuffer
+      // Download data as ArrayBuffer
       const response = await fetch(audiodata.url);
       const arrayBuffer = await response.arrayBuffer();
 
-      // Taglia il buffer audio in base agli istanti di inizio e fine specificati
+      // Trims the audio buffer based on the specified start and end times
       const cutBuffer = await cutAudioFileAsync(
         arrayBuffer,
         audiodata.start,
         audiodata.stop
       );
 
-      // Imposta il buffer audio tagliato per l'oggetto AudioData corrente
+      // Sets the trimmed audio buffer for the current AudioData object
       audiodata.setAudioBuffer(cutBuffer);
 
-      // Aggiungi il buffer audio tagliato all'array di buffer processati
+      // Add the trimmed audio buffer to the processed buffer array
       processedAudioBuffers.push(cutBuffer);
     } catch (error) {
-      console.error("Errore durante l'elaborazione dei dati audio:", error);
       alert("File must exist, be referenced locally or CORS enabled on the server.");
       break;
-      // Aggiungi qui eventuali logiche di gestione degli errori
     }
   }
 
-  // Restituisce l'array di buffer audio processati, mantenendo l'ordine
+  // Returns the array of processed audio buffers, maintaining order
   return processedAudioBuffers;
 }
 
@@ -299,13 +297,13 @@ async function testData(url) {
 export function printAudioBuffersDetails() {
   const allAudioBuffers = AudioData.getAllAudioBuffers();
   allAudioBuffers.forEach((audioBuffer, index) => {
-    console.dir(audioBuffer);
-    console.log(`AudioBuffer ${index}:`);
-    // Qui puoi accedere a specifiche proprietà dell'AudioBuffer
-    // Ad esempio, length, duration, sampleRate, etc.
-    console.log(`  Length: ${audioBuffer.length}`);
-    console.log(`  Duration: ${audioBuffer.duration}`);
-    console.log(`  Sample Rate: ${audioBuffer.sampleRate}`);
+    // console.dir(audioBuffer);
+    // console.log(`AudioBuffer ${index}:`);
+    // Here you can access specific properties of the AudioBuffer
+    // For example, length, duration, sampleRate, etc.
+    // console.log(`  Length: ${audioBuffer.length}`);
+    // console.log(`  Duration: ${audioBuffer.duration}`);
+    // console.log(`  Sample Rate: ${audioBuffer.sampleRate}`);
     // Aggiungi altre proprietà che desideri visualizzare
   });
 }
@@ -325,14 +323,14 @@ export async function cutAudio(audioDataArray) {
 export function to_wav(wavBlob, download_name) {
   const url = URL.createObjectURL(wavBlob);
 
-  // Crea un elemento <a> per il download
+  // Create <a> to allow download
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${download_name}.wav`; // Nota: il file sarà WAV, non MP3
+  a.download = `${download_name}.wav`; // Note the file will be WAV not mp3
   document.body.appendChild(a);
   a.click();
 
-  // Pulizia
+  // Clean up
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
