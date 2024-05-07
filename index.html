@@ -801,8 +801,6 @@ If you are creating an open source application under a license compatible with t
         }
       }
     });
-
-    
     
     let showSpeakers = document.querySelector('#show-speakers');
 
@@ -837,7 +835,6 @@ If you are creating an open source application under a license compatible with t
   }
 
   hyperaudio();
-
 
   function hyperaudioGenerateCaptionsFromTranscript() {
     let rootnode = document.querySelector("#hypertranscript");
@@ -1343,8 +1340,6 @@ If you are creating an open source application under a license compatible with t
 
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
 
-  
-
   function registerStrikeThrus() {
     audioDataArray = [];
 
@@ -1365,11 +1360,9 @@ If you are creating an open source application under a license compatible with t
     newSection.start = 0;
 
     words.forEach((word, index) => {
-      //console.log(word);
       let isStrikethrough = word.style.textDecoration === "line-through";
 
       if (isStrikethrough) {
-        console.log("struck");
         if (isPreviousWordStruckThru === false){
           newSection.end = word.getAttribute("data-m")/1000;
           newSections.push(newSection);
@@ -1408,14 +1401,13 @@ If you are creating an open source application under a license compatible with t
       let animationFrameId;
 
       function update() {
-        // Call the `checkStrikeThrus` function with `audioDataArray` and `myPlayer`
         checkStrikeThrus(audioDataArray, myPlayer);
 
         // Continue the loop
         animationFrameId = requestAnimationFrame(update);
       }
 
-      // Optional: Stop the animation frame loop when the player is not playing
+      // Stop the animation frame loop when the player is not playing
       myPlayer.addEventListener("pause", () => {
         if (animationFrameId) {
           cancelAnimationFrame(animationFrameId);
@@ -1432,20 +1424,9 @@ If you are creating an open source application under a license compatible with t
   }
 
   function checkStrikeThrus(audioDataArray, myPlayer){
-    //let myPlayer = window.hyperaudioInstance.player;
-    console.log(myPlayer.currentTime);
     audioDataArray.forEach((element, index) => {
-      console.log("index = "+index);
-      console.log("audioDataArray.length = "+audioDataArray.length);
-      console.log("start = "+element.stop);
-      //console.log("stop = "+audioDataArray[index+1].start);
       if ((index+1) < audioDataArray.length  && parseFloat(element.stop) < parseFloat(myPlayer.currentTime) && parseFloat(myPlayer.currentTime) < parseFloat(audioDataArray[index+1].start)) {
-        console.log("-------------------------------------------");
-        console.log("START = "+element.stop);
-        console.log("NOW   = "+myPlayer.currentTime);
-        console.log("STOP  = "+audioDataArray[index+1].start);
-        console.log("-------------------------------------------");
-        myPlayer.currentTime = audioDataArray[index+1].start;
+        myPlayer.currentTime = audioDataArray[index+1].start + 0.05;
       }
     });
   }
@@ -1456,30 +1437,26 @@ If you are creating an open source application under a license compatible with t
       // grab the filename if saved
       const element = document.querySelector(".file-item.active");
 
-      /*if (element === null){
-        alert("File must be referenced locally or CORS enabled on the server.");
-      } else {*/
-        let fileName;
-        if (typeof element === "undefined"){
-          fileName = "default";
-        } else {
-          fileName = element.textContent;
-        }
+      let fileName;
+      if (typeof element === "undefined"){
+        fileName = "default";
+      } else {
+        fileName = element.textContent;
+      }
 
-        if (typeof audioDataArray === "undefined") {
-          audioDataArray = [];
-          audioDataArray.push(
-            new AudioData(
-              document.querySelector("#hyperplayer").src,
-              0,
-              document.getElementById("hyperplayer").duration
-            )
-          );
-        }
+      if (typeof audioDataArray === "undefined") {
+        audioDataArray = [];
+        audioDataArray.push(
+          new AudioData(
+            document.querySelector("#hyperplayer").src,
+            0,
+            document.getElementById("hyperplayer").duration
+          )
+        );
+      }
 
-        let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
-        cutAudioApp.to_wav(wavBlob, fileName);
-      //}
+      let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
+      cutAudioApp.to_wav(wavBlob, fileName);
       
     });
 </script>
