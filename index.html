@@ -1,5 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-<!--  Hyperaudio Lite Editor - Version 0.4.3 -->
+
+<!--  Hyperaudio Lite Editor - Version 0.4.5 -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -132,10 +133,11 @@ If you are creating an open source application under a license compatible with t
           <select class="form-select select select-bordered w-full max-w-xs" aria-label="Default select example" id="model-name-input">
             <option selected="" value="Xenova/whisper-tiny.en">Whisper (Tiny) English</option>
             <option value="Xenova/whisper-tiny">Whisper (Tiny)</option>
-            <option value="Xenova/whisper-base">Whisper (Base) English</option>
+            <option value="Xenova/whisper-base.en">Whisper (Base) English</option>
             <option value="Xenova/whisper-base">Whisper (Base)</option>
             <option value="Xenova/whisper-small.en">Whisper (Small) English</option>
             <option value="Xenova/whisper-small">Whisper (Small)</option>
+            <!--<option value="distil-whisper/distil-small.en">Whisper Distil (Small) English</option>-->
           </select>
         </div>
         <div class="form-text" style="font-size: 90%;">
@@ -242,6 +244,10 @@ If you are creating an open source application under a license compatible with t
             <svg id="sidebar-close-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-close"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
             <svg id="sidebar-open-icon" style="display: none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-open"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
           </button>
+          &nbsp;
+          <button id="strikethrough" class="btn btn-square btn-outline" aria-label="Strike through text">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-strikethrough"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg>
+          </button>
           <div class="dropdown menu-compact">
             <label tabindex="0" class="btn m-1 btn-outline gap-2">
               <span id="file-dropdown-text">FILE</span>
@@ -258,6 +264,7 @@ If you are creating an open source application under a license compatible with t
               <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
               <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
               <li><a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript</a></li>
+              <li><a id="download-wav-cut">WAV</a></li>
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
               <li class="menu-title">
@@ -558,7 +565,7 @@ If you are creating an open source application under a license compatible with t
 
   window.document.addEventListener('hyperaudioInit', hyperaudio, false);
   window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
-  window.document.addEventListener('hyperaudioUpdateInteractiveTranscriptDownloadLink', updateInteractiveTranscriptDownloadLink, false);
+  window.document.addEventListener('hyperaudioTranscriptLoaded', updateInteractiveTranscriptDownloadLink, false);
 
   let hyperaudioTemplate = "";
 
@@ -582,6 +589,8 @@ If you are creating an open source application under a license compatible with t
     const playOnClick = false;
 
     const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
+
+    window.hyperaudioInstance = hyperaudioInstance;
 
     const sanitisationCheck = function () {
 
@@ -793,6 +802,7 @@ If you are creating an open source application under a license compatible with t
         }
       }
     });
+    
     let showSpeakers = document.querySelector('#show-speakers');
 
     showSpeakers.addEventListener('change', function(e) {
@@ -826,7 +836,6 @@ If you are creating an open source application under a license compatible with t
   }
 
   hyperaudio();
-
 
   function hyperaudioGenerateCaptionsFromTranscript() {
     let rootnode = document.querySelector("#hypertranscript");
@@ -1220,13 +1229,247 @@ If you are creating an open source application under a license compatible with t
   }
 
 </script>
+<script type="module">
+  import { AudioData, cutAudioApp } from "./js/audio-cut.js";
+
+  let audioDataArray;
+
+  document.querySelector('#strikethrough').addEventListener('click', (e) => {
+
+    audioDataArray = [];
+    let transcript = document.querySelector("#hypertranscript");
+    let selection = null;
+
+    if (window.getSelection) {
+      selection = window.getSelection();
+    } else if (document.selection) {
+      selection = document.selection.createRange();
+    }
+
+    if (selection.toString() !== '' && selection.focusNode !== null) {
+
+      let endNodeText = selection.focusNode;
+      let startNodeText = selection.anchorNode;
+      let endNode = endNodeText.parentNode;
+      let startNode = startNodeText.parentNode;
+      let selectionAnchorOffset = selection.anchorOffset;
+      let selectionFocusOffset = selection.focusOffset;
+
+      //Detect one word selection
+      if (startNode === endNode) {
+        if (startNode.style.textDecoration === "line-through") {
+          startNode.style.setProperty("text-decoration", "");
+        } else {
+          startNode.style.setProperty("text-decoration", "line-through");
+        }
+      } else {
+        // Deal with selection from right to left
+        if (Number(startNode.getAttribute("data-m")) > Number(endNode.getAttribute("data-m"))) {
+          let tempNode = startNode;
+          let tempText = startNodeText;
+          startNode = endNode;
+          startNodeText = endNodeText;
+          endNode = tempNode;
+          endNodeText = tempText;
+
+          selectionFocusOffset  = selection.anchorOffset;
+          selectionAnchorOffset = selection.focusOffset;
+        }
+
+        // Check that last char of startNodeText is a space and we selected that char
+        // if so make the startNode its next sibling 
+        // (as we have selected the trailing space of the previous word)
+        if (startNodeText.textContent.endsWith(" ") && selectionAnchorOffset === startNodeText.length - 1 ) {
+          startNode = startNode.nextElementSibling;
+          console.log("grabbing next element");
+        }
+
+        if (endNodeText.textContent.endsWith(" ") && selectionFocusOffset === 0 ) {
+          endNode = endNode.previousElementSibling;
+          console.log("grabbing previous element");
+        }
+
+        let allSelectionStruckThrough = true;
+
+        if (endNode.style.textDecoration !== "line-through" || startNode.style.textDecoration !== "line-through") {
+          allSelectionStruckThrough = false;
+        } 
+        
+        let nextNode = startNode.nextElementSibling;
+
+        if (nextNode == null) {
+          nextNode = startNode;
+        }
+
+        let textDecoration = "line-through";
+        if (allSelectionStruckThrough === true) {
+          textDecoration = "";
+        }
+
+        endNode.style.setProperty("text-decoration", textDecoration);
+        startNode.style.setProperty("text-decoration", textDecoration);
+
+        nextNode = startNode.nextElementSibling;
+
+        if (nextNode == null) {
+          nextNode = startNode;
+        }
+
+        while (startNode !== endNode && nextNode !== endNode){
+
+          nextNode.style.setProperty("text-decoration", textDecoration);
+          
+          // check not end of paragraph
+          if (nextNode.nextElementSibling !== null) {
+            nextNode = nextNode.nextElementSibling;
+          } else {
+            nextNode = nextNode.parentElement.nextElementSibling.children[0];
+          } 
+        }
+      }
+    }
+
+    // detect the ranges to be cut
+    audioDataArray = createArrayOfGaps(transcript);
+
+    // skip the text that is struck thru
+    skipStrikeThrus(audioDataArray);
+    
+  });
+
+  registerStrikeThrus();
+
+  window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
+
+  function registerStrikeThrus() {
+    audioDataArray = [];
+
+    // detect the ranges to be cut
+    audioDataArray = createArrayOfGaps(document.querySelector("#hypertranscript"));
+
+    // skip the text that is struck thru
+    skipStrikeThrus(audioDataArray);
+  }
+
+  // creates an array of non struck thru ranges
+  function createArrayOfGaps(transcript) {
+    let newSections = [];
+    let words = transcript.querySelectorAll('[data-m]');
+    let isPreviousWordStruckThru = false;
+    let previousWordStruckThruEnd;
+    let newSection = {};
+    newSection.start = 0;
+
+    words.forEach((word, index) => {
+      let isStrikethrough = word.style.textDecoration === "line-through";
+
+      if (isStrikethrough) {
+        if (isPreviousWordStruckThru === false){
+          newSection.end = word.getAttribute("data-m")/1000;
+          newSections.push(newSection);
+        }
+        isPreviousWordStruckThru = true;
+        previousWordStruckThruEnd = word.getAttribute("data-m")/1000 + word.getAttribute("data-d")/1000;
+      } else {
+        if (isPreviousWordStruckThru === true){
+          newSection = {};
+          newSection.start = words[index-1].getAttribute("data-m")/1000 + words[index-1].getAttribute("data-d")/1000;
+        }
+        isPreviousWordStruckThru = false;
+      }
+    });
+
+    // add last range
+    newSection = {};
+    newSection.start = previousWordStruckThruEnd;
+    newSection.end = document.getElementById("hyperplayer").duration;
+    newSections.push(newSection);
+
+    let mediaUrl = document.querySelector("#hyperplayer").src;
+    
+    newSections.forEach(section => {
+      audioDataArray.push(new AudioData(mediaUrl, section.start, section.end));
+    });
+
+    return(audioDataArray);
+  }
+
+  function skipStrikeThrus(audioDataArray) {
+    if (typeof audioDataArray !== "undefined") {
+      let myPlayer = window.hyperaudioInstance.player;
+      console.dir(audioDataArray);
+
+      let animationFrameId;
+
+      function update() {
+        checkStrikeThrus(audioDataArray, myPlayer);
+
+        // Continue the loop
+        animationFrameId = requestAnimationFrame(update);
+      }
+
+      // Stop the animation frame loop when the player is not playing
+      myPlayer.addEventListener("pause", () => {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
+      });
+
+      myPlayer.addEventListener("play", () => {
+        // Ensure the loop is running only when the player is playing
+        if (!animationFrameId) {
+          animationFrameId = requestAnimationFrame(update);
+        }
+      });
+    }
+  }
+
+  function checkStrikeThrus(audioDataArray, myPlayer){
+    audioDataArray.forEach((element, index) => {
+      if ((index+1) < audioDataArray.length  && parseFloat(element.stop) < parseFloat(myPlayer.currentTime) && parseFloat(myPlayer.currentTime) < parseFloat(audioDataArray[index+1].start)) {
+        myPlayer.currentTime = audioDataArray[index+1].start + 0.05;
+      }
+    });
+  }
+
+  document
+    .getElementById("download-wav-cut")
+    .addEventListener("click", async () => {
+      // grab the filename if saved
+      const element = document.querySelector(".file-item.active");
+
+      let fileName;
+      if (typeof element === "undefined"){
+        fileName = "default";
+      } else {
+        fileName = element.textContent;
+      }
+
+      if (typeof audioDataArray === "undefined") {
+        audioDataArray = [];
+        audioDataArray.push(
+          new AudioData(
+            document.querySelector("#hyperplayer").src,
+            0,
+            document.getElementById("hyperplayer").duration
+          )
+        );
+      }
+
+      let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
+      cutAudioApp.to_wav(wavBlob, fileName);
+      
+    });
+</script>
+
+
 <script>
   // SVGs
 
   const transcribingSvg = "data:image/svg+xml,%3Csvg width='45' height='45' viewBox='0 0 45 45' xmlns='http://www.w3.org/2000/svg' stroke='%23000'%3E%3Cg fill='none' fill-rule='evenodd' transform='translate(1 1)' stroke-width='2'%3E%3Ccircle cx='22' cy='22' r='6' stroke-opacity='0'%3E%3Canimate attributeName='r' begin='1.5s' dur='3s' values='6;22' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-opacity' begin='1.5s' dur='3s' values='1;0' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-width' begin='1.5s' dur='3s' values='2;0' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3Ccircle cx='22' cy='22' r='6' stroke-opacity='0'%3E%3Canimate attributeName='r' begin='3s' dur='3s' values='6;22' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-opacity' begin='3s' dur='3s' values='1;0' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-width' begin='3s' dur='3s' values='2;0' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3Ccircle cx='22' cy='22' r='8'%3E%3Canimate attributeName='r' begin='0s' dur='1.5s' values='6;1;2;3;4;5;6' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3C/g%3E%3C/svg%3E";
 
   const errorSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='256' height='256' viewBox='0 0 256 256' xml:space='preserve'%3E%3Cdefs%3E%3C/defs%3E%3Cg style='stroke: none; stroke-width: 0; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: none; fill-rule: nonzero; opacity: 1;' transform='translate(1.4065934065934016 1.4065934065934016) scale(2.81 2.81)' %3E%3Cpath d='M 85.429 85.078 H 4.571 c -1.832 0 -3.471 -0.947 -4.387 -2.533 c -0.916 -1.586 -0.916 -3.479 0 -5.065 L 40.613 7.455 C 41.529 5.869 43.169 4.922 45 4.922 c 0 0 0 0 0 0 c 1.832 0 3.471 0.947 4.386 2.533 l 40.429 70.025 c 0.916 1.586 0.916 3.479 0.001 5.065 C 88.901 84.131 87.261 85.078 85.429 85.078 z M 45 7.922 c -0.747 0 -1.416 0.386 -1.79 1.033 L 2.782 78.979 c -0.373 0.646 -0.373 1.419 0 2.065 c 0.374 0.647 1.042 1.033 1.789 1.033 h 80.858 c 0.747 0 1.416 -0.387 1.789 -1.033 s 0.373 -1.419 0 -2.065 L 46.789 8.955 C 46.416 8.308 45.747 7.922 45 7.922 L 45 7.922 z M 45 75.325 c -4.105 0 -7.446 -3.34 -7.446 -7.445 s 3.34 -7.445 7.446 -7.445 s 7.445 3.34 7.445 7.445 S 49.106 75.325 45 75.325 z M 45 63.435 c -2.451 0 -4.446 1.994 -4.446 4.445 s 1.995 4.445 4.446 4.445 s 4.445 -1.994 4.445 -4.445 S 47.451 63.435 45 63.435 z M 45 57.146 c -3.794 0 -6.882 -3.087 -6.882 -6.882 V 34.121 c 0 -3.794 3.087 -6.882 6.882 -6.882 c 3.794 0 6.881 3.087 6.881 6.882 v 16.144 C 51.881 54.06 48.794 57.146 45 57.146 z M 45 30.239 c -2.141 0 -3.882 1.741 -3.882 3.882 v 16.144 c 0 2.141 1.741 3.882 3.882 3.882 c 2.14 0 3.881 -1.741 3.881 -3.882 V 34.121 C 48.881 31.98 47.14 30.239 45 30.239 z' style='stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;' transform=' matrix(1 0 0 1 0 0) ' stroke-linecap='round' /%3E%3C/g%3E%3C/svg%3E";
-  </script>
+</script>
 
 </body>
 </html>

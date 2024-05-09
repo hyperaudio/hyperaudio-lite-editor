@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.1.3 */
+/*! Version 2.1.8 */
 
 'use strict';
 
@@ -168,16 +168,110 @@ function youtubePlayer(instance) {
   }
 }
 
+// Note – The Spotify Player is in beta.
+// The API limits us to:
+// 1. A seek accuracy of nearest second
+// 2. An update frequency of one second (although a workaround is provided)
+// 3. Playing a file without previous iteraction will always play from start
+//    ie – a shared selection will highlight but not start at the start of
+//    that selection. 
+
+function spotifyPlayer(instance) {
+  this.currentTime = 0;
+  this.paused = true;
+  this.player = null;
+
+  window.onSpotifyIframeApiReady = IFrameAPI => {
+
+    const element = document.getElementById(instance.player.id);
+
+    const extractEpisodeID = (url) => {
+      const match = url.match(/episode\/(.+)$/);
+      return match ? match[1] : null;
+    }
+
+    const subSample = (sampleInterval) => {
+      this.currentTime += sampleInterval;
+    }
+
+    const srcValue = element.getAttribute('src');
+    const episodeID = extractEpisodeID(srcValue);
+
+    const options = {
+      uri: `spotify:episode:${episodeID}`,
+    }
+
+    const callback = player => {
+      this.player = player;
+      player.addListener('playback_update', e => {
+        if (e.data.isPaused !== true) {
+          this.currentTime = e.data.position / 1000;
+          let currentSample = 0;
+          let totalSample = 0;
+          let sampleInterval = 0.25;
+
+          while (totalSample < 1){
+            currentSample += sampleInterval;
+            setTimeout(subSample, currentSample*1000, sampleInterval);
+            totalSample = currentSample + sampleInterval;
+          }
+
+          instance.preparePlayHead();
+          this.paused = false;
+        } else {
+          instance.pausePlayHead();
+          this.paused = true;
+        }
+      });
+
+      player.addListener('ready', () => {
+        // With the Spotify API we need to play before we seek. 
+        // Although togglePlay should autoplay it doesn't,
+        // but lets us prime the playhead.
+        player.togglePlay();
+        instance.checkPlayHead();
+      });
+    };
+  
+    IFrameAPI.createController(element, options, callback);
+  }
+
+  this.getTime = () => {
+    return new Promise((resolve) => {
+      resolve(this.currentTime);
+    });
+  }
+
+  this.setTime = (seconds) => {
+    this.player.seek(seconds);
+  }
+
+  this.play = () => {
+    this.player.play();
+    this.paused = false;
+  }
+
+  this.pause = () => {
+    this.player.togglePlay();
+    this.paused = true;
+  }
+}
+
 const hyperaudioPlayerOptions = {
   "native": nativePlayer,
   "soundcloud": soundcloudPlayer,
   "youtube": youtubePlayer,
   "videojs": videojsPlayer,
-  "vimeo": vimeoPlayer
+  "vimeo": vimeoPlayer,
+  "spotify": spotifyPlayer
 }
 
 function hyperaudioPlayer(playerType, instance) {
-  return new playerType(instance);
+  if (playerType !== null && playerType !== undefined) {
+    return new playerType(instance);
+  } else {
+    console.warn("HYPERAUDIO LITE WARNING: data-player-type attribute should be set on player if not native, eg SoundCloud, YouTube, Vimeo, VideoJS");
+  }
 }
 
 class HyperaudioLite {
@@ -273,9 +367,11 @@ class HyperaudioLite {
 
     this.start = this.hashArray[0];
 
+    //check for URL based start and stop times 
+
     if (!isNaN(parseFloat(this.start))) {
       this.highlightedText = true;
-
+      
       let indices = this.updateTranscriptVisualState(this.start);
       let index = indices.currentWordIndex;
 
@@ -320,8 +416,8 @@ class HyperaudioLite {
     return wordArr;
   };
 
-  getSelectionMediaFragment = () => {
-    let fragment = null;
+  getSelectionRange = () => {
+    let range = null;
     let selection = null;
 
     if (window.getSelection) {
@@ -405,15 +501,23 @@ class HyperaudioLite {
         }
 
         if (isNaN(parseFloat(nodeStart))) {
-          fragment = null;
+          range = null;
         } else {
-          fragment = this.transcript.id + '=' + nodeStart + ',' + Math.round((nodeStart + nodeDuration) * 10) / 10;
+          //fragment = this.transcript.id + '=' + nodeStart + ',' + Math.round((nodeStart + nodeDuration) * 10) / 10;
+          range = nodeStart + ',' + Math.round((nodeStart + nodeDuration) * 10) / 10;
         }
       }
     }
+    return(range);
+  }
 
-    return fragment;
-  };
+  getSelectionMediaFragment = () => {
+    let range = this.getSelectionRange();
+    if (range === null) {
+      return null;
+    }
+    return (this.transcript.id + '=' +range);
+  }
 
   setPlayHead = e => {
     const target = e.target ? e.target : e.srcElement;
@@ -443,11 +547,11 @@ class HyperaudioLite {
         this.myPlayer.play();
       }
     }
-  };
+  }
 
   clearTimer = () => {
     if (this.timer) clearTimeout(this.timer);
-  };
+  }
 
   preparePlayHead = () => {
     this.myPlayer.paused = false;
@@ -622,7 +726,7 @@ class HyperaudioLite {
   };
 
   updateTranscriptVisualState = (currentTime) => {
-    
+
     let index = 0;
     let words = this.wordArr.length - 1;
 
