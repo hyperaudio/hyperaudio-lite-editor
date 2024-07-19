@@ -137,7 +137,7 @@ If you are creating an open source application under a license compatible with t
             <option value="Xenova/whisper-base">Whisper (Base)</option>
             <option value="Xenova/whisper-small.en">Whisper (Small) English</option>
             <option value="Xenova/whisper-small">Whisper (Small)</option>
-            <!--<option value="distil-whisper/distil-small.en">Whisper Distil (Small) English</option>-->
+            <option value="distil-whisper/distil-small.en">Whisper Distil (Small) English</option>
           </select>
         </div>
         <div class="form-text" style="font-size: 90%;">
@@ -1439,7 +1439,7 @@ If you are creating an open source application under a license compatible with t
       const element = document.querySelector(".file-item.active");
 
       let fileName;
-      if (typeof element === "undefined"){
+      if (element == null || typeof element === "undefined"){
         fileName = "default";
       } else {
         fileName = element.textContent;
