@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.4.3 -->
+<!--  Hyperaudio Lite Editor - Version 0.4.4 -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -730,11 +730,11 @@ If you are creating an open source application under a license compatible with t
         }
 
         d = new Date();
-        console.log("sanitising took "+(d.getTime() - starttime)+"ms");
+        //console.log("sanitising took "+(d.getTime() - starttime)+"ms");
       }
 
       function resetTimer() {
-        console.log("reset sanitisation timer");
+        //console.log("reset sanitisation timer");
         clearTimeout(time);
         time = setTimeout(sanitise, 1000);
       }
@@ -1067,11 +1067,7 @@ If you are creating an open source application under a license compatible with t
 
       populateCaptionEditor(data);
 
-      console.log("no caption alert");
-      console.log(localStorage.getItem("noCaptionAlert"));
-
       if (updateCaptionsFromTranscript === false && localStorage.getItem("noCaptionAlert") !== "true") {
-        console.log("displaying...");
         document.querySelector('#captionsource-alert').style.visibility = 'visible';
       }
     }
@@ -1322,118 +1318,7 @@ If you are creating an open source application under a license compatible with t
 
     // skip the text that is struck thru
     skipStrikeThrus(audioDataArray);
-});
-
-
-
-  /*document.querySelector('#strikethrough').addEventListener('click', (e) => {
-
-    audioDataArray = [];
-    let transcript = document.querySelector("#hypertranscript");
-    let selection = null;
-
-    if (window.getSelection) {
-      selection = window.getSelection();
-    } else if (document.selection) {
-      selection = document.selection.createRange();
-    }
-
-    if (selection.toString() !== '' && selection.focusNode !== null) {
-
-      let endNodeText = selection.focusNode;
-      let startNodeText = selection.anchorNode;
-      let endNode = endNodeText.parentNode;
-      let startNode = startNodeText.parentNode;
-      let selectionAnchorOffset = selection.anchorOffset;
-      let selectionFocusOffset = selection.focusOffset;
-
-      //Detect one word selection
-      if (startNode === endNode) {
-        if (startNode.style.textDecoration === "line-through") {
-          startNode.style.setProperty("text-decoration", "");
-        } else {
-          startNode.style.setProperty("text-decoration", "line-through");
-        }
-      } else {
-        // Deal with selection from right to left
-        if (Number(startNode.getAttribute("data-m")) > Number(endNode.getAttribute("data-m"))) {
-          let tempNode = startNode;
-          let tempText = startNodeText;
-          startNode = endNode;
-          startNodeText = endNodeText;
-          endNode = tempNode;
-          endNodeText = tempText;
-
-          selectionFocusOffset  = selection.anchorOffset;
-          selectionAnchorOffset = selection.focusOffset;
-        }
-
-        // Check that last char of startNodeText is a space and we selected that char
-        // if so make the startNode its next sibling 
-        // (as we have selected the trailing space of the previous word)
-        if (startNodeText.textContent.endsWith(" ") && selectionAnchorOffset === startNodeText.length - 1 ) {
-          startNode = startNode.nextElementSibling;
-          console.log("grabbing next element");
-        }
-
-        if (endNodeText.textContent.endsWith(" ") && selectionFocusOffset === 0 ) {
-          endNode = endNode.previousElementSibling;
-          console.log("grabbing previous element");
-        }
-
-        let allSelectionStruckThrough = true;
-
-        console.log(endNode);
-
-        if (endNode.style.textDecoration !== "line-through" || startNode.style.textDecoration !== "line-through") {
-          allSelectionStruckThrough = false;
-        } 
-        
-        let nextNode = startNode.nextElementSibling;
-
-        if (nextNode == null) {
-          nextNode = startNode;
-        }
-
-        let textDecoration = "line-through";
-        if (allSelectionStruckThrough === true) {
-          textDecoration = "";
-        }
-
-        endNode.style.setProperty("text-decoration", textDecoration);
-        startNode.style.setProperty("text-decoration", textDecoration);
-
-        nextNode = startNode.nextElementSibling;
-
-        if (nextNode == null) {
-          nextNode = startNode;
-        }
-
-        while (startNode !== endNode && nextNode !== endNode){
-
-          nextNode.style.setProperty("text-decoration", textDecoration);
-
-          console.log(nextNode);
-          console.log(endNode);
-          console.log(nextNode.nextElementSibling);
-          
-          // check not end of paragraph
-          if (nextNode.nextElementSibling !== null) {
-            nextNode = nextNode.nextElementSibling;
-          } else {
-            nextNode = nextNode.parentElement.nextElementSibling.children[0];
-          } 
-        }
-      }
-    }
-
-    // detect the ranges to be cut
-    audioDataArray = createArrayOfGaps(transcript);
-
-    // skip the text that is struck thru
-    skipStrikeThrus(audioDataArray);
-    
-  });*/
+  });
 
   registerStrikeThrus();
 
