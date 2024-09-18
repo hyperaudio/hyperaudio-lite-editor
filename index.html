@@ -1238,6 +1238,98 @@ If you are creating an open source application under a license compatible with t
 
     audioDataArray = [];
     let transcript = document.querySelector("#hypertranscript");
+
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    let startNode = range.startContainer;
+    let endNode = range.endContainer;
+
+    // Function to find the parent paragraph
+    function findParentParagraph(node) {
+      while (node && node.nodeName !== 'P') {
+        node = node.parentNode;
+      }
+      return node;
+    }
+
+    // Find the parent paragraph of the start and end nodes
+    let startParagraph = findParentParagraph(startNode);
+    let endParagraph = findParentParagraph(endNode);
+
+    if (!startParagraph || !endParagraph) return;
+
+    // Function to apply strikethrough to a single element
+    function strikeoutElement(element) {
+      if (element.nodeType === Node.ELEMENT_NODE && !element.style.textDecoration.includes('line-through')) {
+        element.style.textDecoration = 'line-through';
+      }
+    }
+
+    // Function to find the specific child element containing a node
+    function findChildElementContainingNode(parent, node) {
+      for (let child of parent.children) {
+        if (child.contains(node)) {
+          return child;
+        }
+      }
+      return null;
+    }
+
+    // Check if the selection ends at the very beginning of the end paragraph
+    const isEndAtParagraphStart = endNode === endParagraph && range.endOffset === 0;
+
+    // Apply strikethrough to selected elements
+    let currentParagraph = startParagraph;
+    let inSelection = false;
+
+    while (currentParagraph) {
+      let startElement = currentParagraph === startParagraph ? findChildElementContainingNode(currentParagraph, startNode) : null;
+      let endElement = currentParagraph === endParagraph ? findChildElementContainingNode(currentParagraph, endNode) : null;
+
+      // Skip the last paragraph if the selection ends at its start
+      if (currentParagraph === endParagraph && isEndAtParagraphStart) {
+        break;
+      }
+
+      Array.from(currentParagraph.children).forEach(child => {
+        if (child === startElement || inSelection) {
+          inSelection = true;
+          strikeoutElement(child);
+        }
+
+        if (child === endElement) {
+          // Only strikeout the end element if it's not at the very start of the paragraph
+          if (!(currentParagraph === endParagraph && range.endOffset === 0)) {
+              strikeoutElement(child);
+          }
+          inSelection = false;
+          return; // Exit the forEach loop
+        }
+      });
+
+      if (currentParagraph === endParagraph) break;
+      currentParagraph = currentParagraph.nextElementSibling;
+      inSelection = true; // For paragraphs between start and end
+    }
+
+    // Clear the selection
+    selection.removeAllRanges();
+
+    // detect the ranges to be cut
+    audioDataArray = createArrayOfGaps(transcript);
+
+    // skip the text that is struck thru
+    skipStrikeThrus(audioDataArray);
+});
+
+
+
+  /*document.querySelector('#strikethrough').addEventListener('click', (e) => {
+
+    audioDataArray = [];
+    let transcript = document.querySelector("#hypertranscript");
     let selection = null;
 
     if (window.getSelection) {
@@ -1291,6 +1383,8 @@ If you are creating an open source application under a license compatible with t
 
         let allSelectionStruckThrough = true;
 
+        console.log(endNode);
+
         if (endNode.style.textDecoration !== "line-through" || startNode.style.textDecoration !== "line-through") {
           allSelectionStruckThrough = false;
         } 
@@ -1318,6 +1412,10 @@ If you are creating an open source application under a license compatible with t
         while (startNode !== endNode && nextNode !== endNode){
 
           nextNode.style.setProperty("text-decoration", textDecoration);
+
+          console.log(nextNode);
+          console.log(endNode);
+          console.log(nextNode.nextElementSibling);
           
           // check not end of paragraph
           if (nextNode.nextElementSibling !== null) {
@@ -1335,7 +1433,7 @@ If you are creating an open source application under a license compatible with t
     // skip the text that is struck thru
     skipStrikeThrus(audioDataArray);
     
-  });
+  });*/
 
   registerStrikeThrus();
 
