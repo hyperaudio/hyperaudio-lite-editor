@@ -72,7 +72,7 @@ dialog::backdrop {
   background-color: #ffffff; 
   overflow-y:scroll;
   position: absolute;
-  top: 0;
+  top: 70px;
   left: 400px;
   right: 0;
   bottom: 0;
@@ -81,7 +81,7 @@ dialog::backdrop {
 
 .hyperaudio-transcript {
   position: absolute; 
-  top: 40px; 
+  top: 10px; 
   bottom: 0px; 
   background-color: #ffffff; 
   padding-top: 48px; 

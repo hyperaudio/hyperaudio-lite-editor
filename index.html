@@ -77,6 +77,12 @@ If you are creating an open source application under a license compatible with t
     [contenteditable]:focus {
       outline: 0px solid transparent;
     }
+
+    .caption {
+      content-visibility:auto; 
+      contain-intrinsic-size: auto 300px;
+      height:300px;
+    }
     
   </style>
    <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
@@ -301,8 +307,11 @@ If you are creating an open source application under a license compatible with t
           <!--<label for="captions-modal" class="btn btn-outline gap-2" style="margin-right:4px">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
           </label>-->
-          <button id="caption-editor-btn" class="btn btn-outline gap-2" style="margin-right:4px">
+          <button id="caption-editor-btn" class="btn btn-square btn-outline" style="margin-right:4px">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
+          </button>
+          <button id="transcript-editor-btn" class="btn btn-square btn-outline" style="margin-right:4px" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
           </button>
           <input type="checkbox" id="captions-modal" class="modal-toggle" />
           <div class="modal" style="content-visibility: hidden;">
@@ -1032,13 +1041,24 @@ If you are creating an open source application under a license compatible with t
 
   /* ----------------------------------------------------------- */
 
-  let transcriptCache = document.querySelector('.transcript-holder').innerHTML;
+  let transcriptCache = null;
+  let captionCache = null;
 
   document.querySelector('#caption-editor-btn').addEventListener('click', (e) => {
     console.log("do caption thing here");
-    //document.querySelector('.transcript-holder').innerHTML = "";
+    //document.querySelector('.transcript-holder').innerHTML = "<center>Preparing captions...</center>";
     hyperaudioGenerateCaptionsFromTranscript();
     captionMode = true;
+    document.querySelector('#caption-editor-btn').disabled = true;
+    document.querySelector('#transcript-editor-btn').disabled = false;
+  });
+
+  document.querySelector('#transcript-editor-btn').addEventListener('click', (e) => {
+    console.log("do transcript thing here");
+    restoreTranscript();
+    captionMode = false;
+    document.querySelector('#caption-editor-btn').disabled = false;
+    document.querySelector('#transcript-editor-btn').disabled = true;
   });
 
 
@@ -1479,56 +1499,68 @@ If you are creating an open source application under a license compatible with t
   <script>
     window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
 
+    function restoreTranscript() {
+      document.querySelector('.transcript-holder').innerHTML = transcriptCache;
+      hyperaudio();
+    }
+
     function populateCaptionEditor(data) {
 
-      document.querySelector('.transcript-holder').innerHTML = "";
+
 
       /*let captionModal = document.querySelector('#caption-editor');
       captionModal.innerHTML = "";*/
 
       let holder = document.querySelector('.transcript-holder');
-
+      transcriptCache = holder.innerHTML;
       holder.innerHTML = "";
 
-      let newDiv = document.createElement('div');
+      if (captionCache === null ) {
+        let newDiv = document.createElement('div');
 
-      // Set the width of the new div
-      newDiv.style.width = '520px';
+        // Set the width of the new div
+        newDiv.style.width = '520px';
 
-      // Set an id for the new div
-      newDiv.id = 'captions-display';
+        // Set an id for the new div
+        newDiv.id = 'captions-display';
 
-      // Append the new div to the existing div
-      holder.appendChild(newDiv);
+        // Append the new div to the existing div
 
-      /*let captionModal = document.querySelector('#caption-template');
-      captionModal.innerHTML = "";*/
-    
-      // Initialize the DOM parser
-      let parser = new DOMParser();
-      let html = document.querySelector('#caption-template-holder').innerHTML;
+        holder.insertAdjacentElement('beforeEnd', newDiv);
 
-      // Parse the text
-      let template = parser.parseFromString(html, "text/html");
+        /*let captionModal = document.querySelector('#caption-template');
+        captionModal.innerHTML = "";*/
+      
+        // Initialize the DOM parser
+        let parser = new DOMParser();
+        let html = document.querySelector('#caption-template-holder').innerHTML;
 
-      data.forEach(cap => {
-        let line1 = cap.text.split('\n')[0];
-        let line2 = cap.text.split('\n')[1];
+        // Parse the text
+        let template = parser.parseFromString(html, "text/html");
 
-        if (line2 === undefined || typeof line2 === "undefined") {
-          line2 = "";
-        }
+        data.forEach(cap => {
+          let line1 = cap.text.split('\n')[0];
+          let line2 = cap.text.split('\n')[1];
 
-        let captionTempl = template.querySelector('#caption-template').cloneNode(true);
-        captionTempl.querySelector('.start').value = cap.start;
-        captionTempl.querySelector('.end').value = cap.stop;
-        captionTempl.querySelector('.line1').value = line1;
-        captionTempl.querySelector('.line2').value = line2;
-        //captionModal.insertAdjacentElement('beforeEnd', captionTempl);
+          if (line2 === undefined || typeof line2 === "undefined") {
+            line2 = "";
+          }
 
-        document.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
-      });
+          let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+          captionTempl.querySelector('.start').value = cap.start;
+          captionTempl.querySelector('.end').value = cap.stop;
+          captionTempl.querySelector('.line1').value = line1;
+          captionTempl.querySelector('.line2').value = line2;
+          //captionModal.insertAdjacentElement('beforeEnd', captionTempl);
 
+          document.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
+        });
+        captionCache = holder.innerHTML;
+      
+      } else {
+        holder.innerHTML = captionCache;
+      }
+      
       document.querySelector('#regenerate-btn').classList.add("btn-disabled");
     } 
 
