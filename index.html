@@ -89,6 +89,8 @@ If you are creating an open source application under a license compatible with t
 </head>
 <body data-theme="light">
 
+
+
    <!-- templates -->
 
    <template id="deepgram-modal-template">
@@ -337,6 +339,7 @@ If you are creating an open source application under a license compatible with t
     <div class="transcript-holder">
       <div id="hypertranscript" class="hyperaudio-transcript" contenteditable="true">
         <!-- example data -->
+        
         <article>
           <section>
            <p>
@@ -990,6 +993,23 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
+  <input type="checkbox" id="regenerate-captions-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box">
+      <label id="close-modal" for="regenerate-captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <div class="flex flex-col gap-4 w-full">
+        <h3 class="font-bold text-lg">Caption Regeneration </h3>
+        <p>Any changes you made to the captions will be lost.</p>
+        <p>Are you sure you want to regenerate the captions from the transcript?</p>
+      </div>
+      <div class="modal-action">
+        <label for="regenerate-captions-modal" class="btn btn-ghost">Cancel</label>
+        <label id="regenerate-captions" for="regenerate-captions-modal" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+  </div>
+
+
   <script src="js/hyperaudio-push-notification.js"></script>
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
@@ -1329,7 +1349,7 @@ If you are creating an open source application under a license compatible with t
     let sourceMedia = document.querySelector("#hyperplayer").src;
     let track = document.querySelector('#hyperplayer-vtt');
     let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-    populateCaptionEditor(generateCaptionsFromTranscript(hypertranscript, sourceMedia, track));
+    this.populateCaptionEditor(generateCaptionsFromTranscript(hypertranscript, sourceMedia, track));
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
@@ -1442,7 +1462,6 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
   </div>
-
  
 
   <script src="./js/hyperaudio-lite-editor-storage.js"></script>
@@ -1468,6 +1487,12 @@ If you are creating an open source application under a license compatible with t
     .addEventListener("click", function () {
       let filenameIndex = document.querySelector('#load-localstorage-filename').value;
       loadHyperTranscriptFromLocalStorage(filenameIndex);
+    });
+
+  document
+    .querySelector("#regenerate-captions")
+    .addEventListener("click", function () {
+      generateCaptionsFromCaptionEditor();
     });
 
   setFileSelectListeners();
@@ -1513,7 +1538,7 @@ If you are creating an open source application under a license compatible with t
 
       let holder = document.querySelector('.transcript-holder');
       transcriptCache = holder.innerHTML;
-      holder.innerHTML = "";
+      holder.innerHTML = '<div class="modal-action"><label id="regenerate-btn" for="regenerate-captions-modal" class="fixed bottom-8 right-8 btn btn-outline btn-primary" >Regenerate <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
 
       if (captionCache === null ) {
         let newDiv = document.createElement('div');
@@ -1555,7 +1580,9 @@ If you are creating an open source application under a license compatible with t
 
           document.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
         });
-        captionCache = holder.innerHTML;
+
+        //captionCache = holder.innerHTML;
+        captionCache = captureCaptions(holder);
       
       } else {
         holder.innerHTML = captionCache;
@@ -1563,6 +1590,49 @@ If you are creating an open source application under a license compatible with t
       
       document.querySelector('#regenerate-btn').classList.add("btn-disabled");
     } 
+
+    function captureCaptions(holder) {
+      // Get the form element
+      const form = holder;
+      
+      // Create a deep clone of the form
+      const formClone = form.cloneNode(true);
+      
+      // Update all input values in the clone to match current values
+      const inputs = form.querySelectorAll('input, textarea, select');
+      const clonedInputs = formClone.querySelectorAll('input, textarea, select');
+      
+      inputs.forEach((input, index) => {
+          const clonedInput = clonedInputs[index];
+          
+          if (input.type === 'checkbox' || input.type === 'radio') {
+              clonedInput.checked = input.checked;
+              if (input.checked) {
+                  clonedInput.setAttribute('checked', 'checked');
+              } else {
+                  clonedInput.removeAttribute('checked');
+              }
+          } else if (input.tagName === 'SELECT') {
+              Array.from(input.options).forEach((option, optIndex) => {
+                  clonedInput.options[optIndex].selected = option.selected;
+                  if (option.selected) {
+                      clonedInput.options[optIndex].setAttribute('selected', 'selected');
+                  } else {
+                      clonedInput.options[optIndex].removeAttribute('selected');
+                  }
+              });
+          } else {
+              clonedInput.value = input.value;
+              clonedInput.setAttribute('value', input.value);
+          }
+      });
+      
+      // Get the HTML string
+      const formHTML = formClone.innerHTML;
+      
+      // Log or use the HTML string as needed
+      return formHTML;
+    }
 
     function populateCaptionEditorFromVtt(vtt) {
       const data = [];
