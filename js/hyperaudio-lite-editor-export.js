@@ -7,11 +7,14 @@ class ExportJson extends HTMLElement {
   exportJson() {
     let hypertranscript = document.getElementById('hypertranscript');
     console.log(hypertranscript);
-    // transform in json object with dom elements
-    let jsonData = htmlToJson(hypertranscript);
-    jsonData.url = document.querySelector("#hyperplayer").src;
-    console.log(jsonData);
-    downloadJson(jsonData);
+    if (hypertranscript === null) {
+      alert("Currently you can only export JSON from the transcript view.");
+    } else {
+      // transform in json object with dom elements
+      let jsonData = htmlToJson(hypertranscript);
+      jsonData.url = document.querySelector("#hyperplayer").src;
+      downloadJson(jsonData);
+    }
   }
 
   connectedCallback() {
@@ -43,15 +46,18 @@ class ImportJson extends HTMLElement {
         // transform json object in html
         let hypertranscript = document.getElementById('hypertranscript');
 
-        /* simple innerHTML
-        hypertranscript.innerHTML = jsonData.data;
-        */
-        hypertranscript.innerHTML = jsonToHtml(jsonData);
-        // set video url
-        document.querySelector("#hyperplayer").src = jsonData.url;
+        if (hypertranscript === null) {
+          alert("Currently you can only import JSON from the Transcript View.");
+        } else {
+          hypertranscript.innerHTML = jsonToHtml(jsonData);
+          // set video url
+          document.querySelector("#hyperplayer").src = jsonData.url;
+        }
       });
-      reader.readAsText(file);
-      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+      if (hypertranscript !== null) {
+        reader.readAsText(file);
+        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+      }
     });
     fileInput.click();
   }
