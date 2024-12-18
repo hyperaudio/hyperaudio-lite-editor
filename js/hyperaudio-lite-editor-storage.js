@@ -78,7 +78,7 @@ function renderTranscript(
       updateCaptionsFromTranscript = true;
     }
 
-    console.log(plainVtt);
+    //console.log(plainVtt);
 
     captionCache = null;
     

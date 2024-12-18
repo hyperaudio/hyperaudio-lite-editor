@@ -6,7 +6,7 @@ class ExportJson extends HTMLElement {
 
   exportJson() {
     let hypertranscript = document.getElementById('hypertranscript');
-    console.log(hypertranscript);
+
     if (hypertranscript === null) {
       alert("Currently you can only export JSON from the transcript view.");
     } else {
