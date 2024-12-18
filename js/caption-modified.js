@@ -20,8 +20,20 @@ var caption = function () {
     return timecode.substring(0,8) + "," + timecode.substring(9,12);
   }
 
-  cap.init = function (transcriptId, playerId, maxLength, minLength, label, srclang) {
+  cap.init = function (transcriptId, playerId, maxLength, minLength, label, srclang, parent) {
+
     var transcript = document.getElementById(transcriptId);
+
+    console.log(parent);
+    
+    if (parent) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(parent.innerHTML, 'text/html');
+      console.log(doc);
+      transcript = doc.getElementById(transcriptId);
+      console.log(transcript);
+    }
+    
     var words = transcript.querySelectorAll('[data-m]');
     var data = {};
     data.segments = [];
