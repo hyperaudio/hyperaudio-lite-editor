@@ -20,8 +20,16 @@ var caption = function () {
     return timecode.substring(0,8) + "," + timecode.substring(9,12);
   }
 
-  cap.init = function (transcriptId, playerId, maxLength, minLength, label, srclang) {
+  cap.init = function (transcriptId, playerId, maxLength, minLength, label, srclang, parent) {
+
     var transcript = document.getElementById(transcriptId);
+    
+    if (parent) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(parent.innerHTML, 'text/html');
+      transcript = doc.getElementById(transcriptId);
+    }
+    
     var words = transcript.querySelectorAll('[data-m]');
     var data = {};
     data.segments = [];
@@ -73,8 +81,6 @@ var caption = function () {
       if (word.classList.contains('speaker')) {
         // checking that this is not a new segment AND a new empty segment wasn't already created
         if (thisSegmentMeta !== null && thisSegmentMeta.start !== null) {
-          //console.log("pushing...");
-          //console.log(thisSegmentMeta);
           data.segments.push(thisSegmentMeta); // push the previous segment because it's a new speaker
           thisSegmentMeta = new segmentMeta('', null, 0, 0, 0);
         }
@@ -102,9 +108,6 @@ var caption = function () {
             thisDuration = 5; // sensible default for the last word
           }
         }
-
-        //console.log("thisStart = " + thisStart);
-        //console.log("thisDuration = " + thisDuration);
 
         var thisText = word.innerText;
 
@@ -308,15 +311,15 @@ var caption = function () {
         var track = document.getElementById(playerId+'-vtt');
         track.kind = "captions";
 
-        console.log("label = "+label);
+        //console.log("label = "+label);
 
         if (label !== undefined) {
-          console.log("setting label as "+label);
+          //console.log("setting label as "+label);
           track.label = label;
         }
 
         if (srclang !== undefined) {
-          console.log("setting srclang as "+srclang);
+          //console.log("setting srclang as "+srclang);
           track.srclang = srclang;
         }
         //track.label = "English";

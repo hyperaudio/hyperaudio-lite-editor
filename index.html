@@ -1,12 +1,12 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.4.5 -->
+<!--  Hyperaudio Lite Editor - Version 0.4.6 -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
 Commercial license
 ------------------
-If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact info@hyperaud.io
+If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact mark@hyperaud.io
 
 Open source license
 -------------------
@@ -77,11 +77,19 @@ If you are creating an open source application under a license compatible with t
     [contenteditable]:focus {
       outline: 0px solid transparent;
     }
+
+    .caption {
+      content-visibility:auto; 
+      contain-intrinsic-size: auto 300px;
+      height:300px;
+    }
     
   </style>
    <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
 </head>
 <body data-theme="light">
+
+
 
    <!-- templates -->
 
@@ -175,7 +183,7 @@ If you are creating an open source application under a license compatible with t
         <button class="btn btn-outline btn-xs" onclick="mergeCaption(this)">merge <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-down-from-line"><line x1="12" x2="12" y1="21" y2="7"></line><polyline points="6 15 12 21 18 15"></polyline><path d="M19 3H5"></path></svg></button>
         <button class="btn btn-outline btn-xs" onclick="deleteCaption(this)">delete <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg></button>
       </div>
-      <div class="divider"></div> 
+      <div class="divider"></div>
     </div>
   </template>
 
@@ -298,11 +306,17 @@ If you are creating an open source application under a license compatible with t
           </div>
         </div>
         <div class="navbar-end" style="padding-right: 8px;">
-          <label for="captions-modal" class="btn btn-outline gap-2" style="margin-right:4px">
+          <!--<label for="captions-modal" class="btn btn-outline gap-2" style="margin-right:4px">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
-          </label>
+          </label>-->
+          <button id="caption-editor-btn" class="btn btn-square btn-outline" style="margin-right:4px">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
+          </button>
+          <button id="transcript-editor-btn" class="btn btn-square btn-outline" style="margin-right:4px" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          </button>
           <input type="checkbox" id="captions-modal" class="modal-toggle" />
-          <div class="modal">
+          <div class="modal" style="content-visibility: hidden;">
             <div class="modal-box relative">
               <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
               <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
@@ -325,6 +339,7 @@ If you are creating an open source application under a license compatible with t
     <div class="transcript-holder">
       <div id="hypertranscript" class="hyperaudio-transcript" contenteditable="true">
         <!-- example data -->
+        
         <article>
           <section>
             <p>
@@ -533,13 +548,32 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
+  <input type="checkbox" id="regenerate-captions-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box">
+      <label id="close-modal" for="regenerate-captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <div class="flex flex-col gap-4 w-full">
+        <h3 class="font-bold text-lg">Caption Regeneration </h3>
+        <p>Any changes you made to the captions will be lost.</p>
+        <p>Are you sure you want to regenerate the captions from the transcript?</p>
+      </div>
+      <div class="modal-action">
+        <label for="regenerate-captions-modal" class="btn btn-ghost">Cancel</label>
+        <label id="regenerate-captions" for="regenerate-captions-modal" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+  </div>
+
+
   <script src="js/hyperaudio-push-notification.js"></script>
   <script src="js/hyperaudio-lite.js"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
-  <script src="js/caption.js"></script>
+  <script src="js/caption-modified.js"></script>
   <script>
 
   let updateCaptionsFromTranscript = true;
+  let captionMode = false; // used to detect whether we need to sanitise amongst other things
+  let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
 
   let alertOkBtn = document.querySelector('#captionsource-alert-ok');
 
@@ -580,6 +614,35 @@ If you are creating an open source application under a license compatible with t
   .catch(function(err) {
       console.log('Failed to fetch page: ', err);
   });
+
+  /* ----------------------------------------------------------- */
+
+  let transcriptCache = null;
+  let captionCache = null;
+
+  document.querySelector('#caption-editor-btn').addEventListener('click', (e) => {
+    let holder = document.querySelector('.transcript-holder');
+    transcriptCache = holder.cloneNode(true);
+    captionMode = true;
+    hyperaudioGenerateCaptionsFromTranscript();
+    document.querySelector('#caption-editor-btn').disabled = true;
+    document.querySelector('#transcript-editor-btn').disabled = false;
+  });
+
+  document.querySelector('#transcript-editor-btn').addEventListener('click', (e) => {
+    restoreTranscript();
+    captionMode = false;
+    if (transcriptRequiresInit === true) {
+      hyperaudio();
+      transcriptRequiresInit = false;
+    }
+    
+    document.querySelector('#caption-editor-btn').disabled = false;
+    document.querySelector('#transcript-editor-btn').disabled = true;
+  });
+
+
+  /* ----------------------------------------------------------- */
 
   function hyperaudio() {
     const minimizedMode = false;
@@ -722,7 +785,7 @@ If you are creating an open source application under a license compatible with t
           generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
           const cap2 = caption();
           let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-          populateCaptionEditor(subs.data);
+          //populateCaptionEditor(subs.data);
         }
 
         if (isCaptionEditorFocused === true && updateCaptionsFromTranscript === false) {
@@ -734,9 +797,10 @@ If you are creating an open source application under a license compatible with t
       }
 
       function resetTimer() {
-        //console.log("reset sanitisation timer");
         clearTimeout(time);
-        time = setTimeout(sanitise, 1000);
+        if (captionMode !== true) {
+          time = setTimeout(sanitise, 1000);
+        }
       }
 
       //longpress to set playhead on mobile
@@ -838,16 +902,40 @@ If you are creating an open source application under a license compatible with t
   hyperaudio();
 
   function hyperaudioGenerateCaptionsFromTranscript() {
-    let rootnode = document.querySelector("#hypertranscript");
     let sourceMedia = document.querySelector("#hyperplayer").src;
     let track = document.querySelector('#hyperplayer-vtt');
-    let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-    populateCaptionEditor(generateCaptionsFromTranscript(hypertranscript, sourceMedia, track));
+
+    this.populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
+    
+
+    /*if (document.querySelector("#hypertranscript") !== null) {
+      const cap1 = caption();
+      let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+
+      document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
+      document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
+
+      track.kind = "captions";
+      //track.label = "English";
+      //track.srclang = "en";
+      track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
+
+    } else {
+      generateCaptionsFromCaptionEditor();
+    }*/
+
+
     const cap1 = caption();
-    let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+    let subs = null;
+    
+    if (captionMode === true) {
+      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21', null, null, transcriptCache); 
+    } else {
+      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21');
+    }
 
     document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
     document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
@@ -856,6 +944,8 @@ If you are creating an open source application under a license compatible with t
     //track.label = "English";
     //track.srclang = "en";
     track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
+
+
 
     document
       .querySelector("#download-hypertranscript")
@@ -870,32 +960,35 @@ If you are creating an open source application under a license compatible with t
           )
       );
 
-    // check to see if it's an mp3, in which case we don't display captions
-    if (document.querySelector('#hyperplayer').src.split('.').pop() === "mp3") {
+    // check to see if it's an mp3 or m4a, in which case we don't display captions
+    let extension = document.querySelector('#hyperplayer').src.split('.').pop();
+    if (extension === "mp3" || extension === "m4a") {
       document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
     } else {
       document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
     }
-
     return subs.data;
   }
 
   function updateInteractiveTranscriptDownloadLink() {
 
-    let isAudio = document.querySelector('#hyperplayer').src.split('.').pop() === "mp3";
+    // m4a ?
+    //let isAudio = document.querySelector('#hyperplayer').src.split('.').pop() === "mp3";
+
     document
-      .querySelector("#download-hypertranscript")
-      .setAttribute(
-        "href",
-        "data:text/html," +
-          encodeURIComponent(
-            hyperaudioTemplate
-              .replace("{hypertranscript}", document.querySelector("#hypertranscript").innerHTML.replace(/ class=".*?"/g, ''))
-              // check to see if it's an mp3, in which case we don't display captions
-              .replace("{sourcemedia}", document.querySelector("#hyperplayer").src) 
-              .replace("{sourcevtt}", isAudio ? "" : document.querySelector("#hyperplayer-vtt").src)
-          )
-      );
+    .querySelector("#download-hypertranscript")
+    .setAttribute(
+      "href",
+      "data:text/html," +
+        encodeURIComponent(
+          hyperaudioTemplate
+            .replace("{hypertranscript}", getTranscriptData())
+            // check to see if it's an mp3, in which case we don't display captions
+            .replace("{sourcemedia}", document.querySelector("#hyperplayer").src) 
+            .replace("{sourcevtt}", document.querySelector("#hyperplayer-vtt").src)
+            //.replace("{sourcevtt}", isAudio ? "" : document.querySelector("#hyperplayer-vtt").src)
+        )
+    );
   }
 
   function hasParent(element, parent) {
@@ -955,7 +1048,6 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
   </div>
-
  
 
   <script src="./js/hyperaudio-lite-editor-storage.js"></script>
@@ -983,6 +1075,13 @@ If you are creating an open source application under a license compatible with t
       loadHyperTranscriptFromLocalStorage(filenameIndex);
     });
 
+  document
+    .querySelector("#regenerate-captions")
+    .addEventListener("click", function () {
+      captionCache = null;
+      hyperaudioGenerateCaptionsFromTranscript();
+    });
+
   setFileSelectListeners();
 
   </script>
@@ -1008,40 +1107,133 @@ If you are creating an open source application under a license compatible with t
       padding: 4px;
     }
 
+    #captions-display {
+      width: 520px;
+      padding-top: 40px;
+    }
+
   </style>
   <script>
     window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
 
+    function restoreTranscript() {
+      document.querySelector('.transcript-holder').innerHTML = "";
+      let hypertranscript = transcriptCache.querySelector("#hypertranscript");
+      document.querySelector('.transcript-holder').appendChild(hypertranscript);
+      hyperaudio();
+    }
+
     function populateCaptionEditor(data) {
 
-      let captionModal = document.querySelector('#caption-editor');
-      captionModal.innerHTML = "";
-    
-      // Initialize the DOM parser
-      let parser = new DOMParser();
-      let html = document.querySelector('#caption-template-holder').innerHTML;
+      let holder = null;
 
-      // Parse the text
-      let template = parser.parseFromString(html, "text/html");
+      // only actually inject the caption HTML if we are in "captionMode"
+      if (captionMode === true) {
+        holder = document.querySelector('.transcript-holder');
+      } else {
+        holder = document.createElement('div');
+        holder.className = 'transcript-holder';
+      }
+      
 
-      data.forEach(cap => {
-        let line1 = cap.text.split('\n')[0];
-        let line2 = cap.text.split('\n')[1];
+      holder.innerHTML = '<div class="modal-action"><label id="regenerate-btn" for="regenerate-captions-modal" class="fixed bottom-8 right-8 btn btn-outline btn-primary" >Regenerate <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
 
-        if (line2 === undefined || typeof line2 === "undefined") {
-          line2 = "";
-        }
+      if (captionCache === null ) {
+        let newDiv = document.createElement('div');
 
-        let captionTempl = template.querySelector('#caption-template').cloneNode(true);
-        captionTempl.querySelector('.start').value = cap.start;
-        captionTempl.querySelector('.end').value = cap.stop;
-        captionTempl.querySelector('.line1').value = line1;
-        captionTempl.querySelector('.line2').value = line2;
-        captionModal.insertAdjacentElement('beforeEnd', captionTempl);
-      });
-        
-      document.querySelector('#regenerate-btn').classList.add("btn-disabled");
+        // Set an id for the new div
+        newDiv.id = 'captions-display';
+
+        // Append the new div to the existing div
+
+        holder.insertAdjacentElement('beforeEnd', newDiv);
+      
+        // Initialize the DOM parser
+        let parser = new DOMParser();
+        let html = document.querySelector('#caption-template-holder').innerHTML;
+
+        // Parse the text
+        let template = parser.parseFromString(html, "text/html");
+
+        let index = 0;
+        data.forEach(cap => {
+          let line1 = cap.text.split('\n')[0];
+          let line2 = cap.text.split('\n')[1];
+
+          if (line2 === undefined || typeof line2 === "undefined") {
+            line2 = "";
+          }
+
+          let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+          captionTempl.id = "caption-"+index;
+          index++;
+          captionTempl.querySelector('.start').value = cap.start;
+          captionTempl.querySelector('.end').value = cap.stop;
+          captionTempl.querySelector('.line1').value = line1;
+          captionTempl.querySelector('.line2').value = line2;
+
+          holder.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
+          //document.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
+        });
+
+        captionCache = captureCaptions(holder);
+      
+      } else {
+        holder.innerHTML = captionCache;
+      }
+
+      const captionsDisplay = document.getElementById('captions-display');
+      if (captionsDisplay !== null) {
+        captionsDisplay.addEventListener('change', (e) => {
+          captionCache = captureCaptions(holder);
+          generateCaptionsFromCaptionEditor();
+        });
+      }
+      
     } 
+
+    function captureCaptions(holder) {
+      // Get the form element
+      const form = holder;
+      
+      // Create a deep clone of the form
+      const formClone = form.cloneNode(true);
+      
+      // Update all input values in the clone to match current values
+      const inputs = form.querySelectorAll('input, textarea, select');
+      const clonedInputs = formClone.querySelectorAll('input, textarea, select');
+      
+      inputs.forEach((input, index) => {
+          const clonedInput = clonedInputs[index];
+          
+          if (input.type === 'checkbox' || input.type === 'radio') {
+              clonedInput.checked = input.checked;
+              if (input.checked) {
+                  clonedInput.setAttribute('checked', 'checked');
+              } else {
+                  clonedInput.removeAttribute('checked');
+              }
+          } else if (input.tagName === 'SELECT') {
+              Array.from(input.options).forEach((option, optIndex) => {
+                  clonedInput.options[optIndex].selected = option.selected;
+                  if (option.selected) {
+                      clonedInput.options[optIndex].setAttribute('selected', 'selected');
+                  } else {
+                      clonedInput.options[optIndex].removeAttribute('selected');
+                  }
+              });
+          } else {
+              clonedInput.value = input.value;
+              clonedInput.setAttribute('value', input.value);
+          }
+      });
+      
+      // Get the HTML string
+      const formHTML = formClone.innerHTML;
+      
+      // Log or use the HTML string as needed
+      return formHTML;
+    }
 
     function populateCaptionEditorFromVtt(vtt) {
       const data = [];
@@ -1074,7 +1266,6 @@ If you are creating an open source application under a license compatible with t
 
     const cap2 = caption();
     let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-    populateCaptionEditor(subs.data);
     
     const countSeconds = (str) => {
       const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
@@ -1085,9 +1276,6 @@ If you are creating an open source application under a license compatible with t
     };
 
     function playClip(elem) {
-
-      // this is a little brittle
-      // better to check each parent until you find the elements required
 
       let startTime = countSeconds(elem.parentElement.parentElement.querySelector('.start').value);
       let endTime = countSeconds(elem.parentElement.parentElement.querySelector('.end').value);
@@ -1178,20 +1366,36 @@ If you are creating an open source application under a license compatible with t
       track.src = "data:text/vtt,"+encodeURIComponent(vttCaptions);
 
       document
-        .querySelector("#download-hypertranscript")
-        .setAttribute(
-          "href",
-          "data:text/html," +
-            encodeURIComponent(
-              hyperaudioTemplate
-                .replace("{hypertranscript}", document.querySelector('#hypertranscript').innerHTML.replace(/ class=".*?"/g, ''))
-                .replace("{sourcemedia}", document.querySelector("#hyperplayer").src)
-                .replace("{sourcevtt}", track.src)
-            )
-        );
+      .querySelector("#download-hypertranscript")
+      .setAttribute(
+        "href",
+        "data:text/html," +
+          encodeURIComponent(
+            hyperaudioTemplate
+              .replace("{hypertranscript}", getTranscriptData())
+              .replace("{sourcemedia}", document.querySelector("#hyperplayer").src)
+              .replace("{sourcevtt}", track.src)
+          )
+      );
 
       document.querySelector('#download-vtt').setAttribute('href', "data:text/vtt,"+encodeURIComponent(vttCaptions));
       document.querySelector('#download-srt').setAttribute('href', "data:text/srt,"+encodeURIComponent(srtCaptions));
+    }
+
+    function getTranscriptData() {
+      let transcriptElement = document.querySelector('#hypertranscript');
+
+      let transcriptData = null;
+
+      if (transcriptElement !== null) {
+        transcriptData = transcriptElement.innerHTML;
+      } else {
+        const parser = new DOMParser();
+        transcriptData = parser.parseFromString(transcriptCache.innerHTML, 'text/html').querySelector('#hypertranscript').innerHTML;
+      }
+
+      return transcriptData.replace(/ class=".*?"/g, '');
+
     }
 
     function convertTimecodeToSrt(timecode) {
@@ -1199,7 +1403,6 @@ If you are creating an open source application under a license compatible with t
       return timecode.substring(0,8) + "," + timecode.substring(9,12);
     }
 
-    document.querySelector('#regenerate-btn').addEventListener('click', hyperaudioGenerateCaptionsFromTranscript);
 
   </script>
   <!-- end of caption editor additions -->
@@ -1234,6 +1437,9 @@ If you are creating an open source application under a license compatible with t
 
     audioDataArray = [];
     let transcript = document.querySelector("#hypertranscript");
+    if (transcript == null) { // must be cached
+      transcript = transcriptCache.innerHTML;
+    }
 
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
@@ -1328,7 +1534,12 @@ If you are creating an open source application under a license compatible with t
     audioDataArray = [];
 
     // detect the ranges to be cut
-    audioDataArray = createArrayOfGaps(document.querySelector("#hypertranscript"));
+
+    let transcript = document.querySelector("#hypertranscript");
+    if (transcript == null) { // must be cached
+      transcript = transcriptCache.querySelector("#hypertranscript");
+    }
+    audioDataArray = createArrayOfGaps(transcript);
 
     // skip the text that is struck thru
     skipStrikeThrus(audioDataArray);
@@ -1380,7 +1591,7 @@ If you are creating an open source application under a license compatible with t
   function skipStrikeThrus(audioDataArray) {
     if (typeof audioDataArray !== "undefined") {
       let myPlayer = window.hyperaudioInstance.player;
-      console.dir(audioDataArray);
+      //console.dir(audioDataArray);
 
       let animationFrameId;
 
@@ -1450,7 +1661,6 @@ If you are creating an open source application under a license compatible with t
   // SVGs
 
   const transcribingSvg = "data:image/svg+xml,%3Csvg width='45' height='45' viewBox='0 0 45 45' xmlns='http://www.w3.org/2000/svg' stroke='%23000'%3E%3Cg fill='none' fill-rule='evenodd' transform='translate(1 1)' stroke-width='2'%3E%3Ccircle cx='22' cy='22' r='6' stroke-opacity='0'%3E%3Canimate attributeName='r' begin='1.5s' dur='3s' values='6;22' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-opacity' begin='1.5s' dur='3s' values='1;0' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-width' begin='1.5s' dur='3s' values='2;0' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3Ccircle cx='22' cy='22' r='6' stroke-opacity='0'%3E%3Canimate attributeName='r' begin='3s' dur='3s' values='6;22' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-opacity' begin='3s' dur='3s' values='1;0' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-width' begin='3s' dur='3s' values='2;0' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3Ccircle cx='22' cy='22' r='8'%3E%3Canimate attributeName='r' begin='0s' dur='1.5s' values='6;1;2;3;4;5;6' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3C/g%3E%3C/svg%3E";
-
   const errorSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='256' height='256' viewBox='0 0 256 256' xml:space='preserve'%3E%3Cdefs%3E%3C/defs%3E%3Cg style='stroke: none; stroke-width: 0; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: none; fill-rule: nonzero; opacity: 1;' transform='translate(1.4065934065934016 1.4065934065934016) scale(2.81 2.81)' %3E%3Cpath d='M 85.429 85.078 H 4.571 c -1.832 0 -3.471 -0.947 -4.387 -2.533 c -0.916 -1.586 -0.916 -3.479 0 -5.065 L 40.613 7.455 C 41.529 5.869 43.169 4.922 45 4.922 c 0 0 0 0 0 0 c 1.832 0 3.471 0.947 4.386 2.533 l 40.429 70.025 c 0.916 1.586 0.916 3.479 0.001 5.065 C 88.901 84.131 87.261 85.078 85.429 85.078 z M 45 7.922 c -0.747 0 -1.416 0.386 -1.79 1.033 L 2.782 78.979 c -0.373 0.646 -0.373 1.419 0 2.065 c 0.374 0.647 1.042 1.033 1.789 1.033 h 80.858 c 0.747 0 1.416 -0.387 1.789 -1.033 s 0.373 -1.419 0 -2.065 L 46.789 8.955 C 46.416 8.308 45.747 7.922 45 7.922 L 45 7.922 z M 45 75.325 c -4.105 0 -7.446 -3.34 -7.446 -7.445 s 3.34 -7.445 7.446 -7.445 s 7.445 3.34 7.445 7.445 S 49.106 75.325 45 75.325 z M 45 63.435 c -2.451 0 -4.446 1.994 -4.446 4.445 s 1.995 4.445 4.446 4.445 s 4.445 -1.994 4.445 -4.445 S 47.451 63.435 45 63.435 z M 45 57.146 c -3.794 0 -6.882 -3.087 -6.882 -6.882 V 34.121 c 0 -3.794 3.087 -6.882 6.882 -6.882 c 3.794 0 6.881 3.087 6.881 6.882 v 16.144 C 51.881 54.06 48.794 57.146 45 57.146 z M 45 30.239 c -2.141 0 -3.882 1.741 -3.882 3.882 v 16.144 c 0 2.141 1.741 3.882 3.882 3.882 c 2.14 0 3.881 -1.741 3.881 -3.882 V 34.121 C 48.881 31.98 47.14 30.239 45 30.239 z' style='stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;' transform=' matrix(1 0 0 1 0 0) ' stroke-linecap='round' /%3E%3C/g%3E%3C/svg%3E";
 </script>
 

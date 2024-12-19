@@ -31,9 +31,21 @@ function renderTranscript(
   key,
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
-  vttId = 'hyperplayer-vtt'
+  vttId = 'hyperplayer-vtt',
+  hypertranscriptHolder = '.transcript-holder',
 ) {
-  document.getElementById(hypertranscriptDomId).innerHTML = hypertranscriptstorage['hypertranscript'];
+  let hypertranscriptElement = document.getElementById(hypertranscriptDomId);
+ 
+  if (hypertranscriptElement) {
+    hypertranscriptElement.innerHTML = hypertranscriptstorage['hypertranscript'];
+  } else {
+    transcriptCache.innerHTML = "";
+    //caption page active, put it in the cache
+    transcriptCache.innerHTML = hypertranscriptstorage['hypertranscript'];
+
+    hypertranscriptElement = transcriptCache;
+    document.querySelectorAll(hypertranscriptHolder)[0].innerHTML = hypertranscriptElement.innerHTML;
+  }
 
   // check to see if file is local
   if (hypertranscriptstorage['video'].startsWith("http") === true) { 
@@ -65,18 +77,34 @@ function renderTranscript(
     } else {
       updateCaptionsFromTranscript = true;
     }
+
+    //console.log(plainVtt);
+
+    captionCache = null;
     
     populateCaptionEditorFromVtt(plainVtt);
   }
 
-  let hypertranscript = document.querySelector("#hypertranscript").innerHTML.replace(/ class=".*?"/g, '');
+  let hypertranscript = "";
+  if (hypertranscriptElement && document.querySelector("#hypertranscript")) {
+    hypertranscript = document.querySelector("#hypertranscript").innerHTML.replace(/ class=".*?"/g, '');
+  } else {
+    //grab it from the cache
+    hypertranscript = transcriptCache.innerHTML.replace(/ class=".*?"/g, '');
+  }
+
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
 
   const itDownloadEvent = new CustomEvent('hyperaudioTranscriptLoaded');
   document.dispatchEvent(itDownloadEvent);
   
   //maybe better called using hyperaudioInit event?
-  hyperaudio();
+  if (captionMode !== true) {
+    hyperaudio();
+  } else {
+    transcriptRequiresInit = true;
+  }
+  
 }
 
 function getLocalStorageSaveFilename(url){
@@ -206,7 +234,16 @@ function saveHyperTranscriptToLocalStorage(
   vttId = 'hyperplayer-vtt',
   storage = window.localStorage
 ) {
-  let hypertranscript = document.getElementById(hypertranscriptDomId).innerHTML;
+  let hypertranscriptElement = document.getElementById(hypertranscriptDomId);
+  let hypertranscript = "";
+  if (hypertranscriptElement) {
+    hypertranscript = hypertranscriptElement.innerHTML;
+  } else {
+    //must be in the cache
+    hypertranscript = transcriptCache.innerHTML;
+  }
+
+
   let video = document.getElementById(videoDomId).src;
 
   // if media url begins with blob it means it's locally cached only for the session
@@ -245,7 +282,18 @@ function saveHyperTranscriptToLocalStorage(
   let meta = {"updateCaptionsFromTranscript": updateCaptionsFromTranscript};
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary, topics, captions, meta);
 
-  storage.setItem(filename+fileExtension, JSON.stringify(hypertranscriptstorage));
+
+  try {
+    storage.setItem(filename + fileExtension, JSON.stringify(hypertranscriptstorage));
+  } catch (error) {
+    if (error.name === 'QuotaExceededError') {
+        console.error('Storage quota exceeded. Unable to save transcript:', error.message);
+        // You could add user notification here
+        alert('Local Storage full - please clear some space to save new transcripts');
+    } else {
+        console.error('Error saving transcript:', error);
+    }
+  }
 }
 
 function loadLocalStorageOptions(storage = window.localStorage) {
