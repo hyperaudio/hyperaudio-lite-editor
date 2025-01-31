@@ -16,8 +16,6 @@ Export your transcript as text, interactive transcript, captions and subtitles.
 
 [Demo (now with localStorage and installable as a Progressive Web App)](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html)
 
-(To obtain a token and 200 free hours, [sign up to Deepgram here](https://console.deepgram.com/signup).)
-
 [<img width="1130" alt="Screen capture of Hyperaudio Lite Editor" src="https://user-images.githubusercontent.com/208756/232547062-c118f610-8f22-4273-899a-f089604ac479.png">](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html)
 
 
