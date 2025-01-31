@@ -36,11 +36,15 @@ Created as a Progressive Web App, you can install on your desktop or mobile home
 
 ### Licensing
 
-`Hyperaudio Lite Editor`'s source code is provided under a **dual license model**.
+`Hyperaudio Lite Editor`'s source code is provided under a **triple license model**.
 
 #### Open source license
 
 If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use `Hyperaudio Lite Editor` for free under the terms of the [AGPL-3.0](./LICENSE).
+
+#### Non-commercial use
+
+If you are a non-commerical / not-for-profit entity or organisation and wish to to use this software for non-commercial use you may use `Hyperaudio Lite Editor` for free under the terms of the [MIT License](/.LICENSE-MIT).
 
 #### Commercial license
 
