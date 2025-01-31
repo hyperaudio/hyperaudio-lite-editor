@@ -42,8 +42,12 @@ If you are creating an open source application under a license compatible with t
 
 #### Non-commercial use
 
-If you are a non-commerical / not-for-profit entity or organisation and wish to to use this software for non-commercial use you may use `Hyperaudio Lite Editor` for free under the terms of the [MIT License](/.LICENSE-MIT).
+If you are a non-commerical / not-for-profit entity or organisation and wish to to use this software for non-commercial please contact [mark@hyperaud.io](mailto:mark@hyperaud.io) to use `Hyperaudio Lite Editor` for free under the terms of the [MIT License](/.LICENSE-MIT)  
 
 #### Commercial license
 
 If you'd like to use `Hyperaudio Lite Editor` to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a `Hyperaudio Lite Editor` Commercial License please contact [mark@hyperaud.io](mailto:mark@hyperaud.io).
+
+### Support
+
+Please support The Hyperaudio Project by donating to our [Patreon account](https://patreon.com/hyperaudio). 
