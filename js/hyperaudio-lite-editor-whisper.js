@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 0.0.5 (wp patch) */
+/*! Version 0.0.6 (caption editor patch) */
 
 class WhisperService extends HTMLElement {
 
@@ -47,12 +47,13 @@ customElements.define('client-whisper-service', WhisperService);
 
 function loadWhisperClient(modal, workerBaseUrl) {
 
+  console.log("loading whisper client");
+
   const fileUploadBtn = document.getElementById("file-input");
   const formSubmitBtn = document.getElementById("form-submit-btn");
   const modelNameSelectionInput = document.getElementById("model-name-input");
   const videoPlayer = document.getElementById("hyperplayer");
-  const resultsContainer = document.getElementById("hypertranscript");
-  const loadingMessageContainer = document.getElementById("hypertranscript");
+  
 
   if (workerBaseUrl === undefined || workerBaseUrl === null) {
     workerBaseUrl = "./";
@@ -113,6 +114,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
       }
     });
     
+    const resultsContainer = document.getElementById("hypertranscript");
     resultsContainer.innerHTML = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
 
     const initEvent = new CustomEvent('hyperaudioInit');
@@ -138,6 +140,11 @@ function loadWhisperClient(modal, workerBaseUrl) {
     if (document.querySelector('#transcribe-dialog') !== null){
       document.querySelector('#transcribe-dialog').close();
     }
+
+    const loadingMessageContainer = document.getElementById("hypertranscript");
+
+    console.log("show spinner");
+    console.log(loadingMessageContainer);
 
     loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Transcribing.... </center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
   }
