@@ -900,7 +900,8 @@ If you are creating an open source application under a license compatible with t
     let sourceMedia = document.querySelector("#hyperplayer").src;
     let track = document.querySelector('#hyperplayer-vtt');
 
-    this.populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
+    console.log("hyperaudioGenerateCaptionsFromTranscript()");
+    populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
