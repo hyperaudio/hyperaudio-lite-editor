@@ -122,7 +122,7 @@ If you are creating an open source application under a license compatible with t
   
       </div>
       <div class="modal-action">
-        <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary">TRANSCRIBE</label>
+        <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary">NEW</label>
       </div>
     </form>
   </template>
@@ -260,6 +260,14 @@ If you are creating an open source application under a license compatible with t
             <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
               <li class="menu-title">
                 <span>
+                  Upload
+                </span>
+              </li>
+              <li><a id="upload-transcribe-btn">Upload & Transcribe</a></li>
+              <hr
+              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
+              <li class="menu-title">
+                <span>
                   Download as
                 </span>
               </li>
@@ -322,7 +330,7 @@ If you are creating an open source application under a license compatible with t
             </div>
           </div>
           <label for="transcribe-modal" class="btn btn-primary gap-2">
-            <span id="transcribe-label">TRANSCRIBE</span>
+            <span id="transcribe-label">NEW</span>
             <span id="transcribe-label-mobile">NEW</span>
             <svg id="transcribe-logo" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
           </label>
@@ -1649,6 +1657,12 @@ If you are creating an open source application under a license compatible with t
       let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
       cutAudioApp.to_wav(wavBlob, fileName);
       
+    });
+
+    // Add event listener for the new Upload & Transcribe button
+    document.getElementById('upload-transcribe-btn').addEventListener('click', function() {
+      // Programmatically check the transcribe-modal checkbox to open the modal
+      document.getElementById('transcribe-modal').checked = true;
     });
 </script>
 
