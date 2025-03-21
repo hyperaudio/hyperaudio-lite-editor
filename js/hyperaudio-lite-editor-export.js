@@ -153,9 +153,54 @@ class ImportSrt extends HTMLElement {
 
   constructor() {
     super();
+    console.log("ImportSrt constructor called"); // Check if constructor runs
   }
 
-  importSrt() {
+  clearSrtMediaUrl(event) {
+    event.preventDefault();
+    document.querySelector('#srt-media').value = "";
+  }
+
+  clearSrtFilePicker(event) {
+    event.preventDefault();
+    document.querySelector('#srt-file').value = "";
+  }
+
+  confirmSrt() {
+    let player = document.querySelector("#hyperplayer");
+    if (document.querySelector('#srt-file').value == ""){
+      player.src = document.querySelector('#srt-media').value;
+    } else {
+      const file = document.querySelector('[name=srt-file]').files[0];
+      // Create a new FileReader instance
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+      let blob = null;
+
+      reader.addEventListener('load', () => {
+
+        file.arrayBuffer().then((arrayBuffer) => {
+          blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+          player.src = URL.createObjectURL(blob);
+        });
+      });
+    }
+
+    const file = document.querySelector('[name=srt]').files[0];
+    const reader = new FileReader();
+    reader.addEventListener('load', (event) => {
+      const srtData = event.target.result;
+      let hypertranscript = document.getElementById('hypertranscript');
+      hypertranscript.innerHTML = srtToHtml(srtData);
+      document.querySelector('#hyperplayer-vtt').src = "";
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    });
+    
+    reader.readAsText(file);
+
+  }
+
+  /*importSrt() {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = 'application/text';
@@ -173,17 +218,46 @@ class ImportSrt extends HTMLElement {
        
     });
     fileInput.click();
-  }
+  }*/
 
-  connectedCallback() {
+  /*connectedCallback() {
     //this.innerHTML =  `<button onclick="${this.importSrt}">import srt ⬆</button>`;
     this.innerHTML = `<a onclick="${this.importSrt}">Import SRT</a>`;
     this.addEventListener('click', this.importSrt);
+  }*/
+
+  connectedCallback() {
+    console.log("Import SRT connectedCallback");
+    this.innerHTML = `
+    <div class="hidden-label-holder">
+      <label for="file-import-srt-dialog">Import SRT Dialog</label>
+    </div>
+    <input type="checkbox" id="file-import-srt-dialog" class="modal-toggle" />
+    <div class="modal">
+    <div class="modal-box">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="file-import-srt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Import SRT Dialog</h3>
+        <input id="srt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <span class="label-text">or use local media file</span>
+        <input id="srt-file" name="srt-file" type="file" class="file-input w-full max-w-xs" />
+        <span class="label-text">select local SRT file</span>
+        <input id="srt" name="srt" type="file" class="file-input w-full max-w-xs" />
+      </div>
+      <div class="modal-action">
+        <label for="file-import-srt-dialog" class="btn btn-ghost">Cancel</label>
+        <label id="file-import-srt" for="file-import-srt-dialog" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+    </div>`;
+
+    document.querySelector('#srt').addEventListener('change',this.clearSrtMediaUrl);
+    document.querySelector('#srt-media').addEventListener('change',this.clearSrtFilePicker);
+    document.querySelector('#file-import-srt').addEventListener('click',this.confirmSrt);
   }
 }
 
 customElements.define('import-srt', ImportSrt);
-
 
 function downloadJson(jsonData) {
   // download json file
@@ -462,6 +536,3 @@ function srtToHtml(data) {
   }
   return outputString + '</p></section></article>';
 }
-
-
-
