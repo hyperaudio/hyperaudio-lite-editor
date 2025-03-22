@@ -190,9 +190,17 @@ class ImportSrt extends HTMLElement {
     const reader = new FileReader();
     reader.addEventListener('load', (event) => {
       const srtData = event.target.result;
+
       let hypertranscript = document.getElementById('hypertranscript');
       hypertranscript.innerHTML = srtToHtml(srtData);
-      document.querySelector('#hyperplayer-vtt').src = "";
+
+      const vttData = convertSrtToWebVtt(srtData);
+      // Create a Blob object with the WebVTT data
+      const blob = new Blob([vttData], { type: "text/vtt" });
+      // Generate a URL for the Blob
+      const vttUrl = URL.createObjectURL(blob);
+      document.querySelector('#hyperplayer-vtt').src = vttUrl;
+      
       document.dispatchEvent(new CustomEvent('hyperaudioInit'));
     });
     
@@ -200,31 +208,6 @@ class ImportSrt extends HTMLElement {
 
   }
 
-  /*importSrt() {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'application/text';
-    fileInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        const reader = new FileReader();
-        reader.addEventListener('load', (event) => {
-            const srtData = event.target.result;
-            // transform json object in html
-            let hypertranscript = document.getElementById('hypertranscript');
-            hypertranscript.innerHTML = srtToHtml(srtData);
-            document.dispatchEvent(new CustomEvent('hyperaudioInit'));
-        });
-        reader.readAsText(file);
-       
-    });
-    fileInput.click();
-  }*/
-
-  /*connectedCallback() {
-    //this.innerHTML =  `<button onclick="${this.importSrt}">import srt ⬆</button>`;
-    this.innerHTML = `<a onclick="${this.importSrt}">Import SRT</a>`;
-    this.addEventListener('click', this.importSrt);
-  }*/
 
   connectedCallback() {
     console.log("Import SRT connectedCallback");
@@ -269,6 +252,48 @@ function downloadJson(jsonData) {
   document.body.appendChild(downloadAnchorNode); // required for firefox
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
+}
+
+/**
+* Converts SRT subtitle format to WebVTT format
+* @param {string} srtContent - The SRT content as a string
+* @returns {string} - The converted WebVTT content
+*/
+function convertSrtToWebVtt(srtContent) {
+  // First, normalize line endings to ensure consistent processing across platforms
+  const normalizedContent = srtContent.replace(/\r\n|\r/g, '\n');
+  
+  // WebVTT files must start with "WEBVTT" followed by a blank line
+  let webVttContent = "WEBVTT\n\n";
+  
+  // Split the content into subtitle blocks (separated by blank lines)
+  const subtitleBlocks = normalizedContent.split(/\n\s*\n/);
+  
+  for (const block of subtitleBlocks) {
+    if (!block.trim()) continue;
+    
+    // Split each block into lines
+    const lines = block.split('\n');
+    
+    // Skip the subtitle number (first line in SRT)
+    // If the block doesn't have at least 2 lines, skip it
+    if (lines.length < 2) continue;
+    
+    // Get the timestamp line (second line in SRT)
+    const timestampLine = lines[1];
+    
+    // Convert SRT timestamp format (00:00:00,000) to WebVTT format (00:00:00.000)
+    const webVttTimestamp = timestampLine.replace(/,/g, '.');
+    
+    // Add the timestamp line
+    webVttContent += webVttTimestamp + '\n';
+    
+    // Add the subtitle text (all lines after the timestamp)
+    const subtitleText = lines.slice(2).join('\n');
+    webVttContent += subtitleText + '\n\n';
+  }
+  
+  return webVttContent;
 }
 
 // Convert Hypertranscript to JSON
