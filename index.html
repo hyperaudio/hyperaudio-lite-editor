@@ -908,30 +908,10 @@ If you are creating an open source application under a license compatible with t
     let sourceMedia = document.querySelector("#hyperplayer").src;
     let track = document.querySelector('#hyperplayer-vtt');
 
-    console.log("hyperaudioGenerateCaptionsFromTranscript()");
     populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
-    
-
-    /*if (document.querySelector("#hypertranscript") !== null) {
-      const cap1 = caption();
-      let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-
-      document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
-      document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
-
-      track.kind = "captions";
-      //track.label = "English";
-      //track.srclang = "en";
-      track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
-    } else {
-      generateCaptionsFromCaptionEditor();
-    }*/
-
-
     const cap1 = caption();
     let subs = null;
     
@@ -948,8 +928,6 @@ If you are creating an open source application under a license compatible with t
     //track.label = "English";
     //track.srclang = "en";
     track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
-
 
     document
       .querySelector("#download-hypertranscript")

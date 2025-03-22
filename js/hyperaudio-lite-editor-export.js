@@ -153,7 +153,6 @@ class ImportSrt extends HTMLElement {
 
   constructor() {
     super();
-    console.log("ImportSrt constructor called"); // Check if constructor runs
   }
 
   clearSrtMediaUrl(event) {
@@ -200,7 +199,12 @@ class ImportSrt extends HTMLElement {
       // Generate a URL for the Blob
       const vttUrl = URL.createObjectURL(blob);
       document.querySelector('#hyperplayer-vtt').src = vttUrl;
-      
+
+      // Preserve original format
+      updateCaptionsFromTranscript = false;
+      populateCaptionEditorFromVtt(vttData);
+      //captionCache = vttData;
+
       document.dispatchEvent(new CustomEvent('hyperaudioInit'));
     });
     
@@ -210,7 +214,6 @@ class ImportSrt extends HTMLElement {
 
 
   connectedCallback() {
-    console.log("Import SRT connectedCallback");
     this.innerHTML = `
     <div class="hidden-label-holder">
       <label for="file-import-srt-dialog">Import SRT Dialog</label>
