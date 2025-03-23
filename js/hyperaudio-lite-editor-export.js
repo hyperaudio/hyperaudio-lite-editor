@@ -415,10 +415,10 @@ class ImportVtt extends HTMLElement {
       }
 
       // Add event listener to srt-media to monitor changes
-      srtMediaInput.addEventListener('input', toggleInputDisabled);
+      vttMediaInput.addEventListener('input', toggleInputDisabled);
 
       // Add event listener to srt-file to monitor changes
-      srtFileInput.addEventListener('change', toggleInputDisabled);
+      vttFileInput.addEventListener('change', toggleInputDisabled);
 
       // Initial check to set the correct state on page load
       toggleInputDisabled();
