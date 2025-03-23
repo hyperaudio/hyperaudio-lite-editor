@@ -143,6 +143,35 @@ class ImportDeepgramJson extends HTMLElement {
     document.querySelector('#deepgram-json-file').addEventListener('change',this.clearDeepgramJsonMediaUrl);
     document.querySelector('#deepgram-json-media').addEventListener('change',this.clearDeepgramJsonFilePicker);
     document.querySelector('#file-import-deepgram-json').addEventListener('click',this.confirmDeepgramJson);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const deepgramMediaInput = document.getElementById('deepgram-json-media');
+      const deepgramFileInput = document.getElementById('deepgram-json-file');
+
+      // Function to toggle the disabled state of inputs
+      function toggleDeepgramInputDisabled() {
+        if (deepgramMediaInput.value.trim() !== '') {
+          deepgramFileInput.disabled = true;
+        } else {
+          deepgramFileInput.disabled = false;
+        }
+
+        if (deepgramFileInput.files.length > 0) {
+          deepgramMediaInput.disabled = true;
+        } else {
+          deepgramMediaInput.disabled = false;
+        }
+      }
+
+      // Add event listener to deepgram-media to monitor changes
+      deepgramMediaInput.addEventListener('input', toggleDeepgramInputDisabled);
+
+      // Add event listener to deepgram-file to monitor changes
+      deepgramFileInput.addEventListener('change', toggleDeepgramInputDisabled);
+
+      // Initial check to set the correct state on page load
+      toggleDeepgramInputDisabled();
+    });
   }
 }
 
@@ -155,35 +184,125 @@ class ImportSrt extends HTMLElement {
     super();
   }
 
-  importSrt() {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'application/text';
-    fileInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        const reader = new FileReader();
-        reader.addEventListener('load', (event) => {
-            const srtData = event.target.result;
-            // transform json object in html
-            let hypertranscript = document.getElementById('hypertranscript');
-            hypertranscript.innerHTML = srtToHtml(srtData);
-            document.dispatchEvent(new CustomEvent('hyperaudioInit'));
-        });
-        reader.readAsText(file);
-       
-    });
-    fileInput.click();
+  clearSrtMediaUrl(event) {
+    event.preventDefault();
+    document.querySelector('#srt-media').value = "";
   }
 
+  clearSrtFilePicker(event) {
+    event.preventDefault();
+    document.querySelector('#srt-file').value = "";
+  }
+
+  confirmSrt() {
+    let player = document.querySelector("#hyperplayer");
+    if (document.querySelector('#srt-file').value == ""){
+      console.log("new src ", document.querySelector('#srt-media').value);
+      player.src = document.querySelector('#srt-media').value;
+    } else {
+      const file = document.querySelector('[name=srt-file]').files[0];
+      // Create a new FileReader instance
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+      let blob = null;
+
+      reader.addEventListener('load', () => {
+
+        file.arrayBuffer().then((arrayBuffer) => {
+          blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
+          player.src = URL.createObjectURL(blob);
+        });
+      });
+    }
+
+    const file = document.querySelector('[name=srt]').files[0];
+    const reader = new FileReader();
+    reader.addEventListener('load', (event) => {
+      const srtData = event.target.result;
+
+      let hypertranscript = document.getElementById('hypertranscript');
+      hypertranscript.innerHTML = srtToHtml(srtData);
+
+      const vttData = convertSrtToWebVtt(srtData);
+      // Create a Blob object with the WebVTT data
+      const blob = new Blob([vttData], { type: "text/vtt" });
+      // Generate a URL for the Blob
+      const vttUrl = URL.createObjectURL(blob);
+      document.querySelector('#hyperplayer-vtt').src = vttUrl;
+
+      // Preserve original format
+      updateCaptionsFromTranscript = false;
+      populateCaptionEditorFromVtt(vttData);
+      //captionCache = vttData;
+
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    });
+    
+    reader.readAsText(file);
+
+  }
+
+
   connectedCallback() {
-    //this.innerHTML =  `<button onclick="${this.importSrt}">import srt ⬆</button>`;
-    this.innerHTML = `<a onclick="${this.importSrt}">Import SRT</a>`;
-    this.addEventListener('click', this.importSrt);
+    this.innerHTML = `
+    <div class="hidden-label-holder">
+      <label for="file-import-srt-dialog">Import SRT Dialog</label>
+    </div>
+    <input type="checkbox" id="file-import-srt-dialog" class="modal-toggle" />
+    <div class="modal">
+    <div class="modal-box">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="file-import-srt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Import SRT Dialog</h3>
+        <input id="srt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <span class="label-text">or use local media file</span>
+        <input id="srt-file" name="srt-file" type="file" class="file-input w-full max-w-xs" />
+        <span class="label-text">select local SRT file</span>
+        <input id="srt" name="srt" type="file" class="file-input w-full max-w-xs" />
+      </div>
+      <div class="modal-action">
+        <label for="file-import-srt-dialog" class="btn btn-ghost">Cancel</label>
+        <label id="file-import-srt" for="file-import-srt-dialog" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+    </div>`;
+
+    document.querySelector('#srt').addEventListener('change',this.clearSrtMediaUrl);
+    document.querySelector('#srt-media').addEventListener('change',this.clearSrtFilePicker);
+    document.querySelector('#file-import-srt').addEventListener('click',this.confirmSrt);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const srtMediaInput = document.getElementById('srt-media');
+      const srtFileInput = document.getElementById('srt-file');
+
+      // Function to toggle the disabled state of inputs
+      function toggleInputDisabled() {
+        if (srtMediaInput.value.trim() !== '') {
+          srtFileInput.disabled = true;
+        } else {
+          srtFileInput.disabled = false;
+        }
+
+        if (srtFileInput.files.length > 0) {
+          srtMediaInput.disabled = true;
+        } else {
+          srtMediaInput.disabled = false;
+        }
+      }
+
+      // Add event listener to srt-media to monitor changes
+      srtMediaInput.addEventListener('input', toggleInputDisabled);
+
+      // Add event listener to srt-file to monitor changes
+      srtFileInput.addEventListener('change', toggleInputDisabled);
+
+      // Initial check to set the correct state on page load
+      toggleInputDisabled();
+    });
   }
 }
 
 customElements.define('import-srt', ImportSrt);
-
 
 function downloadJson(jsonData) {
   // download json file
@@ -195,6 +314,48 @@ function downloadJson(jsonData) {
   document.body.appendChild(downloadAnchorNode); // required for firefox
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
+}
+
+/**
+* Converts SRT subtitle format to WebVTT format
+* @param {string} srtContent - The SRT content as a string
+* @returns {string} - The converted WebVTT content
+*/
+function convertSrtToWebVtt(srtContent) {
+  // First, normalize line endings to ensure consistent processing across platforms
+  const normalizedContent = srtContent.replace(/\r\n|\r/g, '\n');
+  
+  // WebVTT files must start with "WEBVTT" followed by a blank line
+  let webVttContent = "WEBVTT\n\n";
+  
+  // Split the content into subtitle blocks (separated by blank lines)
+  const subtitleBlocks = normalizedContent.split(/\n\s*\n/);
+  
+  for (const block of subtitleBlocks) {
+    if (!block.trim()) continue;
+    
+    // Split each block into lines
+    const lines = block.split('\n');
+    
+    // Skip the subtitle number (first line in SRT)
+    // If the block doesn't have at least 2 lines, skip it
+    if (lines.length < 2) continue;
+    
+    // Get the timestamp line (second line in SRT)
+    const timestampLine = lines[1];
+    
+    // Convert SRT timestamp format (00:00:00,000) to WebVTT format (00:00:00.000)
+    const webVttTimestamp = timestampLine.replace(/,/g, '.');
+    
+    // Add the timestamp line
+    webVttContent += webVttTimestamp + '\n';
+    
+    // Add the subtitle text (all lines after the timestamp)
+    const subtitleText = lines.slice(2).join('\n');
+    webVttContent += subtitleText + '\n\n';
+  }
+  
+  return webVttContent;
 }
 
 // Convert Hypertranscript to JSON
@@ -393,7 +554,7 @@ function srtToHtml(data) {
 
     // Join into 1 line, SSA-style linebreaks
     // Strip out other SSA-style tags
-    sub.text = text.join('\\N').replace(/\{(\\[\w]+\(?([\w\d]+,?)+\)?)+\}/gi, '');
+    sub.text = text.join('\\N').replace(/\{(\[\w]+\(?([\w\d]+,?)+\)?)+\}/gi, '');
 
     // Escape HTML entities
     sub.text = sub.text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -462,6 +623,3 @@ function srtToHtml(data) {
   }
   return outputString + '</p></section></article>';
 }
-
-
-

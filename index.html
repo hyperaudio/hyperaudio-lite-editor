@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.4.6 -->
+<!--  Hyperaudio Lite Editor - Version 0.4.9 -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -286,7 +286,7 @@ If you are creating an open source application under a license compatible with t
               <li><export-json></export-json></li>
               <li><import-json></import-json></li>
               <li><label for="file-import-deepgram-json-dialog">Import Deepgram JSON</label></li>
-              <li><import-srt></import-srt></li>
+              <li><label for="file-import-srt-dialog">Import SRT</label></li>
             </ul>
           </div>
           <label for="info-modal" class="btn btn-ghost btn-primary gap-2">
@@ -908,30 +908,10 @@ If you are creating an open source application under a license compatible with t
     let sourceMedia = document.querySelector("#hyperplayer").src;
     let track = document.querySelector('#hyperplayer-vtt');
 
-    console.log("hyperaudioGenerateCaptionsFromTranscript()");
     populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
-    
-
-    /*if (document.querySelector("#hypertranscript") !== null) {
-      const cap1 = caption();
-      let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-
-      document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
-      document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
-
-      track.kind = "captions";
-      //track.label = "English";
-      //track.srclang = "en";
-      track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
-    } else {
-      generateCaptionsFromCaptionEditor();
-    }*/
-
-
     const cap1 = caption();
     let subs = null;
     
@@ -948,8 +928,6 @@ If you are creating an open source application under a license compatible with t
     //track.label = "English";
     //track.srclang = "en";
     track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
-
 
     document
       .querySelector("#download-hypertranscript")
@@ -1012,6 +990,7 @@ If you are creating an open source application under a license compatible with t
 
 
   <import-deepgram-json></import-deepgram-json>
+  <import-srt></import-srt>
   
   <!-- comment out if localstorage not required -->
 
