@@ -143,6 +143,35 @@ class ImportDeepgramJson extends HTMLElement {
     document.querySelector('#deepgram-json-file').addEventListener('change',this.clearDeepgramJsonMediaUrl);
     document.querySelector('#deepgram-json-media').addEventListener('change',this.clearDeepgramJsonFilePicker);
     document.querySelector('#file-import-deepgram-json').addEventListener('click',this.confirmDeepgramJson);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const deepgramMediaInput = document.getElementById('deepgram-json-media');
+      const deepgramFileInput = document.getElementById('deepgram-json-file');
+
+      // Function to toggle the disabled state of inputs
+      function toggleDeepgramInputDisabled() {
+        if (deepgramMediaInput.value.trim() !== '') {
+          deepgramFileInput.disabled = true;
+        } else {
+          deepgramFileInput.disabled = false;
+        }
+
+        if (deepgramFileInput.files.length > 0) {
+          deepgramMediaInput.disabled = true;
+        } else {
+          deepgramMediaInput.disabled = false;
+        }
+      }
+
+      // Add event listener to deepgram-media to monitor changes
+      deepgramMediaInput.addEventListener('input', toggleDeepgramInputDisabled);
+
+      // Add event listener to deepgram-file to monitor changes
+      deepgramFileInput.addEventListener('change', toggleDeepgramInputDisabled);
+
+      // Initial check to set the correct state on page load
+      toggleDeepgramInputDisabled();
+    });
   }
 }
 
@@ -168,6 +197,7 @@ class ImportSrt extends HTMLElement {
   confirmSrt() {
     let player = document.querySelector("#hyperplayer");
     if (document.querySelector('#srt-file').value == ""){
+      console.log("new src ", document.querySelector('#srt-media').value);
       player.src = document.querySelector('#srt-media').value;
     } else {
       const file = document.querySelector('[name=srt-file]').files[0];
@@ -240,6 +270,35 @@ class ImportSrt extends HTMLElement {
     document.querySelector('#srt').addEventListener('change',this.clearSrtMediaUrl);
     document.querySelector('#srt-media').addEventListener('change',this.clearSrtFilePicker);
     document.querySelector('#file-import-srt').addEventListener('click',this.confirmSrt);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const srtMediaInput = document.getElementById('srt-media');
+      const srtFileInput = document.getElementById('srt-file');
+
+      // Function to toggle the disabled state of inputs
+      function toggleInputDisabled() {
+        if (srtMediaInput.value.trim() !== '') {
+          srtFileInput.disabled = true;
+        } else {
+          srtFileInput.disabled = false;
+        }
+
+        if (srtFileInput.files.length > 0) {
+          srtMediaInput.disabled = true;
+        } else {
+          srtMediaInput.disabled = false;
+        }
+      }
+
+      // Add event listener to srt-media to monitor changes
+      srtMediaInput.addEventListener('input', toggleInputDisabled);
+
+      // Add event listener to srt-file to monitor changes
+      srtFileInput.addEventListener('change', toggleInputDisabled);
+
+      // Initial check to set the correct state on page load
+      toggleInputDisabled();
+    });
   }
 }
 
@@ -495,7 +554,7 @@ function srtToHtml(data) {
 
     // Join into 1 line, SSA-style linebreaks
     // Strip out other SSA-style tags
-    sub.text = text.join('\\N').replace(/\{(\\[\w]+\(?([\w\d]+,?)+\)?)+\}/gi, '');
+    sub.text = text.join('\\N').replace(/\{(\[\w]+\(?([\w\d]+,?)+\)?)+\}/gi, '');
 
     // Escape HTML entities
     sub.text = sub.text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
