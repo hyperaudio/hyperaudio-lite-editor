@@ -220,8 +220,8 @@ class ImportSrt extends HTMLElement {
     reader.addEventListener('load', (event) => {
       const srtData = event.target.result;
 
-      let hypertranscript = document.getElementById('hypertranscript');
-      hypertranscript.innerHTML = srtToHtml(srtData);
+      //let hypertranscript = document.getElementById('hypertranscript');
+      //hypertranscript.innerHTML = srtToHtml(srtData);
 
       const vttData = convertSrtToWebVtt(srtData);
       // Create a Blob object with the WebVTT data
@@ -346,8 +346,8 @@ class ImportVtt extends HTMLElement {
     reader.addEventListener('load', (event) => {
       const vttData = event.target.result;
 
-      let hypertranscript = document.getElementById('hypertranscript');
-      hypertranscript.innerHTML = vttToHtml(vttData);
+      //let hypertranscript = document.getElementById('hypertranscript');
+      //hypertranscript.innerHTML = vttToHtml(vttData);
 
       const blob = new Blob([vttData], { type: "text/vtt" });
       // Generate a URL for the Blob

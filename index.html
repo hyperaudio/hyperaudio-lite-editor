@@ -1,43 +1,18 @@
-<!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
-
-<!--  Hyperaudio Lite Editor - Version 0.4.10 -->
-
-<!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
-
-Commercial license
-------------------
-If you want to use Hyperaudio Lite Editor to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a Hyperaudio Lite Editor Commercial License please contact mark@hyperaud.io
-
-Open source license
--------------------
-If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use Hyperaudio Lite Editor under the terms of the AGPL-3.0 License.
--->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
  
-  <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
-  <script src="js/hyperaudio-lite-editor-whisper.js"></script>
 
   <!-- DaisyUI / Tailwind -->
   <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.2/dist/full.css" rel="stylesheet" type="text/css" />
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Meta Tags required for
-    Progressive Web App -->
-  <meta name= "apple-mobile-web-app-status-bar" content="#aa7700">
-  <meta name="theme-color" content="black">
-
-  <!-- Manifest File link -->
-  <link rel="manifest" href="manifest.json">
   <style>
 
     p {
@@ -89,77 +64,11 @@ If you are creating an open source application under a license compatible with t
 </head>
 <body data-theme="light">
 
+  <div class="transcript-holder">
 
+  </div>
 
-   <!-- templates -->
-
-   <template id="deepgram-modal-template">
-    <form id="deepgram-form" name="deepgram-form">
-      <div class="flex flex-col gap-4 w-full">
-        <input id="token" type="text" placeholder="Deepgram token" class="input input-bordered w-full max-w-xs" />
-        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-        <input id="deepgram-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or</span>
-        <input id="deepgram-file" name="file" type="file" class="file-input w-full max-w-xs" />
-        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-  
-        <span class="label-text">Model</span>
-        <div>
-          <select id="language-model" name="language-model" placeholder="language-model" class="select select-bordered w-full max-w-xs">
-          </select>
-        </div>
-  
-        <span class="label-text">Language</span>
-        <select id="language" name="language" placeholder="language" class="select select-bordered w-full max-w-xs">
-        </select>
-  
-        <span class="label-text">Quality</span>
-        <select id="tier" name="tier" placeholder="tier" class="select select-bordered w-full max-w-xs">
-          <option value="base">Base</option>
-          <option value="enhanced">Enhanced (Better)</option>
-          <option value="nova">Nova-2 (Best)</option>
-        </select>
-  
-      </div>
-      <div class="modal-action">
-        <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary">NEW</label>
-      </div>
-    </form>
-  </template>
-
-  <template id="whisper-client-template">
-    <form>
-      <div class="mb-3">
-        <input id="media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" disabled />
-        <span style="display:block; padding:16px" class="label-text">or</span>
-        <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" />
-        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-      </div>
-      <div class="mb-3">
-        <label for="model-name-input" class="form-label label-text">Which model should be used?</label>
-        <div>
-          <select class="form-select select select-bordered w-full max-w-xs" aria-label="Default select example" id="model-name-input">
-            <option selected="" value="Xenova/whisper-tiny.en">Whisper (Tiny) English</option>
-            <option value="Xenova/whisper-tiny">Whisper (Tiny)</option>
-            <option value="Xenova/whisper-base.en">Whisper (Base) English</option>
-            <option value="Xenova/whisper-base">Whisper (Base)</option>
-            <option value="Xenova/whisper-small.en">Whisper (Small) English</option>
-            <option value="Xenova/whisper-small">Whisper (Small)</option>
-            <option value="distil-whisper/distil-small.en">Whisper Distil (Small) English</option>
-          </select>
-        </div>
-        <div class="form-text" style="font-size: 90%;">
-          <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p> 
-          <p>The English models are slightly more accurate (for the English language only).</p>
-          <p>* Whisper running in the browser is currently in beta.</p>
-        </div>
-      </div>
-      
-      <div class="modal-action">
-        <label id="form-submit-btn" for="transcribe-modal" class="btn btn-primary">TRANSCRIBE</label>
-      </div>
-    </form>
-  </template>
+  <!-- templates -->
 
   <template id="caption-template-holder">
     <div id="caption-template" class="caption">
@@ -219,25 +128,6 @@ If you are creating an open source application under a license compatible with t
             </div>
           </div>
         </div>
-
-        <div class="form-control">
-          <span style="text-align: right; padding-right: 12px; padding-top: 12px;">
-            <label for="show-speakers">Display speakers </label>
-            <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="checkbox checkbox-primary"/>
-          </span>
-        </div>
-
-        <div class="tabs">
-          <a class="tab tab-lifted tab-active"><strong>Local Storage</strong></a>
-        </div>
-        <div style="display: flex; overflow-y:scroll; ">
-          <div style="height:360px">
-            <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="width:360px; height:360px">
-            </ul>
-          </div>
-        </div>
-        <div style="position: absolute; bottom: 16px; ">
-        </div>
       </div>
     </div>
     <div class="main-panel" style="z-index: 2">
@@ -290,19 +180,6 @@ If you are creating an open source application under a license compatible with t
               <li><label for="file-import-vtt-dialog">Import VTT</label></li>
             </ul>
           </div>
-          <label for="info-modal" class="btn btn-ghost btn-primary gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
-          </label>
-          <input type="checkbox" id="info-modal" class="modal-toggle" />
-          <div class="modal">
-            <div class="modal-box relative">
-              <label for="info-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-              <h3 class="text-lg font-bold">Summary</h3>
-              <p id="summary" class="py-4"></p>
-              <h3 class="text-lg font-bold">Topics</h3>
-              <p id="topics" class="py-4"></p>
-            </div>
-          </div>
         </div>
         <div class="navbar-center">
           <div class="form-control">
@@ -310,9 +187,6 @@ If you are creating an open source application under a license compatible with t
           </div>
         </div>
         <div class="navbar-end" style="padding-right: 8px;">
-          <!--<label for="captions-modal" class="btn btn-outline gap-2" style="margin-right:4px">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
-          </label>-->
           <button id="caption-editor-btn" class="btn btn-square btn-outline" style="margin-right:4px">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
           </button>
@@ -327,196 +201,12 @@ If you are creating an open source application under a license compatible with t
               <div id="caption-editor">
                 <center>Preparing captions....</center>
               </div>
-              <!--<caption-service></caption-service>-->
             </div>
           </div>
-          <label for="transcribe-modal" class="btn btn-primary gap-2">
-            <span id="transcribe-label">NEW</span>
-            <span id="transcribe-label-mobile">NEW</span>
-            <svg id="transcribe-logo" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
-          </label>
-          
         </div>
       </div>
     </div>
     
-    <div class="transcript-holder">
-      <div id="hypertranscript" class="hyperaudio-transcript" contenteditable="true">
-        <!-- example data -->
-        
-        <article>
-          <section>
-            <p>
-              <span data-m="560" data-d="0" class="speaker">[Angela] </span>
-              <span data-m="560" data-d="240">The </span>
-              <span data-m="800" data-d="640">Hyperaudio </span>
-              <span data-m="1440" data-d="240">Lite </span>
-              <span data-m="1680" data-d="400">Editor </span>
-              <span data-m="2080" data-d="320">makes </span>
-              <span data-m="2400" data-d="400">audio </span>
-              <span data-m="2800" data-d="240">and </span>
-              <span data-m="3040" data-d="400">video </span>
-              <span data-m="3440" data-d="240">more </span>
-              <span data-m="3680" data-d="480">accessible </span>
-              <span data-m="4160" data-d="240">through </span>
-              <span data-m="4400" data-d="160">the </span>
-              <span data-m="4560" data-d="480">creation </span>
-              <span data-m="5040" data-d="240">of </span>
-              <span data-m="5280" data-d="400">captions </span>
-              <span data-m="5680" data-d="240">and </span>
-              <span data-m="5920" data-d="500">interactive </span>
-              <span data-m="6640" data-d="500">transcripts. </span>
-            </p>
-            <p>
-              <span data-m="8240" data-d="240">The </span>
-              <span data-m="8480" data-d="320">first </span>
-              <span data-m="8800" data-d="320">step </span>
-              <span data-m="9130" data-d="160">is </span>
-              <span data-m="9290" data-d="80">to </span>
-              <span data-m="9370" data-d="500">transcribe </span>
-              <span data-m="10010" data-d="240">your </span>
-              <span data-m="10240" data-d="500">content. </span>
-            </p>
-            <p>
-              <span data-m="11530" data-d="240">We </span>
-              <span data-m="11760" data-d="240">use </span>
-              <span data-m="12000" data-d="160">the </span>
-              <span data-m="12160" data-d="500">Deepgram </span>
-              <span data-m="12720" data-d="320">API </span>
-              <span data-m="13040" data-d="240">which </span>
-              <span data-m="13290" data-d="500">produces </span>
-              <span data-m="13920" data-d="240">high </span>
-              <span data-m="14160" data-d="400">quality </span>
-              <span data-m="14560" data-d="500">transcripts </span>
-              <span data-m="15290" data-d="240">in </span>
-              <span data-m="15530" data-d="320">double-</span>
-              <span data-m="15840" data-d="400">quick </span>
-              <span data-m="16240" data-d="460">time. </span>
-              <span data-m="17180" data-d="500">Deepgram </span>
-              <span data-m="17740" data-d="160">are </span>
-              <span data-m="17900" data-d="480">offering </span>
-              <span data-m="18380" data-d="500">45,000 </span>
-              <span data-m="19420" data-d="320">minutes </span>
-              <span data-m="19740" data-d="240">of </span>
-              <span data-m="19980" data-d="500">transcription </span>
-              <span data-m="20700" data-d="240">for </span>
-              <span data-m="20940" data-d="500">free. </span>
-              </p>
-              <p>
-              <span data-m="22060" data-d="160">You </span>
-              <span data-m="22220" data-d="240">can </span>
-              <span data-m="22460" data-d="240">use </span>
-              <span data-m="22700" data-d="160">the </span>
-              <span data-m="22860" data-d="500">Deepgram </span>
-              <span data-m="23420" data-d="320">token </span>
-              <span data-m="23740" data-d="240">with </span>
-              <span data-m="23980" data-d="240">this </span>
-              <span data-m="24220" data-d="500">application. </span>
-            </p>
-            <p>
-              <span data-d="0" data-m="25770" class="speaker">[Angela] </span>
-              <span data-m="25770" data-d="240"> Once </span>
-              <span data-m="26020" data-d="500">transcribed, </span>
-              <span data-m="26890" data-d="240">you </span>
-              <span data-m="27140" data-d="160">can </span>
-              <span data-m="27300" data-d="400">correct </span>
-              <span data-m="27700" data-d="160">the </span>
-              <span data-m="27860" data-d="500">transcript </span>
-              <span data-m="28410" data-d="160">and </span>
-              <span data-m="28570" data-d="240">add </span>
-              <span data-m="28820" data-d="240">speaker </span>
-              <span data-m="29050" data-d="320">names </span>
-              <span data-m="29380" data-d="400">between </span>
-              <span data-m="29770" data-d="480">square </span>
-              <span data-m="30260" data-d="500">brackets. </span>
-            </p>
-            <p>
-              <span data-m="31610" data-d="240">Just </span>
-              <span data-m="31860" data-d="320">edit </span>
-              <span data-m="32170" data-d="240">the </span>
-              <span data-m="32410" data-d="480">transcript </span>
-              <span data-m="32900" data-d="160">like </span>
-              <span data-m="33050" data-d="160">you </span>
-              <span data-m="33220" data-d="160">would </span>
-              <span data-m="33380" data-d="160">any </span>
-              <span data-m="33530" data-d="320">other </span>
-              <span data-m="33850" data-d="240">text </span>
-              <span data-m="34250" data-d="240">and </span>
-              <span data-m="34490" data-d="240">we'll </span>
-              <span data-m="34730" data-d="240">look </span>
-              <span data-m="34970" data-d="320">after </span>
-              <span data-m="35290" data-d="240">the </span>
-              <span data-m="35530" data-d="500">timings. </span>
-            </p>
-            <p>
-              <span data-m="36890" data-d="240">When </span>
-              <span data-m="37130" data-d="320">happy </span>
-              <span data-m="37450" data-d="240">with </span>
-              <span data-m="37690" data-d="240">your </span>
-              <span data-m="37930" data-d="480">transcript, </span>
-              <span data-m="38410" data-d="160">you </span>
-              <span data-m="38570" data-d="160">can </span>
-              <span data-m="38730" data-d="400">convert </span>
-              <span data-m="39130" data-d="160">it </span>
-              <span data-m="39290" data-d="160">to </span>
-              <span data-m="39450" data-d="480">captions </span>
-              <span data-m="39930" data-d="160">and </span>
-              <span data-m="40090" data-d="400">tweak </span>
-              <span data-m="40490" data-d="240">those </span>
-              <span data-m="40730" data-d="400">captions </span>
-              <span data-m="41130" data-d="320">within </span>
-              <span data-m="41450" data-d="160">the </span>
-              <span data-m="41610" data-d="500">editor. </span>
-            </p>
-            <p>
-              <span data-m="43090" data-d="500">Finally, </span>
-              <span data-m="43730" data-d="240">you </span>
-              <span data-m="43960" data-d="240">should </span>
-              <span data-m="44200" data-d="160">be </span>
-              <span data-m="44360" data-d="240">ready </span>
-              <span data-m="44600" data-d="160">to </span>
-              <span data-m="44770" data-d="400">export </span>
-              <span data-m="45160" data-d="240">your </span>
-              <span data-m="45410" data-d="480">transcript </span>
-              <span data-m="45880" data-d="160">in </span>
-              <span data-m="46050" data-d="160">a </span>
-              <span data-m="46200" data-d="320">number </span>
-              <span data-m="46520" data-d="80">of </span>
-              <span data-m="46600" data-d="480">formats </span>
-              <span data-m="47090" data-d="160">that </span>
-              <span data-m="47240" data-d="80">you </span>
-              <span data-m="47320" data-d="240">can </span>
-              <span data-m="47560" data-d="500">associate </span>
-              <span data-m="48120" data-d="160">with </span>
-              <span data-m="48280" data-d="240">your </span>
-              <span data-m="48520" data-d="320">audio</span>
-              <span data-m="48840" data-d="400">visual </span>
-              <span data-m="49240" data-d="500">media. </span>
-            </p>
-            <p>
-              <span data-m="50540" data-d="400">Use </span>
-              <span data-m="50940" data-d="400">formats </span>
-              <span data-m="51340" data-d="160">like </span>
-              <span data-m="51500" data-d="500">interactive </span>
-              <span data-m="52140" data-d="500">transcripts </span>
-              <span data-m="52780" data-d="160">with </span>
-              <span data-m="52940" data-d="240">the </span>
-              <span data-m="53180" data-d="560">Hyperaudio </span>
-              <span data-m="53740" data-d="320">Lite </span>
-              <span data-m="54060" data-d="400">Library </span>
-              <span data-m="54460" data-d="240">or </span>
-              <span data-m="54700" data-d="480">WordPress </span>
-              <span data-m="55180" data-d="480">module </span>
-              <span data-m="55660" data-d="160">to </span>
-              <span data-m="55820" data-d="480">integrate </span>
-              <span data-m="56300" data-d="320">into </span>
-              <span data-m="56620" data-d="240">your </span>
-              <span data-m="56860" data-d="500">website. </span>
-            </p> 
-          </section>
-        </article>        
-      </div>
-    </div>
     <div id="captionsource-alert" class="alert alert-info shadow-lg" style="visibility:hidden; z-index:2; position:absolute; top:50%; left:50%; width:480px; height:140px; margin: -240px 0 0 -240px;">
       <div>
         <div style="margin-top:-60px; width:400px">
@@ -531,52 +221,11 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-  <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
-  <div class="modal">
-    <div class="modal-box">
-      <label id="close-modal" for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-      <h3 class="font-bold text-lg"  style="margin-bottom:16px">Transcribe</h3>
-      <div role="tablist" class="tabs tabs-lifted">
-
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:160px" aria-label="Whisper (Local) *" checked />
-        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-          <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
-        </div>
-      
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:160px" aria-label="Deepgram (Cloud)"  />
-        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-          <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <input type="checkbox" id="regenerate-captions-modal" class="modal-toggle" />
-  <div class="modal">
-    <div class="modal-box">
-      <label id="close-modal" for="regenerate-captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-      <div class="flex flex-col gap-4 w-full">
-        <h3 class="font-bold text-lg">Caption Regeneration </h3>
-        <p>Any changes you made to the captions will be lost.</p>
-        <p>Are you sure you want to regenerate the captions from the transcript?</p>
-      </div>
-      <div class="modal-action">
-        <label for="regenerate-captions-modal" class="btn btn-ghost">Cancel</label>
-        <label id="regenerate-captions" for="regenerate-captions-modal" class="btn btn-primary">Confirm</label>
-      </div>
-    </div>
-  </div>
-
-
-  <script src="js/hyperaudio-push-notification.js"></script>
-  <script src="js/hyperaudio-lite.js"></script>
-  <script src="js/hyperaudio-lite-extension.js"></script>
   <script src="js/caption-modified.js"></script>
   <script>
 
   let updateCaptionsFromTranscript = true;
-  let captionMode = false; // used to detect whether we need to sanitise amongst other things
+  let captionMode = true; // used to detect whether we need to sanitise amongst other things
   let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
 
   let alertOkBtn = document.querySelector('#captionsource-alert-ok');
@@ -592,43 +241,10 @@ If you are creating an open source application under a license compatible with t
     localStorage.setItem("noCaptionAlert", "true");
   });
 
-  let editableDiv = document.querySelector('#hypertranscript');
-
-  editableDiv.addEventListener("paste", function(e) {
-    e.preventDefault();
-    var text = e.clipboardData.getData("text/plain");
-    text.replaceAll("&nbsp;", " ");
-    document.execCommand("insertHTML", false, text);
-  });
-
-  window.document.addEventListener('hyperaudioInit', hyperaudio, false);
-  window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
-  window.document.addEventListener('hyperaudioTranscriptLoaded', updateInteractiveTranscriptDownloadLink, false);
-
-  let hyperaudioTemplate = "";
-
-  fetch('hyperaudio-template.html')
-  .then(function(response) {
-      // When the page is loaded convert it to text
-      return response.text()
-  })
-  .then(function(html) {
-    hyperaudioTemplate = html;
-  })
-  .catch(function(err) {
-      console.log('Failed to fetch page: ', err);
-  });
-
   /* ----------------------------------------------------------- */
 
-  let transcriptCache = null;
-  let captionCache = null;
-
   document.querySelector('#caption-editor-btn').addEventListener('click', (e) => {
-    let holder = document.querySelector('.transcript-holder');
-    transcriptCache = holder.cloneNode(true);
     captionMode = true;
-    hyperaudioGenerateCaptionsFromTranscript();
     document.querySelector('#caption-editor-btn').disabled = true;
     document.querySelector('#transcript-editor-btn').disabled = false;
   });
@@ -644,437 +260,13 @@ If you are creating an open source application under a license compatible with t
     document.querySelector('#caption-editor-btn').disabled = false;
     document.querySelector('#transcript-editor-btn').disabled = true;
   });
-
-
-  /* ----------------------------------------------------------- */
-
-  function hyperaudio() {
-    const minimizedMode = false;
-    const autoScroll = false;
-    const doubleClick = true;
-    const webMonetization = false;
-    const playOnClick = false;
-
-    const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
-
-    window.hyperaudioInstance = hyperaudioInstance;
-
-    const sanitisationCheck = function () {
-
-      let time = 0;
-      resetTimer();
-      window.onload = resetTimer;
-      document.onkeyup = resetTimer;
-      document.ontouchend = resetTimer;
-
-      let rootnode = document.querySelector("#hypertranscript");
-      let sourceMedia = document.querySelector("#hyperplayer").src;
-      let track = document.querySelector('#hyperplayer-vtt');
-
-      function sanitise() {
-        let d = new Date();
-        let starttime = d.getTime();
-
-        // check that transcript has the focus
-
-        // check for focus
-        let isTranscriptFocused = false;
-        let isCaptionEditorFocused = false;
-
-        
-        if (document.activeElement === rootnode) {
-          isTranscriptFocused = true;
-        }
-
-
-        let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
-
-        while (walker.nextNode()) {
-
-          if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
-              && walker.currentNode.parentElement.tagName !== "SPAN") {
-
-            // if previousSibling is a span, add the textContent of currentNode to it
-            if (walker.currentNode.previousSibling.tagName === "SPAN") {
-              walker.currentNode.previousSibling.textContent += walker.currentNode.textContent;
-            } else {
-              // assume nextSibling is a span for now and add textContent of currentNode to that
-              walker.currentNode.nextSibling.textContent += walker.currentNode.textContent;
-            }
-
-            // remove currentNode as we've merged its contents
-            //walker.currentNode.parentNode.removeChild(walker.currentNode);
-            walker.currentNode.textContent = "";
-          }
-        }
-
-        // look for speakers and break them out into their own spans
-
-        walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
-
-        while (walker.nextNode()) {
-          if (walker.currentNode.textContent.replaceAll('\n', '').replaceAll('  ', ' ').trim().length > 0
-              && walker.currentNode.parentElement.tagName === "SPAN" && walker.currentNode.textContent.includes('[') && walker.currentNode.textContent.includes(']')) {
-
-            // if previousSibling is a span, add the textContent of currentNode to it
-            if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().endsWith(']') === false) {
-             
-
-              //look for text in square brackets
-              const regex = / *\[[^\]]*]/g;
-              const found = walker.currentNode.textContent.match(regex);
-
-              let startsWithSpeaker = false;
-              if (walker.currentNode.textContent.trim().startsWith('[') === true){
-                startsWithSpeaker = true;
-              }
-
-              walker.currentNode.textContent = walker.currentNode.textContent.replace(regex, '');
-
-              let span = document.createElement("span");
-              span.textContent = found + ' ';
-
-              if (span.textContent.includes('[') && span.textContent.includes(']')) {
-                span.classList.add("speaker");
-                closedSpeaker = false;
-              }
-
-              // add the classes of the current node
-              span.classList.add(...walker.currentNode.parentNode.classList);
-              //DOMTokenList.prototype.add.apply(span.classList, walker.currentNode.parentNode.classList);
-
-              span.setAttribute("data-d","0");
-
-              if (startsWithSpeaker === true) {
-                span.setAttribute("data-m",walker.currentNode.parentNode.getAttribute("data-m"));
-                walker.currentNode.parentNode.before(span);
-              } else {
-                let nextStart = walker.currentNode.parentNode.nextElementSibling.getAttribute("data-m");
-                span.setAttribute("data-m",nextStart);
-                let newSpan = document.createElement("span");
-                newSpan.setAttribute("data-m",nextStart);
-
-                newSpan.innerHTML = "&nbsp;";
-                walker.currentNode.parentNode.after(span);
-                span.after(newSpan);
-
-                // set the cursor
-                const range = document.createRange();
-                const sel = window.getSelection();
-                range.setStartBefore(newSpan.nextElementSibling);
-                range.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(range);
-              }
-            }
-          }
-        }
-
-        let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
-        updateInteractiveTranscriptDownloadLink();
-
-        if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
-          const words = document.querySelectorAll("[data-m]");
-          hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
-          hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
-
-          if (hyperaudioInstance.currentTime !== undefined) {
-            hyperaudioInstance.updateTranscriptVisualState(hyperaudioInstance.currentTime);
-          }
-
-          /*let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
-          document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));*/
-
-          generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
-          const cap2 = caption();
-          let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-          //populateCaptionEditor(subs.data);
-        }
-
-        if (isCaptionEditorFocused === true && updateCaptionsFromTranscript === false) {
-          generateCaptionsFromCaptionEditor();
-        }
-
-        d = new Date();
-        //console.log("sanitising took "+(d.getTime() - starttime)+"ms");
-      }
-
-      function resetTimer() {
-        clearTimeout(time);
-        if (captionMode !== true) {
-          time = setTimeout(sanitise, 1000);
-        }
-      }
-
-      //longpress to set playhead on mobile
-
-      function longPress(element, callback) {
-        let pressTimer;
-        element.addEventListener("touchstart", function(e) {
-          pressTimer = setTimeout(function() {
-            callback(e);
-          }, 2000);
-        });
-        element.addEventListener("touchend", function(e) {
-          clearTimeout(pressTimer);
-        });
-      }
-
-      longPress(rootnode, function(e) {
-        const startTime = e.target.getAttribute('data-m');
-        if (startTime !== null) {
-          e.target.classList.add("active");
-          hyperaudioInstance.myPlayer.setTime(startTime/1000);
-          hyperaudioInstance.setPlayHead(e);
-          hyperaudioInstance.checkPlayHead();
-        }
-      });
-
-    };
-
-    sanitisationCheck();
-
-    const videoElement = document.querySelector("#hyperplayer");
-    let sidebarOpen = true;
-
-    document.querySelector('#sidebar-toggle').addEventListener('click', (e) => {
-
-      if (sidebarOpen === true) {
-        document.querySelector('.holder').style.left = 0;
-        document.querySelector('.main-panel').style.left = 0;
-        document.querySelector('.transcript-holder').style.left = 0;
-        document.querySelector('#sidebar-close-icon').style.display = "none";
-        document.querySelector('#sidebar-open-icon').style.display = "block";
-        sidebarOpen = false;
-      } else {
-        document.querySelector('.holder').style.left = "400px";
-        document.querySelector('.main-panel').style.left = "400px";
-        document.querySelector('.transcript-holder').style.left = "400px";
-        document.querySelector('#sidebar-close-icon').style.display = "block";
-        document.querySelector('#sidebar-open-icon').style.display = "none";
-        sidebarOpen = true;
-      }
-
-      if(
-        document.pictureInPictureEnabled &&
-        !videoElement.disablePictureInPicture) {
-        try {
-          if (sidebarOpen === false) {
-            videoElement.requestPictureInPicture();
-          } else {
-            document.exitPictureInPicture();
-          }
-        } catch(err) {
-            console.error(err);
-        }
-      }
-    });
-    
-    let showSpeakers = document.querySelector('#show-speakers');
-
-    showSpeakers.addEventListener('change', function(e) {
-      let speakers = document.querySelectorAll('.speaker');
-      if (showSpeakers.checked === true) {
-        speakers.forEach((speaker) => {
-          //speaker.style.display = "inline";
-          speaker.removeAttribute("style");
-        });
-      } else {
-        speakers.forEach((speaker) => {
-          speaker.style.display = "none";
-        });
-      }
-    });
-  }
-
-  if (window.matchMedia("(max-width: 480px)").matches === true){
-    let elem = document.querySelector("#hyperplayer");
-
-    // Create a copy of it
-    let clone = elem.cloneNode(true);
-    
-    clone.style.width = "100%";
-    clone.style.paddingTop = "72px";
-
-    // Inject it into the DOM
-
-    document.querySelector('.transcript-holder').prepend(clone);
-    elem.remove();
-  }
-
-  hyperaudio();
-
-  function hyperaudioGenerateCaptionsFromTranscript() {
-    let sourceMedia = document.querySelector("#hyperplayer").src;
-    let track = document.querySelector('#hyperplayer-vtt');
-
-    populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
-  }
-
-  function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
-    const cap1 = caption();
-    let subs = null;
-    
-    if (captionMode === true) {
-      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21', null, null, transcriptCache); 
-    } else {
-      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21');
-    }
-
-    document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
-    document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
-
-    track.kind = "captions";
-    //track.label = "English";
-    //track.srclang = "en";
-    track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
-
-    document
-      .querySelector("#download-hypertranscript")
-      .setAttribute(
-        "href",
-        "data:text/html," +
-          encodeURIComponent(
-            hyperaudioTemplate
-              .replace("{hypertranscript}", hypertranscript)
-              .replace("{sourcemedia}", sourceMedia)
-              .replace("{sourcevtt}", track.src)
-          )
-      );
-
-    // check to see if it's an mp3 or m4a, in which case we don't display captions
-    let extension = document.querySelector('#hyperplayer').src.split('.').pop();
-    if (extension === "mp3" || extension === "m4a") {
-      document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
-    } else {
-      document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
-    }
-    return subs.data;
-  }
-
-  function updateInteractiveTranscriptDownloadLink() {
-
-    // m4a ?
-    //let isAudio = document.querySelector('#hyperplayer').src.split('.').pop() === "mp3";
-
-    document
-    .querySelector("#download-hypertranscript")
-    .setAttribute(
-      "href",
-      "data:text/html," +
-        encodeURIComponent(
-          hyperaudioTemplate
-            .replace("{hypertranscript}", getTranscriptData())
-            // check to see if it's an mp3, in which case we don't display captions
-            .replace("{sourcemedia}", document.querySelector("#hyperplayer").src) 
-            .replace("{sourcevtt}", document.querySelector("#hyperplayer-vtt").src)
-            //.replace("{sourcevtt}", isAudio ? "" : document.querySelector("#hyperplayer-vtt").src)
-        )
-    );
-  }
-
-  function hasParent(element, parent) {
-    let currentElement = element.parentNode;
-    
-    while (currentElement !== null) {
-      if (currentElement === parent) {
-        return true;
-      }
-      
-      currentElement = currentElement.parentNode;
-    }
-    
-    return false;
-  }
   </script>
 
-
-  <import-deepgram-json></import-deepgram-json>
   <import-srt></import-srt>
   <import-vtt></import-vtt>
   
-  <!-- comment out if localstorage not required -->
-
-  <div class="hidden-label-holder">
-  <label for="file-save-dialog">Open Save to Local Storage Dialog</label>
-  </div>
-  <input type="checkbox" id="file-save-dialog" class="modal-toggle" />
-  <div class="modal">
-  <div class="modal-box">
-    <div class="flex flex-col gap-4 w-full">
-      <label id="close-modal" for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-      <h3 class="font-bold text-lg">Save to Local Storage</h3>
-      <input type="text" id="save-localstorage-filename" name="save-localstorage-filename" placeholder="File name" class="input input-bordered w-full max-w-xs" />
-    </div>
-    <div class="modal-action">
-      <label for="file-save-dialog" class="btn btn-ghost">Cancel</label>
-      <label id="file-save-localstorage" for="file-save-dialog" class="btn btn-primary">Confirm</label>
-    </div>
-  </div>
-  </div>
-
-
-  <div class="hidden-label-holder">
-  <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
-  </div>
-  <input type="checkbox" id="file-load-dialog" class="modal-toggle" />
-  <div class="modal">
-  <div class="modal-box">
-    <div class="flex flex-col gap-4 w-full">
-      <label id="close-modal" for="file-load-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
-      <h3 class="font-bold text-lg">Load from Local Storage</h3>
-      <select id="load-localstorage-filename" class="select select-bordered w-full max-w-xs">
-      </select>
-    </div>
-    <div class="modal-action">
-      <label for="file-load-dialog" class="btn btn-ghost">Cancel</label>
-      <label id="file-load-localstorage" for="file-load-dialog" class="btn btn-primary">Confirm</label>
-    </div>
-  </div>
-  </div>
- 
-
-  <script src="./js/hyperaudio-lite-editor-storage.js"></script>
-
-  <script>
-
-  document.querySelector('#file-dropdown').insertAdjacentHTML("beforeend", '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" /><li class="menu-title"><span>Local Storage</span></li><li><label for="file-save-dialog">Save to Local Storage</label></li><li><label for="file-load-dialog">Load from Local Storage</label></li>');
-
-  document.querySelector('#save-localstorage-filename').value = getLocalStorageSaveFilename(document.querySelector("#hyperplayer").src);
-
-  loadLocalStorageOptions();
-
-  document
-    .querySelector("#file-save-localstorage")
-    .addEventListener("click", function () {
-      let filename = document.querySelector('#save-localstorage-filename').value;
-      saveHyperTranscriptToLocalStorage(filename);
-      loadLocalStorageOptions();
-    });
-
-  document
-    .querySelector("#file-load-localstorage")
-    .addEventListener("click", function () {
-      let filenameIndex = document.querySelector('#load-localstorage-filename').value;
-      loadHyperTranscriptFromLocalStorage(filenameIndex);
-    });
-
-  document
-    .querySelector("#regenerate-captions")
-    .addEventListener("click", function () {
-      captionCache = null;
-      hyperaudioGenerateCaptionsFromTranscript();
-    });
-
-  setFileSelectListeners();
-
-  </script>
-
   <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
-  <!-- end of localstorage additions -->
 
-  <!-- caption editor additions -->
   <style>
     input.line1 {
       width: 36ch;
@@ -1101,13 +293,6 @@ If you are creating an open source application under a license compatible with t
   <script>
     window.document.addEventListener('hyperaudioPopulateCaptionEditor', populateCaptionEditor, false);
 
-    function restoreTranscript() {
-      document.querySelector('.transcript-holder').innerHTML = "";
-      let hypertranscript = transcriptCache.querySelector("#hypertranscript");
-      document.querySelector('.transcript-holder').appendChild(hypertranscript);
-      hyperaudio();
-    }
-
     function populateCaptionEditor(data) {
 
       let holder = null;
@@ -1120,61 +305,44 @@ If you are creating an open source application under a license compatible with t
         holder.className = 'transcript-holder';
       }
       
-
       holder.innerHTML = '<div class="modal-action"><label id="regenerate-btn" for="regenerate-captions-modal" class="fixed bottom-8 right-8 btn btn-outline btn-primary" >Regenerate <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
 
-      if (captionCache === null ) {
-        let newDiv = document.createElement('div');
+      let newDiv = document.createElement('div');
 
-        // Set an id for the new div
-        newDiv.id = 'captions-display';
+      // Set an id for the new div
+      newDiv.id = 'captions-display';
 
-        // Append the new div to the existing div
+      // Append the new div to the existing div
 
-        holder.insertAdjacentElement('beforeEnd', newDiv);
-      
-        // Initialize the DOM parser
-        let parser = new DOMParser();
-        let html = document.querySelector('#caption-template-holder').innerHTML;
+      holder.insertAdjacentElement('beforeEnd', newDiv);
+    
+      // Initialize the DOM parser
+      let parser = new DOMParser();
+      let html = document.querySelector('#caption-template-holder').innerHTML;
 
-        // Parse the text
-        let template = parser.parseFromString(html, "text/html");
+      // Parse the text
+      let template = parser.parseFromString(html, "text/html");
 
-        let index = 0;
-        data.forEach(cap => {
-          let line1 = cap.text.split('\n')[0];
-          let line2 = cap.text.split('\n')[1];
+      let index = 0;
+      data.forEach(cap => {
+        let line1 = cap.text.split('\n')[0];
+        let line2 = cap.text.split('\n')[1];
 
-          if (line2 === undefined || typeof line2 === "undefined") {
-            line2 = "";
-          }
+        if (line2 === undefined || typeof line2 === "undefined") {
+          line2 = "";
+        }
 
-          let captionTempl = template.querySelector('#caption-template').cloneNode(true);
-          captionTempl.id = "caption-"+index;
-          index++;
-          captionTempl.querySelector('.start').value = cap.start;
-          captionTempl.querySelector('.end').value = cap.stop;
-          captionTempl.querySelector('.line1').value = line1;
-          captionTempl.querySelector('.line2').value = line2;
+        let captionTempl = template.querySelector('#caption-template').cloneNode(true);
+        captionTempl.id = "caption-"+index;
+        index++;
+        captionTempl.querySelector('.start').value = cap.start;
+        captionTempl.querySelector('.end').value = cap.stop;
+        captionTempl.querySelector('.line1').value = line1;
+        captionTempl.querySelector('.line2').value = line2;
 
-          holder.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
-          //document.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
-        });
-
-        captionCache = captureCaptions(holder);
-      
-      } else {
-        holder.innerHTML = captionCache;
-      }
-
-      const captionsDisplay = document.getElementById('captions-display');
-      if (captionsDisplay !== null) {
-        captionsDisplay.addEventListener('change', (e) => {
-          captionCache = captureCaptions(holder);
-          generateCaptionsFromCaptionEditor();
-        });
-      }
-      
+        holder.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
+        //document.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
+      });
     } 
 
     function captureCaptions(holder) {
@@ -1249,9 +417,6 @@ If you are creating an open source application under a license compatible with t
       }
     }
 
-    const cap2 = caption();
-    let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-    
     const countSeconds = (str) => {
       const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
       const hour = parseInt(hh, 10) || 0;
@@ -1367,293 +532,12 @@ If you are creating an open source application under a license compatible with t
       document.querySelector('#download-srt').setAttribute('href', "data:text/srt,"+encodeURIComponent(srtCaptions));
     }
 
-    function getTranscriptData() {
-      let transcriptElement = document.querySelector('#hypertranscript');
-
-      let transcriptData = null;
-
-      if (transcriptElement !== null) {
-        transcriptData = transcriptElement.innerHTML;
-      } else {
-        const parser = new DOMParser();
-        transcriptData = parser.parseFromString(transcriptCache.innerHTML, 'text/html').querySelector('#hypertranscript').innerHTML;
-      }
-
-      return transcriptData.replace(/ class=".*?"/g, '');
-
-    }
 
     function convertTimecodeToSrt(timecode) {
       //the same as VTT format but milliseconds separated by a comma
       return timecode.substring(0,8) + "," + timecode.substring(9,12);
     }
 
-
   </script>
-  <!-- end of caption editor additions -->
-
-  <!-- service worker script for PWA -->
-  <script>
-  window.addEventListener('load', () => {
-    registerSW();
-  });
-
-  // Register the Service Worker
-  async function registerSW() {
-    if ('serviceWorker' in navigator) {
-      try {
-      await navigator
-          .serviceWorker
-          .register('serviceworker.js');
-      }
-      catch (e) {
-      console.log('SW registration failed');
-      }
-    }
-  }
-
-</script>
-<script type="module">
-  import { AudioData, cutAudioApp } from "./js/audio-cut.js";
-
-  let audioDataArray;
-
-  document.querySelector('#strikethrough').addEventListener('click', (e) => {
-
-    audioDataArray = [];
-    let transcript = document.querySelector("#hypertranscript");
-    if (transcript == null) { // must be cached
-      transcript = transcriptCache.innerHTML;
-    }
-
-    const selection = window.getSelection();
-    if (!selection.rangeCount) return;
-
-    const range = selection.getRangeAt(0);
-    let startNode = range.startContainer;
-    let endNode = range.endContainer;
-
-    // Function to find the parent paragraph
-    function findParentParagraph(node) {
-      while (node && node.nodeName !== 'P') {
-        node = node.parentNode;
-      }
-      return node;
-    }
-
-    // Find the parent paragraph of the start and end nodes
-    let startParagraph = findParentParagraph(startNode);
-    let endParagraph = findParentParagraph(endNode);
-
-    if (!startParagraph || !endParagraph) return;
-
-    // Function to apply strikethrough to a single element
-    function strikeoutElement(element) {
-      if (element.nodeType === Node.ELEMENT_NODE && !element.style.textDecoration.includes('line-through')) {
-        element.style.textDecoration = 'line-through';
-      }
-    }
-
-    // Function to find the specific child element containing a node
-    function findChildElementContainingNode(parent, node) {
-      for (let child of parent.children) {
-        if (child.contains(node)) {
-          return child;
-        }
-      }
-      return null;
-    }
-
-    // Check if the selection ends at the very beginning of the end paragraph
-    const isEndAtParagraphStart = endNode === endParagraph && range.endOffset === 0;
-
-    // Apply strikethrough to selected elements
-    let currentParagraph = startParagraph;
-    let inSelection = false;
-
-    while (currentParagraph) {
-      let startElement = currentParagraph === startParagraph ? findChildElementContainingNode(currentParagraph, startNode) : null;
-      let endElement = currentParagraph === endParagraph ? findChildElementContainingNode(currentParagraph, endNode) : null;
-
-      // Skip the last paragraph if the selection ends at its start
-      if (currentParagraph === endParagraph && isEndAtParagraphStart) {
-        break;
-      }
-
-      Array.from(currentParagraph.children).forEach(child => {
-        if (child === startElement || inSelection) {
-          inSelection = true;
-          strikeoutElement(child);
-        }
-
-        if (child === endElement) {
-          // Only strikeout the end element if it's not at the very start of the paragraph
-          if (!(currentParagraph === endParagraph && range.endOffset === 0)) {
-              strikeoutElement(child);
-          }
-          inSelection = false;
-          return; // Exit the forEach loop
-        }
-      });
-
-      if (currentParagraph === endParagraph) break;
-      currentParagraph = currentParagraph.nextElementSibling;
-      inSelection = true; // For paragraphs between start and end
-    }
-
-    // Clear the selection
-    selection.removeAllRanges();
-
-    // detect the ranges to be cut
-    audioDataArray = createArrayOfGaps(transcript);
-
-    // skip the text that is struck thru
-    skipStrikeThrus(audioDataArray);
-  });
-
-  registerStrikeThrus();
-
-  window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
-
-  function registerStrikeThrus() {
-    audioDataArray = [];
-
-    // detect the ranges to be cut
-
-    let transcript = document.querySelector("#hypertranscript");
-    if (transcript == null) { // must be cached
-      transcript = transcriptCache.querySelector("#hypertranscript");
-    }
-    audioDataArray = createArrayOfGaps(transcript);
-
-    // skip the text that is struck thru
-    skipStrikeThrus(audioDataArray);
-  }
-
-  // creates an array of non struck thru ranges
-  function createArrayOfGaps(transcript) {
-    let newSections = [];
-    let words = transcript.querySelectorAll('[data-m]');
-    let isPreviousWordStruckThru = false;
-    let previousWordStruckThruEnd;
-    let newSection = {};
-    newSection.start = 0;
-
-    words.forEach((word, index) => {
-      let isStrikethrough = word.style.textDecoration === "line-through";
-
-      if (isStrikethrough) {
-        if (isPreviousWordStruckThru === false){
-          newSection.end = word.getAttribute("data-m")/1000;
-          newSections.push(newSection);
-        }
-        isPreviousWordStruckThru = true;
-        previousWordStruckThruEnd = word.getAttribute("data-m")/1000 + word.getAttribute("data-d")/1000;
-      } else {
-        if (isPreviousWordStruckThru === true){
-          newSection = {};
-          newSection.start = words[index-1].getAttribute("data-m")/1000 + words[index-1].getAttribute("data-d")/1000;
-        }
-        isPreviousWordStruckThru = false;
-      }
-    });
-
-    // add last range
-    newSection = {};
-    newSection.start = previousWordStruckThruEnd;
-    newSection.end = document.getElementById("hyperplayer").duration;
-    newSections.push(newSection);
-
-    let mediaUrl = document.querySelector("#hyperplayer").src;
-    
-    newSections.forEach(section => {
-      audioDataArray.push(new AudioData(mediaUrl, section.start, section.end));
-    });
-
-    return(audioDataArray);
-  }
-
-  function skipStrikeThrus(audioDataArray) {
-    if (typeof audioDataArray !== "undefined") {
-      let myPlayer = window.hyperaudioInstance.player;
-      //console.dir(audioDataArray);
-
-      let animationFrameId;
-
-      function update() {
-        checkStrikeThrus(audioDataArray, myPlayer);
-
-        // Continue the loop
-        animationFrameId = requestAnimationFrame(update);
-      }
-
-      // Stop the animation frame loop when the player is not playing
-      myPlayer.addEventListener("pause", () => {
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId);
-        }
-      });
-
-      myPlayer.addEventListener("play", () => {
-        // Ensure the loop is running only when the player is playing
-        if (!animationFrameId) {
-          animationFrameId = requestAnimationFrame(update);
-        }
-      });
-    }
-  }
-
-  function checkStrikeThrus(audioDataArray, myPlayer){
-    audioDataArray.forEach((element, index) => {
-      if ((index+1) < audioDataArray.length  && parseFloat(element.stop) < parseFloat(myPlayer.currentTime) && parseFloat(myPlayer.currentTime) < parseFloat(audioDataArray[index+1].start)) {
-        myPlayer.currentTime = audioDataArray[index+1].start + 0.05;
-      }
-    });
-  }
-
-  document
-    .getElementById("download-wav-cut")
-    .addEventListener("click", async () => {
-      // grab the filename if saved
-      const element = document.querySelector(".file-item.active");
-
-      let fileName;
-      if (element == null || typeof element === "undefined"){
-        fileName = "default";
-      } else {
-        fileName = element.textContent;
-      }
-
-      if (typeof audioDataArray === "undefined") {
-        audioDataArray = [];
-        audioDataArray.push(
-          new AudioData(
-            document.querySelector("#hyperplayer").src,
-            0,
-            document.getElementById("hyperplayer").duration
-          )
-        );
-      }
-
-      let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
-      cutAudioApp.to_wav(wavBlob, fileName);
-      
-    });
-
-    // Add event listener for the new Upload & Transcribe button
-    document.getElementById('upload-transcribe-btn').addEventListener('click', function() {
-      // Programmatically check the transcribe-modal checkbox to open the modal
-      document.getElementById('transcribe-modal').checked = true;
-    });
-</script>
-
-
-<script>
-  // SVGs
-
-  const transcribingSvg = "data:image/svg+xml,%3Csvg width='45' height='45' viewBox='0 0 45 45' xmlns='http://www.w3.org/2000/svg' stroke='%23000'%3E%3Cg fill='none' fill-rule='evenodd' transform='translate(1 1)' stroke-width='2'%3E%3Ccircle cx='22' cy='22' r='6' stroke-opacity='0'%3E%3Canimate attributeName='r' begin='1.5s' dur='3s' values='6;22' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-opacity' begin='1.5s' dur='3s' values='1;0' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-width' begin='1.5s' dur='3s' values='2;0' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3Ccircle cx='22' cy='22' r='6' stroke-opacity='0'%3E%3Canimate attributeName='r' begin='3s' dur='3s' values='6;22' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-opacity' begin='3s' dur='3s' values='1;0' calcMode='linear' repeatCount='indefinite' /%3E%3Canimate attributeName='stroke-width' begin='3s' dur='3s' values='2;0' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3Ccircle cx='22' cy='22' r='8'%3E%3Canimate attributeName='r' begin='0s' dur='1.5s' values='6;1;2;3;4;5;6' calcMode='linear' repeatCount='indefinite' /%3E%3C/circle%3E%3C/g%3E%3C/svg%3E";
-  const errorSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='256' height='256' viewBox='0 0 256 256' xml:space='preserve'%3E%3Cdefs%3E%3C/defs%3E%3Cg style='stroke: none; stroke-width: 0; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: none; fill-rule: nonzero; opacity: 1;' transform='translate(1.4065934065934016 1.4065934065934016) scale(2.81 2.81)' %3E%3Cpath d='M 85.429 85.078 H 4.571 c -1.832 0 -3.471 -0.947 -4.387 -2.533 c -0.916 -1.586 -0.916 -3.479 0 -5.065 L 40.613 7.455 C 41.529 5.869 43.169 4.922 45 4.922 c 0 0 0 0 0 0 c 1.832 0 3.471 0.947 4.386 2.533 l 40.429 70.025 c 0.916 1.586 0.916 3.479 0.001 5.065 C 88.901 84.131 87.261 85.078 85.429 85.078 z M 45 7.922 c -0.747 0 -1.416 0.386 -1.79 1.033 L 2.782 78.979 c -0.373 0.646 -0.373 1.419 0 2.065 c 0.374 0.647 1.042 1.033 1.789 1.033 h 80.858 c 0.747 0 1.416 -0.387 1.789 -1.033 s 0.373 -1.419 0 -2.065 L 46.789 8.955 C 46.416 8.308 45.747 7.922 45 7.922 L 45 7.922 z M 45 75.325 c -4.105 0 -7.446 -3.34 -7.446 -7.445 s 3.34 -7.445 7.446 -7.445 s 7.445 3.34 7.445 7.445 S 49.106 75.325 45 75.325 z M 45 63.435 c -2.451 0 -4.446 1.994 -4.446 4.445 s 1.995 4.445 4.446 4.445 s 4.445 -1.994 4.445 -4.445 S 47.451 63.435 45 63.435 z M 45 57.146 c -3.794 0 -6.882 -3.087 -6.882 -6.882 V 34.121 c 0 -3.794 3.087 -6.882 6.882 -6.882 c 3.794 0 6.881 3.087 6.881 6.882 v 16.144 C 51.881 54.06 48.794 57.146 45 57.146 z M 45 30.239 c -2.141 0 -3.882 1.741 -3.882 3.882 v 16.144 c 0 2.141 1.741 3.882 3.882 3.882 c 2.14 0 3.881 -1.741 3.881 -3.882 V 34.121 C 48.881 31.98 47.14 30.239 45 30.239 z' style='stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;' transform=' matrix(1 0 0 1 0 0) ' stroke-linecap='round' /%3E%3C/g%3E%3C/svg%3E";
-</script>
-
 </body>
 </html>
