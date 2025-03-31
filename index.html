@@ -149,7 +149,7 @@ If you are creating an open source application under a license compatible with t
           </select>
         </div>
         <div class="form-text" style="font-size: 90%;">
-          <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p> 
+          <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p> 
           <p>The English models are slightly more accurate (for the English language only).</p>
           <p>* Whisper running in the browser is currently in beta.</p>
         </div>
@@ -1286,12 +1286,22 @@ If you are creating an open source application under a license compatible with t
     }
 
     function addCaption(elem) {
+      // Initialize the DOM parser and get the template
+      let parser = new DOMParser();
+      let html = document.querySelector('#caption-template-holder').innerHTML;
+      let template = parser.parseFromString(html, "text/html");
+
       let captionTempl = template.querySelector('#caption-template').cloneNode(true);
       captionTempl.getElementsByClassName('line1')[0].value = "";
       captionTempl.getElementsByClassName('line2')[0].value = "";
       captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
       captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
+      captionTempl.classList.add('caption-new');
       elem.parentElement.parentNode.insertAdjacentElement('afterend', captionTempl);
+      // Remove animation class after animation completes
+      setTimeout(() => {
+        captionTempl.classList.remove('caption-new');
+      }, 300);
       makeCaptionEditorActive();
     }
 
