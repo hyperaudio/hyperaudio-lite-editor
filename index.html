@@ -268,6 +268,14 @@ If you are creating an open source application under a license compatible with t
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
               <li class="menu-title">
                 <span>
+                  Align
+                </span>
+              </li>
+              <li><a id="upload-align-btn">Add Transcript</a></li>
+              <hr
+              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
+              <li class="menu-title">
+                <span>
                   Download as
                 </span>
               </li>
@@ -549,6 +557,30 @@ If you are creating an open source application under a license compatible with t
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <input type="checkbox" id="align-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box">
+      <label id="close-modal" for="align-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <h3 class="font-bold text-lg"  style="margin-bottom:16px">Align</h3>
+      
+      <div class="flex flex-col gap-4 w-full">
+        <label for="align-text-input" class="label-text">Paste the transcript text you want to align with the media:</label>
+        <textarea 
+          id="align-text-input" 
+          name="align-text-input" 
+          placeholder="Paste your transcript text here..." 
+          class="textarea textarea-bordered w-full h-48" 
+          rows="8">
+        </textarea>
+      </div>
+      
+      <div class="modal-action">
+        <button id="align-text-btn" class="btn btn-primary">ALIGN</button>
+      </div>
+
     </div>
   </div>
 
@@ -1655,6 +1687,11 @@ If you are creating an open source application under a license compatible with t
       // Programmatically check the transcribe-modal checkbox to open the modal
       document.getElementById('transcribe-modal').checked = true;
     });
+
+    document.getElementById('upload-align-btn').addEventListener('click', function() {
+      document.getElementById('align-modal').checked = true;
+    });
+
 </script>
 
 
