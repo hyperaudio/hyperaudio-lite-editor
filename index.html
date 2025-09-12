@@ -1690,6 +1690,316 @@ If you are creating an open source application under a license compatible with t
       document.getElementById('align-modal').checked = true;
     });
 
+    // Add event listener for ALIGN button
+    document.getElementById('align-text-btn').addEventListener('click', function() {
+      alignTranscriptText();
+    });
+
+    // Word Alignment Algorithm - Based on the provided example
+    function alignTranscriptText() {
+      try {
+        // Get the pasted text from the textarea
+        const plainText = document.getElementById('align-text-input').value.trim();
+        
+        if (!plainText) {
+          alert('Please paste some text to align.');
+          return;
+        }
+
+        // Get the current timed transcript HTML
+        const hypertranscriptDiv = document.getElementById('hypertranscript');
+        if (!hypertranscriptDiv) {
+          alert('No timed transcript found.');
+          return;
+        }
+
+        // Extract words and timings from existing HTML
+        const { words: sourceWords, timings } = extractTimedWords(hypertranscriptDiv.innerHTML);
+        
+        if (sourceWords.length === 0) {
+          alert('No timed words found in the current transcript.');
+          return;
+        }
+
+        // Split plain text into words
+        const targetWords = plainText.split(/\s+/).filter(w => w.length > 0);
+
+        // Align words
+        const alignment = alignWords(sourceWords, targetWords);
+
+        // Generate new HTML with aligned timings
+        const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings);
+
+        // Update the hypertranscript div
+        hypertranscriptDiv.innerHTML = newHTML;
+
+        // Close the modal
+        document.getElementById('align-modal').checked = false;
+
+        // Clear the textarea
+        document.getElementById('align-text-input').value = '';
+
+        // Reinitialize hyperaudio to recognize the new transcript
+        if (typeof hyperaudio === 'function') {
+          hyperaudio();
+        }
+
+        alert('Transcript alignment completed successfully!');
+
+      } catch (error) {
+        console.error('Alignment error:', error);
+        alert('Error during alignment: ' + error.message);
+      }
+    }
+
+    // Extract words and timings from HTML
+    function extractTimedWords(html) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      
+      const spans = doc.querySelectorAll('span[data-m][data-d]');
+      
+      const words = [];
+      const timings = [];
+      
+      spans.forEach(span => {
+        const word = span.textContent.trim();
+        if (word && !span.classList.contains('speaker')) { // Skip speaker spans
+          words.push(word);
+          
+          const start = parseInt(span.getAttribute('data-m'));
+          const duration = parseInt(span.getAttribute('data-d'));
+          
+          timings.push({ 
+            start, 
+            duration, 
+            end: start + duration 
+          });
+        }
+      });
+      
+      return { words, timings };
+    }
+
+    // Helper functions for word alignment
+    function stripPunctuation(word) {
+      return word.replace(/[.,!?;:'"]+$/, '');
+    }
+    
+    function normalizeWord(word) {
+      return stripPunctuation(word.toLowerCase());
+    }
+
+    // Word alignment algorithm
+    function alignWords(sourceWords, targetWords) {
+      const sourceWordMap = new Map();
+      const targetWordMap = new Map();
+      
+      // Build frequency maps
+      sourceWords.forEach((word, idx) => {
+        const key = normalizeWord(word);
+        if (!sourceWordMap.has(key)) {
+          sourceWordMap.set(key, []);
+        }
+        sourceWordMap.get(key).push(idx);
+      });
+      
+      targetWords.forEach((word, idx) => {
+        const key = normalizeWord(word);
+        if (!targetWordMap.has(key)) {
+          targetWordMap.set(key, []);
+        }
+        targetWordMap.get(key).push(idx);
+      });
+      
+      const usedSourceIndices = new Set();
+      const targetAlignment = new Array(targetWords.length).fill(null);
+      
+      // First pass - in-order matching
+      let lastSourceIdx = -1;
+      
+      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
+        const targetWord = normalizeWord(targetWords[targetIdx]);
+        
+        if (sourceWordMap.has(targetWord)) {
+          const sourceIndices = sourceWordMap.get(targetWord);
+          
+          let bestSourceIdx = null;
+          for (const sourceIdx of sourceIndices) {
+            if (!usedSourceIndices.has(sourceIdx) && sourceIdx > lastSourceIdx) {
+              bestSourceIdx = sourceIdx;
+              break;
+            }
+          }
+          
+          if (bestSourceIdx !== null) {
+            targetAlignment[targetIdx] = bestSourceIdx;
+            usedSourceIndices.add(bestSourceIdx);
+            lastSourceIdx = bestSourceIdx;
+          }
+        }
+      }
+      
+      // Second pass - out-of-order matching
+      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
+        if (targetAlignment[targetIdx] === null) {
+          const targetWord = normalizeWord(targetWords[targetIdx]);
+          
+          if (sourceWordMap.has(targetWord)) {
+            const sourceIndices = sourceWordMap.get(targetWord);
+            
+            for (const sourceIdx of sourceIndices) {
+              if (!usedSourceIndices.has(sourceIdx)) {
+                targetAlignment[targetIdx] = sourceIdx;
+                usedSourceIndices.add(sourceIdx);
+                break;
+              }
+            }
+          }
+        }
+      }
+      
+      // Handle substitution groups
+      const substitutionGroups = [];
+      let currentUnmatchedGroup = [];
+      
+      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
+        if (targetAlignment[targetIdx] === null) {
+          currentUnmatchedGroup.push(targetIdx);
+        } else {
+          if (currentUnmatchedGroup.length > 0) {
+            substitutionGroups.push([...currentUnmatchedGroup]);
+            currentUnmatchedGroup = [];
+          }
+        }
+      }
+      if (currentUnmatchedGroup.length > 0) {
+        substitutionGroups.push(currentUnmatchedGroup);
+      }
+      
+      // Process substitution groups
+      substitutionGroups.forEach(group => {
+        let prevMatchedIdx = -1;
+        let nextMatchedIdx = sourceWords.length;
+        
+        for (let i = group[0] - 1; i >= 0; i--) {
+          if (targetAlignment[i] !== null) {
+            prevMatchedIdx = targetAlignment[i];
+            break;
+          }
+        }
+        
+        for (let i = group[group.length - 1] + 1; i < targetWords.length; i++) {
+          if (targetAlignment[i] !== null) {
+            nextMatchedIdx = targetAlignment[i];
+            break;
+          }
+        }
+        
+        const unusedInRange = [];
+        for (let sourceIdx = prevMatchedIdx + 1; sourceIdx < nextMatchedIdx && sourceIdx < sourceWords.length; sourceIdx++) {
+          if (!usedSourceIndices.has(sourceIdx)) {
+            unusedInRange.push(sourceIdx);
+          }
+        }
+        
+        if (unusedInRange.length > 0) {
+          if (unusedInRange.length === group.length) {
+            for (let i = 0; i < group.length; i++) {
+              targetAlignment[group[i]] = unusedInRange[i];
+              usedSourceIndices.add(unusedInRange[i]);
+            }
+          } else if (unusedInRange.length > group.length) {
+            for (let i = 0; i < group.length; i++) {
+              targetAlignment[group[i]] = unusedInRange[i];
+              usedSourceIndices.add(unusedInRange[i]);
+            }
+          } else {
+            for (let i = 0; i < group.length; i++) {
+              const sourceIdx = unusedInRange[Math.min(i, unusedInRange.length - 1)];
+              targetAlignment[group[i]] = sourceIdx;
+              if (i < unusedInRange.length) {
+                usedSourceIndices.add(sourceIdx);
+              }
+            }
+          }
+        }
+      });
+      
+      // Build final alignment
+      const alignment = [];
+      
+      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
+        const sourceIdx = targetAlignment[targetIdx];
+        if (sourceIdx !== null) {
+          alignment.push({ 
+            type: 'match', 
+            sourceIdx: sourceIdx, 
+            targetIdx: targetIdx 
+          });
+        } else {
+          alignment.push({ 
+            type: 'insert', 
+            sourceIdx: null, 
+            targetIdx: targetIdx 
+          });
+        }
+      }
+      
+      for (let sourceIdx = 0; sourceIdx < sourceWords.length; sourceIdx++) {
+        if (!usedSourceIndices.has(sourceIdx)) {
+          alignment.push({ 
+            type: 'delete', 
+            sourceIdx: sourceIdx, 
+            targetIdx: null 
+          });
+        }
+      }
+      
+      alignment.sort((a, b) => {
+        if (a.targetIdx === null) return 1;
+        if (b.targetIdx === null) return -1;
+        return a.targetIdx - b.targetIdx;
+      });
+      
+      return alignment;
+    }
+
+    // Generate new HTML with aligned timings
+    function generateAlignedHTML(alignment, sourceWords, targetWords, timings) {
+      let html = '<article><section><p>\n';
+      let lastTiming = null;
+      
+      alignment.forEach((align, idx) => {
+        if (align.type === 'match') {
+          const timing = timings[align.sourceIdx];
+          html += `      <span data-m="${timing.start}" data-d="${timing.duration}">${targetWords[align.targetIdx]} </span>\n`;
+          lastTiming = timing;
+        } else if (align.type === 'insert') {
+          // Find next timing for interpolation
+          let nextTiming = null;
+          for (let i = idx + 1; i < alignment.length; i++) {
+            if (alignment[i].type === 'match') {
+              nextTiming = timings[alignment[i].sourceIdx];
+              break;
+            }
+          }
+          
+          const timing = nextTiming || lastTiming;
+          if (timing) {
+            html += `      <span data-m="${timing.start}" data-d="${timing.duration}">${targetWords[align.targetIdx]} </span>\n`;
+          } else {
+            // Fallback timing if no timing available
+            html += `      <span data-m="0" data-d="100">${targetWords[align.targetIdx]} </span>\n`;
+          }
+        }
+        // Skip deleted words (they don't appear in the new transcript)
+      });
+      
+      html += '</p></section></article>';
+      return html;
+    }
+
 </script>
 
 
