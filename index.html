@@ -1790,178 +1790,65 @@ If you are creating an open source application under a license compatible with t
       return stripPunctuation(word.toLowerCase());
     }
 
-    // Word alignment algorithm
+    // Simple word alignment using edit distance
     function alignWords(sourceWords, targetWords) {
-      const sourceWordMap = new Map();
-      const targetWordMap = new Map();
+      const m = sourceWords.length;
+      const n = targetWords.length;
       
-      // Build frequency maps
-      sourceWords.forEach((word, idx) => {
-        const key = normalizeWord(word);
-        if (!sourceWordMap.has(key)) {
-          sourceWordMap.set(key, []);
-        }
-        sourceWordMap.get(key).push(idx);
-      });
+      // Create DP table
+      const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
       
-      targetWords.forEach((word, idx) => {
-        const key = normalizeWord(word);
-        if (!targetWordMap.has(key)) {
-          targetWordMap.set(key, []);
-        }
-        targetWordMap.get(key).push(idx);
-      });
+      // Initialize base cases
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
       
-      const usedSourceIndices = new Set();
-      const targetAlignment = new Array(targetWords.length).fill(null);
-      
-      // First pass - in-order matching
-      let lastSourceIdx = -1;
-      
-      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
-        const targetWord = normalizeWord(targetWords[targetIdx]);
-        
-        if (sourceWordMap.has(targetWord)) {
-          const sourceIndices = sourceWordMap.get(targetWord);
-          
-          let bestSourceIdx = null;
-          for (const sourceIdx of sourceIndices) {
-            if (!usedSourceIndices.has(sourceIdx) && sourceIdx > lastSourceIdx) {
-              bestSourceIdx = sourceIdx;
-              break;
-            }
-          }
-          
-          if (bestSourceIdx !== null) {
-            targetAlignment[targetIdx] = bestSourceIdx;
-            usedSourceIndices.add(bestSourceIdx);
-            lastSourceIdx = bestSourceIdx;
-          }
-        }
-      }
-      
-      // Second pass - out-of-order matching
-      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
-        if (targetAlignment[targetIdx] === null) {
-          const targetWord = normalizeWord(targetWords[targetIdx]);
-          
-          if (sourceWordMap.has(targetWord)) {
-            const sourceIndices = sourceWordMap.get(targetWord);
-            
-            for (const sourceIdx of sourceIndices) {
-              if (!usedSourceIndices.has(sourceIdx)) {
-                targetAlignment[targetIdx] = sourceIdx;
-                usedSourceIndices.add(sourceIdx);
-                break;
-              }
-            }
-          }
-        }
-      }
-      
-      // Handle substitution groups
-      const substitutionGroups = [];
-      let currentUnmatchedGroup = [];
-      
-      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
-        if (targetAlignment[targetIdx] === null) {
-          currentUnmatchedGroup.push(targetIdx);
-        } else {
-          if (currentUnmatchedGroup.length > 0) {
-            substitutionGroups.push([...currentUnmatchedGroup]);
-            currentUnmatchedGroup = [];
-          }
-        }
-      }
-      if (currentUnmatchedGroup.length > 0) {
-        substitutionGroups.push(currentUnmatchedGroup);
-      }
-      
-      // Process substitution groups
-      substitutionGroups.forEach(group => {
-        let prevMatchedIdx = -1;
-        let nextMatchedIdx = sourceWords.length;
-        
-        for (let i = group[0] - 1; i >= 0; i--) {
-          if (targetAlignment[i] !== null) {
-            prevMatchedIdx = targetAlignment[i];
-            break;
-          }
-        }
-        
-        for (let i = group[group.length - 1] + 1; i < targetWords.length; i++) {
-          if (targetAlignment[i] !== null) {
-            nextMatchedIdx = targetAlignment[i];
-            break;
-          }
-        }
-        
-        const unusedInRange = [];
-        for (let sourceIdx = prevMatchedIdx + 1; sourceIdx < nextMatchedIdx && sourceIdx < sourceWords.length; sourceIdx++) {
-          if (!usedSourceIndices.has(sourceIdx)) {
-            unusedInRange.push(sourceIdx);
-          }
-        }
-        
-        if (unusedInRange.length > 0) {
-          if (unusedInRange.length === group.length) {
-            for (let i = 0; i < group.length; i++) {
-              targetAlignment[group[i]] = unusedInRange[i];
-              usedSourceIndices.add(unusedInRange[i]);
-            }
-          } else if (unusedInRange.length > group.length) {
-            for (let i = 0; i < group.length; i++) {
-              targetAlignment[group[i]] = unusedInRange[i];
-              usedSourceIndices.add(unusedInRange[i]);
-            }
+      // Fill DP table
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
+            dp[i][j] = dp[i-1][j-1];
           } else {
-            for (let i = 0; i < group.length; i++) {
-              const sourceIdx = unusedInRange[Math.min(i, unusedInRange.length - 1)];
-              targetAlignment[group[i]] = sourceIdx;
-              if (i < unusedInRange.length) {
-                usedSourceIndices.add(sourceIdx);
-              }
-            }
+            dp[i][j] = Math.min(
+              dp[i-1][j-1] + 1,  // substitute
+              dp[i-1][j] + 1,    // delete
+              dp[i][j-1] + 1     // insert
+            );
           }
         }
-      });
+      }
       
-      // Build final alignment
+      // Backtrack to find alignment
       const alignment = [];
+      let i = m, j = n;
       
-      for (let targetIdx = 0; targetIdx < targetWords.length; targetIdx++) {
-        const sourceIdx = targetAlignment[targetIdx];
-        if (sourceIdx !== null) {
-          alignment.push({ 
-            type: 'match', 
-            sourceIdx: sourceIdx, 
-            targetIdx: targetIdx 
-          });
+      while (i > 0 || j > 0) {
+        if (i === 0) {
+          alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
+          j--;
+        } else if (j === 0) {
+          alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
+          i--;
         } else {
-          alignment.push({ 
-            type: 'insert', 
-            sourceIdx: null, 
-            targetIdx: targetIdx 
-          });
+          const current = dp[i][j];
+          if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
+            alignment.push({ type: 'match', sourceIdx: i-1, targetIdx: j-1 });
+            i--;
+            j--;
+          } else if (current === dp[i-1][j-1] + 1) {
+            alignment.push({ type: 'substitute', sourceIdx: i-1, targetIdx: j-1 });
+            i--;
+            j--;
+          } else if (current === dp[i-1][j] + 1) {
+            alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
+            i--;
+          } else {
+            alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
+            j--;
+          }
         }
       }
       
-      for (let sourceIdx = 0; sourceIdx < sourceWords.length; sourceIdx++) {
-        if (!usedSourceIndices.has(sourceIdx)) {
-          alignment.push({ 
-            type: 'delete', 
-            sourceIdx: sourceIdx, 
-            targetIdx: null 
-          });
-        }
-      }
-      
-      alignment.sort((a, b) => {
-        if (a.targetIdx === null) return 1;
-        if (b.targetIdx === null) return -1;
-        return a.targetIdx - b.targetIdx;
-      });
-      
+      alignment.reverse();
       return alignment;
     }
 
@@ -1971,7 +1858,7 @@ If you are creating an open source application under a license compatible with t
       let lastTiming = null;
       
       alignment.forEach((align, idx) => {
-        if (align.type === 'match') {
+        if (align.type === 'match' || align.type === 'substitute') {
           const timing = timings[align.sourceIdx];
           html += `      <span data-m="${timing.start}" data-d="${timing.duration}">${targetWords[align.targetIdx]} </span>\n`;
           lastTiming = timing;
@@ -1979,7 +1866,7 @@ If you are creating an open source application under a license compatible with t
           // Find next timing for interpolation
           let nextTiming = null;
           for (let i = idx + 1; i < alignment.length; i++) {
-            if (alignment[i].type === 'match') {
+            if (alignment[i].type === 'match' || alignment[i].type === 'substitute') {
               nextTiming = timings[alignment[i].sourceIdx];
               break;
             }
