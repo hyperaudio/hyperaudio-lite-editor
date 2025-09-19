@@ -605,6 +605,9 @@ If you are creating an open source application under a license compatible with t
   <script src="js/caption-modified.js"></script>
   <script>
 
+    console.log("version 3");
+
+
   let updateCaptionsFromTranscript = true;
   let captionMode = false; // used to detect whether we need to sanitise amongst other things
   let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
@@ -1697,6 +1700,7 @@ If you are creating an open source application under a license compatible with t
 
     // Word Alignment Algorithm - Based on the provided example
     function alignTranscriptText() {
+      console.log("aligning...");
       try {
         // Get the pasted text from the textarea
         const plainText = document.getElementById('align-text-input').value.trim();
@@ -1714,7 +1718,7 @@ If you are creating an open source application under a license compatible with t
         }
 
         // Extract words and timings from existing HTML
-        const { words: sourceWords, timings } = extractTimedWords(hypertranscriptDiv.innerHTML);
+        const { words: sourceWords, timings, htmlStructure } = extractTimedWords(hypertranscriptDiv.innerHTML);
         
         if (sourceWords.length === 0) {
           alert('No timed words found in the current transcript.');
@@ -1728,7 +1732,7 @@ If you are creating an open source application under a license compatible with t
         const alignment = alignWords(sourceWords, targetWords);
 
         // Generate new HTML with aligned timings
-        const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings);
+        const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings, htmlStructure);
 
         // Update the hypertranscript div
         hypertranscriptDiv.innerHTML = newHTML;
@@ -1753,6 +1757,10 @@ If you are creating an open source application under a license compatible with t
     }
 
     // Extract words and timings from HTML
+    // This function parses the input HTML and extracts:
+    // 1. The text content of each span (the words)
+    // 2. The timing attributes (data-m for start time, data-d for duration)
+    // 3. The original HTML structure
     function extractTimedWords(html) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
@@ -1778,7 +1786,10 @@ If you are creating an open source application under a license compatible with t
         }
       });
       
-      return { words, timings };
+      // Preserve the original HTML structure
+      const htmlStructure = html.trim();
+      
+      return { words, timings, htmlStructure };
     }
 
     // Helper functions for word alignment
@@ -1853,14 +1864,19 @@ If you are creating an open source application under a license compatible with t
     }
 
     // Generate new HTML with aligned timings
-    function generateAlignedHTML(alignment, sourceWords, targetWords, timings) {
-      let html = '<article><section><p>\n';
+    function generateAlignedHTML(alignment, sourceWords, targetWords, timings, originalHtml) {
+      // Build the output array first
+      const output = [];
       let lastTiming = null;
       
       alignment.forEach((align, idx) => {
         if (align.type === 'match' || align.type === 'substitute') {
           const timing = timings[align.sourceIdx];
-          html += `      <span data-m="${timing.start}" data-d="${timing.duration}">${targetWords[align.targetIdx]} </span>\n`;
+          output.push({
+            word: targetWords[align.targetIdx],
+            start: timing.start,
+            duration: timing.duration
+          });
           lastTiming = timing;
         } else if (align.type === 'insert') {
           // Find next timing for interpolation
@@ -1874,17 +1890,44 @@ If you are creating an open source application under a license compatible with t
           
           const timing = nextTiming || lastTiming;
           if (timing) {
-            html += `      <span data-m="${timing.start}" data-d="${timing.duration}">${targetWords[align.targetIdx]} </span>\n`;
+            output.push({
+              word: targetWords[align.targetIdx],
+              start: timing.start,
+              duration: timing.duration
+            });
           } else {
             // Fallback timing if no timing available
-            html += `      <span data-m="0" data-d="100">${targetWords[align.targetIdx]} </span>\n`;
+            output.push({
+              word: targetWords[align.targetIdx],
+              start: 0,
+              duration: 100
+            });
           }
         }
         // Skip deleted words (they don't appear in the new transcript)
       });
       
-      html += '</p></section></article>';
-      return html;
+      // Parse the original HTML to preserve structure
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(originalHtml, 'text/html');
+      
+      // Generate spans HTML
+      let spansHtml = '';
+      output.forEach(item => {
+        spansHtml += `<span data-m="${item.start}" data-d="${item.duration}">${item.word} </span>`;
+      });
+      
+      // Find all <p> tags and replace their content
+      const pTags = doc.querySelectorAll('p');
+      if (pTags.length > 0) {
+        // Replace content of first p tag with our new spans
+        pTags[0].innerHTML = spansHtml;
+        // Output just the modified p tag, not the entire body
+        return pTags[0].outerHTML;
+      } else {
+        // If no p tags found, wrap in p tags
+        return `<p>${spansHtml}</p>`;
+      }
     }
 
 </script>
