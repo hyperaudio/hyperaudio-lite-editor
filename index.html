@@ -1721,17 +1721,19 @@ If you are creating an open source application under a license compatible with t
         // Store original content in case we need to restore it on error
         const originalContent = hypertranscriptDiv.innerHTML;
 
-        // Show loader
-        hypertranscriptDiv.innerHTML = '<div class="vertically-centre"><center>Aligning transcript....</center><br/><img src="'+transcribingSvg+'" width="50" alt="aligning" style="margin: auto; display: block;"></div>';
-
-        // Close the modal immediately to show the loading state
+        // Close the modal first
         document.getElementById('align-modal').checked = false;
 
         // Clear the textarea
         document.getElementById('align-text-input').value = '';
 
-        // Use setTimeout to allow the loader to render before processing
+        // Wait for modal to close, then show loader and start alignment
         setTimeout(() => {
+          // Show loader
+          hypertranscriptDiv.innerHTML = '<div class="vertically-centre"><center>Aligning transcript....</center><br/><img src="'+transcribingSvg+'" width="50" alt="aligning" style="margin: auto; display: block;"></div>';
+
+          // Short delay to allow loader to render before processing
+          setTimeout(() => {
           try {
             // Extract words and timings from existing HTML
             const { words: sourceWords, timings, htmlStructure } = extractTimedWords(originalContent);
@@ -1764,7 +1766,8 @@ If you are creating an open source application under a license compatible with t
             hypertranscriptDiv.innerHTML = originalContent;
             alert('Error during alignment: ' + error.message);
           }
-        }, 100); // Small delay to allow loader to render
+          }, 100); // Small delay to allow loader to render
+        }, 300); // Wait for modal close animation
 
       } catch (error) {
         console.error('Alignment error:', error);
