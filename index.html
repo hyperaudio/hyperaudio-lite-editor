@@ -1699,7 +1699,7 @@ If you are creating an open source application under a license compatible with t
       alignTranscriptText();
     });
 
-    // Word Alignment Algorithm - Based on the provided example
+    // Word Alignment Algorithm with Loader
     function alignTranscriptText() {
       console.log("aligning...");
       try {
@@ -1718,38 +1718,53 @@ If you are creating an open source application under a license compatible with t
           return;
         }
 
-        // Extract words and timings from existing HTML
-        const { words: sourceWords, timings, htmlStructure } = extractTimedWords(hypertranscriptDiv.innerHTML);
-        
-        if (sourceWords.length === 0) {
-          alert('No timed words found in the current transcript.');
-          return;
-        }
+        // Store original content in case we need to restore it on error
+        const originalContent = hypertranscriptDiv.innerHTML;
 
-        // Split plain text into words
-        const targetWords = plainText.split(/\s+/).filter(w => w.length > 0);
+        // Show loader
+        hypertranscriptDiv.innerHTML = '<div class="vertically-centre"><center>Aligning transcript....</center><br/><img src="'+transcribingSvg+'" width="50" alt="aligning" style="margin: auto; display: block;"></div>';
 
-        // Align words
-        const alignment = alignWords(sourceWords, targetWords);
-
-        // Generate new HTML with aligned timings and paragraph structure
-        const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings, htmlStructure, plainText);
-
-        // Update the hypertranscript div
-        hypertranscriptDiv.innerHTML = newHTML;
-
-        // Close the modal
+        // Close the modal immediately to show the loading state
         document.getElementById('align-modal').checked = false;
 
         // Clear the textarea
         document.getElementById('align-text-input').value = '';
 
-        // Reinitialize hyperaudio to recognize the new transcript
-        if (typeof hyperaudio === 'function') {
-          hyperaudio();
-        }
+        // Use setTimeout to allow the loader to render before processing
+        setTimeout(() => {
+          try {
+            // Extract words and timings from existing HTML
+            const { words: sourceWords, timings, htmlStructure } = extractTimedWords(originalContent);
+            
+            if (sourceWords.length === 0) {
+              hypertranscriptDiv.innerHTML = originalContent;
+              alert('No timed words found in the current transcript.');
+              return;
+            }
 
-        alert('Transcript alignment completed successfully!');
+            // Split plain text into words, excluding speaker names
+            const targetWords = extractWordsWithoutSpeakers(plainText);
+
+            // Align words
+            const alignment = alignWords(sourceWords, targetWords);
+
+            // Generate new HTML with aligned timings and paragraph structure
+            const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings, htmlStructure, plainText);
+
+            // Update the hypertranscript div with aligned content
+            hypertranscriptDiv.innerHTML = newHTML;
+
+            // Reinitialize hyperaudio to recognize the new transcript
+            if (typeof hyperaudio === 'function') {
+              hyperaudio();
+            }
+
+          } catch (error) {
+            console.error('Alignment error:', error);
+            hypertranscriptDiv.innerHTML = originalContent;
+            alert('Error during alignment: ' + error.message);
+          }
+        }, 100); // Small delay to allow loader to render
 
       } catch (error) {
         console.error('Alignment error:', error);

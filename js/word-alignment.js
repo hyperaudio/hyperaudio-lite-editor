@@ -105,29 +105,63 @@ function alignWords(sourceWords, targetWords) {
   return alignment;
 }
 
-// Detect paragraph breaks in the original input text
+// Detect paragraph breaks and speakers in the original input text
 function detectParagraphBreaks(plainText) {
   // Split by double newlines (paragraph breaks)
   const paragraphs = plainText.split(/\n\s*\n/);
   
-  // Map each paragraph to its word positions
+  // Map each paragraph to its word positions and speaker info
   const paragraphMap = [];
   let wordIndex = 0;
   
   paragraphs.forEach((paragraph, paragraphIndex) => {
-    const paragraphWords = paragraph.trim().split(/\s+/).filter(w => w.length > 0);
-    if (paragraphWords.length > 0) {
-      paragraphMap.push({
-        paragraphIndex: paragraphIndex,
-        startWordIndex: wordIndex,
-        endWordIndex: wordIndex + paragraphWords.length - 1,
-        wordCount: paragraphWords.length
-      });
-      wordIndex += paragraphWords.length;
+    const trimmedParagraph = paragraph.trim();
+    if (trimmedParagraph.length > 0) {
+      // Check if paragraph starts with a speaker name in square brackets
+      const speakerMatch = trimmedParagraph.match(/^\[([^\]]+)\]\s*/);
+      let speaker = null;
+      let paragraphText = trimmedParagraph;
+      
+      if (speakerMatch) {
+        speaker = speakerMatch[1]; // Extract speaker name without brackets
+        paragraphText = trimmedParagraph.substring(speakerMatch[0].length); // Remove speaker from text
+      }
+      
+      const paragraphWords = paragraphText.split(/\s+/).filter(w => w.length > 0);
+      
+      if (paragraphWords.length > 0) {
+        paragraphMap.push({
+          paragraphIndex: paragraphIndex,
+          startWordIndex: wordIndex,
+          endWordIndex: wordIndex + paragraphWords.length - 1,
+          wordCount: paragraphWords.length,
+          speaker: speaker
+        });
+        wordIndex += paragraphWords.length;
+      }
     }
   });
   
   return paragraphMap;
+}
+
+// Extract words from plain text, excluding speaker names
+function extractWordsWithoutSpeakers(plainText) {
+  // Split by double newlines to get paragraphs
+  const paragraphs = plainText.split(/\n\s*\n/);
+  let allWords = [];
+  
+  paragraphs.forEach(paragraph => {
+    const trimmedParagraph = paragraph.trim();
+    if (trimmedParagraph.length > 0) {
+      // Remove speaker name if present
+      const paragraphText = trimmedParagraph.replace(/^\[([^\]]+)\]\s*/, '');
+      const words = paragraphText.split(/\s+/).filter(w => w.length > 0);
+      allWords = allWords.concat(words);
+    }
+  });
+  
+  return allWords;
 }
 
 // Generate new HTML with aligned timings and paragraph structure
@@ -187,6 +221,18 @@ function generateAlignedHTML(alignment, sourceWords, targetWords, timings, origi
     // Generate multiple paragraphs
     paragraphMap.forEach((paragraph, paragraphIndex) => {
       html += '  <p>\n';
+      
+      // Add speaker span if present (speakers are not part of the alignment, so we add them separately)
+      if (paragraph.speaker) {
+        // Get the timing of the first word in this paragraph for the speaker
+        const paragraphWords = output.filter(item => 
+          item.targetIdx >= paragraph.startWordIndex && 
+          item.targetIdx <= paragraph.endWordIndex
+        );
+        
+        const firstWordTiming = paragraphWords.length > 0 ? paragraphWords[0].start : 0;
+        html += `    <span data-m="${firstWordTiming}" data-d="0" class="speaker">[${paragraph.speaker}] </span>\n`;
+      }
       
       // Add words for this paragraph
       const paragraphWords = output.filter(item => 
