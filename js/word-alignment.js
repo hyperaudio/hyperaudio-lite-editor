@@ -105,8 +105,33 @@ function alignWords(sourceWords, targetWords) {
   return alignment;
 }
 
-// Generate new HTML with aligned timings
-function generateAlignedHTML(alignment, sourceWords, targetWords, timings, originalHtml) {
+// Detect paragraph breaks in the original input text
+function detectParagraphBreaks(plainText) {
+  // Split by double newlines (paragraph breaks)
+  const paragraphs = plainText.split(/\n\s*\n/);
+  
+  // Map each paragraph to its word positions
+  const paragraphMap = [];
+  let wordIndex = 0;
+  
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const paragraphWords = paragraph.trim().split(/\s+/).filter(w => w.length > 0);
+    if (paragraphWords.length > 0) {
+      paragraphMap.push({
+        paragraphIndex: paragraphIndex,
+        startWordIndex: wordIndex,
+        endWordIndex: wordIndex + paragraphWords.length - 1,
+        wordCount: paragraphWords.length
+      });
+      wordIndex += paragraphWords.length;
+    }
+  });
+  
+  return paragraphMap;
+}
+
+// Generate new HTML with aligned timings and paragraph structure
+function generateAlignedHTML(alignment, sourceWords, targetWords, timings, originalHtml, plainText) {
   // Build the output array first
   const output = [];
   let lastTiming = null;
@@ -117,7 +142,8 @@ function generateAlignedHTML(alignment, sourceWords, targetWords, timings, origi
       output.push({
         word: targetWords[align.targetIdx],
         start: timing.start,
-        duration: timing.duration
+        duration: timing.duration,
+        targetIdx: align.targetIdx
       });
       lastTiming = timing;
     } else if (align.type === 'insert') {
@@ -135,39 +161,54 @@ function generateAlignedHTML(alignment, sourceWords, targetWords, timings, origi
         output.push({
           word: targetWords[align.targetIdx],
           start: timing.start,
-          duration: timing.duration
+          duration: timing.duration,
+          targetIdx: align.targetIdx
         });
       } else {
         // Fallback timing if no timing available
         output.push({
           word: targetWords[align.targetIdx],
           start: 0,
-          duration: 100
+          duration: 100,
+          targetIdx: align.targetIdx
         });
       }
     }
     // Skip deleted words (they don't appear in the new transcript)
   });
   
-  // Parse the original HTML to preserve structure
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(originalHtml, 'text/html');
+  // Detect paragraph breaks in the plain text
+  const paragraphMap = detectParagraphBreaks(plainText);
   
-  // Generate spans HTML
-  let spansHtml = '';
-  output.forEach(item => {
-    spansHtml += `<span data-m="${item.start}" data-d="${item.duration}">${item.word} </span>`;
-  });
+  // Generate HTML with paragraph structure
+  let html = '<article><section>\n';
   
-  // Find all <p> tags and replace their content
-  const pTags = doc.querySelectorAll('p');
-  if (pTags.length > 0) {
-    // Replace content of first p tag with our new spans
-    pTags[0].innerHTML = spansHtml;
-    // Output just the modified p tag, not the entire body
-    return pTags[0].outerHTML;
+  if (paragraphMap.length > 0) {
+    // Generate multiple paragraphs
+    paragraphMap.forEach((paragraph, paragraphIndex) => {
+      html += '  <p>\n';
+      
+      // Add words for this paragraph
+      const paragraphWords = output.filter(item => 
+        item.targetIdx >= paragraph.startWordIndex && 
+        item.targetIdx <= paragraph.endWordIndex
+      );
+      
+      paragraphWords.forEach(item => {
+        html += `    <span data-m="${item.start}" data-d="${item.duration}">${item.word} </span>\n`;
+      });
+      
+      html += '  </p>\n';
+    });
   } else {
-    // If no p tags found, wrap in p tags
-    return `<p>${spansHtml}</p>`;
+    // Single paragraph fallback
+    html += '  <p>\n';
+    output.forEach(item => {
+      html += `    <span data-m="${item.start}" data-d="${item.duration}">${item.word} </span>\n`;
+    });
+    html += '  </p>\n';
   }
+  
+  html += '</section></article>';
+  return html;
 }

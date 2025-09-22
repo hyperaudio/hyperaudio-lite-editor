@@ -1732,8 +1732,8 @@ If you are creating an open source application under a license compatible with t
         // Align words
         const alignment = alignWords(sourceWords, targetWords);
 
-        // Generate new HTML with aligned timings
-        const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings, htmlStructure);
+        // Generate new HTML with aligned timings and paragraph structure
+        const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings, htmlStructure, plainText);
 
         // Update the hypertranscript div
         hypertranscriptDiv.innerHTML = newHTML;
