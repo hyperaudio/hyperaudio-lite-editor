@@ -26,6 +26,7 @@ If you are creating an open source application under a license compatible with t
  
   <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js"></script>
+  <script src="js/word-alignment.js"></script>
 
   <!-- DaisyUI / Tailwind -->
   <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.2/dist/full.css" rel="stylesheet" type="text/css" />
@@ -264,6 +265,14 @@ If you are creating an open source application under a license compatible with t
                 </span>
               </li>
               <li><a id="upload-transcribe-btn">Upload & Transcribe</a></li>
+              <hr
+              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
+              <li class="menu-title">
+                <span>
+                  Align
+                </span>
+              </li>
+              <li><a id="upload-align-btn">Add Transcript</a></li>
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
               <li class="menu-title">
@@ -552,6 +561,28 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
+  <input type="checkbox" id="align-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box">
+      <label id="close-modal" for="align-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <h3 class="font-bold text-lg"  style="margin-bottom:16px">Align</h3>
+      
+      <div class="flex flex-col gap-4 w-full">
+        <textarea 
+          id="align-text-input" 
+          name="align-text-input" 
+          placeholder="Paste the transcript text you want to align with the media here..." 
+          class="textarea textarea-bordered w-full h-48" 
+          rows="8"></textarea>
+      </div>
+      
+      <div class="modal-action">
+        <button id="align-text-btn" class="btn btn-primary">ALIGN</button>
+      </div>
+
+    </div>
+  </div>
+
   <input type="checkbox" id="regenerate-captions-modal" class="modal-toggle" />
   <div class="modal">
     <div class="modal-box">
@@ -574,6 +605,9 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-extension.js"></script>
   <script src="js/caption-modified.js"></script>
   <script>
+
+    console.log("version 3");
+
 
   let updateCaptionsFromTranscript = true;
   let captionMode = false; // used to detect whether we need to sanitise amongst other things
@@ -1655,6 +1689,94 @@ If you are creating an open source application under a license compatible with t
       // Programmatically check the transcribe-modal checkbox to open the modal
       document.getElementById('transcribe-modal').checked = true;
     });
+
+    document.getElementById('upload-align-btn').addEventListener('click', function() {
+      document.getElementById('align-modal').checked = true;
+    });
+
+    // Add event listener for ALIGN button
+    document.getElementById('align-text-btn').addEventListener('click', function() {
+      alignTranscriptText();
+    });
+
+    // Word Alignment Algorithm with Loader
+    function alignTranscriptText() {
+      console.log("aligning...");
+      try {
+        // Get the pasted text from the textarea
+        const plainText = document.getElementById('align-text-input').value.trim();
+        
+        if (!plainText) {
+          alert('Please paste some text to align.');
+          return;
+        }
+
+        // Get the current timed transcript HTML
+        const hypertranscriptDiv = document.getElementById('hypertranscript');
+        if (!hypertranscriptDiv) {
+          alert('No timed transcript found.');
+          return;
+        }
+
+        // Store original content in case we need to restore it on error
+        const originalContent = hypertranscriptDiv.innerHTML;
+
+        // Close the modal first
+        document.getElementById('align-modal').checked = false;
+
+        // Clear the textarea
+        document.getElementById('align-text-input').value = '';
+
+        // Wait for modal to close, then show loader and start alignment
+        setTimeout(() => {
+          // Show loader
+          hypertranscriptDiv.innerHTML = '<div class="vertically-centre"><center>Aligning transcript....</center><br/><img src="'+transcribingSvg+'" width="50" alt="aligning" style="margin: auto; display: block;"></div>';
+
+          // Short delay to allow loader to render before processing
+          setTimeout(() => {
+          try {
+            // Extract words and timings from existing HTML
+            const { words: sourceWords, timings, htmlStructure } = extractTimedWords(originalContent);
+            
+            if (sourceWords.length === 0) {
+              hypertranscriptDiv.innerHTML = originalContent;
+              alert('No timed words found in the current transcript.');
+              return;
+            }
+
+            // Split plain text into words, excluding speaker names
+            const targetWords = extractWordsWithoutSpeakers(plainText);
+
+            // Align words
+            const alignment = alignWords(sourceWords, targetWords);
+
+            // Generate new HTML with aligned timings and paragraph structure
+            const newHTML = generateAlignedHTML(alignment, sourceWords, targetWords, timings, htmlStructure, plainText);
+
+            // Update the hypertranscript div with aligned content
+            hypertranscriptDiv.innerHTML = newHTML;
+
+            // Reinitialize hyperaudio to recognize the new transcript
+            if (typeof hyperaudio === 'function') {
+              hyperaudio();
+            }
+
+          } catch (error) {
+            console.error('Alignment error:', error);
+            hypertranscriptDiv.innerHTML = originalContent;
+            alert('Error during alignment: ' + error.message);
+          }
+          }, 100); // Small delay to allow loader to render
+        }, 300); // Wait for modal close animation
+
+      } catch (error) {
+        console.error('Alignment error:', error);
+        alert('Error during alignment: ' + error.message);
+      }
+    }
+
+    // Alignment functions are now in js/word-alignment.js
+
 </script>
 
 
