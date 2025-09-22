@@ -38,7 +38,7 @@ Created as a Progressive Web App, you can install on your desktop or mobile home
 
 #### Open source license
 
-If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use `Hyperaudio Lite Editor` for free under the terms of the [AGPL-3.0](./LICENSE). This is the deafult license for `Hyperaudio Lite Editor`.
+If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use `Hyperaudio Lite Editor` for free under the terms of the [AGPL-3.0](./LICENSE). This is the default license for `Hyperaudio Lite Editor`.
 
 #### Non-commercial use
 
