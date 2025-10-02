@@ -27,6 +27,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js"></script>
   <script src="js/word-alignment.js"></script>
+  <script src="js/html-json-converter.js"></script>
 
   <!-- DaisyUI / Tailwind -->
   <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.2/dist/full.css" rel="stylesheet" type="text/css" />
@@ -1700,6 +1701,7 @@ If you are creating an open source application under a license compatible with t
     });
 
     // Word Alignment Algorithm with Loader
+    /*
     function alignTranscriptText() {
       console.log("aligning...");
       try {
@@ -1766,6 +1768,79 @@ If you are creating an open source application under a license compatible with t
             hypertranscriptDiv.innerHTML = originalContent;
             alert('Error during alignment: ' + error.message);
           }
+          }, 100); // Small delay to allow loader to render
+        }, 300); // Wait for modal close animation
+
+      } catch (error) {
+        console.error('Alignment error:', error);
+        alert('Error during alignment: ' + error.message);
+      }
+    }*/
+
+    // Word Alignment Algorithm with Loader
+    function alignTranscriptText() {
+      console.log("aligning...");
+      try {
+        // Get the pasted text from the textarea
+        const plainText = document.getElementById('align-text-input').value.trim();
+        
+        if (!plainText) {
+          alert('Please paste some text to align.');
+          return;
+        }
+
+        // Get the current timed transcript HTML
+        const hypertranscriptDiv = document.getElementById('hypertranscript');
+        if (!hypertranscriptDiv) {
+          alert('No timed transcript found.');
+          return;
+        }
+
+        // Store original content in case we need to restore it on error
+        const originalContent = hypertranscriptDiv.innerHTML;
+
+        // Close the modal first
+        document.getElementById('align-modal').checked = false;
+
+        // Clear the textarea
+        document.getElementById('align-text-input').value = '';
+
+        // Wait for modal to close, then show loader and start alignment
+        setTimeout(() => {
+          // Show loader
+          hypertranscriptDiv.innerHTML = '<div class="vertically-centre"><center>Aligning transcript....</center><br/><img src="'+transcribingSvg+'" width="50" alt="aligning" style="margin: auto; display: block;"></div>';
+
+          // Short delay to allow loader to render before processing
+          setTimeout(() => {
+            try {
+              // Convert HTML to JSON
+              const machineJSON = htmlToJSON(originalContent);
+              
+              if (!machineJSON.words || machineJSON.words.length === 0) {
+                hypertranscriptDiv.innerHTML = originalContent;
+                alert('No timed words found in the current transcript.');
+                return;
+              }
+
+              // Align transcripts (JSON to JSON)
+              const alignedJSON = alignTranscripts(machineJSON, plainText);
+
+              // Convert aligned JSON back to HTML
+              const newHTML = jsonToHTML(alignedJSON);
+
+              // Update the hypertranscript div with aligned content
+              hypertranscriptDiv.innerHTML = newHTML;
+
+              // Reinitialize hyperaudio to recognize the new transcript
+              if (typeof hyperaudio === 'function') {
+                hyperaudio();
+              }
+
+            } catch (error) {
+              console.error('Alignment error:', error);
+              hypertranscriptDiv.innerHTML = originalContent;
+              alert('Error during alignment: ' + error.message);
+            }
           }, 100); // Small delay to allow loader to render
         }, 300); // Wait for modal close animation
 
