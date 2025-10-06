@@ -38,14 +38,11 @@
  * 
  * PLAIN TEXT FORMAT (for corrected transcripts):
  * [Alice]: I believe we should...
- * Bob: Yes, I agree completely.
- * Dr. Johnson: Excellent point.
- * Smith-Jones: Let me add something.
+ * Bob - Yes, I agree completely.
+ * Charlie: Excellent point.
  * - Paragraphs separated by one or more newlines
- * - Optional speaker labels (bracketed or unbracketed)
- * - Colon (:) used as separator for unbracketed speakers
- * - Names can contain periods and dashes (Dr. Johnson, Smith-Jones)
- * - Speaker text must start with capital letter
+ * - Optional speaker labels (bracketed or unbracketed) with colon/dash separator
+ * - Speaker must be followed by capitalized word
  * 
  * ALGORITHM FLOW:
  * 
@@ -242,9 +239,9 @@ function extractWordsFromPlainText(plainText) {
  * 
  * WHY: We need to distinguish actual speaker labels from regular text.
  *      Valid patterns:
- *      - [Name]: Hello (bracketed, optionally with colon)
- *      - [Name] Hello (bracketed without colon)
- *      - Name: Hello (unbracketed with colon - required)
+ *      - [Name]: Hello (bracketed with separator)
+ *      - Name: Hello (unbracketed with separator)
+ *      - Name - Hello (unbracketed with dash)
  * 
  * INPUTS:
  *   - text: The paragraph text to check
@@ -253,28 +250,26 @@ function extractWordsFromPlainText(plainText) {
  *   - Object with {isValid: boolean, speaker: string|null, remainingText: string}
  * 
  * VALIDATION RULES:
- *   1. Bracketed: [Name] optionally followed by :, then capitalized word
- *   2. Unbracketed: Capitalized word(s) followed by : (required), then capitalized word
- *   3. Names can contain periods (Dr. Johnson) and dashes (Smith-Jones)
- *   4. Only : is used as separator (dashes are NOT used as separators)
+ *   1. Bracketed: [Name] followed by optional separator, then capitalized word
+ *   2. Unbracketed: Capitalized word(s) followed by : or -, then capitalized word
+ *   3. Next word after separator must start with capital letter
  * 
  * EXAMPLES:
- *   "[Alice]: Hello there" → {isValid: true, speaker: "Alice"}
- *   "[Bob] Hello" → {isValid: true, speaker: "Bob"}
- *   "Alice: So do I." → {isValid: true, speaker: "Alice"}
- *   "Dr. Johnson: Good morning" → {isValid: true, speaker: "Dr. Johnson"}
- *   "Smith-Jones: Hello" → {isValid: true, speaker: "Smith-Jones"}
- *   "Bob - Hello" → {isValid: false} (dash not used as separator)
+ *   "[Alice]: Hello there" → {isValid: true, speaker: "Alice", remainingText: "Hello there"}
+ *   "[Bob] - Good morning" → {isValid: true, speaker: "Bob", remainingText: "Good morning"}
+ *   "Alice: So do I." → {isValid: true, speaker: "Alice", remainingText: "So do I."}
+ *   "Bob - I love life." → {isValid: true, speaker: "Bob", remainingText: "I love life."}
  *   "[note] something" → {isValid: false} (lowercase after bracket)
  *   "hello: world" → {isValid: false} (lowercase speaker name)
  */
 function isValidSpeakerPattern(text) {
-  // Try bracketed pattern first: [Name] optional(:) optional(whitespace) rest
-  const bracketedMatch = text.match(/^\[([^\]]+)\]\s*:?\s*(.*)$/);
+  // Try bracketed pattern first: [Name] optional(: or - or —) optional(whitespace) rest
+  const bracketedMatch = text.match(/^\[([^\]]+)\]\s*([:\-—–])?\s*(.*)$/);
   
   if (bracketedMatch) {
     const potentialSpeaker = bracketedMatch[1];
-    const remainingText = bracketedMatch[2];
+    const separator = bracketedMatch[2];
+    const remainingText = bracketedMatch[3];
     
     // If there's remaining text, check if it starts with capital letter
     if (remainingText.length > 0) {
@@ -292,19 +287,24 @@ function isValidSpeakerPattern(text) {
         return { isValid: false, speaker: null, remainingText: text };
       }
     } else {
-      // Empty remaining text - not valid (need actual content)
-      return { isValid: false, speaker: null, remainingText: text };
+      // Empty remaining text - still valid if there was a separator
+      return {
+        isValid: separator !== undefined,
+        speaker: separator !== undefined ? potentialSpeaker : null,
+        remainingText: remainingText
+      };
     }
   }
   
-  // Try unbracketed pattern: Name(s) followed by : and then capitalized word
-  // Pattern matches text before colon that can include letters, spaces, periods, and dashes
-  // This allows: "Dr. Johnson:", "Smith-Jones:", "Mary Jane Watson:", etc.
-  const unbracketedMatch = text.match(/^([A-Z][A-Za-z.\-\s]+?):\s*(.+)$/);
+  // Try unbracketed pattern: Name(s) followed by : or - and then capitalized word
+  // Match one or more capitalized words followed by separator
+  // Pattern: Start with capital, optional additional words, then separator, then rest
+  const unbracketedMatch = text.match(/^([A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)*)\s*([:\-—–])\s*(.+)$/);
   
   if (unbracketedMatch) {
-    const potentialSpeaker = unbracketedMatch[1].trim();
-    const remainingText = unbracketedMatch[2];
+    const potentialSpeaker = unbracketedMatch[1];
+    const separator = unbracketedMatch[2];
+    const remainingText = unbracketedMatch[3];
     
     // Check if remaining text starts with capital letter
     const firstChar = remainingText.charAt(0);
@@ -334,10 +334,9 @@ function isValidSpeakerPattern(text) {
  *   Plain text with:
  *   - Paragraphs separated by one or more newlines
  *   - Optional speaker labels:
- *     * Bracketed: "[Name]: text" or "[Name] text"
- *     * Unbracketed: "Name: text" (colon required)
- *   - Names can contain periods and dashes (Dr. Johnson, Smith-Jones)
- *   - Speaker validation: text after separator must start with capital letter
+ *     * Bracketed: "[Name]: text" or "[Name] - text"
+ *     * Unbracketed: "Name: text" or "Name - text"
+ *   - Speaker validation: next word must start with capital letter
  * 
  * INPUTS:
  *   - plainText: The corrected transcript as a plain text string
@@ -351,7 +350,7 @@ function isValidSpeakerPattern(text) {
  *     * speaker: Speaker name (null if no valid speaker label)
  * 
  * EXAMPLE INPUT:
- *   "[Alice]: Hello there. How are you?\nBob: I'm doing well, thanks!"
+ *   "[Alice]: Hello there. How are you?\nBob - I'm doing well, thanks!"
  * 
  * EXAMPLE OUTPUT:
  *   [
@@ -747,7 +746,7 @@ function generateAlignedJSON(alignment, sourceWords, targetWords, timings, plain
  *   - machineTranscript: JSON object from machine transcript (has timings)
  *     Format: {words: [{start, end, text}, ...], paragraphs: [...]}
  *   - correctedText: Plain text of corrected transcript
- *     Format: "[Speaker]: text\nSpeaker: more text"
+ *     Format: "[Speaker]: text\nSpeaker - more text"
  * 
  * OUTPUTS:
  *   - JSON object with corrected words and aligned timings
