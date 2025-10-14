@@ -256,12 +256,15 @@ function extractWordsFromPlainText(plainText) {
  *   1. Bracketed: [Name] optionally followed by :, then capitalized word
  *   2. Unbracketed: Capitalized word(s) followed by : (required), then capitalized word
  *   3. Names can contain periods (Dr. Johnson) and dashes (Smith-Jones)
- *   4. Only : is used as separator (dashes are NOT used as separators)
+ *   4. Single-letter speakers supported (Q:, A:, I:, etc.)
+ *   5. Only : is used as separator (dashes are NOT used as separators)
  * 
  * EXAMPLES:
  *   "[Alice]: Hello there" → {isValid: true, speaker: "Alice"}
  *   "[Bob] Hello" → {isValid: true, speaker: "Bob"}
  *   "Alice: So do I." → {isValid: true, speaker: "Alice"}
+ *   "Q: Tell me more." → {isValid: true, speaker: "Q"}
+ *   "A: My answer is..." → {isValid: true, speaker: "A"}
  *   "Dr. Johnson: Good morning" → {isValid: true, speaker: "Dr. Johnson"}
  *   "Smith-Jones: Hello" → {isValid: true, speaker: "Smith-Jones"}
  *   "Bob - Hello" → {isValid: false} (dash not used as separator)
@@ -299,8 +302,8 @@ function isValidSpeakerPattern(text) {
   
   // Try unbracketed pattern: Name(s) followed by : and then capitalized word
   // Pattern matches text before colon that can include letters, spaces, periods, and dashes
-  // This allows: "Dr. Johnson:", "Smith-Jones:", "Mary Jane Watson:", etc.
-  const unbracketedMatch = text.match(/^([A-Z][A-Za-z.\-\s]+?):\s*(.+)$/);
+  // This allows: "Q:", "A:", "Dr. Johnson:", "Smith-Jones:", "Mary Jane Watson:", etc.
+  const unbracketedMatch = text.match(/^([A-Z][A-Za-z.\-\s]*?):\s*(.+)$/);
   
   if (unbracketedMatch) {
     const potentialSpeaker = unbracketedMatch[1].trim();
