@@ -1,134 +1,420 @@
-// Extract words and timings from HTML
-// This function parses the input HTML and extracts:
-// 1. The text content of each span (the words)
-// 2. The timing attributes (data-m for start time, data-d for duration)
-// 3. The original HTML structure
-function extractTimedWords(html) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  
-  const spans = doc.querySelectorAll('span[data-m][data-d]');
-  
-  const words = [];
-  const timings = [];
-  
-  spans.forEach(span => {
-    const word = span.textContent.trim();
-    if (word && !span.classList.contains('speaker')) { // Skip speaker spans
-      words.push(word);
-      
-      const start = parseInt(span.getAttribute('data-m'));
-      const duration = parseInt(span.getAttribute('data-d'));
-      
-      timings.push({ 
-        start, 
-        duration, 
-        end: start + duration 
-      });
-    }
-  });
-  
-  // Preserve the original HTML structure
-  const htmlStructure = html.trim();
-  
-  return { words, timings, htmlStructure };
-}
+/**
+ * ============================================================================
+ * TRANSCRIPT ALIGNMENT ALGORITHM
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Align a machine-generated transcript (with timing data) with a human-corrected
+ * transcript (without timing data) to produce a corrected transcript with accurate
+ * timing information.
+ * 
+ * INTERNAL FORMAT: JSON
+ * All algorithms work with JSON format internally. Use conversion.js for HTML.
+ * 
+ * PROBLEM STATEMENT:
+ * - Machine transcription (e.g., from speech-to-video) produces word-level timings
+ *   but often contains transcription errors (wrong words, missing words, extra words)
+ * - Human editors correct the transcript text but lose the timing data
+ * - We need to transfer timing data from machine transcript to corrected transcript
+ * 
+ * SOLUTION OVERVIEW:
+ * Use edit distance (Levenshtein distance) algorithm to align the two transcripts
+ * word-by-word, then transfer timings based on the alignment.
+ * 
+ * JSON FORMAT:
+ * {
+ *   "words": [
+ *     {"start": 4.76, "end": 5.28, "text": "word"},
+ *     ...
+ *   ],
+ *   "paragraphs": [
+ *     {"speaker": "Name", "start": 4.76, "end": 10.0},
+ *     ...
+ *   ]
+ * }
+ * - Times in seconds (floating point)
+ * - Paragraphs are optional
+ * - Speaker labels are optional
+ * 
+ * PLAIN TEXT FORMAT (for corrected transcripts):
+ * [Alice]: I believe we should...
+ * Bob: Yes, I agree completely.
+ * Dr. Johnson: Excellent point.
+ * Smith-Jones: Let me add something.
+ * - Paragraphs separated by one or more newlines
+ * - Optional speaker labels (bracketed or unbracketed)
+ * - Colon (:) used as separator for unbracketed speakers
+ * - Names can contain periods and dashes (Dr. Johnson, Smith-Jones)
+ * - Speaker text must start with capital letter
+ * 
+ * ALGORITHM FLOW:
+ * 
+ * 1. EXTRACT phase:
+ *    - Parse machine JSON to extract words and timings
+ *    - Parse corrected text to extract words (without speaker labels)
+ *    
+ * 2. ALIGN phase:
+ *    - Use dynamic programming edit distance to align word sequences
+ *    - Identify matches, substitutions, insertions, deletions
+ *    
+ * 3. TRANSFER phase:
+ *    - For matched/substituted words: use original timing
+ *    - For inserted words: interpolate timing from nearby words
+ *    - For deleted words: skip (don't appear in output)
+ *    
+ * 4. RECONSTRUCT phase:
+ *    - Detect paragraph structure from corrected text
+ *    - Generate JSON with proper structure
+ *    - Attach timing data to each word
+ * 
+ * KEY FEATURES:
+ * - Handles word substitutions (corrections)
+ * - Handles insertions (words added by editor)
+ * - Handles deletions (words removed by editor)
+ * - Preserves paragraph structure
+ * - Preserves speaker labels
+ * - Case-insensitive word matching
+ * - Punctuation-aware alignment
+ * 
+ * LIMITATIONS:
+ * - Inserted words borrow timing from adjacent words (not perfectly accurate)
+ * - Large-scale restructuring may not align well
+ * - Assumes words are mostly in the same order
+ * 
+ * ============================================================================
+ */
 
-// Helper functions for word alignment
+/**
+ * HELPER FUNCTION: stripPunctuation
+ * 
+ * PURPOSE: Remove trailing punctuation from a word for better matching
+ * 
+ * WHY: Machine transcripts and corrected transcripts may differ in punctuation.
+ *      "hello," and "hello" should be considered the same word for alignment.
+ * 
+ * INPUTS:
+ *   - word: A string representing a single word (may have punctuation)
+ * 
+ * OUTPUTS:
+ *   - The word with trailing punctuation removed
+ * 
+ * EXAMPLES:
+ *   stripPunctuation("hello,") → "hello"
+ *   stripPunctuation("world!") → "world"
+ *   stripPunctuation("okay.") → "okay"
+ */
 function stripPunctuation(word) {
+  // Remove one or more trailing punctuation characters: .,!?;:'"
+  // The + means "one or more", $ means "at the end of string"
   return word.replace(/[.,!?;:'"]+$/, '');
 }
 
+/**
+ * HELPER FUNCTION: normalizeWord
+ * 
+ * PURPOSE: Normalize a word for comparison during alignment
+ * 
+ * WHY: Words should match regardless of case or punctuation differences.
+ *      "Hello," and "hello" should be treated as the same word.
+ * 
+ * INPUTS:
+ *   - word: A string representing a single word
+ * 
+ * OUTPUTS:
+ *   - Lowercase word with trailing punctuation removed
+ * 
+ * PROCESS:
+ *   1. Strip trailing punctuation
+ *   2. Convert to lowercase
+ * 
+ * EXAMPLES:
+ *   normalizeWord("Hello,") → "hello"
+ *   normalizeWord("WORLD!") → "world"
+ */
 function normalizeWord(word) {
   return stripPunctuation(word.toLowerCase());
 }
 
-// Simple word alignment using edit distance
-function alignWords(sourceWords, targetWords) {
-  const m = sourceWords.length;
-  const n = targetWords.length;
+/**
+ * FUNCTION: extractWordsFromJSON
+ * 
+ * PURPOSE: Extract words and timing data from JSON transcript
+ * 
+ * INPUTS:
+ *   - jsonData: JSON object with structure {words: [...], paragraphs: [...]}
+ * 
+ * OUTPUTS:
+ *   - Object containing:
+ *     * words: Array of word text strings
+ *     * timings: Array of timing objects {start, end} in seconds
+ * 
+ * PROCESS:
+ *   1. Extract word text from JSON words array
+ *   2. Extract timing information (already in seconds)
+ *   3. Filter out empty words
+ */
+function extractWordsFromJSON(jsonData) {
+  const words = [];
+  const timings = [];
   
-  // Create DP table
-  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-  
-  // Initialize base cases
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  
-  // Fill DP table
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
-        dp[i][j] = dp[i-1][j-1];
-      } else {
-        dp[i][j] = Math.min(
-          dp[i-1][j-1] + 1,  // substitute
-          dp[i-1][j] + 1,    // delete
-          dp[i][j-1] + 1     // insert
-        );
-      }
+  // Process each word in the JSON data
+  (jsonData.words || []).forEach(word => {
+    // Skip empty words
+    if (word.text && word.text.trim()) {
+      words.push(word.text.trim());
+      
+      // Store timing in seconds (as provided in JSON)
+      timings.push({
+        start: word.start,
+        end: word.end
+      });
     }
-  }
+  });
   
-  // Backtrack to find alignment
-  const alignment = [];
-  let i = m, j = n;
-  
-  while (i > 0 || j > 0) {
-    if (i === 0) {
-      alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
-      j--;
-    } else if (j === 0) {
-      alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
-      i--;
-    } else {
-      const current = dp[i][j];
-      if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
-        alignment.push({ type: 'match', sourceIdx: i-1, targetIdx: j-1 });
-        i--;
-        j--;
-      } else if (current === dp[i-1][j-1] + 1) {
-        alignment.push({ type: 'substitute', sourceIdx: i-1, targetIdx: j-1 });
-        i--;
-        j--;
-      } else if (current === dp[i-1][j] + 1) {
-        alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
-        i--;
-      } else {
-        alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
-        j--;
-      }
-    }
-  }
-  
-  alignment.reverse();
-  return alignment;
+  return { words, timings };
 }
 
-// Detect paragraph breaks and speakers in the original input text
-function detectParagraphBreaks(plainText) {
-  // Split by double newlines (paragraph breaks)
-  const paragraphs = plainText.split(/\n\s*\n/);
+/**
+ * FUNCTION: extractWordsFromPlainText
+ * 
+ * PURPOSE: Extract just the words from corrected transcript, excluding speaker labels
+ * 
+ * WHY: We need a clean word array for alignment that matches the structure
+ *      of the machine transcript. Speaker labels are metadata, not actual spoken words.
+ * 
+ * INPUTS:
+ *   - plainText: Corrected transcript as plain text (may include speaker labels)
+ * 
+ * OUTPUTS:
+ *   - Array of words (strings) without any speaker labels
+ * 
+ * EXAMPLE INPUT:
+ *   "[Alice]: Hello there.\nBob - How are you?"
+ * 
+ * EXAMPLE OUTPUT:
+ *   ["Hello", "there.", "How", "are", "you?"]
+ *   // Note: "Alice" and "Bob" are NOT included
+ * 
+ * PROCESS:
+ *   1. Split text by one or more newlines to get paragraphs
+ *   2. For each paragraph:
+ *      a. Validate and remove speaker label if present (bracketed or unbracketed)
+ *      b. Split remaining text into words
+ *   3. Concatenate all words into a single array
+ */
+function extractWordsFromPlainText(plainText) {
+  // Split by one or more newlines to get individual paragraphs
+  const paragraphs = plainText.split(/\n+/);
   
-  // Map each paragraph to its word positions and speaker info
+  // Accumulator for all words across all paragraphs
+  let allWords = [];
+  
+  // Process each paragraph
+  paragraphs.forEach(paragraph => {
+    const trimmedParagraph = paragraph.trim();
+    
+    if (trimmedParagraph.length > 0) {
+      // Use the validation function to check for speaker and get remaining text
+      const validation = isValidSpeakerPattern(trimmedParagraph);
+      
+      let paragraphText = trimmedParagraph;
+      
+      // If valid speaker pattern detected, use the remaining text
+      if (validation.isValid) {
+        paragraphText = validation.remainingText;
+      }
+      
+      // Split into words by whitespace, filter out empty strings
+      const words = paragraphText.split(/\s+/).filter(w => w.length > 0);
+      
+      // Add this paragraph's words to the master list
+      allWords = allWords.concat(words);
+    }
+  });
+  
+  return allWords;
+}
+
+/**
+ * HELPER FUNCTION: isValidSpeakerPattern
+ * 
+ * PURPOSE: Validate that a potential speaker label follows the correct pattern
+ * 
+ * WHY: We need to distinguish actual speaker labels from regular text.
+ *      Valid patterns:
+ *      - [Name]: Hello (bracketed, optionally with colon)
+ *      - [Name] Hello (bracketed without colon)
+ *      - Name: Hello (unbracketed with colon - required)
+ * 
+ * INPUTS:
+ *   - text: The paragraph text to check
+ * 
+ * OUTPUTS:
+ *   - Object with {isValid: boolean, speaker: string|null, remainingText: string}
+ * 
+ * VALIDATION RULES:
+ *   1. Bracketed: [Name] optionally followed by :, then capitalized word
+ *   2. Unbracketed: Capitalized word(s) followed by : (required), then capitalized word
+ *   3. Names can contain periods (Dr. Johnson) and dashes (Smith-Jones)
+ *   4. Single-letter speakers supported (Q:, A:, I:, etc.)
+ *   5. Only : is used as separator (dashes are NOT used as separators)
+ * 
+ * EXAMPLES:
+ *   "[Alice]: Hello there" → {isValid: true, speaker: "Alice"}
+ *   "[Bob] Hello" → {isValid: true, speaker: "Bob"}
+ *   "Alice: So do I." → {isValid: true, speaker: "Alice"}
+ *   "Q: Tell me more." → {isValid: true, speaker: "Q"}
+ *   "A: My answer is..." → {isValid: true, speaker: "A"}
+ *   "Dr. Johnson: Good morning" → {isValid: true, speaker: "Dr. Johnson"}
+ *   "Smith-Jones: Hello" → {isValid: true, speaker: "Smith-Jones"}
+ *   "Bob - Hello" → {isValid: false} (dash not used as separator)
+ *   "[note] something" → {isValid: false} (lowercase after bracket)
+ *   "hello: world" → {isValid: false} (lowercase speaker name)
+ */
+function isValidSpeakerPattern(text) {
+  // Try bracketed pattern first: [Name] optional(:) optional(whitespace) rest
+  const bracketedMatch = text.match(/^\[([^\]]+)\]\s*:?\s*(.*)$/);
+  
+  if (bracketedMatch) {
+    const potentialSpeaker = bracketedMatch[1];
+    const remainingText = bracketedMatch[2];
+    
+    // If there's remaining text, check if it starts with capital letter
+    if (remainingText.length > 0) {
+      const firstChar = remainingText.charAt(0);
+      
+      // Must start with uppercase letter or digit
+      if (firstChar === firstChar.toUpperCase() && /[A-Z0-9]/.test(firstChar)) {
+        return {
+          isValid: true,
+          speaker: potentialSpeaker,
+          remainingText: remainingText
+        };
+      } else {
+        // Lowercase first character - not a valid speaker pattern
+        return { isValid: false, speaker: null, remainingText: text };
+      }
+    } else {
+      // Empty remaining text - not valid (need actual content)
+      return { isValid: false, speaker: null, remainingText: text };
+    }
+  }
+  
+  // Try unbracketed pattern: Name(s) followed by : and then capitalized word
+  // Pattern matches text before colon that can include letters, spaces, periods, and dashes
+  // This allows: "Q:", "A:", "Dr. Johnson:", "Smith-Jones:", "Mary Jane Watson:", etc.
+  const unbracketedMatch = text.match(/^([A-Z][A-Za-z.\-\s]*?):\s*(.+)$/);
+  
+  if (unbracketedMatch) {
+    const potentialSpeaker = unbracketedMatch[1].trim();
+    const remainingText = unbracketedMatch[2];
+    
+    // Check if remaining text starts with capital letter
+    const firstChar = remainingText.charAt(0);
+    
+    if (firstChar === firstChar.toUpperCase() && /[A-Z0-9]/.test(firstChar)) {
+      return {
+        isValid: true,
+        speaker: potentialSpeaker,
+        remainingText: remainingText
+      };
+    }
+  }
+  
+  // No valid pattern found
+  return { isValid: false, speaker: null, remainingText: text };
+}
+
+/**
+ * FUNCTION: detectParagraphs
+ * 
+ * PURPOSE: Analyze corrected transcript text to identify paragraph boundaries and speakers
+ * 
+ * WHY: The corrected transcript may have multiple paragraphs and speaker changes.
+ *      We need to preserve this structure in the final aligned JSON output.
+ * 
+ * INPUT FORMAT:
+ *   Plain text with:
+ *   - Paragraphs separated by one or more newlines
+ *   - Optional speaker labels:
+ *     * Bracketed: "[Name]: text" or "[Name] text"
+ *     * Unbracketed: "Name: text" (colon required)
+ *   - Names can contain periods and dashes (Dr. Johnson, Smith-Jones)
+ *   - Speaker validation: text after separator must start with capital letter
+ * 
+ * INPUTS:
+ *   - plainText: The corrected transcript as a plain text string
+ * 
+ * OUTPUTS:
+ *   - Array of paragraph metadata objects, each containing:
+ *     * paragraphIndex: Index of this paragraph (0, 1, 2, ...)
+ *     * startWordIndex: Global word index where this paragraph starts
+ *     * endWordIndex: Global word index where this paragraph ends
+ *     * wordCount: Number of words in this paragraph
+ *     * speaker: Speaker name (null if no valid speaker label)
+ * 
+ * EXAMPLE INPUT:
+ *   "[Alice]: Hello there. How are you?\nBob: I'm doing well, thanks!"
+ * 
+ * EXAMPLE OUTPUT:
+ *   [
+ *     {
+ *       paragraphIndex: 0,
+ *       startWordIndex: 0,
+ *       endWordIndex: 5,
+ *       wordCount: 6,
+ *       speaker: "Alice"
+ *     },
+ *     {
+ *       paragraphIndex: 1,
+ *       startWordIndex: 6,
+ *       endWordIndex: 10,
+ *       wordCount: 5,
+ *       speaker: "Bob"
+ *     }
+ *   ]
+ * 
+ * PROCESS:
+ *   1. Split text by one or more newlines to get paragraphs
+ *   2. For each paragraph:
+ *      a. Validate speaker label pattern
+ *      b. Extract speaker name if valid
+ *      c. Remove speaker label from paragraph text
+ *      d. Count words in paragraph (excluding speaker label)
+ *      e. Track cumulative word index across all paragraphs
+ *   3. Return array of paragraph metadata for JSON generation
+ */
+function detectParagraphs(plainText) {
+  // Split by one or more newlines (paragraph separator in plain text)
+  const paragraphs = plainText.split(/\n+/);
+  
+  // Array to store metadata about each paragraph
   const paragraphMap = [];
+  
+  // Track the cumulative word index across all paragraphs
   let wordIndex = 0;
   
+  // Process each paragraph
   paragraphs.forEach((paragraph, paragraphIndex) => {
     const trimmedParagraph = paragraph.trim();
+    
+    // Skip empty paragraphs
     if (trimmedParagraph.length > 0) {
-      // Check if paragraph starts with a speaker name in square brackets
-      const speakerMatch = trimmedParagraph.match(/^\[([^\]]+)\]\s*/);
+      // Check if paragraph has a valid speaker pattern
+      const validation = isValidSpeakerPattern(trimmedParagraph);
+      
       let speaker = null;
       let paragraphText = trimmedParagraph;
       
-      if (speakerMatch) {
-        speaker = speakerMatch[1]; // Extract speaker name without brackets
-        paragraphText = trimmedParagraph.substring(speakerMatch[0].length); // Remove speaker from text
+      if (validation.isValid) {
+        speaker = validation.speaker;
+        paragraphText = validation.remainingText;
       }
       
+      // Split paragraph text into words (by whitespace)
       const paragraphWords = paragraphText.split(/\s+/).filter(w => w.length > 0);
       
+      // Only add to map if paragraph has actual words
       if (paragraphWords.length > 0) {
         paragraphMap.push({
           paragraphIndex: paragraphIndex,
@@ -137,6 +423,8 @@ function detectParagraphBreaks(plainText) {
           wordCount: paragraphWords.length,
           speaker: speaker
         });
+        
+        // Move word index forward for next paragraph
         wordIndex += paragraphWords.length;
       }
     }
@@ -145,116 +433,393 @@ function detectParagraphBreaks(plainText) {
   return paragraphMap;
 }
 
-// Extract words from plain text, excluding speaker names
-function extractWordsWithoutSpeakers(plainText) {
-  // Split by double newlines to get paragraphs
-  const paragraphs = plainText.split(/\n\s*\n/);
-  let allWords = [];
+/**
+ * FUNCTION: alignWords
+ * 
+ * PURPOSE: Align two sequences of words using edit distance (Levenshtein distance) algorithm
+ * 
+ * WHY: Machine transcripts contain errors (wrong words, missing words, extra words).
+ *      We need to map each word in the corrected transcript to a word in the 
+ *      machine transcript (or mark it as inserted/deleted) to transfer timing data.
+ * 
+ * ALGORITHM: Dynamic Programming Edit Distance with Backtracking
+ * 
+ * INPUTS:
+ *   - sourceWords: Array of words from the machine transcript (has timings)
+ *   - targetWords: Array of words from the corrected transcript (needs timings)
+ * 
+ * OUTPUTS:
+ *   - Array of alignment objects, each describing the relationship between words:
+ *     * {type: 'match', sourceIdx, targetIdx} - Words are the same
+ *     * {type: 'substitute', sourceIdx, targetIdx} - Words are different (one replaces another)
+ *     * {type: 'insert', sourceIdx: null, targetIdx} - Word added in corrected transcript
+ *     * {type: 'delete', sourceIdx, targetIdx: null} - Word removed from machine transcript
+ * 
+ * PROCESS:
+ *   PHASE 1: BUILD DP TABLE
+ *     - Create a 2D table where dp[i][j] = minimum edits to align first i source words 
+ *       with first j target words
+ *     - Base cases: dp[i][0] = i (delete all), dp[0][j] = j (insert all)
+ *     - For each cell, choose minimum cost operation:
+ *       * If words match: dp[i-1][j-1] (no cost)
+ *       * Otherwise: min of substitute, delete, or insert (each costs 1)
+ * 
+ *   PHASE 2: BACKTRACK TO FIND ALIGNMENT
+ *     - Start at dp[m][n] (bottom-right corner)
+ *     - Work backwards to dp[0][0], recording which operation was used
+ *     - Build alignment array showing how words correspond
+ * 
+ * EXAMPLE:
+ *   sourceWords: ["I", "think", "we", "should"]
+ *   targetWords: ["I", "believe", "we", "must"]
+ *   
+ *   Result: [
+ *     {type: 'match', sourceIdx: 0, targetIdx: 0},      // "I" matches "I"
+ *     {type: 'substitute', sourceIdx: 1, targetIdx: 1}, // "think" → "believe"
+ *     {type: 'match', sourceIdx: 2, targetIdx: 2},      // "we" matches "we"
+ *     {type: 'substitute', sourceIdx: 3, targetIdx: 3}  // "should" → "must"
+ *   ]
+ */
+function alignWords(sourceWords, targetWords) {
+  const m = sourceWords.length;  // Number of words in machine transcript
+  const n = targetWords.length;  // Number of words in corrected transcript
   
-  paragraphs.forEach(paragraph => {
-    const trimmedParagraph = paragraph.trim();
-    if (trimmedParagraph.length > 0) {
-      // Remove speaker name if present
-      const paragraphText = trimmedParagraph.replace(/^\[([^\]]+)\]\s*/, '');
-      const words = paragraphText.split(/\s+/).filter(w => w.length > 0);
-      allWords = allWords.concat(words);
+  // ===== PHASE 1: BUILD DP TABLE =====
+  // Create a 2D table to store minimum edit distances
+  // dp[i][j] = minimum number of operations to align sourceWords[0..i-1] with targetWords[0..j-1]
+  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  
+  // Initialize base cases:
+  // dp[i][0] = i: To align i source words with 0 target words, delete all i words
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  
+  // dp[0][j] = j: To align 0 source words with j target words, insert all j words
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  
+  // Fill the DP table using dynamic programming
+  // For each cell, compute the minimum cost of three possible operations
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      // Check if current words match (case-insensitive comparison)
+      if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
+        // Words match! No operation needed, inherit cost from diagonal
+        dp[i][j] = dp[i-1][j-1];
+      } else {
+        // Words don't match. Choose the minimum cost operation:
+        dp[i][j] = Math.min(
+          dp[i-1][j-1] + 1,  // SUBSTITUTE: Replace source word with target word (cost: 1)
+          dp[i-1][j] + 1,    // DELETE: Remove source word (cost: 1)
+          dp[i][j-1] + 1     // INSERT: Add target word (cost: 1)
+        );
+      }
     }
-  });
+  }
   
-  return allWords;
+  // ===== PHASE 2: BACKTRACK TO FIND ALIGNMENT =====
+  // Now that we have the minimum edit distance, trace back through the table
+  // to find which specific operations were used
+  const alignment = [];
+  let i = m;  // Start at bottom-right corner (end of source words)
+  let j = n;  // Start at bottom-right corner (end of target words)
+  
+  // Work backwards from dp[m][n] to dp[0][0]
+  while (i > 0 || j > 0) {
+    if (i === 0) {
+      // No more source words left, all remaining target words are insertions
+      alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
+      j--;
+    } else if (j === 0) {
+      // No more target words left, all remaining source words are deletions
+      alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
+      i--;
+    } else {
+      // Both sequences still have words, determine which operation was used
+      const current = dp[i][j];
+      
+      // Check if words match (this gives us the operation for free)
+      if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
+        alignment.push({ type: 'match', sourceIdx: i-1, targetIdx: j-1 });
+        i--;
+        j--;
+      } 
+      // Check if the current cost came from a substitution (diagonal)
+      else if (current === dp[i-1][j-1] + 1) {
+        alignment.push({ type: 'substitute', sourceIdx: i-1, targetIdx: j-1 });
+        i--;
+        j--;
+      } 
+      // Check if the current cost came from a deletion (move up)
+      else if (current === dp[i-1][j] + 1) {
+        alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
+        i--;
+      } 
+      // Otherwise, it must have come from an insertion (move left)
+      else {
+        alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
+        j--;
+      }
+    }
+  }
+  
+  // Reverse the alignment array because we built it backwards
+  alignment.reverse();
+  return alignment;
 }
 
-// Generate new HTML with aligned timings and paragraph structure
-function generateAlignedHTML(alignment, sourceWords, targetWords, timings, originalHtml, plainText) {
-  // Build the output array first
-  const output = [];
+/**
+ * FUNCTION: generateAlignedJSON
+ * 
+ * PURPOSE: Generate JSON output with aligned timings and paragraph structure
+ * 
+ * WHY: This is the final step that combines:
+ *      1. Corrected transcript words (from human editor)
+ *      2. Timing data (from machine transcript)
+ *      3. Paragraph structure and speakers (from corrected transcript)
+ *      to produce a perfectly timed, correctly worded, well-structured JSON transcript
+ * 
+ * INPUTS:
+ *   - alignment: Array of alignment objects from alignWords() function
+ *   - sourceWords: Words from machine transcript (have timings)
+ *   - targetWords: Words from corrected transcript (need timings)
+ *   - timings: Timing data from machine transcript (in seconds)
+ *   - plainText: Corrected transcript as plain text (for paragraph structure)
+ * 
+ * OUTPUTS:
+ *   - JSON object with structure:
+ *     {
+ *       words: [{start, end, text}, ...],
+ *       paragraphs: [{speaker, start, end}, ...]
+ *     }
+ * 
+ * PROCESS:
+ *   PHASE 1: Build output array with words and timings
+ *     - For each aligned word:
+ *       * If MATCH or SUBSTITUTE: Use timing from source word
+ *       * If INSERT: Interpolate timing (use next/previous timing)
+ *       * If DELETE: Skip (word doesn't appear in output)
+ *   
+ *   PHASE 2: Detect paragraph structure from plain text
+ *   
+ *   PHASE 3: Generate JSON with proper paragraph structure
+ */
+function generateAlignedJSON(alignment, sourceWords, targetWords, timings, plainText) {
+  // ===== PHASE 1: BUILD OUTPUT ARRAY WITH WORDS AND TIMINGS =====
+  
+  // Array to store final words with their timing information
+  // Each element: {word, start, end, targetIdx}
+  const outputWords = [];
+  
+  // Track the most recent timing for interpolation purposes
   let lastTiming = null;
   
+  // Process each alignment operation to build the output
   alignment.forEach((align, idx) => {
+    
+    // CASE 1: MATCH or SUBSTITUTE
+    // The target word corresponds to a source word, so we can use its timing directly
     if (align.type === 'match' || align.type === 'substitute') {
       const timing = timings[align.sourceIdx];
-      output.push({
-        word: targetWords[align.targetIdx],
-        start: timing.start,
-        duration: timing.duration,
-        targetIdx: align.targetIdx
+      outputWords.push({
+        word: targetWords[align.targetIdx],   // Use corrected word text
+        start: timing.start,                  // Use machine timing (seconds)
+        end: timing.end,                      // Use machine timing (seconds)
+        targetIdx: align.targetIdx            // Track position in target array
       });
-      lastTiming = timing;
-    } else if (align.type === 'insert') {
-      // Find next timing for interpolation
+      lastTiming = timing;  // Remember this for interpolating inserted words
+    } 
+    
+    // CASE 2: INSERT
+    // This word was added in the corrected transcript, so it has no direct timing.
+    // We need to estimate/interpolate the timing from nearby words.
+    else if (align.type === 'insert') {
+      // Look ahead in the alignment to find the next word with timing
       let nextTiming = null;
       for (let i = idx + 1; i < alignment.length; i++) {
         if (alignment[i].type === 'match' || alignment[i].type === 'substitute') {
           nextTiming = timings[alignment[i].sourceIdx];
-          break;
+          break;  // Found it, stop searching
         }
       }
       
+      // Use the next timing if found, otherwise fall back to the last timing
+      // This means inserted words will "borrow" timing from adjacent words
       const timing = nextTiming || lastTiming;
+      
       if (timing) {
-        output.push({
+        outputWords.push({
           word: targetWords[align.targetIdx],
-          start: timing.start,
-          duration: timing.duration,
+          start: timing.start,    // Borrow start time from nearby word
+          end: timing.end,        // Borrow end time from nearby word
           targetIdx: align.targetIdx
         });
       } else {
-        // Fallback timing if no timing available
-        output.push({
+        // FALLBACK: If no timing available at all (rare edge case)
+        // Use dummy timing values so the output is still valid
+        outputWords.push({
           word: targetWords[align.targetIdx],
-          start: 0,
-          duration: 100,
+          start: 0,     // Start at beginning
+          end: 0.1,     // 100ms duration
           targetIdx: align.targetIdx
         });
       }
     }
-    // Skip deleted words (they don't appear in the new transcript)
+    
+    // CASE 3: DELETE
+    // Word existed in machine transcript but not in corrected transcript
+    // We simply skip it - it won't appear in the output at all
+    // (No code needed here, just explanation)
   });
   
-  // Detect paragraph breaks in the plain text
-  const paragraphMap = detectParagraphBreaks(plainText);
+  // ===== PHASE 2: DETECT PARAGRAPH STRUCTURE =====
+  // Analyze the plain text to find paragraph boundaries and speaker labels
+  const paragraphMap = detectParagraphs(plainText);
   
-  // Generate HTML with paragraph structure
-  let html = '<article><section>\n';
+  // ===== PHASE 3: BUILD JSON OUTPUT =====
+  
+  // Convert words to JSON format
+  const jsonWords = outputWords.map(item => ({
+    start: item.start,  // Already in seconds
+    end: item.end,      // Already in seconds
+    text: item.word
+  }));
+  
+  // Build paragraphs array
+  const jsonParagraphs = [];
   
   if (paragraphMap.length > 0) {
-    // Generate multiple paragraphs
-    paragraphMap.forEach((paragraph, paragraphIndex) => {
-      html += '  <p>\n';
-      
-      // Add speaker span if present (speakers are not part of the alignment, so we add them separately)
-      if (paragraph.speaker) {
-        // Get the timing of the first word in this paragraph for the speaker
-        const paragraphWords = output.filter(item => 
-          item.targetIdx >= paragraph.startWordIndex && 
-          item.targetIdx <= paragraph.endWordIndex
-        );
-        
-        const firstWordTiming = paragraphWords.length > 0 ? paragraphWords[0].start : 0;
-        html += `    <span data-m="${firstWordTiming}" data-d="0" class="speaker">[${paragraph.speaker}] </span>\n`;
-      }
-      
-      // Add words for this paragraph
-      const paragraphWords = output.filter(item => 
-        item.targetIdx >= paragraph.startWordIndex && 
+    // MULTI-PARAGRAPH CASE: Create paragraph objects based on detected structure
+    paragraphMap.forEach(paragraph => {
+      // Find words in this paragraph
+      const paragraphWords = outputWords.filter(item =>
+        item.targetIdx >= paragraph.startWordIndex &&
         item.targetIdx <= paragraph.endWordIndex
       );
       
-      paragraphWords.forEach(item => {
-        html += `    <span data-m="${item.start}" data-d="${item.duration}">${item.word} </span>\n`;
-      });
-      
-      html += '  </p>\n';
+      if (paragraphWords.length > 0) {
+        // Get start time from first word, end time from last word
+        const firstWord = paragraphWords[0];
+        const lastWord = paragraphWords[paragraphWords.length - 1];
+        
+        const paragraphObj = {
+          start: firstWord.start,  // In seconds
+          end: lastWord.end        // In seconds
+        };
+        
+        // Add speaker if present (without brackets or punctuation)
+        if (paragraph.speaker) {
+          paragraphObj.speaker = paragraph.speaker;
+        }
+        
+        jsonParagraphs.push(paragraphObj);
+      }
     });
   } else {
-    // Single paragraph fallback
-    html += '  <p>\n';
-    output.forEach(item => {
-      html += `    <span data-m="${item.start}" data-d="${item.duration}">${item.word} </span>\n`;
-    });
-    html += '  </p>\n';
+    // SINGLE PARAGRAPH FALLBACK: No paragraph breaks detected
+    if (outputWords.length > 0) {
+      const firstWord = outputWords[0];
+      const lastWord = outputWords[outputWords.length - 1];
+      
+      jsonParagraphs.push({
+        start: firstWord.start,
+        end: lastWord.end
+      });
+    }
   }
   
-  html += '</section></article>';
-  return html;
+  return {
+    words: jsonWords,
+    paragraphs: jsonParagraphs
+  };
+}
+
+/**
+ * ============================================================================
+ * MAIN API FUNCTION
+ * ============================================================================
+ */
+
+/**
+ * FUNCTION: alignTranscripts
+ * 
+ * PURPOSE: Main entry point for transcript alignment using JSON format
+ * 
+ * WHY: Provides a simple, high-level API for aligning transcripts.
+ *      This is the main function users will call.
+ * 
+ * INPUTS:
+ *   - machineTranscript: JSON object from machine transcript (has timings)
+ *     Format: {words: [{start, end, text}, ...], paragraphs: [...]}
+ *   - correctedText: Plain text of corrected transcript
+ *     Format: "[Speaker]: text\nSpeaker: more text"
+ * 
+ * OUTPUTS:
+ *   - JSON object with corrected words and aligned timings
+ *     Format: {words: [{start, end, text}, ...], paragraphs: [...]}
+ * 
+ * EXAMPLE USAGE:
+ *   const machineJSON = {
+ *     words: [{start: 4.76, end: 5.28, text: "Testing"}, ...],
+ *     paragraphs: [{speaker: "Alice", start: 4.76, end: 10.0}]
+ *   };
+ *   const correctedText = "[Alice]: Testing the production version...";
+ *   const alignedJSON = alignTranscripts(machineJSON, correctedText);
+ * 
+ * ALGORITHM STEPS:
+ *   1. Extract words and timings from machine JSON
+ *   2. Extract words from corrected plain text
+ *   3. Align the two word sequences using edit distance
+ *   4. Generate aligned JSON output with timing and structure
+ */
+function alignTranscripts(machineTranscript, correctedText) {
+  // Step 1: Extract words and timings from machine JSON
+  const { words: sourceWords, timings } = extractWordsFromJSON(machineTranscript);
+  
+  // Step 2: Extract words from corrected text (without speaker labels)
+  const targetWords = extractWordsFromPlainText(correctedText);
+  
+  // Step 3: Align the two word sequences
+  const alignment = alignWords(sourceWords, targetWords);
+  
+  // Step 4: Generate aligned JSON output
+  const alignedJSON = generateAlignedJSON(
+    alignment,
+    sourceWords,
+    targetWords,
+    timings,
+    correctedText
+  );
+
+  console.log("original timings");
+  console.log(sourceWords);
+  console.log("machine transcript");
+  console.log(machineTranscript)
+  console.log("timings");
+  console.log(timings);
+  console.log("aligned timings");
+  console.log(alignedJSON);
+  
+  return alignedJSON;
+}
+
+/**
+ * ============================================================================
+ * EXPORTS (for module usage)
+ * ============================================================================
+ */
+
+// Export main API function
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    alignTranscripts,
+    // Export internal functions for advanced usage
+    extractWordsFromJSON,
+    extractWordsFromPlainText,
+    detectParagraphs,
+    alignWords,
+    generateAlignedJSON,
+    // Export helpers
+    stripPunctuation,
+    normalizeWord,
+    isValidSpeakerPattern
+  };
 }
