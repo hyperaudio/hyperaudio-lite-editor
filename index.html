@@ -1836,6 +1836,9 @@ If you are creating an open source application under a license compatible with t
                 hyperaudio();
               }
 
+              // Regenerate captions from the newly aligned transcript
+              hyperaudioGenerateCaptionsFromTranscript();
+
             } catch (error) {
               console.error('Alignment error:', error);
               hypertranscriptDiv.innerHTML = originalContent;
