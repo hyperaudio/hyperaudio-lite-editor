@@ -1459,200 +1459,188 @@ If you are creating an open source application under a license compatible with t
 <script type="module">
   import { AudioData, cutAudioApp } from "./js/audio-cut.js";
 
-  let audioDataArray;
+  const audioDataArray = [];
+  let skipListenersAttached = false;
 
-  document.querySelector('#strikethrough').addEventListener('click', (e) => {
-
-    audioDataArray = [];
-    let transcript = document.querySelector("#hypertranscript");
-    if (transcript == null) { // must be cached
-      transcript = transcriptCache.innerHTML;
-    }
-
-    const selection = window.getSelection();
-    if (!selection.rangeCount) return;
-
-    const range = selection.getRangeAt(0);
-    let startNode = range.startContainer;
-    let endNode = range.endContainer;
-
-    // Function to find the parent paragraph
-    function findParentParagraph(node) {
-      while (node && node.nodeName !== 'P') {
-        node = node.parentNode;
-      }
-      return node;
-    }
-
-    // Find the parent paragraph of the start and end nodes
-    let startParagraph = findParentParagraph(startNode);
-    let endParagraph = findParentParagraph(endNode);
-
-    if (!startParagraph || !endParagraph) return;
-
-    // Function to apply strikethrough to a single element
-    function strikeoutElement(element) {
-      if (element.nodeType === Node.ELEMENT_NODE && !element.style.textDecoration.includes('line-through')) {
-        element.style.textDecoration = 'line-through';
-      }
-    }
-
-    // Function to find the specific child element containing a node
-    function findChildElementContainingNode(parent, node) {
-      for (let child of parent.children) {
-        if (child.contains(node)) {
-          return child;
-        }
-      }
-      return null;
-    }
-
-    // Check if the selection ends at the very beginning of the end paragraph
-    const isEndAtParagraphStart = endNode === endParagraph && range.endOffset === 0;
-
-    // Apply strikethrough to selected elements
-    let currentParagraph = startParagraph;
-    let inSelection = false;
-
-    while (currentParagraph) {
-      let startElement = currentParagraph === startParagraph ? findChildElementContainingNode(currentParagraph, startNode) : null;
-      let endElement = currentParagraph === endParagraph ? findChildElementContainingNode(currentParagraph, endNode) : null;
-
-      // Skip the last paragraph if the selection ends at its start
-      if (currentParagraph === endParagraph && isEndAtParagraphStart) {
-        break;
-      }
-
-      Array.from(currentParagraph.children).forEach(child => {
-        if (child === startElement || inSelection) {
-          inSelection = true;
-          strikeoutElement(child);
-        }
-
-        if (child === endElement) {
-          // Only strikeout the end element if it's not at the very start of the paragraph
-          if (!(currentParagraph === endParagraph && range.endOffset === 0)) {
-              strikeoutElement(child);
-          }
-          inSelection = false;
-          return; // Exit the forEach loop
-        }
-      });
-
-      if (currentParagraph === endParagraph) break;
-      currentParagraph = currentParagraph.nextElementSibling;
-      inSelection = true; // For paragraphs between start and end
-    }
-
-    // Clear the selection
-    selection.removeAllRanges();
-
-    // detect the ranges to be cut
-    audioDataArray = createArrayOfGaps(transcript);
-
-    // skip the text that is struck thru
-    skipStrikeThrus(audioDataArray);
+  document.querySelector('#strikethrough').addEventListener('click', () => {
+    applyStrikeThroughToSelection();
+    rebuildAudioDataArray();
+    ensureSkipListeners();
   });
 
   registerStrikeThrus();
-
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
 
   function registerStrikeThrus() {
-    audioDataArray = [];
-
-    // detect the ranges to be cut
-
-    let transcript = document.querySelector("#hypertranscript");
-    if (transcript == null) { // must be cached
-      transcript = transcriptCache.querySelector("#hypertranscript");
-    }
-    audioDataArray = createArrayOfGaps(transcript);
-
-    // skip the text that is struck thru
-    skipStrikeThrus(audioDataArray);
+    rebuildAudioDataArray();
+    ensureSkipListeners();
   }
 
-  // creates an array of non struck thru ranges
-  function createArrayOfGaps(transcript) {
-    let newSections = [];
-    let words = transcript.querySelectorAll('[data-m]');
-    let isPreviousWordStruckThru = false;
-    let previousWordStruckThruEnd;
-    let newSection = {};
-    newSection.start = 0;
+  function getTranscript() {
+    let transcript = document.querySelector("#hypertranscript");
+    if (transcript == null && typeof transcriptCache !== "undefined") {
+      transcript = transcriptCache.querySelector && transcriptCache.querySelector("#hypertranscript");
+    }
+    return transcript;
+  }
 
-    words.forEach((word, index) => {
-      let isStrikethrough = word.style.textDecoration === "line-through";
+  function isStruck(el) {
+    return el.style.textDecoration.includes('line-through');
+  }
 
-      if (isStrikethrough) {
-        if (isPreviousWordStruckThru === false){
-          newSection.end = word.getAttribute("data-m")/1000;
-          newSections.push(newSection);
+  function strikeoutElement(element) {
+    if (element.nodeType === Node.ELEMENT_NODE && !isStruck(element)) {
+      element.style.textDecoration = 'line-through';
+    }
+  }
+
+  function unstrikeElement(element) {
+    if (element.nodeType === Node.ELEMENT_NODE && isStruck(element)) {
+      element.style.textDecoration = '';
+    }
+  }
+
+  // Map the user's Range to the spans it actually covers, regardless of where
+  // the caret was parked (text node, span boundary, or paragraph element).
+  function applyStrikeThroughToSelection() {
+    const transcript = getTranscript();
+    if (!transcript) return;
+
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+
+    const allSpans = Array.from(transcript.querySelectorAll('[data-m]'));
+    let startSpan = null;
+    let endSpan = null;
+    for (const span of allSpans) {
+      if (range.intersectsNode(span) && span.textContent.trim() !== '') {
+        if (!startSpan) startSpan = span;
+        endSpan = span;
+      }
+    }
+    if (!startSpan || !endSpan) return;
+
+    let startIndex = allSpans.indexOf(startSpan);
+    const endIndex = allSpans.indexOf(endSpan);
+
+    // Trim leading spaces — if the selection only touches the trailing space
+    // of a word, that word shouldn't be struck.
+    let selectedText = range.toString();
+    while (selectedText.startsWith(' ') && startIndex < endIndex) {
+      startIndex++;
+      selectedText = selectedText.slice(1);
+    }
+
+    const selectedSpans = allSpans.slice(startIndex, endIndex + 1);
+    const action = selectedSpans.every(isStruck) ? unstrikeElement : strikeoutElement;
+    selectedSpans.forEach(action);
+
+    selection.removeAllRanges();
+  }
+
+  function computePlayableSections(transcript) {
+    const words = transcript.querySelectorAll('[data-m]');
+    const player = document.getElementById("hyperplayer");
+    const duration = (player && !isNaN(player.duration) && player.duration > 0) ? player.duration : Infinity;
+
+    if (words.length === 0) {
+      return [{ start: 0, end: duration }];
+    }
+
+    const sections = [];
+    let current = { start: 0 };
+    let inStruck = false;
+    let lastStruckEnd = 0;
+
+    words.forEach(word => {
+      const struck = isStruck(word);
+      const wordStart = parseInt(word.getAttribute('data-m')) / 1000;
+      const wordEnd = wordStart + (parseInt(word.getAttribute('data-d')) || 0) / 1000;
+
+      if (struck) {
+        if (!inStruck) {
+          current.end = wordStart;
+          sections.push(current);
+          current = null;
+          inStruck = true;
         }
-        isPreviousWordStruckThru = true;
-        previousWordStruckThruEnd = word.getAttribute("data-m")/1000 + word.getAttribute("data-d")/1000;
-      } else {
-        if (isPreviousWordStruckThru === true){
-          newSection = {};
-          newSection.start = words[index-1].getAttribute("data-m")/1000 + words[index-1].getAttribute("data-d")/1000;
-        }
-        isPreviousWordStruckThru = false;
+        lastStruckEnd = wordEnd;
+      } else if (inStruck) {
+        current = { start: lastStruckEnd };
+        inStruck = false;
       }
     });
 
-    // add last range
-    newSection = {};
-    newSection.start = previousWordStruckThruEnd;
-    newSection.end = document.getElementById("hyperplayer").duration;
-    newSections.push(newSection);
+    if (current === null) {
+      current = { start: lastStruckEnd };
+    }
+    current.end = duration;
+    sections.push(current);
 
-    let mediaUrl = document.querySelector("#hyperplayer").src;
-    
-    newSections.forEach(section => {
-      audioDataArray.push(new AudioData(mediaUrl, section.start, section.end));
-    });
-
-    return(audioDataArray);
+    return sections;
   }
 
-  function skipStrikeThrus(audioDataArray) {
-    if (typeof audioDataArray !== "undefined") {
-      let myPlayer = window.hyperaudioInstance.player;
-      //console.dir(audioDataArray);
+  // Mutate audioDataArray in place so any listener closures see the update.
+  function rebuildAudioDataArray() {
+    const transcript = getTranscript();
+    audioDataArray.length = 0;
+    if (!transcript) return;
 
-      let animationFrameId;
+    const sections = computePlayableSections(transcript);
+    const mediaUrl = document.querySelector("#hyperplayer").src;
+    sections.forEach(s => audioDataArray.push(new AudioData(mediaUrl, s.start, s.end)));
+  }
 
-      function update() {
-        checkStrikeThrus(audioDataArray, myPlayer);
+  // Attach the play/pause/seeked listeners exactly once. Earlier code attached
+  // a fresh pair on every strike, leaking listeners and stale closures.
+  function ensureSkipListeners() {
+    if (skipListenersAttached) return;
+    const myPlayer = window.hyperaudioInstance && window.hyperaudioInstance.player;
+    if (!myPlayer) return;
 
-        // Continue the loop
+    let animationFrameId = null;
+
+    function update() {
+      checkStrikeThrus(myPlayer);
+      animationFrameId = requestAnimationFrame(update);
+    }
+
+    myPlayer.addEventListener("play", () => {
+      if (!animationFrameId) {
         animationFrameId = requestAnimationFrame(update);
       }
+    });
 
-      // Stop the animation frame loop when the player is not playing
-      myPlayer.addEventListener("pause", () => {
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId);
-          animationFrameId = null;
-        }
-      });
-
-      myPlayer.addEventListener("play", () => {
-        // Ensure the loop is running only when the player is playing
-        if (!animationFrameId) {
-          animationFrameId = requestAnimationFrame(update);
-        }
-      });
-    }
-  }
-
-  function checkStrikeThrus(audioDataArray, myPlayer){
-    audioDataArray.forEach((element, index) => {
-      if ((index+1) < audioDataArray.length  && parseFloat(element.stop) < parseFloat(myPlayer.currentTime) && parseFloat(myPlayer.currentTime) < parseFloat(audioDataArray[index+1].start)) {
-        myPlayer.currentTime = audioDataArray[index+1].start + 0.05;
+    myPlayer.addEventListener("pause", () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
       }
     });
+
+    // Catch the case where the user clicks/seeks into a struck region while
+    // paused, or where RAF hasn't ticked yet at the boundary.
+    myPlayer.addEventListener("seeked", () => checkStrikeThrus(myPlayer));
+    myPlayer.addEventListener("timeupdate", () => checkStrikeThrus(myPlayer));
+
+    skipListenersAttached = true;
+  }
+
+  // Use >= on the lower bound so we jump the instant currentTime reaches the
+  // struck region — without this the first word can sneak through between
+  // RAF ticks.
+  function checkStrikeThrus(myPlayer) {
+    if (audioDataArray.length < 2) return;
+    const t = myPlayer.currentTime;
+    for (let i = 0; i < audioDataArray.length - 1; i++) {
+      const stop = audioDataArray[i].stop;
+      const nextStart = audioDataArray[i + 1].start;
+      if (t >= stop && t < nextStart) {
+        myPlayer.currentTime = nextStart + 0.05;
+        return;
+      }
+    }
   }
 
   document
@@ -1668,8 +1656,7 @@ If you are creating an open source application under a license compatible with t
         fileName = element.textContent;
       }
 
-      if (typeof audioDataArray === "undefined") {
-        audioDataArray = [];
+      if (audioDataArray.length === 0) {
         audioDataArray.push(
           new AudioData(
             document.querySelector("#hyperplayer").src,
