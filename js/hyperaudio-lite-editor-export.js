@@ -596,6 +596,12 @@ function jsonToHtml(jsonData) {
   return div.innerHTML;
 }
 
+// Expose globally for native app integration
+window.jsonToHtml = jsonToHtml;
+window.srtToHtml = srtToHtml;
+window.vttToHtml = vttToHtml;
+window.convertSrtToWebVtt = convertSrtToWebVtt;
+
 function srtToHtml(data) {
   let i = 0,
   len = 0,
