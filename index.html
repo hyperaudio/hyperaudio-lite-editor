@@ -241,18 +241,21 @@ If you are creating an open source application under a license compatible with t
       </div>
     </div>
     <div class="main-panel" style="z-index: 2">
-      <div class="navbar bg-base-100" style="background-color: #ffffff; opacity:0.95;">
+      <div class="navbar bg-base-100" style="background-color: #ffffff; opacity:0.95; min-height:70px;">
         <div class="navbar-start">
-          <button id="sidebar-toggle" class="btn btn-square btn-outline" aria-label="Toggle Sidebar">
+          <button id="sidebar-toggle" class="btn btn-square btn-outline" style="margin-right:4px" aria-label="Toggle Sidebar">
             <svg id="sidebar-close-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-close"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
             <svg id="sidebar-open-icon" style="display: none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-open"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
           </button>
-          &nbsp;
-          <button id="strikethrough" class="btn btn-square btn-outline" aria-label="Strike through text">
+          <button id="strikethrough" class="btn btn-square btn-outline" style="margin-right:4px" aria-label="Strike through text">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-strikethrough"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg>
           </button>
+          <label id="remove-gaps-btn" for="remove-gaps-modal" class="btn btn-square btn-outline relative" style="margin-right:4px" aria-label="Remove silent gaps">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rabbit"><path d="M13 16a3 3 0 0 1 2.24 5"/><path d="M18 12h.01"/><path d="M18 21h-8a4 4 0 0 1-4-4 7 7 0 0 1 7-7h.2L9.6 6.4a1 1 0 1 1 2.8-2.8L15.8 7h.2c3.3 0 6 2.7 6 6v1a2 2 0 0 1-2 2h-1a3 3 0 0 0-3 3"/><path d="M20 8.54V4a2 2 0 1 0-4 0v3"/><path d="M7.612 12.524a3 3 0 1 0-1.6 4.3"/></svg>
+            <span id="remove-gaps-active-dot" style="display:none;position:absolute;top:4px;right:4px;width:9px;height:9px;border-radius:9999px;background-color:oklch(var(--p));z-index:2;pointer-events:none;"></span>
+          </label>
           <div class="dropdown menu-compact">
-            <label tabindex="0" class="btn m-1 btn-outline gap-2">
+            <label tabindex="0" class="btn btn-outline gap-2" style="margin-right:4px">
               <span id="file-dropdown-text">FILE</span>
               <svg id="file-dropdown-symbol" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
               <svg id="file-dropdown-symbol-mobile" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
@@ -579,6 +582,57 @@ If you are creating an open source application under a license compatible with t
         <button id="align-text-btn" class="btn btn-primary">ALIGN</button>
       </div>
 
+    </div>
+  </div>
+
+  <input type="checkbox" id="remove-gaps-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box">
+      <label for="remove-gaps-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <h3 class="font-bold text-lg" style="margin-bottom:16px">Remove Silent Gaps</h3>
+
+      <div class="flex flex-col gap-4 w-full">
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="remove-gaps-enabled" type="checkbox" class="toggle toggle-primary" style="cursor:pointer" />
+          <label for="remove-gaps-enabled" class="label-text" style="cursor:pointer">Skip gaps during playback</label>
+        </div>
+        <p id="remove-gaps-savings" class="text-sm opacity-80" style="display:none;text-align:right"></p>
+
+        <details style="margin-top:8px">
+          <summary class="text-sm opacity-70" style="cursor:pointer;user-select:none">Advanced settings</summary>
+          <div class="flex flex-col gap-4 w-full" style="margin-top:12px">
+            <div class="form-control">
+              <label for="remove-gaps-threshold" class="label">
+                <span class="label-text">Skip gaps longer than (milliseconds)</span>
+              </label>
+              <input
+                id="remove-gaps-threshold"
+                type="number"
+                min="100"
+                step="100"
+                value="500"
+                class="input input-bordered"
+                style="width:120px"
+              />
+            </div>
+
+            <div class="form-control">
+              <label for="remove-gaps-buffer" class="label">
+                <span class="label-text">Keep buffer either side (milliseconds)</span>
+              </label>
+              <input
+                id="remove-gaps-buffer"
+                type="number"
+                min="0"
+                step="10"
+                value="100"
+                class="input input-bordered"
+                style="width:120px"
+              />
+            </div>
+          </div>
+        </details>
+      </div>
     </div>
   </div>
 
@@ -1462,11 +1516,83 @@ If you are creating an open source application under a license compatible with t
   const audioDataArray = [];
   let skipListenersAttached = false;
 
+  let removeGapsEnabled = false;
+  let gapThreshold = 0.5;
+  let gapBuffer = 0.1;
+
   document.querySelector('#strikethrough').addEventListener('click', () => {
     applyStrikeThroughToSelection();
     rebuildAudioDataArray();
     ensureSkipListeners();
   });
+
+  function applyGapSettings() {
+    const enabledEl = document.querySelector('#remove-gaps-enabled');
+    const thresholdEl = document.querySelector('#remove-gaps-threshold');
+    const bufferEl = document.querySelector('#remove-gaps-buffer');
+    removeGapsEnabled = !!enabledEl.checked;
+    const thresholdMs = parseFloat(thresholdEl.value);
+    if (!isNaN(thresholdMs) && thresholdMs > 0) {
+      gapThreshold = thresholdMs / 1000;
+    }
+    const bufferMs = parseFloat(bufferEl.value);
+    if (!isNaN(bufferMs) && bufferMs >= 0) {
+      gapBuffer = bufferMs / 1000;
+    }
+    rebuildAudioDataArray();
+    ensureSkipListeners();
+    updateRemoveGapsBtnState();
+    updateGapSavingsMessage();
+  }
+
+  document.querySelector('#remove-gaps-enabled').addEventListener('change', applyGapSettings);
+  document.querySelector('#remove-gaps-threshold').addEventListener('input', applyGapSettings);
+  document.querySelector('#remove-gaps-buffer').addEventListener('input', applyGapSettings);
+
+  function updateRemoveGapsBtnState() {
+    const dot = document.querySelector('#remove-gaps-active-dot');
+    if (!dot) return;
+    dot.style.display = removeGapsEnabled ? 'block' : 'none';
+  }
+
+  function computeGapSavings() {
+    const transcript = getTranscript();
+    if (!transcript) return 0;
+    const words = transcript.querySelectorAll('[data-m]');
+    let saved = 0;
+    let prevWordEnd = null;
+    let prevWordStruck = false;
+    words.forEach(word => {
+      const struck = isStruck(word);
+      const wordStart = parseInt(word.getAttribute('data-m')) / 1000;
+      const wordEnd = wordStart + (parseInt(word.getAttribute('data-d')) || 0) / 1000;
+      if (!struck && prevWordEnd !== null && !prevWordStruck) {
+        const gap = wordStart - prevWordEnd;
+        if (gap > gapThreshold) {
+          const skipStart = prevWordEnd + gapBuffer;
+          const skipEnd = wordStart - gapBuffer;
+          if (skipEnd > skipStart) {
+            saved += skipEnd - skipStart;
+          }
+        }
+      }
+      prevWordEnd = wordEnd;
+      prevWordStruck = struck;
+    });
+    return saved;
+  }
+
+  function updateGapSavingsMessage() {
+    const el = document.querySelector('#remove-gaps-savings');
+    if (!el) return;
+    if (!removeGapsEnabled) {
+      el.style.display = 'none';
+      return;
+    }
+    const saved = computeGapSavings();
+    el.textContent = `Playback shortened by ${saved.toFixed(1)} seconds`;
+    el.style.display = 'block';
+  }
 
   registerStrikeThrus();
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
@@ -1552,11 +1678,35 @@ If you are creating an open source application under a license compatible with t
     let current = { start: 0 };
     let inStruck = false;
     let lastStruckEnd = 0;
+    let prevWordEnd = null;
+    let prevWordStruck = false;
 
     words.forEach(word => {
       const struck = isStruck(word);
       const wordStart = parseInt(word.getAttribute('data-m')) / 1000;
       const wordEnd = wordStart + (parseInt(word.getAttribute('data-d')) || 0) / 1000;
+
+      // Long-gap skipping: when both surrounding words are unstruck and the
+      // gap exceeds the threshold, skip the middle of the gap, keeping a
+      // small buffer on each side so word edges aren't clipped.
+      if (
+        removeGapsEnabled &&
+        !inStruck && !struck &&
+        prevWordEnd !== null &&
+        !prevWordStruck &&
+        current !== null
+      ) {
+        const gap = wordStart - prevWordEnd;
+        if (gap > gapThreshold) {
+          const skipStart = prevWordEnd + gapBuffer;
+          const skipEnd = wordStart - gapBuffer;
+          if (skipEnd > skipStart) {
+            current.end = skipStart;
+            sections.push(current);
+            current = { start: skipEnd };
+          }
+        }
+      }
 
       if (struck) {
         if (!inStruck) {
@@ -1570,6 +1720,9 @@ If you are creating an open source application under a license compatible with t
         current = { start: lastStruckEnd };
         inStruck = false;
       }
+
+      prevWordEnd = wordEnd;
+      prevWordStruck = struck;
     });
 
     if (current === null) {
