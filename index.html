@@ -704,6 +704,12 @@ If you are creating an open source application under a license compatible with t
   let transcriptCache = null;
   let captionCache = null;
 
+  // A new transcript was just created with no captions of its own
+  // (transcribe / JSON import / SRT-VTT import) — discard any cached caption
+  // editor so the next entry rebuilds from the fresh transcript. Caption
+  // edits otherwise persist; localStorage load manages its own cache.
+  window.document.addEventListener('hyperaudioInit', () => { captionCache = null; }, false);
+
   document.querySelector('#caption-editor-btn').addEventListener('click', (e) => {
     let holder = document.querySelector('.transcript-holder');
     transcriptCache = holder.cloneNode(true);
@@ -1212,7 +1218,7 @@ If you are creating an open source application under a license compatible with t
         // Append the new div to the existing div
 
         holder.insertAdjacentElement('beforeEnd', newDiv);
-      
+
         // Initialize the DOM parser
         let parser = new DOMParser();
         let html = document.querySelector('#caption-template-holder').innerHTML;
@@ -1238,11 +1244,10 @@ If you are creating an open source application under a license compatible with t
           captionTempl.querySelector('.line2').value = line2;
 
           holder.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
-          //document.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
         });
 
         captionCache = captureCaptions(holder);
-      
+
       } else {
         holder.innerHTML = captionCache;
       }

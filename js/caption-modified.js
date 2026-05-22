@@ -148,17 +148,24 @@ var caption = function () {
       // If the entire segment fits on a line, add it to the captions.
       if (segment.chars < maxLineLength) {
 
-        if (segment.duration === 0){
-          if (i < arr.length) {
-            segment.duration = arr[i+1].start - segment.start; 
-          } else {
-            segment.duration = 5 * 1000;
-          }
-        } 
+        // Prefer the last word's actual end time over the accumulated
+        // duration, which only sums word durations and undercounts the
+        // segment whenever there are silent gaps between words.
+        var lastWord = segment.words[segment.words.length - 1];
+        var segmentStop;
+        if (lastWord !== undefined && !isNaN(lastWord.start + lastWord.duration)) {
+          segmentStop = lastWord.start + lastWord.duration;
+        } else if (segment.duration > 0) {
+          segmentStop = segment.start + segment.duration;
+        } else if (i + 1 < arr.length) {
+          segmentStop = arr[i+1].start;
+        } else {
+          segmentStop = segment.start + 5;
+        }
 
         thisCaption = new captionMeta(
           formatSeconds(segment.start),
-          formatSeconds(segment.start + segment.duration),
+          formatSeconds(segmentStop),
           '',
         );
 
