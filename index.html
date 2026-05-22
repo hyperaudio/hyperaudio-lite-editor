@@ -592,40 +592,46 @@ If you are creating an open source application under a license compatible with t
       <h3 class="font-bold text-lg" style="margin-bottom:16px">Remove Silent Gaps</h3>
 
       <div class="flex flex-col gap-4 w-full">
-        <label class="label cursor-pointer justify-start gap-3">
-          <input id="remove-gaps-enabled" type="checkbox" class="toggle toggle-primary" />
-          <span class="label-text">Skip gaps during playback</span>
-        </label>
-
-        <div class="form-control">
-          <label for="remove-gaps-threshold" class="label">
-            <span class="label-text">Skip gaps longer than (milliseconds)</span>
-          </label>
-          <input
-            id="remove-gaps-threshold"
-            type="number"
-            min="100"
-            step="100"
-            value="500"
-            class="input input-bordered"
-            style="width:120px"
-          />
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="remove-gaps-enabled" type="checkbox" class="toggle toggle-primary" style="cursor:pointer" />
+          <label for="remove-gaps-enabled" class="label-text" style="cursor:pointer">Skip gaps during playback</label>
         </div>
+        <p id="remove-gaps-savings" class="text-sm opacity-80" style="display:none;text-align:right"></p>
 
-        <div class="form-control">
-          <label for="remove-gaps-buffer" class="label">
-            <span class="label-text">Keep buffer either side (milliseconds)</span>
-          </label>
-          <input
-            id="remove-gaps-buffer"
-            type="number"
-            min="0"
-            step="10"
-            value="100"
-            class="input input-bordered"
-            style="width:120px"
-          />
-        </div>
+        <details style="margin-top:8px">
+          <summary class="text-sm opacity-70" style="cursor:pointer;user-select:none">Advanced settings</summary>
+          <div class="flex flex-col gap-4 w-full" style="margin-top:12px">
+            <div class="form-control">
+              <label for="remove-gaps-threshold" class="label">
+                <span class="label-text">Skip gaps longer than (milliseconds)</span>
+              </label>
+              <input
+                id="remove-gaps-threshold"
+                type="number"
+                min="100"
+                step="100"
+                value="500"
+                class="input input-bordered"
+                style="width:120px"
+              />
+            </div>
+
+            <div class="form-control">
+              <label for="remove-gaps-buffer" class="label">
+                <span class="label-text">Keep buffer either side (milliseconds)</span>
+              </label>
+              <input
+                id="remove-gaps-buffer"
+                type="number"
+                min="0"
+                step="10"
+                value="100"
+                class="input input-bordered"
+                style="width:120px"
+              />
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   </div>
@@ -1536,6 +1542,7 @@ If you are creating an open source application under a license compatible with t
     rebuildAudioDataArray();
     ensureSkipListeners();
     updateRemoveGapsBtnState();
+    updateGapSavingsMessage();
   }
 
   document.querySelector('#remove-gaps-enabled').addEventListener('change', applyGapSettings);
@@ -1546,6 +1553,45 @@ If you are creating an open source application under a license compatible with t
     const dot = document.querySelector('#remove-gaps-active-dot');
     if (!dot) return;
     dot.style.display = removeGapsEnabled ? 'block' : 'none';
+  }
+
+  function computeGapSavings() {
+    const transcript = getTranscript();
+    if (!transcript) return 0;
+    const words = transcript.querySelectorAll('[data-m]');
+    let saved = 0;
+    let prevWordEnd = null;
+    let prevWordStruck = false;
+    words.forEach(word => {
+      const struck = isStruck(word);
+      const wordStart = parseInt(word.getAttribute('data-m')) / 1000;
+      const wordEnd = wordStart + (parseInt(word.getAttribute('data-d')) || 0) / 1000;
+      if (!struck && prevWordEnd !== null && !prevWordStruck) {
+        const gap = wordStart - prevWordEnd;
+        if (gap > gapThreshold) {
+          const skipStart = prevWordEnd + gapBuffer;
+          const skipEnd = wordStart - gapBuffer;
+          if (skipEnd > skipStart) {
+            saved += skipEnd - skipStart;
+          }
+        }
+      }
+      prevWordEnd = wordEnd;
+      prevWordStruck = struck;
+    });
+    return saved;
+  }
+
+  function updateGapSavingsMessage() {
+    const el = document.querySelector('#remove-gaps-savings');
+    if (!el) return;
+    if (!removeGapsEnabled) {
+      el.style.display = 'none';
+      return;
+    }
+    const saved = computeGapSavings();
+    el.textContent = `Playback shortened by ${saved.toFixed(1)} seconds`;
+    el.style.display = 'block';
   }
 
   registerStrikeThrus();
