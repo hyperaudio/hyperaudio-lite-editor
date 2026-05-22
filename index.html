@@ -627,11 +627,6 @@ If you are creating an open source application under a license compatible with t
           />
         </div>
       </div>
-
-      <div class="modal-action">
-        <label for="remove-gaps-modal" class="btn btn-ghost">Cancel</label>
-        <label for="remove-gaps-modal" id="remove-gaps-apply" class="btn btn-primary">Apply</label>
-      </div>
     </div>
   </div>
 
@@ -1525,7 +1520,7 @@ If you are creating an open source application under a license compatible with t
     ensureSkipListeners();
   });
 
-  document.querySelector('#remove-gaps-apply').addEventListener('click', () => {
+  function applyGapSettings() {
     const enabledEl = document.querySelector('#remove-gaps-enabled');
     const thresholdEl = document.querySelector('#remove-gaps-threshold');
     const bufferEl = document.querySelector('#remove-gaps-buffer');
@@ -1541,7 +1536,11 @@ If you are creating an open source application under a license compatible with t
     rebuildAudioDataArray();
     ensureSkipListeners();
     updateRemoveGapsBtnState();
-  });
+  }
+
+  document.querySelector('#remove-gaps-enabled').addEventListener('change', applyGapSettings);
+  document.querySelector('#remove-gaps-threshold').addEventListener('input', applyGapSettings);
+  document.querySelector('#remove-gaps-buffer').addEventListener('input', applyGapSettings);
 
   function updateRemoveGapsBtnState() {
     const dot = document.querySelector('#remove-gaps-active-dot');
