@@ -349,9 +349,9 @@ function getApiUrl(tier, language, model) {
   }
 
   if (model.startsWith("whisper")) { // no tier
-    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&detect_topics=true&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=true&topics=true&smart_format=true`
   } else {
-    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&detect_topics=true&language=${language}&smart_format=true`
+    url = `https://api.deepgram.com/v1/listen?model=${novaPrefix}${model}&tier=${tier}&diarize=true&summarize=true&topics=true&language=${language}&smart_format=true`
   }
   return (url);
 }
@@ -439,12 +439,30 @@ function getLanguageCode(json){
 function parseData(json) {
 
   const maxWordsInPara = 100;
-  const significantGapInSeconds = 0.5;
+  const significantGapInSeconds = 4.0;
 
   const punctuatedWords = json.results.channels[0].alternatives[0].transcript.split(' ');
   const wordData = json.results.channels[0].alternatives[0].words;
   console.log("wordData...");
   console.log(wordData);
+
+  // Fix Deepgram diarization edge case where the last word of a speaker turn
+  // gets attached to the next speaker. Signature: the word starts essentially
+  // on top of the previous speaker's word, but the next word from this "new"
+  // speaker is far away. In that case, reassign the word back.
+  const speakerReassignGap = 0.3;
+  for (let i = 1; i < wordData.length - 1; i++) {
+    const prev = wordData[i - 1];
+    const cur = wordData[i];
+    const next = wordData[i + 1];
+    if (cur.speaker !== prev.speaker && next.speaker === cur.speaker) {
+      const gapBefore = cur.start - prev.end;
+      const gapAfter = next.start - cur.end;
+      if (gapBefore < speakerReassignGap && gapAfter > speakerReassignGap) {
+        cur.speaker = prev.speaker;
+      }
+    }
+  }
 
   let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
 
@@ -482,16 +500,9 @@ function parseData(json) {
       }
     }
 
-    // change of speaker or first word
-    if ((showDiarization === true && index > 0 && element.speaker !== wordData[index-1].speaker) || index === 0) { 
-      let previousWord = punctuatedWords[index-1];
-      let previousWordLastChar = null;
-      
+    // change of speaker or first word - always start a new paragraph on speaker change
+    if ((showDiarization === true && index > 0 && element.speaker !== wordData[index-1].speaker) || index === 0) {
       if (index > 0) {
-        previousWordLastChar = previousWord.charAt(previousWord.length-1);
-      }
-
-      if (index > 0 && (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!")) {
         hyperTranscript += "\n  </p>\n  <p>\n   ";
         wordsInPara = 0;
       }
@@ -504,7 +515,9 @@ function parseData(json) {
   });
 
   hyperTranscript +=  "\n </p> \n </section>\n</article>\n ";
-  
+
+  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
+
   document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
 
   let showSpeakers = document.querySelector('#show-speakers');
@@ -530,30 +543,23 @@ function parseData(json) {
 }
 
 function extractSummary(json) {
-  let summary = "";
-  const summaryData = json.results.channels[0].alternatives[0].summaries;
-
-  summaryData.forEach((element, index) => {
-    summary += element.summary;
-    if (index < summaryData.length - 1) {
-      summary += "\n\n";
-    }
-  });
-
-  return (summary);
+  const summary = json.results && json.results.summary;
+  if (!summary) return "";
+  return summary.short || summary.text || "";
 }
 
 function extractTopics(json) {
-  let topics = [];
-  const topicsData = json.results.channels[0].alternatives[0].topics;
-
-  topicsData.forEach(element => {
-    element.topics.forEach(el => {
-      topics.push(el.topic);
+  const topicsData = json.results && json.results.topics;
+  if (!topicsData || !Array.isArray(topicsData.segments)) return [];
+  const seen = new Set();
+  topicsData.segments.forEach(segment => {
+    (segment.topics || []).forEach(t => {
+      if (t && t.topic && !seen.has(t.topic)) {
+        seen.add(t.topic);
+      }
     });
   });
-
-  return (topics);
+  return Array.from(seen);
 }
 
 function extractLanguage(json) {
