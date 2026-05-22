@@ -125,6 +125,11 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
   async function handleFormSubmission() {
 
+    // If the user is in caption mode, switch back to transcript view so the
+    // transcribing loader is visible and the result lands in the right place.
+    // #transcript-editor-btn is disabled in transcript mode, so this no-ops.
+    document.querySelector('#transcript-editor-btn')?.click();
+
     const model_name = modelNameSelectionInput.value;
     const file = fileUploadBtn.files[0];
     const audio = await readAudioFrom(file);
