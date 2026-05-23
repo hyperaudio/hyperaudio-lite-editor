@@ -1614,9 +1614,21 @@ If you are creating an open source application under a license compatible with t
   // freshly-loaded transcript.
   window.document.addEventListener('hyperaudioInit', registerStrikeThrus, false);
 
+  // Recalculate gap-skips and the savings message when the user edits the
+  // transcript (e.g., deletes a word — the time it occupied becomes a gap).
+  // Debounced so we coalesce rapid keystrokes. Delegated on document so the
+  // listener survives transcript element replacement via restoreTranscript().
+  let gapRecalcTimer = null;
+  document.addEventListener('input', (e) => {
+    if (!e.target || e.target.id !== 'hypertranscript') return;
+    clearTimeout(gapRecalcTimer);
+    gapRecalcTimer = setTimeout(registerStrikeThrus, 150);
+  });
+
   function registerStrikeThrus() {
     rebuildAudioDataArray();
     ensureSkipListeners();
+    updateGapSavingsMessage();
   }
 
   function getTranscript() {
