@@ -1580,6 +1580,21 @@ If you are creating an open source application under a license compatible with t
     return saved;
   }
 
+  function formatGapSavings(seconds) {
+    if (seconds < 60) {
+      return `${seconds.toFixed(1)} seconds`;
+    }
+    const total = Math.round(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const parts = [];
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    if (s > 0) parts.push(`${s}s`);
+    return parts.join(' ');
+  }
+
   function updateGapSavingsMessage() {
     const el = document.querySelector('#remove-gaps-savings');
     if (!el) return;
@@ -1588,7 +1603,7 @@ If you are creating an open source application under a license compatible with t
       return;
     }
     const saved = computeGapSavings();
-    el.textContent = `Playback shortened by ${saved.toFixed(1)} seconds`;
+    el.textContent = `Playback shortened by ${formatGapSavings(saved)}`;
     el.style.display = 'block';
   }
 
