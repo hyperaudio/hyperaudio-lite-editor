@@ -1580,6 +1580,21 @@ If you are creating an open source application under a license compatible with t
     return saved;
   }
 
+  function formatGapSavings(seconds) {
+    if (seconds < 60) {
+      return `${seconds.toFixed(1)} seconds`;
+    }
+    const total = Math.round(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const parts = [];
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    if (s > 0) parts.push(`${s}s`);
+    return parts.join(' ');
+  }
+
   function updateGapSavingsMessage() {
     const el = document.querySelector('#remove-gaps-savings');
     if (!el) return;
@@ -1588,16 +1603,55 @@ If you are creating an open source application under a license compatible with t
       return;
     }
     const saved = computeGapSavings();
-    el.textContent = `Playback shortened by ${saved.toFixed(1)} seconds`;
+    el.textContent = `Playback shortened by ${formatGapSavings(saved)}`;
     el.style.display = 'block';
   }
 
   registerStrikeThrus();
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
+  // Also rebuild on hyperaudioInit so transcribe (Deepgram/Whisper) and
+  // JSON/SRT/VTT import inherit the current gap-skip settings against the
+  // freshly-loaded transcript.
+  window.document.addEventListener('hyperaudioInit', registerStrikeThrus, false);
+
+  // Recalculate gap-skips and the savings message when the user edits the
+  // transcript (e.g., deletes a word — the time it occupied becomes a gap).
+  // Debounced so we coalesce rapid keystrokes. Delegated on document so the
+  // listener survives transcript element replacement via restoreTranscript().
+  let gapRecalcTimer = null;
+  document.addEventListener('input', (e) => {
+    if (!e.target || e.target.id !== 'hypertranscript') return;
+    clearTimeout(gapRecalcTimer);
+    gapRecalcTimer = setTimeout(registerStrikeThrus, 150);
+  });
 
   function registerStrikeThrus() {
     rebuildAudioDataArray();
     ensureSkipListeners();
+    updateGapSavingsMessage();
+    refreshHyperaudioInstance();
+  }
+
+  // Refresh the library's cached word array so the karaoke highlight stays in
+  // sync with the current DOM after structural edits. Without this, the
+  // existing sanitise()-driven refresh runs at 1000ms vs. our 150ms gap
+  // recalc, leaving the highlight pointing at detached nodes in between.
+  function refreshHyperaudioInstance() {
+    const instance = window.hyperaudioInstance;
+    if (!instance || !instance.transcript) return;
+    const words = instance.transcript.querySelectorAll('[data-m]');
+    instance.wordArr = instance.createWordArray(words);
+    instance.parentElements = instance.transcript.getElementsByTagName(instance.parentTag);
+    if (instance.currentTime !== undefined) {
+      instance.updateTranscriptVisualState(instance.currentTime);
+    }
+    // The library's polling chain may have died silently mid-edit if its
+    // cached wordArr referenced a deleted span (word.n.parentNode === null
+    // throws inside the setTimeout callback). Kicking checkPlayHead clears
+    // any pending timer and starts a fresh poll against the refreshed array.
+    if (typeof instance.checkPlayHead === 'function') {
+      instance.checkPlayHead();
+    }
   }
 
   function getTranscript() {
@@ -1789,6 +1843,14 @@ If you are creating an open source application under a license compatible with t
       const nextStart = audioDataArray[i + 1].start;
       if (t >= stop && t < nextStart) {
         myPlayer.currentTime = nextStart + 0.05;
+        // The library only listens for play/pause natively, not seeked, so
+        // it has no idea we just jumped. Kick its polling chain so the
+        // highlight re-locks onto the post-skip word instead of waiting for
+        // its stale setTimeout to fire seconds later.
+        const instance = window.hyperaudioInstance;
+        if (instance && typeof instance.checkPlayHead === 'function') {
+          instance.checkPlayHead();
+        }
         return;
       }
     }
