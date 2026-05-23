@@ -1594,6 +1594,10 @@ If you are creating an open source application under a license compatible with t
 
   registerStrikeThrus();
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
+  // Also rebuild on hyperaudioInit so transcribe (Deepgram/Whisper) and
+  // JSON/SRT/VTT import inherit the current gap-skip settings against the
+  // freshly-loaded transcript.
+  window.document.addEventListener('hyperaudioInit', registerStrikeThrus, false);
 
   function registerStrikeThrus() {
     rebuildAudioDataArray();
