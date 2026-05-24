@@ -991,6 +991,29 @@ If you are creating an open source application under a license compatible with t
 
   hyperaudio();
 
+  // Show the native media controls only on hover or keyboard focus so a
+  // programmatic seek (gap skip, redaction jump) doesn't briefly flash the
+  // control overlay. Touch users get the controls on tap via pointerenter
+  // as well; the pointerleave on lift-off matches existing behavior.
+  (function setupHoverOnlyControls() {
+    const player = document.querySelector('#hyperplayer');
+    if (!player) return;
+    player.removeAttribute('controls');
+    let hovered = false;
+    let focused = false;
+    const sync = () => {
+      if (hovered || focused) {
+        player.setAttribute('controls', '');
+      } else {
+        player.removeAttribute('controls');
+      }
+    };
+    player.addEventListener('pointerenter', () => { hovered = true; sync(); });
+    player.addEventListener('pointerleave', () => { hovered = false; sync(); });
+    player.addEventListener('focus', () => { focused = true; sync(); });
+    player.addEventListener('blur', () => { focused = false; sync(); });
+  })();
+
   function hyperaudioGenerateCaptionsFromTranscript() {
     let sourceMedia = document.querySelector("#hyperplayer").src;
     let track = document.querySelector('#hyperplayer-vtt');
