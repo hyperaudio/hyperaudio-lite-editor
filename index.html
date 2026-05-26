@@ -743,6 +743,22 @@ If you are creating an open source application under a license compatible with t
 
     const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
 
+    // Patch for #294: if the library's polling chain runs while wordArr
+    // still references a span deleted by an in-progress edit, the original
+    // throws on word.n.parentNode.classList and the chain dies silently.
+    // Strip detached entries before delegating — the next debounced
+    // refreshHyperaudioInstance will rebuild wordArr from the live DOM.
+    const originalUpdateVisualState = hyperaudioInstance.updateTranscriptVisualState.bind(hyperaudioInstance);
+    hyperaudioInstance.updateTranscriptVisualState = function (currentTime) {
+      if (hyperaudioInstance.wordArr) {
+        const live = hyperaudioInstance.wordArr.filter(w => w.n && w.n.parentNode);
+        if (live.length !== hyperaudioInstance.wordArr.length) {
+          hyperaudioInstance.wordArr = live;
+        }
+      }
+      return originalUpdateVisualState(currentTime);
+    };
+
     window.hyperaudioInstance = hyperaudioInstance;
 
     const sanitisationCheck = function () {
