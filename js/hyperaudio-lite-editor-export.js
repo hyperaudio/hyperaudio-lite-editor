@@ -10,9 +10,7 @@ class ExportJson extends HTMLElement {
     if (hypertranscript === null) {
       alert("Currently you can only export JSON from the transcript view.");
     } else {
-      // transform in json object with dom elements
       let jsonData = htmlToJson(hypertranscript);
-      jsonData.url = document.querySelector("#hyperplayer").src;
       downloadJson(jsonData);
     }
   }
@@ -50,8 +48,12 @@ class ImportJson extends HTMLElement {
           alert("Currently you can only import JSON from the Transcript View.");
         } else {
           hypertranscript.innerHTML = jsonToHtml(jsonData);
-          // set video url
-          document.querySelector("#hyperplayer").src = jsonData.url;
+          // Media URL lives in sections[0].mediaUrl in the current format;
+          // jsonData.url is the legacy top-level field, kept for back-compat.
+          const mediaUrl = (jsonData.sections && jsonData.sections[0] && jsonData.sections[0].mediaUrl) || jsonData.url;
+          if (mediaUrl) {
+            document.querySelector("#hyperplayer").src = mediaUrl;
+          }
         }
       });
       if (hypertranscript !== null) {
@@ -482,117 +484,179 @@ function convertSrtToWebVtt(srtContent) {
   return webVttContent;
 }
 
-// Convert Hypertranscript to JSON
+// Convert Hypertranscript to JSON.
+//
+// Emits three flat arrays:
+//   words[]      — { start, end, text } in seconds, in document order.
+//   paragraphs[] — { speaker, start, end } speaker turns spanning words.
+//                  Paragraphs without an explicit speaker tag inherit the
+//                  previous paragraph's speaker.
+//   sections[]   — { start, end, mediaUrl } source-media context, one per
+//                  <section> in the transcript HTML.
 function htmlToJson(html) {
   const article = html.querySelector('article');
-
-  // Create an empty object to store the JSON data
-  const jsonData = {};
-
-  // Add the <article> element data to the JSON object
-  jsonData.article = {};
-
-  // Get the <section> element
-  const section = article.querySelector('section');
-
-  // Add the <section> element data to the JSON object
-  jsonData.article.section = {};
-
-  // Get the <p> element
-  const paragraphs = section.querySelectorAll('p');
-
-  // Add the <p> element data to the JSON object
-  jsonData.article.section.paragraphs = [];
-
-  // Iterate through each <p> element
-  for (const paragraph of paragraphs) {
-    // Create an object to store the <p> element data
-    const paragraphData = {};
-    // Get all the <span> elements within the <p> element
-    const spans = paragraph.querySelectorAll('span');
-
-    // Add the <span> elements data to the JSON object
-    paragraphData.spans = [];
-
-    // Iterate through each <span> element
-    for (const span of spans) {
-      // Create an object to store the <span> element data
-      const spanData = {};
-
-      // Get the "data-m" attribute value
-      spanData.m = span.getAttribute('data-m');
-
-      // Get the "data-d" attribute value
-      spanData.d = span.getAttribute('data-d');
-
-      // Get the class attribute value
-      spanData.class = span.getAttribute('class');
-
-      // Get the text content of the <span> element
-      spanData.text = span.textContent;
-
-      // Add the <span> element data to the JSON object
-      paragraphData.spans.push(spanData);
-    }
-    jsonData.article.section.paragraphs.push(paragraphData);
+  if (!article) {
+    return { words: [], paragraphs: [], sections: [] };
   }
-  // Return the JSON object
-  return jsonData;
+
+  const player = document.querySelector('#hyperplayer');
+  const mediaUrl = player ? player.src : '';
+
+  const words = [];
+  const paragraphs = [];
+  const sections = [];
+  let lastSpeaker = null;
+
+  const sectionEls = article.querySelectorAll('section');
+  for (const sectionEl of sectionEls) {
+    const sectionStartIdx = words.length;
+
+    const paragraphEls = sectionEl.querySelectorAll('p');
+    for (const pEl of paragraphEls) {
+      const paragraphStartIdx = words.length;
+      let paragraphSpeaker = null;
+
+      const spans = pEl.querySelectorAll('span[data-m]');
+      for (const span of spans) {
+        if (span.classList.contains('speaker')) {
+          // Strip surrounding [brackets] from "[Angela]" → "Angela".
+          const raw = span.textContent.trim();
+          const match = raw.match(/^\[(.*)\]$/);
+          paragraphSpeaker = match ? match[1].trim() : raw;
+          continue;
+        }
+        const m = parseInt(span.getAttribute('data-m'), 10);
+        const d = parseInt(span.getAttribute('data-d'), 10) || 0;
+        const text = span.textContent.replace(/\s+$/, '');
+        if (!isNaN(m) && text.length > 0) {
+          words.push({
+            start: m / 1000,
+            end: (m + d) / 1000,
+            text: text
+          });
+        }
+      }
+
+      if (words.length > paragraphStartIdx) {
+        const effectiveSpeaker = paragraphSpeaker !== null ? paragraphSpeaker : lastSpeaker;
+        if (paragraphSpeaker !== null) {
+          lastSpeaker = paragraphSpeaker;
+        }
+        paragraphs.push({
+          speaker: effectiveSpeaker,
+          start: words[paragraphStartIdx].start,
+          end: words[words.length - 1].end
+        });
+      }
+    }
+
+    if (words.length > sectionStartIdx) {
+      sections.push({
+        start: words[sectionStartIdx].start,
+        end: words[words.length - 1].end,
+        mediaUrl: mediaUrl
+      });
+    }
+  }
+
+  return { words, paragraphs, sections };
 }
 
 
-// Convert JSON to Hypertranscript HTML
+// Convert JSON to Hypertranscript HTML.
+//
+// Accepts the new flat shape (words + paragraphs + sections). Falls back to
+// the legacy nested shape (jsonData.article.section.paragraphs[].spans[]) so
+// older exports still import cleanly.
 function jsonToHtml(jsonData) {
-  // Create an empty <article> element
-  const div = document.createElement('div');
+  if (jsonData && jsonData.article) {
+    return legacyJsonToHtml(jsonData);
+  }
+
+  const words = (jsonData && jsonData.words) || [];
+  const paragraphs = (jsonData && jsonData.paragraphs) || [];
+  const sections = (jsonData && jsonData.sections && jsonData.sections.length > 0)
+    ? jsonData.sections
+    : [{ start: -Infinity, end: Infinity }];
+
+  // Bucket paragraphs into their section. Both arrays are sorted by start,
+  // so a two-pointer walk handles boundary equality (paragraph start equal
+  // to a section end) correctly.
+  const paragraphsBySection = sections.map(() => []);
+  let si = 0;
+  for (const para of paragraphs) {
+    while (si < sections.length - 1 && para.start > sections[si].end) si++;
+    paragraphsBySection[si].push(para);
+  }
+
+  // Same idea for words → paragraphs.
+  const wordsByParagraph = new Map();
+  for (const para of paragraphs) wordsByParagraph.set(para, []);
+  let pi = 0;
+  for (const w of words) {
+    while (pi < paragraphs.length - 1 && w.start > paragraphs[pi].end) pi++;
+    if (paragraphs[pi]) wordsByParagraph.get(paragraphs[pi]).push(w);
+  }
 
   const article = document.createElement('article');
+  let lastSpeakerEmitted = null;
 
-  // Create an empty <section> element
+  for (let s = 0; s < sections.length; s++) {
+    const sectionEl = document.createElement('section');
+    article.appendChild(sectionEl);
+
+    for (const para of paragraphsBySection[s]) {
+      const pEl = document.createElement('p');
+      sectionEl.appendChild(pEl);
+
+      if (para.speaker && para.speaker !== lastSpeakerEmitted) {
+        const speakerSpan = document.createElement('span');
+        speakerSpan.className = 'speaker';
+        speakerSpan.setAttribute('data-m', String(Math.round(para.start * 1000)));
+        speakerSpan.setAttribute('data-d', '0');
+        speakerSpan.textContent = `[${para.speaker}] `;
+        pEl.appendChild(speakerSpan);
+        lastSpeakerEmitted = para.speaker;
+      }
+
+      for (const w of wordsByParagraph.get(para) || []) {
+        const span = document.createElement('span');
+        span.setAttribute('data-m', String(Math.round(w.start * 1000)));
+        span.setAttribute('data-d', String(Math.round((w.end - w.start) * 1000)));
+        span.textContent = w.text + ' ';
+        pEl.appendChild(span);
+      }
+    }
+  }
+
+  const div = document.createElement('div');
+  div.appendChild(article);
+  return div.innerHTML;
+}
+
+// Legacy importer for the nested jsonData.article.section.paragraphs[].spans[]
+// shape produced by earlier versions of this editor.
+function legacyJsonToHtml(jsonData) {
+  const div = document.createElement('div');
+  const article = document.createElement('article');
   const section = document.createElement('section');
-
-  // Add the <section> element to the <article> element
   article.appendChild(section);
 
-  // Get the <p> elements data from the JSON object
   const paragraphs = jsonData.article.section.paragraphs;
-
-  // Iterate through each <p> element
   for (const paragraph of paragraphs) {
-    // Create an empty <p> element
     const p = document.createElement('p');
-
-    // Add the <p> element to the <section> element
     section.appendChild(p);
-
-    // Get the <span> elements data from the JSON object
-    const spans = paragraph.spans;
-
-    // Iterate through each <span> element
-    for (const span of spans) {
-      // Create an empty <span> element
+    for (const span of paragraph.spans) {
       const spanElement = document.createElement('span');
-
-      // Set the "data-m" attribute value
       spanElement.setAttribute('data-m', span.m);
-
-      // Set the "data-d" attribute value
       spanElement.setAttribute('data-d', span.d);
-
-      // Set the class attribute value
-      spanElement.setAttribute('class', span.class);
-
-      // Set the text content of the <span> element
+      if (span.class) spanElement.setAttribute('class', span.class);
       spanElement.textContent = span.text;
-
-      // Add the <span> element to the <p> element
       p.appendChild(spanElement);
     }
   }
 
   div.appendChild(article);
-  // Return the <article> element
-
   return div.innerHTML;
 }
 
