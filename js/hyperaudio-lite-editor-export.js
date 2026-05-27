@@ -48,9 +48,7 @@ class ImportJson extends HTMLElement {
           alert("Currently you can only import JSON from the Transcript View.");
         } else {
           hypertranscript.innerHTML = jsonToHtml(jsonData);
-          // Media URL lives in sections[0].mediaUrl in the current format;
-          // jsonData.url is the legacy top-level field, kept for back-compat.
-          const mediaUrl = (jsonData.sections && jsonData.sections[0] && jsonData.sections[0].mediaUrl) || jsonData.url;
+          const mediaUrl = jsonData.sections && jsonData.sections[0] && jsonData.sections[0].mediaUrl;
           if (mediaUrl) {
             document.querySelector("#hyperplayer").src = mediaUrl;
           }
@@ -432,7 +430,7 @@ customElements.define('import-vtt', ImportVtt);
 
 function downloadJson(jsonData) {
   // download json file
-  let dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(jsonData));
+  let dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(jsonData, null, 2));
   //start download
   let downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute('href', dataStr);
@@ -563,16 +561,9 @@ function htmlToJson(html) {
 }
 
 
-// Convert JSON to Hypertranscript HTML.
-//
-// Accepts the new flat shape (words + paragraphs + sections). Falls back to
-// the legacy nested shape (jsonData.article.section.paragraphs[].spans[]) so
-// older exports still import cleanly.
+// Convert JSON to Hypertranscript HTML. Accepts the flat shape
+// { words, paragraphs, sections } produced by htmlToJson.
 function jsonToHtml(jsonData) {
-  if (jsonData && jsonData.article) {
-    return legacyJsonToHtml(jsonData);
-  }
-
   const words = (jsonData && jsonData.words) || [];
   const paragraphs = (jsonData && jsonData.paragraphs) || [];
   const sections = (jsonData && jsonData.sections && jsonData.sections.length > 0)
@@ -630,32 +621,6 @@ function jsonToHtml(jsonData) {
   }
 
   const div = document.createElement('div');
-  div.appendChild(article);
-  return div.innerHTML;
-}
-
-// Legacy importer for the nested jsonData.article.section.paragraphs[].spans[]
-// shape produced by earlier versions of this editor.
-function legacyJsonToHtml(jsonData) {
-  const div = document.createElement('div');
-  const article = document.createElement('article');
-  const section = document.createElement('section');
-  article.appendChild(section);
-
-  const paragraphs = jsonData.article.section.paragraphs;
-  for (const paragraph of paragraphs) {
-    const p = document.createElement('p');
-    section.appendChild(p);
-    for (const span of paragraph.spans) {
-      const spanElement = document.createElement('span');
-      spanElement.setAttribute('data-m', span.m);
-      spanElement.setAttribute('data-d', span.d);
-      if (span.class) spanElement.setAttribute('class', span.class);
-      spanElement.textContent = span.text;
-      p.appendChild(spanElement);
-    }
-  }
-
   div.appendChild(article);
   return div.innerHTML;
 }
