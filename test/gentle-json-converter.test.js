@@ -31,6 +31,17 @@ assert.deepStrictEqual(gentleImport.sections, [{
   mediaUrl: 'https://example.com/audio.mp3'
 }]);
 
+const gentleRoundTrip = hyperaudioJsonToGentle(gentleImport);
+assert.strictEqual(gentleRoundTrip.transcript, 'Hello world next|| Again done||');
+assert.deepStrictEqual(
+  gentleRoundTrip.words.map(word => word.word),
+  ['Hello', 'world', 'next||', 'Again', 'done||']
+);
+
+const reimportedGentleRoundTrip = gentleToHyperaudioJson(gentleRoundTrip);
+assert.deepStrictEqual(reimportedGentleRoundTrip.words, gentleImport.words);
+assert.deepStrictEqual(reimportedGentleRoundTrip.paragraphs, gentleImport.paragraphs);
+
 const gentleExport = hyperaudioJsonToGentle({
   words: [
     { start: 0.1, end: 0.3, text: 'Hello' },

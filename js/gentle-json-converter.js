@@ -61,16 +61,52 @@
     return { words, paragraphs, sections };
   }
 
+  function getParagraphEndWordIndexes(words, paragraphs) {
+    const endIndexes = new Set();
+    const epsilon = 0.000001;
+
+    paragraphs.forEach(paragraph => {
+      let endIndex = -1;
+
+      words.forEach((word, index) => {
+        const wordStart = Number(word.start);
+        const wordEnd = Number(word.end);
+        const paragraphStart = Number(paragraph.start);
+        const paragraphEnd = Number(paragraph.end);
+
+        if (
+          Number.isFinite(wordStart) &&
+          Number.isFinite(wordEnd) &&
+          Number.isFinite(paragraphStart) &&
+          Number.isFinite(paragraphEnd) &&
+          wordStart + epsilon >= paragraphStart &&
+          wordEnd <= paragraphEnd + epsilon
+        ) {
+          endIndex = index;
+        }
+      });
+
+      if (endIndex !== -1) {
+        endIndexes.add(endIndex);
+      }
+    });
+
+    return endIndexes;
+  }
+
   function hyperaudioJsonToGentle(jsonData) {
     const words = (jsonData && jsonData.words) || [];
+    const paragraphs = (jsonData && jsonData.paragraphs) || [];
+    const paragraphEndIndexes = getParagraphEndWordIndexes(words, paragraphs);
     const transcriptParts = [];
     let offset = 0;
 
-    const gentleWords = words.map(word => {
+    const gentleWords = words.map((word, index) => {
       const text = String(word.text || '').trim();
+      const gentleText = paragraphEndIndexes.has(index) ? `${text}||` : text;
       const startOffset = offset;
-      transcriptParts.push(text);
-      offset += text.length;
+      transcriptParts.push(gentleText);
+      offset += gentleText.length;
       const endOffset = offset;
       offset += 1;
 
@@ -82,7 +118,7 @@
         phones: [],
         start: Number(word.start),
         startOffset,
-        word: text
+        word: gentleText
       };
     });
 
