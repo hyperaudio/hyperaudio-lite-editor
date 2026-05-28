@@ -17,12 +17,37 @@ class ExportJson extends HTMLElement {
 
   connectedCallback() {
     //this.innerHTML =  `<button onclick="${this.exportJson}">export json ⬇</button>`;
-    this.innerHTML = `<a onclick="${this.exportJson}">Export Hyperaudio JSON</a>`;
+    this.innerHTML = `<a>Export Hyperaudio JSON</a>`;
     this.addEventListener('click', this.exportJson);
   }
 }
 
 customElements.define('export-json', ExportJson);
+
+class ExportGentleJson extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  exportJson() {
+    let hypertranscript = document.getElementById('hypertranscript');
+
+    if (hypertranscript === null) {
+      alert("Currently you can only export Gentle JSON from the transcript view.");
+    } else {
+      let jsonData = htmlToJson(hypertranscript);
+      downloadJson(window.hyperaudioJsonToGentle(jsonData), 'hyperaudio-gentle.json');
+    }
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Export Gentle JSON</a>`;
+    this.addEventListener('click', this.exportJson);
+  }
+}
+
+customElements.define('export-gentle-json', ExportGentleJson);
 
 class ImportJson extends HTMLElement {
 
@@ -38,6 +63,10 @@ class ImportJson extends HTMLElement {
     fileInput.accept = 'application/json';
     fileInput.addEventListener('change', (event) => {
       const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+
       const reader = new FileReader();
       reader.addEventListener('load', (event) => {
         const jsonData = JSON.parse(event.target.result);
@@ -52,24 +81,64 @@ class ImportJson extends HTMLElement {
           if (mediaUrl) {
             document.querySelector("#hyperplayer").src = mediaUrl;
           }
+          document.dispatchEvent(new CustomEvent('hyperaudioInit'));
         }
       });
-      if (hypertranscript !== null) {
-        reader.readAsText(file);
-        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
-      }
+      reader.readAsText(file);
     });
     fileInput.click();
   }
 
   connectedCallback() {
     //this.innerHTML =  `<button onclick="${this.importJson}">import json ⬆</button>`;
-    this.innerHTML = `<a onclick="${this.importJson}">Import Hyperaudio JSON</a>`;
+    this.innerHTML = `<a>Import Hyperaudio JSON</a>`;
     this.addEventListener('click', this.importJson);
   }
 }
 
 customElements.define('import-json', ImportJson);
+
+class ImportGentleJson extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  importJson() {
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'application/json';
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.addEventListener('load', (event) => {
+        const jsonData = window.gentleToHyperaudioJson(JSON.parse(event.target.result));
+        let hypertranscript = document.getElementById('hypertranscript');
+
+        if (hypertranscript === null) {
+          alert("Currently you can only import Gentle JSON from the Transcript View.");
+        } else {
+          hypertranscript.innerHTML = jsonToHtml(jsonData);
+          document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+        }
+      });
+      reader.readAsText(file);
+    });
+    fileInput.click();
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Import Gentle JSON</a>`;
+    this.addEventListener('click', this.importJson);
+  }
+}
+
+customElements.define('import-gentle-json', ImportGentleJson);
 
 class ImportDeepgramJson extends HTMLElement {
 
@@ -428,13 +497,13 @@ class ImportVtt extends HTMLElement {
 
 customElements.define('import-vtt', ImportVtt);
 
-function downloadJson(jsonData) {
+function downloadJson(jsonData, filename = 'hyperaudio-lite.json') {
   // download json file
   let dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(jsonData, null, 2));
   //start download
   let downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute('href', dataStr);
-  downloadAnchorNode.setAttribute('download', 'hyperaudio-lite.json');
+  downloadAnchorNode.setAttribute('download', filename);
   document.body.appendChild(downloadAnchorNode); // required for firefox
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
