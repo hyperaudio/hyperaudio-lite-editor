@@ -71,6 +71,56 @@ class ImportJson extends HTMLElement {
 
 customElements.define('import-json', ImportJson);
 
+class ExportYoutubeVtt extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  exportYoutubeVtt() {
+    const jsonData = getHyperaudioJsonForExport();
+    if (!jsonData) return;
+
+    downloadText(
+      window.hyperaudioJsonToYoutubeVtt(jsonData),
+      'youtube-captions.vtt',
+      'text/vtt'
+    );
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Export YouTube VTT</a>`;
+    this.addEventListener('click', this.exportYoutubeVtt);
+  }
+}
+
+customElements.define('export-youtube-vtt', ExportYoutubeVtt);
+
+class ExportYoutubeXml extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  exportYoutubeXml() {
+    const jsonData = getHyperaudioJsonForExport();
+    if (!jsonData) return;
+
+    downloadText(
+      window.hyperaudioJsonToYoutubeTimedTextXml(jsonData),
+      'youtube-captions.xml',
+      'application/xml'
+    );
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Export YouTube XML</a>`;
+    this.addEventListener('click', this.exportYoutubeXml);
+  }
+}
+
+customElements.define('export-youtube-xml', ExportYoutubeXml);
+
 class ImportDeepgramJson extends HTMLElement {
 
   constructor() {
@@ -427,6 +477,120 @@ class ImportVtt extends HTMLElement {
 }
 
 customElements.define('import-vtt', ImportVtt);
+
+class ImportYoutubeCaptions extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  clearYoutubeCaptionMediaUrl(event) {
+    event.preventDefault();
+    document.querySelector('#youtube-caption-media').value = "";
+  }
+
+  clearYoutubeCaptionFilePicker(event) {
+    event.preventDefault();
+    document.querySelector('#youtube-caption-media-file').value = "";
+  }
+
+  confirmYoutubeCaptions() {
+    const player = document.querySelector("#hyperplayer");
+    if (document.querySelector('#youtube-caption-media-file').value == ""){
+      player.src = document.querySelector('#youtube-caption-media').value;
+    } else {
+      const mediaFile = document.querySelector('[name=youtube-caption-media-file]').files[0];
+      const mediaReader = new FileReader();
+      mediaReader.readAsArrayBuffer(mediaFile);
+      mediaReader.addEventListener('load', () => {
+        mediaFile.arrayBuffer().then((arrayBuffer) => {
+          const blob = new Blob([new Uint8Array(arrayBuffer)], {type: mediaFile.type });
+          player.src = URL.createObjectURL(blob);
+        });
+      });
+    }
+
+    const file = document.querySelector('[name=youtube-caption-file]').files[0];
+    if (!file) {
+      alert("Please select a YouTube XML or VTT caption file.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener('load', (event) => {
+      const captionData = event.target.result;
+      const isXml = file.name.toLowerCase().endsWith('.xml') || captionData.trim().startsWith('<');
+      const html = isXml
+        ? window.youtubeTimedTextXmlToHtml(captionData)
+        : window.youtubeVttToHtml(captionData);
+
+      const hypertranscript = document.getElementById('hypertranscript');
+      hypertranscript.innerHTML = html;
+
+      const jsonData = htmlToJson(hypertranscript);
+      const youtubeVtt = window.hyperaudioJsonToYoutubeVtt(jsonData);
+      document.querySelector('#hyperplayer-vtt').src = "data:text/vtt," + encodeURIComponent(youtubeVtt);
+
+      updateCaptionsFromTranscript = false;
+      populateCaptionEditorFromVtt(youtubeVtt);
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    });
+
+    reader.readAsText(file);
+  }
+
+  connectedCallback() {
+    this.innerHTML = `
+    <div class="hidden-label-holder">
+      <label for="file-import-youtube-caption-dialog">Import YouTube Captions Dialog</label>
+    </div>
+    <input type="checkbox" id="file-import-youtube-caption-dialog" class="modal-toggle" />
+    <div class="modal">
+    <div class="modal-box">
+      <div class="flex flex-col gap-4 w-full">
+        <label id="close-modal" for="file-import-youtube-caption-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <h3 class="font-bold text-lg">Import YouTube Captions Dialog</h3>
+        <input id="youtube-caption-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <span class="label-text">or use local media file</span>
+        <input id="youtube-caption-media-file" name="youtube-caption-media-file" type="file" class="file-input w-full max-w-xs" />
+        <span class="label-text">select YouTube XML or VTT file</span>
+        <input id="youtube-caption-file" name="youtube-caption-file" type="file" accept=".xml,.vtt,text/xml,text/vtt" class="file-input w-full max-w-xs" />
+      </div>
+      <div class="modal-action">
+        <label for="file-import-youtube-caption-dialog" class="btn btn-ghost">Cancel</label>
+        <label id="file-import-youtube-caption" for="file-import-youtube-caption-dialog" class="btn btn-primary">Confirm</label>
+      </div>
+    </div>
+    </div>`;
+
+    document.querySelector('#youtube-caption-media-file').addEventListener('change',this.clearYoutubeCaptionMediaUrl);
+    document.querySelector('#youtube-caption-media').addEventListener('change',this.clearYoutubeCaptionFilePicker);
+    document.querySelector('#file-import-youtube-caption').addEventListener('click',this.confirmYoutubeCaptions);
+  }
+}
+
+customElements.define('import-youtube-captions', ImportYoutubeCaptions);
+
+function getHyperaudioJsonForExport() {
+  const hypertranscript = document.getElementById('hypertranscript');
+
+  if (hypertranscript === null) {
+    alert("Currently you can only export YouTube captions from the transcript view.");
+    return null;
+  }
+
+  return htmlToJson(hypertranscript);
+}
+
+function downloadText(textData, fileName, mimeType) {
+  const dataStr = `data:${mimeType};charset=utf-8,` + encodeURIComponent(textData);
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute('href', dataStr);
+  downloadAnchorNode.setAttribute('download', fileName);
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+}
 
 function downloadJson(jsonData) {
   // download json file
