@@ -496,6 +496,14 @@ class ImportYoutubeCaptions extends HTMLElement {
 
   confirmYoutubeCaptions() {
     const player = document.querySelector("#hyperplayer");
+    const hypertranscript = document.getElementById('hypertranscript');
+    const track = document.querySelector('#hyperplayer-vtt');
+
+    if (!player || !hypertranscript || !track) {
+      alert("Currently you can only import YouTube captions from the transcript view.");
+      return;
+    }
+
     if (document.querySelector('#youtube-caption-media-file').value == ""){
       player.src = document.querySelector('#youtube-caption-media').value;
     } else {
@@ -524,12 +532,11 @@ class ImportYoutubeCaptions extends HTMLElement {
         ? window.youtubeTimedTextXmlToHtml(captionData)
         : window.youtubeVttToHtml(captionData);
 
-      const hypertranscript = document.getElementById('hypertranscript');
       hypertranscript.innerHTML = html;
 
       const jsonData = htmlToJson(hypertranscript);
       const youtubeVtt = window.hyperaudioJsonToYoutubeVtt(jsonData);
-      document.querySelector('#hyperplayer-vtt').src = "data:text/vtt," + encodeURIComponent(youtubeVtt);
+      track.src = "data:text/vtt," + encodeURIComponent(youtubeVtt);
 
       updateCaptionsFromTranscript = false;
       populateCaptionEditorFromVtt(youtubeVtt);
