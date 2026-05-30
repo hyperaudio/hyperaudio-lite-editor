@@ -71,6 +71,76 @@ class ImportJson extends HTMLElement {
 
 customElements.define('import-json', ImportJson);
 
+class ExportGentleJson extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  exportGentleJson() {
+    const hypertranscript = document.getElementById('hypertranscript');
+
+    if (hypertranscript === null) {
+      alert("Currently you can only export Gentle JSON from the transcript view.");
+    } else {
+      const jsonData = window.hyperaudioJsonToGentleJson(htmlToJson(hypertranscript));
+      downloadJson(jsonData, 'hyperaudio-lite-gentle.json');
+    }
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Export Gentle JSON</a>`;
+    this.addEventListener('click', this.exportGentleJson);
+  }
+}
+
+customElements.define('export-gentle-json', ExportGentleJson);
+
+class ImportGentleJson extends HTMLElement {
+
+  constructor() {
+    super();
+  }
+
+  importGentleJson() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'application/json,.json';
+    fileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.addEventListener('load', (event) => {
+        const hypertranscript = document.getElementById('hypertranscript');
+
+        if (hypertranscript === null) {
+          alert("Currently you can only import Gentle JSON from the Transcript View.");
+          return;
+        }
+
+        try {
+          const jsonData = window.gentleJsonToHyperaudioJson(JSON.parse(event.target.result));
+          hypertranscript.innerHTML = jsonToHtml(jsonData);
+          document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+        } catch (error) {
+          console.error('Unable to import Gentle JSON:', error);
+          alert('Unable to import Gentle JSON. Please check that the file is valid JSON with Gentle word timings.');
+        }
+      });
+      reader.readAsText(file);
+    });
+    fileInput.click();
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Import Gentle JSON</a>`;
+    this.addEventListener('click', this.importGentleJson);
+  }
+}
+
+customElements.define('import-gentle-json', ImportGentleJson);
+
 class ImportDeepgramJson extends HTMLElement {
 
   constructor() {
@@ -428,13 +498,13 @@ class ImportVtt extends HTMLElement {
 
 customElements.define('import-vtt', ImportVtt);
 
-function downloadJson(jsonData) {
+function downloadJson(jsonData, filename = 'hyperaudio-lite.json') {
   // download json file
   let dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(jsonData, null, 2));
   //start download
   let downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute('href', dataStr);
-  downloadAnchorNode.setAttribute('download', 'hyperaudio-lite.json');
+  downloadAnchorNode.setAttribute('download', filename);
   document.body.appendChild(downloadAnchorNode); // required for firefox
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
