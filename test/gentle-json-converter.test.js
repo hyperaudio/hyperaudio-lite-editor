@@ -16,6 +16,10 @@ const {
   hyperaudioJsonToGentleJson
 } = context.module.exports;
 
+function loadFixture(name) {
+  return JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8'));
+}
+
 const gentleP = {
   transcript: '[+] This audio recording. \\||\n\n[+] TIME-CODES work.',
   words: [
@@ -44,6 +48,27 @@ assert.equal(hyperaudioP.sections[0].end, 3.5);
 assert.equal(hyperaudioP.words[3].text, 'TIME-');
 assert.equal(hyperaudioP.words[4].text, 'CODES');
 assert.ok(hyperaudioP.words.find((word) => word.text === 'work.'), 'preserves punctuation that appears between Gentle word offsets');
+
+for (const fixture of ['gentle-sample-p.json', 'gentle-sample-h.json']) {
+  const source = loadFixture(fixture);
+  const converted = gentleJsonToHyperaudioJson(source);
+  const successfulWords = source.words.filter((word) => word.case === 'success');
+
+  assert.equal(converted.words.length, successfulWords.length, `${fixture} imports all successful Gentle words`);
+  assert.equal(converted.words[0].text, 'This');
+  assert.equal(converted.words.at(-1).text, 'format.');
+  assert.equal(converted.paragraphs.length, 13, `${fixture} preserves sentence and paragraph marker boundaries`);
+  assert.equal(JSON.stringify(converted.sections), JSON.stringify([{ start: converted.words[0].start, end: converted.words.at(-1).end }]));
+
+  const exported = hyperaudioJsonToGentleJson(converted);
+  assert.equal(exported.words.length, converted.words.length, `${fixture} can round-trip exported word offsets`);
+  assert.equal(exported.words[0].startOffset, 0);
+  assert.equal(exported.words.at(-1).word, 'format');
+}
+
+const homophoneSample = gentleJsonToHyperaudioJson(loadFixture('gentle-sample-h.json'));
+assert.ok(homophoneSample.words.find((word) => word.text === 'TIME-CODE'), 'preserves homophone hyphenation from issue sample');
+assert.ok(homophoneSample.words.find((word) => word.text === 'YOU-'), 'preserves hyphenated homophone word prefixes');
 
 const exportedGentle = hyperaudioJsonToGentleJson({
   words: [
