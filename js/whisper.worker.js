@@ -1,23 +1,184 @@
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.11.0";
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
+
+const SAMPLE_RATE = 16000;
+const WINDOW_S = 300;   // transcribe in 5-minute windows to bound memory
+const OVERLAP_S = 10;   // each seam is transcribed by both windows
+
+let cache = { key: null, pipe: null, device: null };
 
 self.addEventListener("message", async (event) => {
   const { type, audio, model_name } = event.data;
 
-  if (type === "INFERENCE_REQUEST") {
-  
-    const automaticSpeechRecognition = await pipeline(
-      "automatic-speech-recognition",
-      model_name,
-      { revision: "output_attentions" }
-    );
-  
-    let output = await automaticSpeechRecognition(audio, {
+  if (type !== "INFERENCE_REQUEST") {
+    return;
+  }
+
+  let pipe;
+  try {
+    pipe = await getPipeline(model_name);
+  } catch (e) {
+    console.error(e);
+    self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
+    return;
+  }
+
+  try {
+    const output = await transcribe(pipe, audio);
+    self.postMessage({ type: "result", output });
+  } catch (e) {
+    console.error(e);
+    // WebGPU can pass pipeline init yet fail at inference time on some GPUs –
+    // rebuild on WASM and retry once before giving up.
+    if (cache.device === "webgpu") {
+      try {
+        pipe = await getPipeline(model_name, ["wasm"]);
+        const output = await transcribe(pipe, audio);
+        self.postMessage({ type: "result", output });
+        return;
+      } catch (retryError) {
+        console.error(retryError);
+        self.postMessage({ type: "error", stage: "transcribe", message: retryError?.message || String(retryError) });
+        return;
+      }
+    }
+    self.postMessage({ type: "error", stage: "transcribe", message: e?.message || String(e) });
+  }
+});
+
+function pickDtype(model_name, device) {
+  if (model_name.includes("large-v3-turbo")) {
+    return "q4f16";
+  }
+  if (device === "webgpu") {
+    // fp16 whisper decoders are numerically fragile and prone to repetition
+    // loops – use the same per-component dtypes as the official demos.
+    return { encoder_model: "fp32", decoder_model_merged: "q4" };
+  }
+  return "q8";
+}
+
+async function getPipeline(model_name, devices) {
+  if (devices === undefined) {
+    devices = self.navigator?.gpu ? ["webgpu", "wasm"] : ["wasm"];
+  }
+
+  let lastError = null;
+  for (const device of devices) {
+    const dtype = pickDtype(model_name, device);
+    const dtypeLabel = typeof dtype === "string" ? dtype : JSON.stringify(dtype);
+    const key = `${model_name}|${device}|${dtypeLabel}`;
+
+    if (cache.key === key && cache.pipe !== null) {
+      return cache.pipe;
+    }
+
+    try {
+      const pipe = await pipeline("automatic-speech-recognition", model_name, {
+        device,
+        dtype,
+        progress_callback: makeDownloadProgress(),
+      });
+
+      if (cache.pipe !== null) {
+        await cache.pipe.dispose().catch(() => {});
+      }
+      cache = { key, pipe, device };
+
+      console.log(`Whisper pipeline ready: ${model_name} on ${device} (${dtypeLabel})`);
+      self.postMessage({ type: "device", device, dtype: dtypeLabel });
+      return pipe;
+    } catch (e) {
+      console.warn(`Failed to initialise ${model_name} on ${device}:`, e);
+      lastError = e;
+    }
+  }
+  throw lastError || new Error("No usable inference device");
+}
+
+function makeDownloadProgress() {
+  const files = new Map();
+  let lastPercent = -1;
+
+  return (info) => {
+    if (info.status !== "progress" || !info.total) {
+      return;
+    }
+    files.set(info.file, { loaded: info.loaded, total: info.total });
+
+    let loaded = 0, total = 0;
+    files.forEach((f) => { loaded += f.loaded; total += f.total; });
+
+    const percent = Math.floor((loaded / total) * 100);
+    if (percent !== lastPercent) {
+      lastPercent = percent;
+      self.postMessage({ type: "progress", phase: "download", progress: percent });
+    }
+  };
+}
+
+async function transcribe(pipe, audio) {
+  const windowSamples = WINDOW_S * SAMPLE_RATE;
+  const stepSamples = (WINDOW_S - OVERLAP_S) * SAMPLE_RATE;
+  const windowCount = audio.length <= windowSamples
+    ? 1
+    : Math.ceil((audio.length - windowSamples) / stepSamples) + 1;
+
+  let chunks = [];
+
+  for (let i = 0; i < windowCount; i++) {
+    const offsetSamples = i * stepSamples;
+    const offsetSeconds = offsetSamples / SAMPLE_RATE;
+    const window = audio.subarray(offsetSamples, offsetSamples + windowSamples);
+
+    const output = await pipe(window, {
       return_timestamps: "word",
       chunk_length_s: 30,
       stride_length_s: 5,
     });
-  
-    console.log(output);
-    self.postMessage({ output: output });
+
+    const windowChunks = (output.chunks || []).map((chunk) => {
+      const start = chunk.timestamp[0] + offsetSeconds;
+      // the final word of a window can come back with a null end timestamp
+      const end = (chunk.timestamp[1] ?? chunk.timestamp[0] + 0.5) + offsetSeconds;
+      return { text: chunk.text, timestamp: [start, end] };
+    });
+
+    chunks = i === 0 ? windowChunks : stitch(chunks, windowChunks, offsetSeconds);
+
+    self.postMessage({
+      type: "progress",
+      phase: "transcribe",
+      progress: Math.round(((i + 1) / windowCount) * 100),
+    });
   }
-});
+
+  return { text: chunks.map((c) => c.text).join(""), chunks };
+}
+
+// Join two overlapping windows at a word boundary: find the inter-word gap in
+// the previous window's output closest to the overlap midpoint and cut there,
+// so the seam always falls in silence between words, never mid-word.
+function stitch(prevChunks, nextChunks, overlapStart) {
+  const overlapEnd = overlapStart + OVERLAP_S;
+  const midpoint = overlapStart + OVERLAP_S / 2;
+
+  let cut = midpoint;
+  let bestDistance = Infinity;
+  for (let i = 1; i < prevChunks.length; i++) {
+    const gapStart = prevChunks[i - 1].timestamp[1];
+    const gapEnd = prevChunks[i].timestamp[0];
+    if (gapEnd < overlapStart || gapStart > overlapEnd) {
+      continue;
+    }
+    const gapMiddle = (gapStart + gapEnd) / 2;
+    const distance = Math.abs(gapMiddle - midpoint);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      cut = gapMiddle;
+    }
+  }
+
+  return prevChunks
+    .filter((c) => c.timestamp[1] <= cut)
+    .concat(nextChunks.filter((c) => c.timestamp[0] > cut));
+}

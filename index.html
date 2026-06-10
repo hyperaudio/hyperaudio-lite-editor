@@ -132,19 +132,19 @@ If you are creating an open source application under a license compatible with t
         <label for="model-name-input" class="form-label label-text">Which model should be used?</label>
         <div>
           <select class="form-select select select-bordered w-full max-w-xs" aria-label="Default select example" id="model-name-input">
-            <option selected="" value="Xenova/whisper-tiny.en">Whisper (Tiny) English</option>
-            <option value="Xenova/whisper-tiny">Whisper (Tiny)</option>
-            <option value="Xenova/whisper-base.en">Whisper (Base) English</option>
-            <option value="Xenova/whisper-base">Whisper (Base)</option>
-            <option value="Xenova/whisper-small.en">Whisper (Small) English</option>
-            <option value="Xenova/whisper-small">Whisper (Small)</option>
-            <option value="distil-whisper/distil-small.en">Whisper Distil (Small) English</option>
+            <option selected="" value="onnx-community/whisper-tiny.en_timestamped">Whisper (Tiny) English – ~40–80 MB</option>
+            <option value="onnx-community/whisper-tiny_timestamped">Whisper (Tiny) – ~40–80 MB</option>
+            <option value="onnx-community/whisper-base.en_timestamped">Whisper (Base) English – ~80–150 MB</option>
+            <option value="onnx-community/whisper-base_timestamped">Whisper (Base) – ~80–150 MB</option>
+            <option value="onnx-community/whisper-small.en_timestamped">Whisper (Small) English – ~250–490 MB</option>
+            <option value="onnx-community/whisper-small_timestamped">Whisper (Small) – ~250–490 MB</option>
+            <option value="onnx-community/whisper-large-v3-turbo_timestamped">Whisper (Large v3 Turbo) – ~560 MB, GPU recommended</option>
           </select>
         </div>
         <div class="form-text" style="font-size: 90%;">
-          <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p> 
+          <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p>
           <p>The English models are slightly more accurate (for the English language only).</p>
-          <p>* Whisper running in the browser is currently in beta.</p>
+          <p>Each model is downloaded once and cached by the browser. Transcription runs on your GPU (WebGPU) when available, otherwise on the CPU.</p>
         </div>
       </div>
       
@@ -542,7 +542,7 @@ If you are creating an open source application under a license compatible with t
       <h3 class="font-bold text-lg"  style="margin-bottom:16px">Transcribe</h3>
       <div role="tablist" class="tabs tabs-lifted">
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:160px" aria-label="Whisper (Local) *" checked />
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:160px" aria-label="Whisper (Local)" checked />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
         </div>

@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 0.0.6 (caption editor patch) */
+/*! Version 0.1.0 (transformers.js v4 / WebGPU) */
 
 class WhisperService extends HTMLElement {
 
@@ -32,8 +32,8 @@ class WhisperService extends HTMLElement {
           modal.innerHTML = whisperTempl.innerHTML;
           loadWhisperClient(modal, workerBaseUrl);
         })
-        .catch(function(err) {  
-          console.log('Template error: ', err);  
+        .catch(function(err) {
+          console.log('Template error: ', err);
         });
     } else {
       modal.innerHTML = document.querySelector(templateSelector).innerHTML;
@@ -53,12 +53,12 @@ function loadWhisperClient(modal, workerBaseUrl) {
   const formSubmitBtn = document.getElementById("form-submit-btn");
   const modelNameSelectionInput = document.getElementById("model-name-input");
   const videoPlayer = document.getElementById("hyperplayer");
-  
+
 
   if (workerBaseUrl === undefined || workerBaseUrl === null) {
     workerBaseUrl = "./";
   }
-  
+
   const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js";
 
   let webWorker = createWorker();
@@ -70,12 +70,45 @@ function loadWhisperClient(modal, workerBaseUrl) {
   function createWorker() {
     const worker = new Worker(whisperWorkerPath, { type: "module" });
 
-    let results = [];
     worker.onmessage = (event) => {
-      handleInferenceDone(event.data);
+      const data = event.data;
+      switch (data.type) {
+        case "progress":
+          updateLoadingMessage(data.phase === "download"
+            ? `Downloading model… ${data.progress}%`
+            : `Transcribing… ${data.progress}%`);
+          break;
+        case "device":
+          console.log(`Whisper running on ${data.device} (${data.dtype})`);
+          break;
+        case "result":
+          handleInferenceDone(data);
+          break;
+        case "error":
+          handleError(data.message);
+          break;
+      }
+    };
+
+    worker.onerror = (event) => {
+      console.error(event);
+      handleError(event.message || "The transcription worker crashed.");
     };
 
     return worker;
+  }
+
+  function updateLoadingMessage(message) {
+    const msg = document.querySelector("#hypertranscript .transcribing-msg");
+    if (msg !== null) {
+      msg.textContent = message;
+    }
+  }
+
+  function handleError(message) {
+    console.error("Whisper error: " + message);
+    document.getElementById("hypertranscript").innerHTML =
+      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Try a smaller model or reload the page.</center></div>';
   }
 
   function handleInferenceDone(results) {
@@ -91,29 +124,30 @@ function loadWhisperClient(modal, workerBaseUrl) {
       // ignore text with square brackets - usually contains things like [BLANK _AUDIO]
       if (word.text.indexOf("[") < 0  && word.text.indexOf("]") < 0) {
         let start = Math.floor(word.timestamp[0]*1000);
-        let duration = Math.floor((word.timestamp[1]*1000)-1) - start;
+        let end = word.timestamp[1] ?? (word.timestamp[0] + 0.5);
+        let duration = Math.floor((end*1000)-1) - start;
         let wordCapitalised = false;
-  
+
         if (Array.from(word.text)[0].toUpperCase() === Array.from(word.text)[0]){
           wordCapitalised = true;
         }
-  
+
         if (wordCapitalised === true && lastWord.endsWith(".") ){
           sentences += 1;
         }
-  
+
         lastWord = word.text;
-        
+
         // new para every 5 sentences
         if (sentences % 5 === 0 && sentences !== 0) {
           hypertranscript += "\n  </p>\n  <p>\n";
           sentences = 0;
         }
-  
+
         hypertranscript += `<span data-m='${start}' data-d='${duration}'>${word.text} </span>\n`;
       }
     });
-    
+
     const resultsContainer = document.getElementById("hypertranscript");
     resultsContainer.innerHTML = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
 
@@ -132,13 +166,6 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     const model_name = modelNameSelectionInput.value;
     const file = fileUploadBtn.files[0];
-    const audio = await readAudioFrom(file);
-
-    webWorker.postMessage({
-      type: "INFERENCE_REQUEST",
-      audio,
-      model_name
-    });
 
     videoPlayer.src = URL.createObjectURL(file);
 
@@ -147,19 +174,35 @@ function loadWhisperClient(modal, workerBaseUrl) {
     }
 
     const loadingMessageContainer = document.getElementById("hypertranscript");
+    loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
 
-    console.log("show spinner");
-    console.log(loadingMessageContainer);
+    let audio;
+    try {
+      audio = await readAudioFrom(file);
+    } catch (e) {
+      console.error(e);
+      handleError("Could not decode the media file.");
+      return;
+    }
 
-    loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Transcribing.... </center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
+    // transfer the buffer rather than copying it - large files would otherwise
+    // be structured-cloned in full
+    webWorker.postMessage({
+      type: "INFERENCE_REQUEST",
+      audio,
+      model_name
+    }, [audio.buffer]);
   }
 
   async function readAudioFrom(file) {
     const sampling_rate = 16e3;
     const audioCTX = new AudioContext({ sampleRate: sampling_rate });
-    const response = await file.arrayBuffer();
-    const decoded = await audioCTX.decodeAudioData(response);
-    const audio = decoded.getChannelData(0);
-    return audio;
+    try {
+      const response = await file.arrayBuffer();
+      const decoded = await audioCTX.decodeAudioData(response);
+      return decoded.getChannelData(0);
+    } finally {
+      audioCTX.close();
+    }
   }
 }
