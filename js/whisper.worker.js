@@ -45,16 +45,20 @@ self.addEventListener("message", async (event) => {
   }
 });
 
-function pickDtype(model_name, device) {
+// Preferred dtype first, then a fallback: the quantized exports of some of the
+// *_timestamped models predate the v4 ONNX runtime and fail session creation
+// ("Missing required scale ... MatMulNBits"), so always keep a variant in the
+// list that loads everywhere – fp32, except for turbo where fp32 is 2.5 GB.
+function pickDtypes(model_name, device) {
   if (model_name.includes("large-v3-turbo")) {
-    return "q4f16";
+    return ["q4f16", "q4"];
   }
   if (device === "webgpu") {
     // fp16 whisper decoders are numerically fragile and prone to repetition
     // loops – use the same per-component dtypes as the official demos.
-    return { encoder_model: "fp32", decoder_model_merged: "q4" };
+    return [{ encoder_model: "fp32", decoder_model_merged: "q4" }, "fp32"];
   }
-  return "q8";
+  return ["q8", "fp32"];
 }
 
 async function getPipeline(model_name, devices) {
@@ -64,32 +68,40 @@ async function getPipeline(model_name, devices) {
 
   let lastError = null;
   for (const device of devices) {
-    const dtype = pickDtype(model_name, device);
-    const dtypeLabel = typeof dtype === "string" ? dtype : JSON.stringify(dtype);
-    const key = `${model_name}|${device}|${dtypeLabel}`;
+    for (const dtype of pickDtypes(model_name, device)) {
+      const dtypeLabel = typeof dtype === "string" ? dtype : JSON.stringify(dtype);
+      const key = `${model_name}|${device}|${dtypeLabel}`;
 
-    if (cache.key === key && cache.pipe !== null) {
-      return cache.pipe;
-    }
-
-    try {
-      const pipe = await pipeline("automatic-speech-recognition", model_name, {
-        device,
-        dtype,
-        progress_callback: makeDownloadProgress(),
-      });
-
-      if (cache.pipe !== null) {
-        await cache.pipe.dispose().catch(() => {});
+      if (cache.key === key && cache.pipe !== null) {
+        return cache.pipe;
       }
-      cache = { key, pipe, device };
 
-      console.log(`Whisper pipeline ready: ${model_name} on ${device} (${dtypeLabel})`);
-      self.postMessage({ type: "device", device, dtype: dtypeLabel });
-      return pipe;
-    } catch (e) {
-      console.warn(`Failed to initialise ${model_name} on ${device}:`, e);
-      lastError = e;
+      // free the previous model's (GPU) memory before loading the next one
+      if (cache.pipe !== null) {
+        try {
+          await cache.pipe.dispose();
+        } catch (e) {
+          console.warn("Failed to dispose previous pipeline:", e);
+        }
+        cache = { key: null, pipe: null, device: null };
+      }
+
+      try {
+        const pipe = await pipeline("automatic-speech-recognition", model_name, {
+          device,
+          dtype,
+          progress_callback: makeDownloadProgress(),
+        });
+
+        cache = { key, pipe, device };
+
+        console.log(`Whisper pipeline ready: ${model_name} on ${device} (${dtypeLabel})`);
+        self.postMessage({ type: "device", device, dtype: dtypeLabel });
+        return pipe;
+      } catch (e) {
+        console.warn(`Failed to initialise ${model_name} on ${device} (${dtypeLabel}):`, e);
+        lastError = e;
+      }
     }
   }
   throw lastError || new Error("No usable inference device");
@@ -144,6 +156,7 @@ async function transcribe(pipe, audio) {
     });
 
     chunks = i === 0 ? windowChunks : stitch(chunks, windowChunks, offsetSeconds);
+    chunks = collapseRepeats(chunks);
 
     self.postMessage({
       type: "progress",
@@ -153,6 +166,29 @@ async function transcribe(pipe, audio) {
   }
 
   return { text: chunks.map((c) => c.text).join(""), chunks };
+}
+
+// When the whisper decoder gets stuck in a repetition loop its word-timestamp
+// prediction collapses too: dozens of words come back with the identical start
+// time. Real speech never starts two words at the same instant, so within each
+// run of same-start chunks keep only the first occurrence of each word.
+function collapseRepeats(chunks) {
+  const out = [];
+  let runStart = null;
+  let seen = null;
+  for (const chunk of chunks) {
+    if (chunk.timestamp[0] !== runStart) {
+      runStart = chunk.timestamp[0];
+      seen = new Set();
+    }
+    const key = chunk.text.trim().toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(chunk);
+  }
+  return out;
 }
 
 // Join two overlapping windows at a word boundary: find the inter-word gap in

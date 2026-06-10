@@ -107,8 +107,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
   function handleError(message) {
     console.error("Whisper error: " + message);
+    const detail = message ? '<br/><span style="font-size:80%; opacity:0.7">'+String(message).slice(0, 200)+'</span>' : '';
     document.getElementById("hypertranscript").innerHTML =
-      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Try a smaller model or reload the page.</center></div>';
+      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Try a smaller model or reload the page.'+detail+'</center></div>';
   }
 
   function handleInferenceDone(results) {
@@ -125,7 +126,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
       if (word.text.indexOf("[") < 0  && word.text.indexOf("]") < 0) {
         let start = Math.floor(word.timestamp[0]*1000);
         let end = word.timestamp[1] ?? (word.timestamp[0] + 0.5);
-        let duration = Math.floor((end*1000)-1) - start;
+        let duration = Math.max(0, Math.floor((end*1000)-1) - start);
         let wordCapitalised = false;
 
         if (Array.from(word.text)[0].toUpperCase() === Array.from(word.text)[0]){
