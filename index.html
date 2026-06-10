@@ -132,9 +132,9 @@ If you are creating an open source application under a license compatible with t
         <label for="model-name-input" class="form-label label-text">Which model should be used?</label>
         <div>
           <select class="form-select select select-bordered w-full max-w-xs" aria-label="Default select example" id="model-name-input">
-            <option selected="" value="onnx-community/whisper-tiny.en_timestamped">Whisper (Tiny) English – ~40–80 MB</option>
-            <option value="onnx-community/whisper-tiny_timestamped">Whisper (Tiny) – ~40–80 MB</option>
-            <option value="onnx-community/whisper-base.en_timestamped">Whisper (Base) English – ~80–150 MB</option>
+            <option value="onnx-community/whisper-tiny.en_timestamped">Whisper (Tiny) English – ~40–80 MB, fastest, least accurate</option>
+            <option value="onnx-community/whisper-tiny_timestamped">Whisper (Tiny) – ~40–80 MB, fastest, least accurate</option>
+            <option selected="" value="onnx-community/whisper-base.en_timestamped">Whisper (Base) English – ~80–150 MB</option>
             <option value="onnx-community/whisper-base_timestamped">Whisper (Base) – ~80–150 MB</option>
             <option value="onnx-community/whisper-small.en_timestamped">Whisper (Small) English – ~250–490 MB</option>
             <option value="onnx-community/whisper-small_timestamped">Whisper (Small) – ~250–490 MB</option>
@@ -144,6 +144,7 @@ If you are creating an open source application under a license compatible with t
         <div class="form-text" style="font-size: 90%;">
           <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p>
           <p>The English models are slightly more accurate (for the English language only).</p>
+          <p>Tiny is best suited to short, clear recordings – on long or noisy audio small models can garble difficult passages, so prefer Base or larger.</p>
           <p>Each model is downloaded once and cached by the browser. Transcription runs on your GPU (WebGPU) when available, otherwise on the CPU.</p>
         </div>
       </div>
