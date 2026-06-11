@@ -14,7 +14,7 @@ const OVERLAP_S = 10;   // each seam is transcribed by both windows
 let cache = { key: null, pipe: null, device: null };
 
 self.addEventListener("message", async (event) => {
-  const { type, audio, model_name, compat } = event.data;
+  const { type, audio, model_name, compat, avoid_webgpu } = event.data;
 
   if (type !== "INFERENCE_REQUEST") {
     return;
@@ -22,10 +22,12 @@ self.addEventListener("message", async (event) => {
 
   let pipe;
   try {
-    // compatibility mode: a previous worker died on a failed session
-    // creation (which poisons the WASM runtime for all later attempts),
-    // so this fresh worker goes straight to the most compatible config
-    pipe = await getPipeline(model_name, compat ? ["wasm"] : undefined, compat);
+    // compat: a previous worker died on a failed session creation (which
+    // poisons the WASM runtime for all later attempts), so this fresh worker
+    // goes straight to the most compatible config. avoid_webgpu: this
+    // browser's WebGPU measured pathologically slow on an earlier run.
+    const devices = (compat || avoid_webgpu) ? ["wasm"] : undefined;
+    pipe = await getPipeline(model_name, devices, compat);
   } catch (e) {
     console.error(e);
     self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
@@ -80,11 +82,7 @@ function pickDtypes(model_name, device) {
 
 async function getPipeline(model_name, devices, compat) {
   if (devices === undefined) {
-    // Firefox's WebGPU initialises and completes but is far slower than its
-    // WASM path (measured 2026-06: minutes vs 13s for the same clip) – prefer
-    // WASM there until its WebGPU matures
-    const slowWebGpu = /firefox/i.test(self.navigator?.userAgent || "");
-    devices = self.navigator?.gpu && !slowWebGpu ? ["webgpu", "wasm"] : ["wasm"];
+    devices = self.navigator?.gpu ? ["webgpu", "wasm"] : ["wasm"];
   }
 
   let lastError = null;
@@ -114,20 +112,25 @@ async function getPipeline(model_name, devices, compat) {
           progress_callback: makeDownloadProgress(),
         });
 
+        let warmupSeconds = null;
         if (device === "webgpu") {
           // run one second of silence through the pipeline so that shader
           // compilation happens here, under "Preparing model…", rather than
           // inside the first transcription window – and so a GPU that fails
           // at inference time is caught now, while falling through to WASM
-          // is still cheap
+          // is still cheap. The duration doubles as a quality probe of this
+          // browser's WebGPU implementation.
           self.postMessage({ type: "progress", phase: "prepare" });
+          const warmupStart = Date.now();
           await pipe(new Float32Array(SAMPLE_RATE));
+          warmupSeconds = (Date.now() - warmupStart) / 1000;
         }
 
         cache = { key, pipe, device };
 
-        console.log(`Whisper pipeline ready: ${model_name} on ${device} (${dtypeLabel})`);
-        self.postMessage({ type: "device", device, dtype: dtypeLabel });
+        console.log(`Whisper pipeline ready: ${model_name} on ${device} (${dtypeLabel})`
+          + (warmupSeconds !== null ? `, warm-up ${warmupSeconds.toFixed(1)}s` : ""));
+        self.postMessage({ type: "device", device, dtype: dtypeLabel, warmupSeconds });
         return pipe;
       } catch (e) {
         console.warn(`Failed to initialise ${model_name} on ${device} (${dtypeLabel}):`, e);

@@ -88,6 +88,14 @@ function loadWhisperClient(modal, workerBaseUrl) {
           break;
         case "device":
           console.log(`Whisper running on ${data.device} (${data.dtype})`);
+          // a pathologically slow warm-up means this browser's WebGPU is not
+          // worth using (e.g. extensive internal CPU fallback) – remember
+          // that and use the plain CPU path next time. The flag expires so
+          // the GPU gets re-probed as browser implementations improve.
+          if (data.device === "webgpu" && data.warmupSeconds > SLOW_WEBGPU_WARMUP_S) {
+            localStorage.setItem(AVOID_WEBGPU_KEY, JSON.stringify({ at: Date.now(), warmupSeconds: data.warmupSeconds }));
+            console.warn(`WebGPU warm-up took ${data.warmupSeconds.toFixed(1)}s – future transcriptions in this browser will use the CPU instead (re-probed after ${AVOID_WEBGPU_DAYS} days)`);
+          }
           break;
         case "result":
           stopProgressClock();
@@ -124,6 +132,20 @@ function loadWhisperClient(modal, workerBaseUrl) {
   let progressStart = 0;
   let progressMessage = "";
   let lastSubmission = null;
+
+  const AVOID_WEBGPU_KEY = "hyperaudio-whisper-avoid-webgpu";
+  const SLOW_WEBGPU_WARMUP_S = 30;
+  const AVOID_WEBGPU_DAYS = 30;
+
+  function shouldAvoidWebGpu() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(AVOID_WEBGPU_KEY));
+      if (stored !== null && (Date.now() - stored.at) < AVOID_WEBGPU_DAYS * 24 * 60 * 60 * 1000) {
+        return true;
+      }
+    } catch (e) { /* absent or malformed – treat as no preference */ }
+    return false;
+  }
 
   // progress messages only arrive when a whole window completes, so a ticking
   // clock is the liveness signal in between
@@ -257,7 +279,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
       type: "INFERENCE_REQUEST",
       audio,
       model_name,
-      compat
+      compat,
+      avoid_webgpu: shouldAvoidWebGpu()
     }, [audio.buffer]);
   }
 
