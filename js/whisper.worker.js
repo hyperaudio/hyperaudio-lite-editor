@@ -14,7 +14,7 @@ const OVERLAP_S = 10;   // each seam is transcribed by both windows
 let cache = { key: null, pipe: null, device: null };
 
 self.addEventListener("message", async (event) => {
-  const { type, audio, model_name } = event.data;
+  const { type, audio, model_name, compat } = event.data;
 
   if (type !== "INFERENCE_REQUEST") {
     return;
@@ -22,7 +22,10 @@ self.addEventListener("message", async (event) => {
 
   let pipe;
   try {
-    pipe = await getPipeline(model_name);
+    // compatibility mode: a previous worker died on a failed session
+    // creation (which poisons the WASM runtime for all later attempts),
+    // so this fresh worker goes straight to the most compatible config
+    pipe = await getPipeline(model_name, compat ? ["wasm"] : undefined, compat);
   } catch (e) {
     console.error(e);
     self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
@@ -65,17 +68,17 @@ function pickDtypes(model_name, device) {
     // loops – use the same per-component dtypes as the official demos.
     return [{ encoder_model: "fp32", decoder_model_merged: "q4" }, "fp32"];
   }
-  // the q8 exports of the base models fail session creation on the WASM
-  // runtime ("Missing required scale ... MatMulNBits", huggingface/
-  // transformers.js#1707) – go straight to fp32 rather than landing every
-  // CPU user on a doomed download
-  if (model_name.includes("whisper-base")) {
+  // the q8 exports of the base and tiny *_timestamped models fail session
+  // creation on the WASM runtime ("Missing required scale ... MatMulNBits",
+  // huggingface/transformers.js#1707) – go straight to fp32 rather than
+  // landing every CPU user on a doomed download
+  if (model_name.includes("whisper-base") || model_name.includes("whisper-tiny")) {
     return ["fp32"];
   }
   return ["q8", "fp32"];
 }
 
-async function getPipeline(model_name, devices) {
+async function getPipeline(model_name, devices, compat) {
   if (devices === undefined) {
     // Firefox's WebGPU initialises and completes but is far slower than its
     // WASM path (measured 2026-06: minutes vs 13s for the same clip) – prefer
@@ -86,7 +89,7 @@ async function getPipeline(model_name, devices) {
 
   let lastError = null;
   for (const device of devices) {
-    for (const dtype of pickDtypes(model_name, device)) {
+    for (const dtype of (compat ? ["fp32"] : pickDtypes(model_name, device))) {
       const dtypeLabel = typeof dtype === "string" ? dtype : JSON.stringify(dtype);
       const key = `${model_name}|${device}|${dtypeLabel}`;
 

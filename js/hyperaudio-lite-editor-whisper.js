@@ -94,6 +94,19 @@ function loadWhisperClient(modal, workerBaseUrl) {
           handleInferenceDone(data);
           break;
         case "error":
+          // a failed session creation poisons the WASM runtime for every
+          // later attempt in that worker, so in-worker fallbacks can't be
+          // trusted – throw the worker away and retry once in a fresh one
+          // with the most compatible config (wasm + fp32)
+          if (data.stage === "load" && lastSubmission !== null && lastSubmission.compatRetried === false) {
+            lastSubmission.compatRetried = true;
+            console.warn("Model failed to load – retrying in a fresh worker in compatibility mode (wasm/fp32)");
+            webWorker.terminate();
+            webWorker = createWorker();
+            updateLoadingMessage("Retrying in compatibility mode…");
+            submitToWorker(lastSubmission.file, lastSubmission.model_name, true);
+            break;
+          }
           handleError(data.message);
           break;
       }
@@ -110,6 +123,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
   let progressTicker = null;
   let progressStart = 0;
   let progressMessage = "";
+  let lastSubmission = null;
 
   // progress messages only arrive when a whole window completes, so a ticking
   // clock is the liveness signal in between
@@ -221,8 +235,15 @@ function loadWhisperClient(modal, workerBaseUrl) {
     progressMessage = "Preparing model…";
     startProgressClock();
 
+    lastSubmission = { file, model_name, compatRetried: false };
+    await submitToWorker(file, model_name, false);
+  }
+
+  async function submitToWorker(file, model_name, compat) {
     let audio;
     try {
+      // the buffer is transferred away on each submission, so a retry has to
+      // decode the file again
       audio = await readAudioFrom(file);
     } catch (e) {
       console.error(e);
@@ -235,7 +256,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
     webWorker.postMessage({
       type: "INFERENCE_REQUEST",
       audio,
-      model_name
+      model_name,
+      compat
     }, [audio.buffer]);
   }
 
