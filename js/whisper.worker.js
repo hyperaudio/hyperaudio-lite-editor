@@ -155,12 +155,12 @@ async function transcribe(pipe, audio) {
       stride_length_s: 5,
     });
 
-    const windowChunks = (output.chunks || []).map((chunk) => {
+    const windowChunks = dropRewindDuplicates((output.chunks || []).map((chunk) => {
       const start = chunk.timestamp[0] + offsetSeconds;
       // the final word of a window can come back with a null end timestamp
       const end = (chunk.timestamp[1] ?? chunk.timestamp[0] + 0.5) + offsetSeconds;
       return { text: chunk.text, timestamp: [start, end] };
-    });
+    }));
 
     chunks = i === 0 ? windowChunks : stitch(chunks, windowChunks, offsetSeconds);
     chunks = collapseRepeats(chunks);
@@ -173,6 +173,26 @@ async function transcribe(pipe, audio) {
   }
 
   return { text: chunks.map((c) => c.text).join(""), chunks };
+}
+
+// transformers.js merges its internal 30s chunks by matching tokens across the
+// seam; when the two decodes of the overlap disagree the merge can fail and a
+// stretch of words is emitted twice. The re-emit starts with word timestamps
+// rewinding – something real speech never does – so on a rewind of more than a
+// second, drop back to where the re-decode begins and let the later decode
+// (which carries on into the following audio) win.
+function dropRewindDuplicates(chunks) {
+  const out = [];
+  for (const chunk of chunks) {
+    const start = chunk.timestamp[0];
+    if (out.length > 0 && start < out[out.length - 1].timestamp[0] - 1.0) {
+      while (out.length > 0 && out[out.length - 1].timestamp[0] >= start - 0.2) {
+        out.pop();
+      }
+    }
+    out.push(chunk);
+  }
+  return out;
 }
 
 // When the whisper decoder gets stuck in a repetition loop its word-timestamp
