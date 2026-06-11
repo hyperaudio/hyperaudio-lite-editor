@@ -130,7 +130,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
   function renderLoadingMessage() {
     const msg = document.querySelector("#hypertranscript .transcribing-msg");
     if (msg !== null) {
-      msg.textContent = `${progressMessage} · ${formatElapsed(Date.now() - progressStart)}`;
+      msg.textContent = `${progressMessage} (${formatElapsed(Date.now() - progressStart)})`;
     }
   }
 
