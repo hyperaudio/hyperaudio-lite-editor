@@ -146,6 +146,7 @@ function makeDownloadProgress() {
 }
 
 async function transcribe(pipe, audio) {
+  const startedAt = Date.now();
   const windowSamples = WINDOW_S * SAMPLE_RATE;
   const stepSamples = (WINDOW_S - OVERLAP_S) * SAMPLE_RATE;
   const windowCount = audio.length <= windowSamples
@@ -194,6 +195,9 @@ async function transcribe(pipe, audio) {
   }
 
   chunks = mergeWordFragments(chunks);
+
+  const seconds = (Date.now() - startedAt) / 1000;
+  console.log(`Whisper transcription took ${seconds.toFixed(1)}s for ${(audio.length / SAMPLE_RATE).toFixed(1)}s of audio (${cache.device})`);
 
   return { text: chunks.map((c) => c.text).join(""), chunks };
 }
