@@ -86,6 +86,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
           console.log(`Whisper running on ${data.device} (${data.dtype})`);
           break;
         case "result":
+          stopProgressClock();
           handleInferenceDone(data);
           break;
         case "error":
@@ -102,14 +103,44 @@ function loadWhisperClient(modal, workerBaseUrl) {
     return worker;
   }
 
-  function updateLoadingMessage(message) {
+  let progressTicker = null;
+  let progressStart = 0;
+  let progressMessage = "";
+
+  // progress messages only arrive when a whole window completes, so a ticking
+  // clock is the liveness signal in between
+  function startProgressClock() {
+    progressStart = Date.now();
+    clearInterval(progressTicker);
+    progressTicker = setInterval(renderLoadingMessage, 1000);
+  }
+
+  function stopProgressClock() {
+    clearInterval(progressTicker);
+    progressTicker = null;
+  }
+
+  function formatElapsed(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+  }
+
+  function renderLoadingMessage() {
     const msg = document.querySelector("#hypertranscript .transcribing-msg");
     if (msg !== null) {
-      msg.textContent = message;
+      msg.textContent = `${progressMessage} · ${formatElapsed(Date.now() - progressStart)}`;
     }
   }
 
+  function updateLoadingMessage(message) {
+    progressMessage = message;
+    renderLoadingMessage();
+  }
+
   function handleError(message) {
+    stopProgressClock();
     console.error("Whisper error: " + message);
     const detail = message ? '<br/><span style="font-size:80%; opacity:0.7">'+String(message).slice(0, 200)+'</span>' : '';
     document.getElementById("hypertranscript").innerHTML =
@@ -180,6 +211,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     const loadingMessageContainer = document.getElementById("hypertranscript");
     loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
+    progressMessage = "Preparing model…";
+    startProgressClock();
 
     let audio;
     try {
