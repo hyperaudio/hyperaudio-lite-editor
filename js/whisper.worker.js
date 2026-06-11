@@ -100,6 +100,16 @@ async function getPipeline(model_name, devices) {
           progress_callback: makeDownloadProgress(),
         });
 
+        if (device === "webgpu") {
+          // run one second of silence through the pipeline so that shader
+          // compilation happens here, under "Preparing model…", rather than
+          // inside the first transcription window – and so a GPU that fails
+          // at inference time is caught now, while falling through to WASM
+          // is still cheap
+          self.postMessage({ type: "progress", phase: "prepare" });
+          await pipe(new Float32Array(SAMPLE_RATE));
+        }
+
         cache = { key, pipe, device };
 
         console.log(`Whisper pipeline ready: ${model_name} on ${device} (${dtypeLabel})`);
