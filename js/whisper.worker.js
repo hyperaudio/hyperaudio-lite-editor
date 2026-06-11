@@ -5,7 +5,7 @@
  * @license MIT
  */
 
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
 
 const SAMPLE_RATE = 16000;
 const WINDOW_S = 300;   // transcribe in 5-minute windows to bound memory
@@ -24,8 +24,13 @@ self.addEventListener("message", async (event) => {
   try {
     // compat: a previous worker died on a failed session creation (which
     // poisons the WASM runtime for all later attempts), so this fresh worker
-    // goes straight to the most compatible config. avoid_webgpu: this
+    // goes straight to the most compatible config — including bypassing the
+    // browser model cache, whose writes can fail mid-stream on very large
+    // files ("Error in input stream" on Firefox). avoid_webgpu: this
     // browser's WebGPU measured pathologically slow on an earlier run.
+    if (compat) {
+      env.useBrowserCache = false;
+    }
     const devices = (compat || avoid_webgpu) ? ["wasm"] : undefined;
     pipe = await getPipeline(model_name, devices, compat);
   } catch (e) {
