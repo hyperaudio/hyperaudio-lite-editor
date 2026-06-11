@@ -77,7 +77,11 @@ function pickDtypes(model_name, device) {
 
 async function getPipeline(model_name, devices) {
   if (devices === undefined) {
-    devices = self.navigator?.gpu ? ["webgpu", "wasm"] : ["wasm"];
+    // Firefox's WebGPU initialises and completes but is far slower than its
+    // WASM path (measured 2026-06: minutes vs 13s for the same clip) – prefer
+    // WASM there until its WebGPU matures
+    const slowWebGpu = /firefox/i.test(self.navigator?.userAgent || "");
+    devices = self.navigator?.gpu && !slowWebGpu ? ["webgpu", "wasm"] : ["wasm"];
   }
 
   let lastError = null;
