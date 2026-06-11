@@ -145,6 +145,15 @@ async function transcribe(pipe, audio) {
   let chunks = [];
 
   for (let i = 0; i < windowCount; i++) {
+    // announce the window before running it – otherwise nothing updates the
+    // loader between the model download and the first completed window, and
+    // it shows a stale "Downloading model" for the whole first inference
+    self.postMessage({
+      type: "progress",
+      phase: "transcribe",
+      progress: Math.round((i / windowCount) * 100),
+    });
+
     const offsetSamples = i * stepSamples;
     const offsetSeconds = offsetSamples / SAMPLE_RATE;
     const window = audio.subarray(offsetSamples, offsetSamples + windowSamples);
