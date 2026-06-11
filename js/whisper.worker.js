@@ -1,7 +1,7 @@
 /**
  * whisper.worker.js
  * (C) The Hyperaudio Project
- * @version 0.6.6 — last changed in release 0.6.6
+ * @version 0.6.7 — last changed in release 0.6.7
  * @license MIT
  */
 

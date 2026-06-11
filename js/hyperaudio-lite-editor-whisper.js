@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 0.6.6 — last changed in release 0.6.6
+ * @version 0.6.7 — last changed in release 0.6.7
  * @license MIT
  */
 
@@ -63,7 +63,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=0.6.6";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=0.6.7";
 
   let webWorker = createWorker();
 
