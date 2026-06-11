@@ -172,7 +172,27 @@ async function transcribe(pipe, audio) {
     });
   }
 
+  chunks = mergeWordFragments(chunks);
+
   return { text: chunks.map((c) => c.text).join(""), chunks };
+}
+
+// Whisper marks the start of a word with a leading space on the chunk text; a
+// chunk without one ("-to", "-text" in "speech-to-text") is a fragment of the
+// word before it. Merge fragments into their parent so hyphenated words render
+// as one timed span instead of "speech -to -text".
+function mergeWordFragments(chunks) {
+  const out = [];
+  for (const chunk of chunks) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && !chunk.text.startsWith(" ")) {
+      prev.text += chunk.text;
+      prev.timestamp = [prev.timestamp[0], chunk.timestamp[1]];
+    } else {
+      out.push({ text: chunk.text, timestamp: [...chunk.timestamp] });
+    }
+  }
+  return out;
 }
 
 // transformers.js merges its internal 30s chunks by matching tokens across the
