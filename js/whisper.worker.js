@@ -65,6 +65,13 @@ function pickDtypes(model_name, device) {
     // loops – use the same per-component dtypes as the official demos.
     return [{ encoder_model: "fp32", decoder_model_merged: "q4" }, "fp32"];
   }
+  // the q8 exports of the base models fail session creation on the WASM
+  // runtime ("Missing required scale ... MatMulNBits", huggingface/
+  // transformers.js#1707) – go straight to fp32 rather than landing every
+  // CPU user on a doomed download
+  if (model_name.includes("whisper-base")) {
+    return ["fp32"];
+  }
   return ["q8", "fp32"];
 }
 
