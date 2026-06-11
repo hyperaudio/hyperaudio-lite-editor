@@ -1,5 +1,9 @@
-/*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 0.1.0 (transformers.js v4 / WebGPU) */
+/**
+ * hyperaudio-lite-editor-whisper.js
+ * (C) The Hyperaudio Project
+ * @version 0.6.6 — last changed in release 0.6.6
+ * @license MIT
+ */
 
 class WhisperService extends HTMLElement {
 
@@ -59,7 +63,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=0.6.6";
 
   let webWorker = createWorker();
 

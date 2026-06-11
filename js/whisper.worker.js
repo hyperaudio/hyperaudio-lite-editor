@@ -1,3 +1,10 @@
+/**
+ * whisper.worker.js
+ * (C) The Hyperaudio Project
+ * @version 0.6.6 — last changed in release 0.6.6
+ * @license MIT
+ */
+
 import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
 
 const SAMPLE_RATE = 16000;
