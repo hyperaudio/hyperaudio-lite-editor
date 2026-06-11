@@ -82,7 +82,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
             ? `Downloading model… ${data.progress}%`
             : data.phase === "prepare"
               ? "Preparing model…"
-              : `Transcribing… ${data.progress}%`);
+              : data.progress === null
+                ? "Transcribing…"
+                : `Transcribing… ${data.progress}%`);
           break;
         case "device":
           console.log(`Whisper running on ${data.device} (${data.dtype})`);

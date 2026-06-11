@@ -157,11 +157,13 @@ async function transcribe(pipe, audio) {
   for (let i = 0; i < windowCount; i++) {
     // announce the window before running it – otherwise nothing updates the
     // loader between the model download and the first completed window, and
-    // it shows a stale "Downloading model" for the whole first inference
+    // it shows a stale "Downloading model" for the whole first inference.
+    // progress is only countable across windows, so a single-window file
+    // (under 5 minutes) gets no percentage – the elapsed clock carries it
     self.postMessage({
       type: "progress",
       phase: "transcribe",
-      progress: Math.round((i / windowCount) * 100),
+      progress: windowCount > 1 ? Math.round((i / windowCount) * 100) : null,
     });
 
     const offsetSamples = i * stepSamples;
@@ -187,7 +189,7 @@ async function transcribe(pipe, audio) {
     self.postMessage({
       type: "progress",
       phase: "transcribe",
-      progress: Math.round(((i + 1) / windowCount) * 100),
+      progress: windowCount > 1 ? Math.round(((i + 1) / windowCount) * 100) : null,
     });
   }
 
