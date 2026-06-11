@@ -157,14 +157,17 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     results.output.chunks.forEach((word) => {
 
-      // ignore text with square brackets - usually contains things like [BLANK _AUDIO]
-      if (word.text.indexOf("[") < 0  && word.text.indexOf("]") < 0) {
+      // whisper marks word boundaries with a leading space on the text
+      const text = word.text.trim();
+
+      // ignore empty text and text with square brackets - usually contains things like [BLANK _AUDIO]
+      if (text.length > 0 && text.indexOf("[") < 0  && text.indexOf("]") < 0) {
         let start = Math.floor(word.timestamp[0]*1000);
         let end = word.timestamp[1] ?? (word.timestamp[0] + 0.5);
         let duration = Math.max(0, Math.floor((end*1000)-1) - start);
         let wordCapitalised = false;
 
-        if (Array.from(word.text)[0].toUpperCase() === Array.from(word.text)[0]){
+        if (Array.from(text)[0].toUpperCase() === Array.from(text)[0]){
           wordCapitalised = true;
         }
 
@@ -172,7 +175,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
           sentences += 1;
         }
 
-        lastWord = word.text;
+        lastWord = text;
 
         // new para every 5 sentences
         if (sentences % 5 === 0 && sentences !== 0) {
@@ -180,7 +183,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
           sentences = 0;
         }
 
-        hypertranscript += `<span data-m='${start}' data-d='${duration}'>${word.text} </span>\n`;
+        hypertranscript += `<span data-m='${start}' data-d='${duration}'>${text} </span>\n`;
       }
     });
 
