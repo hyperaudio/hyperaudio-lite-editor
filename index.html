@@ -325,13 +325,17 @@ If you are creating an open source application under a license compatible with t
               <li><label for="file-import-vtt-dialog">Import VTT</label></li>
             </ul>
           </div>
-          <label for="info-modal" class="btn btn-ghost btn-primary gap-2 tooltip" data-tip="Summary and topics" aria-label="Summary and topics">
+          <label for="info-modal" class="btn btn-ghost btn-primary gap-2 tooltip" data-tip="Transcription info" aria-label="Transcription info">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
           </label>
           <input type="checkbox" id="info-modal" class="modal-toggle" />
           <div class="modal">
             <div class="modal-box relative">
               <label for="info-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+              <h3 class="text-lg font-bold">Transcription</h3>
+              <div id="transcription-info" class="py-4">
+                <p>Nothing transcribed yet – details of the service, model and processing time will appear here.</p>
+              </div>
               <h3 class="text-lg font-bold">Summary</h3>
               <p id="summary" class="py-4"></p>
               <h3 class="text-lg font-bold">Topics</h3>
@@ -695,6 +699,26 @@ If you are creating an open source application under a license compatible with t
   <script>
 
     console.log("version 3");
+
+  // Populates the Transcription section of the info modal. Called by the
+  // transcription modules (Whisper, Deepgram) when a transcription completes.
+  function setTranscriptionInfo(info) {
+    const container = document.getElementById("transcription-info");
+    if (container === null) {
+      return;
+    }
+    const rows = [];
+    if (info.service) rows.push(["Service", info.service]);
+    if (info.model) rows.push(["Model", info.model]);
+    if (info.language) rows.push(["Language", info.language]);
+    if (info.device) rows.push(["Processing", info.device]);
+    if (typeof info.seconds === "number") {
+      const minutes = Math.floor(info.seconds / 60);
+      const seconds = Math.round(info.seconds % 60);
+      rows.push(["Time taken", minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`]);
+    }
+    container.innerHTML = rows.map(([label, value]) => `<p><strong>${label}:</strong> ${value}</p>`).join("");
+  }
 
 
   let updateCaptionsFromTranscript = true;
