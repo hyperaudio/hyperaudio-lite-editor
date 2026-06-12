@@ -25,7 +25,7 @@ If you are creating an open source application under a license compatible with t
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
  
-  <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
+  <script src="js/hyperaudio-lite-editor-deepgram.js?v=0.6.7"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.7"></script>
   <script src="js/word-alignment.js"></script>
   <script src="js/html-json-converter.js"></script>
@@ -116,7 +116,7 @@ If you are creating an open source application under a license compatible with t
 
       </div>
       <div class="modal-action">
-        <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary">TRANSCRIBE</label>
+        <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
       </div>
     </form>
   </template>
@@ -180,7 +180,7 @@ If you are creating an open source application under a license compatible with t
       </div>
       
       <div class="modal-action">
-        <label id="form-submit-btn" for="transcribe-modal" class="btn btn-primary">TRANSCRIBE</label>
+        <label id="form-submit-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
       </div>
     </form>
   </template>
