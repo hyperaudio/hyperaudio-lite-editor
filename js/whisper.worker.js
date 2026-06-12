@@ -5,7 +5,7 @@
  * @license MIT
  */
 
-import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
 
 const SAMPLE_RATE = 16000;
 const WINDOW_S = 300;   // transcribe in 5-minute windows to bound memory
@@ -14,25 +14,20 @@ const OVERLAP_S = 10;   // each seam is transcribed by both windows
 let cache = { key: null, pipe: null, device: null };
 
 self.addEventListener("message", async (event) => {
-  const { type, audio, model_name, compat, avoid_webgpu } = event.data;
+  const { type, audio, model_name } = event.data;
 
   if (type !== "INFERENCE_REQUEST") {
     return;
   }
 
+  // a language hint stops multilingual models re-detecting the language per
+  // 30s chunk (which can drift into translating instead of transcribing).
+  // English-only models reject the option, so it only applies to multilingual.
+  const language = (event.data.language && !model_name.includes(".en")) ? event.data.language : null;
+
   let pipe;
   try {
-    // compat: a previous worker died on a failed session creation (which
-    // poisons the WASM runtime for all later attempts), so this fresh worker
-    // goes straight to the most compatible config — including bypassing the
-    // browser model cache, whose writes can fail mid-stream on very large
-    // files ("Error in input stream" on Firefox). avoid_webgpu: this
-    // browser's WebGPU measured pathologically slow on an earlier run.
-    if (compat) {
-      env.useBrowserCache = false;
-    }
-    const devices = (compat || avoid_webgpu) ? ["wasm"] : undefined;
-    pipe = await getPipeline(model_name, devices, compat);
+    pipe = await getPipeline(model_name);
   } catch (e) {
     console.error(e);
     self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
@@ -40,7 +35,7 @@ self.addEventListener("message", async (event) => {
   }
 
   try {
-    const output = await transcribe(pipe, audio);
+    const output = await transcribe(pipe, audio, language);
     self.postMessage({ type: "result", output });
   } catch (e) {
     console.error(e);
@@ -49,7 +44,7 @@ self.addEventListener("message", async (event) => {
     if (cache.device === "webgpu") {
       try {
         pipe = await getPipeline(model_name, ["wasm"]);
-        const output = await transcribe(pipe, audio);
+        const output = await transcribe(pipe, audio, language);
         self.postMessage({ type: "result", output });
         return;
       } catch (retryError) {
@@ -66,6 +61,22 @@ self.addEventListener("message", async (event) => {
 // *_timestamped models predate the v4 ONNX runtime and fail session creation
 // ("Missing required scale ... MatMulNBits"), so always keep a variant in the
 // list that loads everywhere – fp32, except for turbo where fp32 is 2.5 GB.
+// navigator.gpu existing does not mean a usable GPU exists (headless and
+// GPU-less machines expose the API but yield no adapter) – and a failed
+// webgpu attempt poisons every later device attempt in the same worker, so
+// it must be ruled out before trying, not after failing.
+async function hasGpuAdapter() {
+  try {
+    if (!self.navigator?.gpu) {
+      return false;
+    }
+    const adapter = await self.navigator.gpu.requestAdapter();
+    return adapter !== null;
+  } catch (e) {
+    return false;
+  }
+}
+
 function pickDtypes(model_name, device) {
   if (model_name.includes("large-v3-turbo")) {
     return ["q4f16", "q4"];
@@ -75,24 +86,27 @@ function pickDtypes(model_name, device) {
     // loops – use the same per-component dtypes as the official demos.
     return [{ encoder_model: "fp32", decoder_model_merged: "q4" }, "fp32"];
   }
-  // the q8 exports of the base and tiny *_timestamped models fail session
-  // creation on the WASM runtime ("Missing required scale ... MatMulNBits",
-  // huggingface/transformers.js#1707) – go straight to fp32 rather than
-  // landing every CPU user on a doomed download
-  if (model_name.includes("whisper-base") || model_name.includes("whisper-tiny")) {
-    return ["fp32"];
-  }
-  return ["q8", "fp32"];
+  // On the WASM runtime, q4 is the only quantized variant of the
+  // *_timestamped exports that loads – q8/int8/uint8 fail session creation
+  // ("Missing required scale ... MatMulNBits", huggingface/transformers.js
+  // #1707) and fp16 fails with a graph error. q4 verified on tiny, base and
+  // small; it is also a quarter of fp32's size, which matters because very
+  // large downloads have proven fragile on flaky connections.
+  return ["q4", "fp32"];
 }
 
-async function getPipeline(model_name, devices, compat) {
+async function getPipeline(model_name, devices) {
   if (devices === undefined) {
-    devices = self.navigator?.gpu ? ["webgpu", "wasm"] : ["wasm"];
+    // Firefox's WebGPU initialises and completes but is far slower than its
+    // own WASM path (measured 2026-06: minutes vs 13s for the same clip) –
+    // prefer WASM there until its implementation matures
+    const slowWebGpu = /firefox/i.test(self.navigator?.userAgent || "");
+    devices = !slowWebGpu && (await hasGpuAdapter()) ? ["webgpu", "wasm"] : ["wasm"];
   }
 
   let lastError = null;
   for (const device of devices) {
-    for (const dtype of (compat ? ["fp32"] : pickDtypes(model_name, device))) {
+    for (const dtype of pickDtypes(model_name, device)) {
       const dtypeLabel = typeof dtype === "string" ? dtype : JSON.stringify(dtype);
       const key = `${model_name}|${device}|${dtypeLabel}`;
 
@@ -135,7 +149,7 @@ async function getPipeline(model_name, devices, compat) {
 
         console.log(`Whisper pipeline ready: ${model_name} on ${device} (${dtypeLabel})`
           + (warmupSeconds !== null ? `, warm-up ${warmupSeconds.toFixed(1)}s` : ""));
-        self.postMessage({ type: "device", device, dtype: dtypeLabel, warmupSeconds });
+        self.postMessage({ type: "device", device, dtype: dtypeLabel });
         return pipe;
       } catch (e) {
         console.warn(`Failed to initialise ${model_name} on ${device} (${dtypeLabel}):`, e);
@@ -167,7 +181,7 @@ function makeDownloadProgress() {
   };
 }
 
-async function transcribe(pipe, audio) {
+async function transcribe(pipe, audio, language) {
   const startedAt = Date.now();
   const windowSamples = WINDOW_S * SAMPLE_RATE;
   const stepSamples = (WINDOW_S - OVERLAP_S) * SAMPLE_RATE;
@@ -197,6 +211,7 @@ async function transcribe(pipe, audio) {
       return_timestamps: "word",
       chunk_length_s: 30,
       stride_length_s: 5,
+      ...(language !== null ? { language } : {}),
     });
 
     const windowChunks = dropRewindDuplicates((output.chunks || []).map((chunk) => {
@@ -216,7 +231,7 @@ async function transcribe(pipe, audio) {
     });
   }
 
-  chunks = mergeWordFragments(chunks);
+  chunks = collapseCycles(mergeWordFragments(chunks));
 
   const seconds = (Date.now() - startedAt) / 1000;
   console.log(`Whisper transcription took ${seconds.toFixed(1)}s for ${(audio.length / SAMPLE_RATE).toFixed(1)}s of audio (${cache.device})`);
@@ -258,6 +273,55 @@ function dropRewindDuplicates(chunks) {
       }
     }
     out.push(chunk);
+  }
+  return out;
+}
+
+// A looping decoder can also creep its timestamps forward, emitting the same
+// word cycle over and over at slightly advancing times – invisible to the
+// same-instant collapse below. Real speech essentially never repeats the
+// identical word sequence many times back to back with identical punctuation,
+// so collapse such runs to their first occurrence. Single-word cycles need a
+// higher bar ("no, no, no" is legitimate speech).
+function collapseCycles(chunks) {
+  const texts = chunks.map((c) => c.text.trim().toLowerCase());
+
+  const cycleMatches = (start, candidate, n) => {
+    if (candidate + n > texts.length) {
+      return false;
+    }
+    for (let k = 0; k < n; k++) {
+      if (texts[start + k] !== texts[candidate + k]) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const out = [];
+  let i = 0;
+  while (i < chunks.length) {
+    let collapsed = false;
+    // smallest period first, so "a b a b a b" collapses as the 2-cycle
+    for (let n = 1; n <= 8 && !collapsed; n++) {
+      let reps = 1;
+      while (cycleMatches(i, i + reps * n, n)) {
+        reps++;
+      }
+      const minReps = n === 1 ? 6 : 4;
+      if (reps >= minReps) {
+        for (let k = 0; k < n; k++) {
+          out.push(chunks[i + k]);
+        }
+        console.log(`Collapsed repetition loop: "${chunks.slice(i, i + n).map((c) => c.text.trim()).join(" ")}" × ${reps}`);
+        i += reps * n;
+        collapsed = true;
+      }
+    }
+    if (!collapsed) {
+      out.push(chunks[i]);
+      i++;
+    }
   }
   return out;
 }

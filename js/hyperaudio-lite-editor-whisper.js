@@ -56,6 +56,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
   const fileUploadBtn = document.getElementById("file-input");
   const formSubmitBtn = document.getElementById("form-submit-btn");
   const modelNameSelectionInput = document.getElementById("model-name-input");
+  const languageSelectionInput = document.getElementById("whisper-language");
   const videoPlayer = document.getElementById("hyperplayer");
 
 
@@ -64,6 +65,20 @@ function loadWhisperClient(modal, workerBaseUrl) {
   }
 
   const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=0.6.7";
+
+  // Firefox runs Whisper on the CPU (its WebGPU is still much slower than
+  // its CPU path) – workable for the smaller models, but the larger ones may
+  // be slow or fail. Say so up front rather than letting users find out.
+  if (/firefox/i.test(navigator.userAgent)) {
+    const form = modal.querySelector("form");
+    if (form !== null) {
+      const note = document.createElement("div");
+      note.setAttribute("role", "alert");
+      note.style.cssText = "background:#fff7e0; border-left:4px solid #f0a800; border-radius:4px; padding:8px 12px; margin-bottom:12px; font-size:85%;";
+      note.textContent = "Firefox: we recommend the Tiny or Base models – larger models may be slow or may not work.";
+      form.prepend(note);
+    }
+  }
 
   let webWorker = createWorker();
 
@@ -88,33 +103,12 @@ function loadWhisperClient(modal, workerBaseUrl) {
           break;
         case "device":
           console.log(`Whisper running on ${data.device} (${data.dtype})`);
-          // a pathologically slow warm-up means this browser's WebGPU is not
-          // worth using (e.g. extensive internal CPU fallback) – remember
-          // that and use the plain CPU path next time. The flag expires so
-          // the GPU gets re-probed as browser implementations improve.
-          if (data.device === "webgpu" && data.warmupSeconds > SLOW_WEBGPU_WARMUP_S) {
-            localStorage.setItem(AVOID_WEBGPU_KEY, JSON.stringify({ at: Date.now(), warmupSeconds: data.warmupSeconds }));
-            console.warn(`WebGPU warm-up took ${data.warmupSeconds.toFixed(1)}s – future transcriptions in this browser will use the CPU instead (re-probed after ${AVOID_WEBGPU_DAYS} days)`);
-          }
           break;
         case "result":
           stopProgressClock();
           handleInferenceDone(data);
           break;
         case "error":
-          // a failed session creation poisons the WASM runtime for every
-          // later attempt in that worker, so in-worker fallbacks can't be
-          // trusted – throw the worker away and retry once in a fresh one
-          // with the most compatible config (wasm + fp32)
-          if (data.stage === "load" && lastSubmission !== null && lastSubmission.compatRetried === false) {
-            lastSubmission.compatRetried = true;
-            console.warn("Model failed to load – retrying in a fresh worker in compatibility mode (wasm/fp32)");
-            webWorker.terminate();
-            webWorker = createWorker();
-            updateLoadingMessage("Retrying in compatibility mode…");
-            submitToWorker(lastSubmission.file, lastSubmission.model_name, true);
-            break;
-          }
           handleError(data.message);
           break;
       }
@@ -131,21 +125,6 @@ function loadWhisperClient(modal, workerBaseUrl) {
   let progressTicker = null;
   let progressStart = 0;
   let progressMessage = "";
-  let lastSubmission = null;
-
-  const AVOID_WEBGPU_KEY = "hyperaudio-whisper-avoid-webgpu";
-  const SLOW_WEBGPU_WARMUP_S = 30;
-  const AVOID_WEBGPU_DAYS = 30;
-
-  function shouldAvoidWebGpu() {
-    try {
-      const stored = JSON.parse(localStorage.getItem(AVOID_WEBGPU_KEY));
-      if (stored !== null && (Date.now() - stored.at) < AVOID_WEBGPU_DAYS * 24 * 60 * 60 * 1000) {
-        return true;
-      }
-    } catch (e) { /* absent or malformed – treat as no preference */ }
-    return false;
-  }
 
   // progress messages only arrive when a whole window completes, so a ticking
   // clock is the liveness signal in between
@@ -243,7 +222,18 @@ function loadWhisperClient(modal, workerBaseUrl) {
     // #transcript-editor-btn is disabled in transcript mode, so this no-ops.
     document.querySelector('#transcript-editor-btn')?.click();
 
-    const model_name = modelNameSelectionInput.value;
+    const size = modelNameSelectionInput.value;
+    const language = languageSelectionInput !== null ? languageSelectionInput.value : "";
+    // English gets the slightly more accurate English-only variants; any
+    // other language (or auto-detect) needs the multilingual ones. Turbo
+    // only exists as a multilingual model.
+    const WHISPER_MODELS = {
+      tiny:  { en: "onnx-community/whisper-tiny.en_timestamped",  multi: "onnx-community/whisper-tiny_timestamped" },
+      base:  { en: "onnx-community/whisper-base.en_timestamped",  multi: "onnx-community/whisper-base_timestamped" },
+      small: { en: "onnx-community/whisper-small.en_timestamped", multi: "onnx-community/whisper-small_timestamped" },
+      turbo: { en: "onnx-community/whisper-large-v3-turbo_timestamped", multi: "onnx-community/whisper-large-v3-turbo_timestamped" },
+    };
+    const model_name = (WHISPER_MODELS[size] || WHISPER_MODELS.base)[language === "en" ? "en" : "multi"];
     const file = fileUploadBtn.files[0];
 
     videoPlayer.src = URL.createObjectURL(file);
@@ -257,15 +247,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
     progressMessage = "Preparing model…";
     startProgressClock();
 
-    lastSubmission = { file, model_name, compatRetried: false };
-    await submitToWorker(file, model_name, false);
-  }
-
-  async function submitToWorker(file, model_name, compat) {
     let audio;
     try {
-      // the buffer is transferred away on each submission, so a retry has to
-      // decode the file again
       audio = await readAudioFrom(file);
     } catch (e) {
       console.error(e);
@@ -279,8 +262,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
       type: "INFERENCE_REQUEST",
       audio,
       model_name,
-      compat,
-      avoid_webgpu: shouldAvoidWebGpu()
+      language
     }, [audio.buffer]);
   }
 
