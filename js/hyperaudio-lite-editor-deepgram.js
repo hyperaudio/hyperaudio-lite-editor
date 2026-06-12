@@ -128,6 +128,9 @@ class DeepgramService extends HTMLElement {
     // #transcript-editor-btn is disabled in transcript mode, so this no-ops.
     document.querySelector('#transcript-editor-btn')?.click();
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
+    if (typeof setTranscriptBusy === 'function') {
+      setTranscriptBusy(true);
+    }
     const language = document.querySelector('#language').value;
     const model = document.querySelector('#language-model').value;
     let media =  document.querySelector('#deepgram-media').value;
@@ -155,6 +158,9 @@ class DeepgramService extends HTMLElement {
         fetchData(token, media, language, model);
       } else {
         document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
+        if (typeof setTranscriptBusy === 'function') {
+          setTranscriptBusy(false);
+        }
       }
     }
   }
@@ -310,6 +316,9 @@ function fetchDataLocal(token, file, language, model) {
         })
       } else {
         document.querySelector('#hypertranscript').innerHTML = '';
+        if (typeof setTranscriptBusy === 'function') {
+          setTranscriptBusy(false);
+        }
       }
     });
   });
@@ -321,6 +330,9 @@ function getApiUrl(language, model) {
 }
 
 function displayAppropriateErrorMessage(error) {
+  if (typeof setTranscriptBusy === 'function') {
+    setTranscriptBusy(false);
+  }
   console.dir("error is : " + error);
   error = error + "";
 
@@ -340,6 +352,9 @@ function displayGenericError() {
 }
 
 function displayNoWordsError() {
+  if (typeof setTranscriptBusy === 'function') {
+    setTranscriptBusy(false);
+  }
   document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
 }
 
@@ -466,6 +481,9 @@ function parseData(json) {
 
   if (typeof setTranscriptionInfo === 'function' && transcriptionStart !== 0) {
     setTranscriptionInfo({ ...transcriptionMeta, seconds: (Date.now() - transcriptionStart) / 1000 });
+  }
+  if (typeof setTranscriptBusy === 'function') {
+    setTranscriptBusy(false);
   }
 
   const initEvent = new CustomEvent('hyperaudioInit');
