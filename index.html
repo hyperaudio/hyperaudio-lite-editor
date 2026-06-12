@@ -720,6 +720,22 @@ If you are creating an open source application under a license compatible with t
     container.innerHTML = rows.map(([label, value]) => `<p><strong>${label}:</strong> ${value}</p>`).join("");
   }
 
+  // While a transcription is in flight the transcript container holds loader
+  // markup, not a transcript – typing into it would be silently destroyed
+  // when the result lands. Transcription modules call this around their work.
+  function setTranscriptBusy(busy) {
+    const transcript = document.getElementById("hypertranscript");
+    if (transcript === null) {
+      return;
+    }
+    transcript.setAttribute("contenteditable", String(!busy));
+    if (busy) {
+      transcript.setAttribute("aria-busy", "true");
+    } else {
+      transcript.removeAttribute("aria-busy");
+    }
+  }
+
 
   let updateCaptionsFromTranscript = true;
   let captionMode = false; // used to detect whether we need to sanitise amongst other things
@@ -843,13 +859,20 @@ If you are creating an open source application under a license compatible with t
         let d = new Date();
         let starttime = d.getTime();
 
+        // the container only holds a transcript when there are timed spans –
+        // during transcription it holds loader or error markup whose text
+        // nodes have no span siblings, and walking those used to throw
+        if (rootnode.querySelector("span[data-m]") === null) {
+          return;
+        }
+
         // check that transcript has the focus
 
         // check for focus
         let isTranscriptFocused = false;
         let isCaptionEditorFocused = false;
 
-        
+
         if (document.activeElement === rootnode) {
           isTranscriptFocused = true;
         }
@@ -863,11 +886,14 @@ If you are creating an open source application under a license compatible with t
               && walker.currentNode.parentElement.tagName !== "SPAN") {
 
             // if previousSibling is a span, add the textContent of currentNode to it
-            if (walker.currentNode.previousSibling.tagName === "SPAN") {
+            if (walker.currentNode.previousSibling !== null && walker.currentNode.previousSibling.tagName === "SPAN") {
               walker.currentNode.previousSibling.textContent += walker.currentNode.textContent;
-            } else {
+            } else if (walker.currentNode.nextSibling !== null) {
               // assume nextSibling is a span for now and add textContent of currentNode to that
               walker.currentNode.nextSibling.textContent += walker.currentNode.textContent;
+            } else {
+              // orphan text node with no siblings at all – leave it alone
+              continue;
             }
 
             // remove currentNode as we've merged its contents

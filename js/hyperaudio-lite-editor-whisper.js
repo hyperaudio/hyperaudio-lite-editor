@@ -179,6 +179,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
   function handleError(message) {
     stopProgressClock();
+    if (typeof setTranscriptBusy === "function") {
+      setTranscriptBusy(false);
+    }
     console.error("Whisper error: " + message);
     const detail = message ? '<br/><span style="font-size:80%; opacity:0.7">'+String(message).slice(0, 200)+'</span>' : '';
     document.getElementById("hypertranscript").innerHTML =
@@ -187,6 +190,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
   function handleInferenceDone(results) {
 
+    if (typeof setTranscriptBusy === "function") {
+      setTranscriptBusy(false);
+    }
     videoPlayer.currentTime = 0;
 
     let hypertranscript = "";
@@ -272,6 +278,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     const loadingMessageContainer = document.getElementById("hypertranscript");
     loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
+    if (typeof setTranscriptBusy === "function") {
+      setTranscriptBusy(true);
+    }
     progressMessage = "Preparing model…";
     startProgressClock();
 
