@@ -134,6 +134,13 @@ class DeepgramService extends HTMLElement {
     const token =  document.querySelector('#token').value;
     const file = document.querySelector('#deepgram-file').files[0];
 
+    transcriptionStart = Date.now();
+    transcriptionMeta = {
+      service: "Deepgram (cloud)",
+      model: document.querySelector('#language-model').selectedOptions[0]?.textContent || model,
+      language: document.querySelector('#language').selectedOptions[0]?.textContent || language,
+    };
+
     if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
       media = "https://"+media;
     }
@@ -354,6 +361,9 @@ function getLanguageCode(json){
   return (language);
 }
 
+let transcriptionStart = 0;
+let transcriptionMeta = {};
+
 function parseData(json) {
 
   const maxWordsInPara = 100;
@@ -453,6 +463,10 @@ function parseData(json) {
 
   console.log("updating download html link");
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperTranscript));
+
+  if (typeof setTranscriptionInfo === 'function' && transcriptionStart !== 0) {
+    setTranscriptionInfo({ ...transcriptionMeta, seconds: (Date.now() - transcriptionStart) / 1000 });
+  }
 
   const initEvent = new CustomEvent('hyperaudioInit');
   document.dispatchEvent(initEvent);

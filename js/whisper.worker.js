@@ -236,7 +236,7 @@ async function transcribe(pipe, audio, language) {
   const seconds = (Date.now() - startedAt) / 1000;
   console.log(`Whisper transcription took ${seconds.toFixed(1)}s for ${(audio.length / SAMPLE_RATE).toFixed(1)}s of audio (${cache.device})`);
 
-  return { text: chunks.map((c) => c.text).join(""), chunks };
+  return { text: chunks.map((c) => c.text).join(""), chunks, seconds };
 }
 
 // Whisper marks the start of a word with a leading space on the chunk text; a

@@ -116,9 +116,13 @@ function loadWhisperClient(modal, workerBaseUrl) {
           break;
         case "device":
           console.log(`Whisper running on ${data.device} (${data.dtype})`);
+          lastDeviceLabel = data.device === "webgpu" ? "GPU (WebGPU)" : "CPU";
           break;
         case "result":
           stopProgressClock();
+          if (pendingInfo !== null && typeof setTranscriptionInfo === "function") {
+            setTranscriptionInfo({ ...pendingInfo, device: lastDeviceLabel, seconds: data.output.seconds });
+          }
           handleInferenceDone(data);
           break;
         case "error":
@@ -138,6 +142,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
   let progressTicker = null;
   let progressStart = 0;
   let progressMessage = "";
+  let lastDeviceLabel = "";
+  let pendingInfo = null;
 
   // progress messages only arrive when a whole window completes, so a ticking
   // clock is the liveness signal in between
@@ -248,6 +254,15 @@ function loadWhisperClient(modal, workerBaseUrl) {
     };
     const model_name = (WHISPER_MODELS[size] || WHISPER_MODELS.base)[language === "en" ? "en" : "multi"];
     const file = fileUploadBtn.files[0];
+
+    const SIZE_LABELS = { tiny: "Whisper Tiny", base: "Whisper Base", small: "Whisper Small", turbo: "Whisper Large v3 Turbo" };
+    pendingInfo = {
+      service: "Whisper (local, in your browser)",
+      model: (SIZE_LABELS[size] || size) + (language === "en" && size !== "turbo" ? " (English)" : " (multilingual)"),
+      language: languageSelectionInput !== null && languageSelectionInput.selectedOptions.length > 0
+        ? languageSelectionInput.selectedOptions[0].textContent
+        : "Auto-detect",
+    };
 
     videoPlayer.src = URL.createObjectURL(file);
 
