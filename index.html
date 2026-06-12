@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.6 (last changed in release 0.6.6) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.7 (last changed in release 0.6.7) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.6">
+  <meta name="version" content="0.6.7">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -26,7 +26,7 @@ If you are creating an open source application under a license compatible with t
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
  
   <script src="js/hyperaudio-lite-editor-deepgram.js"></script>
-  <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.6"></script>
+  <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.7"></script>
   <script src="js/word-alignment.js"></script>
   <script src="js/html-json-converter.js"></script>
 
@@ -132,21 +132,50 @@ If you are creating an open source application under a license compatible with t
       <div class="mb-3">
         <label for="model-name-input" class="form-label label-text">Which model should be used?</label>
         <div>
-          <select class="form-select select select-bordered w-full max-w-xs" aria-label="Default select example" id="model-name-input">
-            <option value="onnx-community/whisper-tiny.en_timestamped">Whisper (Tiny) English – ~40–80 MB, fastest, least accurate</option>
-            <option value="onnx-community/whisper-tiny_timestamped">Whisper (Tiny) – ~40–80 MB, fastest, least accurate</option>
-            <option selected="" value="onnx-community/whisper-base.en_timestamped">Whisper (Base) English – ~80–150 MB</option>
-            <option value="onnx-community/whisper-base_timestamped">Whisper (Base) – ~80–150 MB</option>
-            <option value="onnx-community/whisper-small.en_timestamped">Whisper (Small) English – ~250–490 MB</option>
-            <option value="onnx-community/whisper-small_timestamped">Whisper (Small) – ~250–490 MB</option>
-            <option value="onnx-community/whisper-large-v3-turbo_timestamped">Whisper (Large v3 Turbo) – ~560 MB, GPU recommended</option>
+          <select class="form-select select select-bordered w-full max-w-xs" aria-label="Whisper model" id="model-name-input">
+            <option value="tiny">Whisper (Tiny) – ~40–80 MB, fastest, least accurate</option>
+            <option selected="" value="base">Whisper (Base) – ~80–150 MB</option>
+            <option value="small">Whisper (Small) – ~250–490 MB</option>
+            <option value="turbo">Whisper (Large v3 Turbo) – ~560 MB, GPU recommended</option>
+          </select>
+        </div>
+        <label for="whisper-language" class="form-label label-text" style="display:block; padding-top:12px">Language</label>
+        <div>
+          <select class="form-select select select-bordered w-full max-w-xs" id="whisper-language">
+            <option selected="" value="en">English</option>
+            <option value="">Auto-detect</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="it">Italian</option>
+            <option value="pt">Portuguese</option>
+            <option value="nl">Dutch</option>
+            <option value="sv">Swedish</option>
+            <option value="no">Norwegian</option>
+            <option value="da">Danish</option>
+            <option value="fi">Finnish</option>
+            <option value="pl">Polish</option>
+            <option value="cs">Czech</option>
+            <option value="el">Greek</option>
+            <option value="ro">Romanian</option>
+            <option value="hu">Hungarian</option>
+            <option value="ru">Russian</option>
+            <option value="uk">Ukrainian</option>
+            <option value="tr">Turkish</option>
+            <option value="ar">Arabic</option>
+            <option value="he">Hebrew</option>
+            <option value="hi">Hindi</option>
+            <option value="id">Indonesian</option>
+            <option value="vi">Vietnamese</option>
+            <option value="th">Thai</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+            <option value="zh">Chinese</option>
           </select>
         </div>
         <div class="form-text" style="font-size: 90%;">
-          <p style="padding-top:16px">The models are listed in order of size. The larger the model, the more accurate it is – and slower to process.</p>
-          <p>The English models are slightly more accurate (for the English language only).</p>
-          <p>Tiny is best suited to short, clear recordings – on long or noisy audio small models can garble difficult passages, so prefer Base or larger.</p>
-          <p>Each model is downloaded once and cached by the browser. Transcription runs on your GPU (WebGPU) when available, otherwise on the CPU.</p>
+          <p style="padding-top:12px">Models download once, then run locally – on your GPU when available. Larger models are more accurate but slower.</p>
+          <p>For non-English media select the language – auto-detect can mistranslate on the smaller models.</p>
         </div>
       </div>
       

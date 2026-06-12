@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 0.6.6 — last changed in release 0.6.6
+ * @version 0.6.7 — last changed in release 0.6.7
  * @license MIT
  */
 
@@ -56,6 +56,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
   const fileUploadBtn = document.getElementById("file-input");
   const formSubmitBtn = document.getElementById("form-submit-btn");
   const modelNameSelectionInput = document.getElementById("model-name-input");
+  const languageSelectionInput = document.getElementById("whisper-language");
   const videoPlayer = document.getElementById("hyperplayer");
 
 
@@ -63,7 +64,21 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=0.6.6";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=0.6.7";
+
+  // Firefox runs Whisper on the CPU (its WebGPU is still much slower than
+  // its CPU path) – workable for the smaller models, but the larger ones may
+  // be slow or fail. Say so up front rather than letting users find out.
+  if (/firefox/i.test(navigator.userAgent)) {
+    const form = modal.querySelector("form");
+    if (form !== null) {
+      const note = document.createElement("div");
+      note.setAttribute("role", "alert");
+      note.style.cssText = "background:#fff7e0; border-left:4px solid #f0a800; border-radius:4px; padding:8px 12px; margin-bottom:12px; font-size:85%;";
+      note.textContent = "Firefox: we recommend the Tiny or Base models – larger models may be slow or may not work.";
+      form.prepend(note);
+    }
+  }
 
   let webWorker = createWorker();
 
@@ -80,7 +95,11 @@ function loadWhisperClient(modal, workerBaseUrl) {
         case "progress":
           updateLoadingMessage(data.phase === "download"
             ? `Downloading model… ${data.progress}%`
-            : `Transcribing… ${data.progress}%`);
+            : data.phase === "prepare"
+              ? "Preparing model…"
+              : data.progress === null
+                ? "Transcribing…"
+                : `Transcribing… ${data.progress}%`);
           break;
         case "device":
           console.log(`Whisper running on ${data.device} (${data.dtype})`);
@@ -203,7 +222,18 @@ function loadWhisperClient(modal, workerBaseUrl) {
     // #transcript-editor-btn is disabled in transcript mode, so this no-ops.
     document.querySelector('#transcript-editor-btn')?.click();
 
-    const model_name = modelNameSelectionInput.value;
+    const size = modelNameSelectionInput.value;
+    const language = languageSelectionInput !== null ? languageSelectionInput.value : "";
+    // English gets the slightly more accurate English-only variants; any
+    // other language (or auto-detect) needs the multilingual ones. Turbo
+    // only exists as a multilingual model.
+    const WHISPER_MODELS = {
+      tiny:  { en: "onnx-community/whisper-tiny.en_timestamped",  multi: "onnx-community/whisper-tiny_timestamped" },
+      base:  { en: "onnx-community/whisper-base.en_timestamped",  multi: "onnx-community/whisper-base_timestamped" },
+      small: { en: "onnx-community/whisper-small.en_timestamped", multi: "onnx-community/whisper-small_timestamped" },
+      turbo: { en: "onnx-community/whisper-large-v3-turbo_timestamped", multi: "onnx-community/whisper-large-v3-turbo_timestamped" },
+    };
+    const model_name = (WHISPER_MODELS[size] || WHISPER_MODELS.base)[language === "en" ? "en" : "multi"];
     const file = fileUploadBtn.files[0];
 
     videoPlayer.src = URL.createObjectURL(file);
@@ -231,7 +261,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
     webWorker.postMessage({
       type: "INFERENCE_REQUEST",
       audio,
-      model_name
+      model_name,
+      language
     }, [audio.buffer]);
   }
 
