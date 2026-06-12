@@ -82,7 +82,20 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
   let webWorker = createWorker();
 
+  // the button is a styled <label>, so "disabled" is the btn-disabled class
+  // (pointer-events: none) plus a guard in the handler
+  function updateSubmitState() {
+    const ready = fileUploadBtn.files.length > 0;
+    formSubmitBtn.classList.toggle("btn-disabled", !ready);
+    formSubmitBtn.setAttribute("aria-disabled", String(!ready));
+  }
+  fileUploadBtn.addEventListener("change", updateSubmitState);
+  updateSubmitState();
+
   formSubmitBtn.addEventListener("click", async (event2) => {
+    if (formSubmitBtn.classList.contains("btn-disabled")) {
+      return;
+    }
     await handleFormSubmission();
   });
 

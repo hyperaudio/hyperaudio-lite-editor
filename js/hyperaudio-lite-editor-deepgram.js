@@ -1,5 +1,9 @@
-/*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 1.1.0 */
+/**
+ * hyperaudio-lite-editor-deepgram.js
+ * (C) The Hyperaudio Project
+ * @version 0.6.7 — last changed in release 0.6.7
+ * @license MIT
+ */
 
 const DEEPGRAM_LANGUAGE_LABELS = {
   "en": "English",
@@ -190,9 +194,28 @@ customElements.define('deepgram-service', DeepgramService);
 function addModalEventListeners(modal) {
   document.querySelector('#deepgram-file').addEventListener('change',modal.clearMediaUrl);
   document.querySelector('#deepgram-media').addEventListener('change',modal.clearFilePicker);
-  document.querySelector('#transcribe-btn').addEventListener('click', modal.getData);
+  document.querySelector('#transcribe-btn').addEventListener('click', (event) => {
+    if (document.querySelector('#transcribe-btn').classList.contains('btn-disabled')) {
+      return;
+    }
+    modal.getData(event);
+  });
   document.querySelector('#deepgram-file').addEventListener('change', modal.updatePlayerWithLocalFile);
   document.querySelector('#language-model').addEventListener('change', modal.updateDropdowns);
+
+  // the button is a styled <label>, so "disabled" is the btn-disabled class
+  // (pointer-events: none) plus the guard above. A token alone is not enough
+  // to transcribe – media is what enables the button.
+  const updateTranscribeState = () => {
+    const hasFile = document.querySelector('#deepgram-file').files.length > 0;
+    const hasMedia = document.querySelector('#deepgram-media').value.trim() !== '';
+    const button = document.querySelector('#transcribe-btn');
+    button.classList.toggle('btn-disabled', !(hasFile || hasMedia));
+    button.setAttribute('aria-disabled', String(!(hasFile || hasMedia)));
+  };
+  document.querySelector('#deepgram-file').addEventListener('change', updateTranscribeState);
+  document.querySelector('#deepgram-media').addEventListener('input', updateTranscribeState);
+  updateTranscribeState();
 }
 
 function fetchData(token, media, language, model) {
