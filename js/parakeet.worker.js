@@ -183,7 +183,15 @@ async function transcribe(s, audio) {
     const offsetSeconds = offsetSamples / SAMPLE_RATE;
     const win = audio.subarray(offsetSamples, offsetSamples + windowSamples);
     const windowWords = await transcribeWindow(s, win, offsetSeconds);
-    words = i === 0 ? windowWords : dedupeSeam(words, windowWords);
+    if (i === 0) {
+      words = windowWords;
+    } else {
+      // both windows transcribe the OVERLAP_S overlap [offsetSeconds, offsetSeconds+OVERLAP_S];
+      // cut at its midpoint so each word survives exactly once (time-based, so
+      // legitimate within-window repeats are untouched)
+      const cut = offsetSeconds + OVERLAP_S / 2;
+      words = words.filter((w) => w.start < cut).concat(windowWords.filter((w) => w.start >= cut));
+    }
     self.postMessage({
       type: "progress",
       phase: "transcribe",
@@ -255,15 +263,3 @@ async function transcribeWindow(s, samples, offsetSeconds) {
   return words;
 }
 
-// Merge two overlapping windows: drop a word from the new window if it repeats
-// the previous kept word within 0.5s (the overlap is transcribed by both).
-function dedupeSeam(prev, next) {
-  if (next.length === 0) return prev;
-  const merged = prev.slice();
-  for (const w of next) {
-    const tail = merged[merged.length - 1];
-    if (tail && w.word === tail.word && Math.abs(w.start - tail.start) < 0.5) continue;
-    merged.push(w);
-  }
-  return merged;
-}
