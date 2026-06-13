@@ -1,0 +1,108 @@
+<!--
+  Spike tool for issue #309 — Parakeet (Local) feasibility. NOT part of the
+  shipped app; a standalone benchmark you open in a browser to measure the
+  parakeet-tdt-0.6b-v3 int8 encoder's speed (RTF) and load/memory behaviour
+  on your own machine, via onnxruntime-web (WASM + WebGPU). It does not
+  transcribe — it isolates the dominant cost (the encoder). See #309.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parakeet TDT v3 — browser encoder benchmark (#309)</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; padding: .5rem 1rem; margin: .25rem .25rem 0 0; cursor: pointer; }
+  pre { background: #f4f4f4; padding: 1rem; border-radius: 6px; white-space: pre-wrap; }
+  .muted { color: #666; }
+  h1 { font-size: 1.3rem; }
+</style>
+</head>
+<body>
+<h1>Parakeet TDT 0.6B v3 — browser encoder benchmark</h1>
+<p class="muted">Measures the int8 encoder's speed (RTF) and load behaviour on <em>this</em> machine, for hyperaudio-lite-editor issue #309. Random correctly-shaped inputs (audio_signal [1,128,T] + length) — values don't affect compute time, so this is an accurate throughput measurement. It does <strong>not</strong> transcribe (no mel/decoder); it isolates the dominant cost.</p>
+
+<p>1. Load the 652&nbsp;MB int8 encoder:
+  <button id="fetchBtn">Download from HuggingFace</button>
+  <input type="file" id="fileInput" accept=".onnx">
+  <span class="muted">(or pick a local <code>encoder-model.int8.onnx</code>)</span>
+</p>
+<p>2. Run:
+  <button id="wasmBtn" disabled>Benchmark WASM (CPU)</button>
+  <button id="gpuBtn" disabled>Benchmark WebGPU</button>
+</p>
+<pre id="out">Idle.</pre>
+
+<script type="module">
+import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort.all.min.mjs";
+
+const FEATURES = 128, FRAMES_PER_SEC = 100, DURATIONS = [10, 30, 60], RUNS = 3;
+const out = document.getElementById("out");
+let modelBytes = null;
+const log = (m) => { out.textContent += "\n" + m; };
+const reset = (m) => { out.textContent = m; };
+
+function mkInputs(seconds) {
+  const len = seconds * FRAMES_PER_SEC;
+  const audio = new Float32Array(FEATURES * len);
+  for (let i = 0; i < audio.length; i++) audio[i] = (Math.random() - 0.5) * 2;
+  return {
+    audio_signal: new ort.Tensor("float32", audio, [1, FEATURES, len]),
+    length: new ort.Tensor("int64", BigInt64Array.from([BigInt(len)]), [1]),
+  };
+}
+
+async function ready(bytes) {
+  modelBytes = bytes;
+  document.getElementById("wasmBtn").disabled = false;
+  document.getElementById("gpuBtn").disabled = false;
+  log(`Model ready: ${(bytes.byteLength / 1e6).toFixed(0)} MB`);
+}
+
+document.getElementById("fetchBtn").onclick = async () => {
+  reset("Downloading encoder-model.int8.onnx (652 MB)…");
+  const r = await fetch("https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.int8.onnx");
+  await ready(await r.arrayBuffer());
+};
+document.getElementById("fileInput").onchange = async (e) => {
+  reset("Reading file…");
+  await ready(await e.target.files[0].arrayBuffer());
+};
+
+async function bench(ep) {
+  reset(`${ep.toUpperCase()}: creating session…  (UA cores: ${navigator.hardwareConcurrency}, crossOriginIsolated: ${self.crossOriginIsolated})`);
+  try {
+    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
+    if (ep === "wasm") ort.env.wasm.numThreads = self.crossOriginIsolated ? navigator.hardwareConcurrency : 1;
+    const t0 = performance.now();
+    const session = await ort.InferenceSession.create(modelBytes, { executionProviders: [ep] });
+    log(`session created in ${Math.round(performance.now() - t0)} ms (threads: ${ep === "wasm" ? ort.env.wasm.numThreads : "n/a"})`);
+    await session.run(mkInputs(10));
+    for (const sec of DURATIONS) {
+      const feeds = mkInputs(sec);
+      const times = [];
+      for (let r = 0; r < RUNS; r++) {
+        const s = performance.now();
+        await session.run(feeds);
+        times.push(performance.now() - s);
+      }
+      const mean = times.reduce((a, b) => a + b, 0) / times.length;
+      log(`${sec}s audio: ${mean.toFixed(0)} ms/run   RTF=${(mean / 1000 / sec).toFixed(3)}   ${(1000 * sec / mean).toFixed(1)}x realtime`);
+    }
+    if (performance.measureUserAgentSpecificMemory) {
+      try { const m = await performance.measureUserAgentSpecificMemory(); log(`total tab memory: ${(m.bytes / 1e6).toFixed(0)} MB`); }
+      catch (e) { log("memory: " + e); }
+    } else if (performance.memory) {
+      log(`JS heap used: ${(performance.memory.usedJSHeapSize / 1e6).toFixed(0)} MB (wasm heap is separate; ~652 MB model floor)`);
+    }
+    await session.release();
+  } catch (e) {
+    log("ERROR: " + (e.message || e));
+  }
+}
+document.getElementById("wasmBtn").onclick = () => bench("wasm");
+document.getElementById("gpuBtn").onclick = () => bench("webgpu");
+</script>
+</body>
+</html>
