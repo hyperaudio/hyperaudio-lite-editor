@@ -195,6 +195,7 @@ If you are creating an open source application under a license compatible with t
       <div class="form-text" style="font-size: 90%;">
         <p style="padding-top:8px">Parakeet TDT v3 runs entirely in your browser — no token, nothing uploaded.</p>
         <p>The model downloads once and is cached (~650&nbsp;MB on CPU, ~1.2&nbsp;GB on GPU). Multilingual — the language is detected automatically.</p>
+        <p>Runs on your GPU when available — a GPU browser (Chrome or Safari) is recommended. Without WebGPU (e.g. Firefox) it falls back to the CPU and is several times slower.</p>
         <p id="parakeet-device" style="opacity:0.7"></p>
       </div>
       <div class="modal-action">
@@ -601,24 +602,24 @@ If you are creating an open source application under a license compatible with t
 
   <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box" style="max-width:34rem">
+    <div class="modal-box" style="max-width:36rem">
       <label id="close-modal" for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
       <h3 class="font-bold text-lg"  style="margin-bottom:16px">Transcribe</h3>
       <div role="tablist" class="tabs tabs-lifted">
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:150px" aria-label="Whisper (Local)" checked />
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Parakeet (Beta)" checked />
+        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+          <client-parakeet-service templateSelector="#parakeet-local-template"></client-parakeet-service>
+        </div>
+
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Whisper (Beta)"  />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
         </div>
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:150px" aria-label="Deepgram (Cloud)"  />
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Deepgram"  />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
-        </div>
-
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:150px" aria-label="Parakeet (Local)"  />
-        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-          <client-parakeet-service templateSelector="#parakeet-local-template"></client-parakeet-service>
         </div>
 
       </div>

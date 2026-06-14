@@ -63,6 +63,10 @@ async function hasGpuAdapter() {
 }
 
 // Fetch a model with progress, caching it so the (large) download is one-time.
+// A 652MB download holds one connection open for ~100s+, so a single mid-stream
+// network drop must not mean starting over: on failure we resume from the byte
+// we reached via an HTTP Range request, keeping the chunks already in hand.
+const MAX_DOWNLOAD_ATTEMPTS = 5;
 async function fetchModel(url, onProgress) {
   const cache = await caches.open(CACHE_NAME);
   const hit = await cache.match(url);
@@ -70,21 +74,67 @@ async function fetchModel(url, onProgress) {
     onProgress(url, 1, 1);
     return new Uint8Array(await hit.arrayBuffer());
   }
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    throw new Error(`Download failed (${resp.status}) for ${url.split("/").pop()}`);
+
+  let parts = [];
+  let loaded = 0, total = 0;
+  let lastErr = null;
+  let complete = false;
+  for (let attempt = 0; attempt < MAX_DOWNLOAD_ATTEMPTS && !complete; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt));   // brief backoff before resuming
+    }
+    // cache:"no-store" bypasses the browser HTTP cache: we keep our own copy in
+    // Cache Storage, so a duplicate 652MB disk-cache entry only wastes space and
+    // (with HF's redirect to a signed CDN url) causes flaky partial reads and
+    // stale-redirect CORS failures on resume.
+    const init = { cache: "no-store" };
+    if (loaded > 0) init.headers = { Range: `bytes=${loaded}-` };
+    let resp;
+    try {
+      resp = await fetch(url, init);
+    } catch (e) {
+      lastErr = e;   // couldn't even open the connection — retry (same offset resumes)
+      continue;
+    }
+    if (resp.status === 416) {
+      // our offset is at/past EOF: either we already hold the whole file, or
+      // `loaded` is stale — start over in that case.
+      if (total && loaded >= total) { complete = true; break; }
+      parts = []; loaded = 0; lastErr = new Error("range not satisfiable"); continue;
+    }
+    if (!resp.ok) {
+      // 5xx / 429 may be transient; anything else (404, 403…) is fatal, fail fast.
+      if (resp.status >= 500 || resp.status === 429) { lastErr = new Error(`status ${resp.status}`); continue; }
+      throw new Error(`Download failed (${resp.status}) for ${url.split("/").pop()}`);
+    }
+    // If we asked to resume but the server ignored Range (200, not 206), it is
+    // re-sending the whole file — discard what we had and start clean.
+    if (loaded > 0 && resp.status !== 206) { parts = []; loaded = 0; }
+    if (!total) {
+      const cr = resp.headers.get("content-range");   // "bytes start-end/total" on a 206
+      total = cr ? Number(cr.split("/")[1]) : (Number(resp.headers.get("content-length")) || 0);
+    }
+    try {
+      const reader = resp.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value);
+        loaded += value.length;
+        onProgress(url, loaded, total);
+      }
+      complete = true;   // stream finished cleanly
+    } catch (e) {
+      lastErr = e;   // stream dropped — but a drop right at the end may have left it whole
+      if (total && loaded >= total) complete = true;
+      // otherwise the next attempt resumes from `loaded`
+    }
   }
-  const total = Number(resp.headers.get("content-length")) || 0;
-  const reader = resp.body.getReader();
-  const parts = [];
-  let loaded = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    parts.push(value);
-    loaded += value.length;
-    onProgress(url, loaded, total);
+  if (!complete) {
+    console.error("Model download failed after retries:", lastErr?.message || lastErr);
+    throw new Error("Model download interrupted — please check your connection.");
   }
+
   const bytes = new Uint8Array(loaded);
   let off = 0;
   for (const p of parts) { bytes.set(p, off); off += p.length; }

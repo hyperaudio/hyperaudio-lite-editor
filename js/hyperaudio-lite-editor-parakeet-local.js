@@ -62,6 +62,20 @@ function loadParakeetClient(modal, workerBaseUrl) {
 
   const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=0.6.8";
 
+  // Firefox has no usable WebGPU here, so Parakeet runs on the CPU – it works
+  // but is several times slower than the audio. Say so up front, the same way
+  // the Whisper tab warns about Firefox.
+  if (/firefox/i.test(navigator.userAgent)) {
+    const form = modal.querySelector("form");
+    if (form !== null) {
+      const note = document.createElement("div");
+      note.setAttribute("role", "alert");
+      note.style.cssText = "background:#fff7e0; border-left:4px solid #f0a800; border-radius:4px; padding:8px 12px; margin-bottom:12px; font-size:85%;";
+      note.textContent = "Firefox: Parakeet runs on the CPU here and is much slower than the audio length – Chrome or Safari (GPU) is recommended.";
+      form.prepend(note);
+    }
+  }
+
   let webWorker = createWorker();
 
   // the button is a styled <label>, so "disabled" is the btn-disabled class
@@ -155,7 +169,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
   function renderLoadingMessage() {
     const msg = document.querySelector("#hypertranscript .transcribing-msg");
     if (msg !== null) {
-      msg.textContent = `${progressMessage} (${formatElapsed(Date.now() - progressStart)})`;
+      msg.innerHTML = `${progressMessage} <span style="font-size:80%; opacity:0.55">(${formatElapsed(Date.now() - progressStart)})</span>`;
     }
   }
 
