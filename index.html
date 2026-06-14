@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.7 (last changed in release 0.6.7) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.8 (last changed in release 0.6.8) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.7">
+  <meta name="version" content="0.6.8">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -27,6 +27,7 @@ If you are creating an open source application under a license compatible with t
  
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=0.6.7"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.7"></script>
+  <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=0.6.8"></script>
   <script src="js/word-alignment.js"></script>
   <script src="js/html-json-converter.js"></script>
 
@@ -101,7 +102,7 @@ If you are creating an open source application under a license compatible with t
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="deepgram-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or</span>
-        <input id="deepgram-file" name="file" type="file" class="file-input w-full max-w-xs" />
+        <input id="deepgram-file" name="file" type="file" class="file-input w-full max-w-xs" title="" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
   
         <span class="label-text">Model</span>
@@ -126,7 +127,7 @@ If you are creating an open source application under a license compatible with t
       <div class="mb-3">
         <input id="media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" disabled />
         <span style="display:block; padding:16px" class="label-text">or</span>
-        <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" />
+        <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" title="" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
       </div>
       <div class="mb-3">
@@ -181,6 +182,24 @@ If you are creating an open source application under a license compatible with t
       
       <div class="modal-action">
         <label id="form-submit-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
+      </div>
+    </form>
+  </template>
+
+  <template id="parakeet-local-template">
+    <form>
+      <div class="mb-3">
+        <input id="parakeet-file-input" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+      </div>
+      <div class="form-text" style="font-size: 90%;">
+        <p style="padding-top:8px">Parakeet TDT v3 runs entirely in your browser — no token, nothing uploaded.</p>
+        <p>The model downloads once and is cached (~650&nbsp;MB on CPU, ~1.2&nbsp;GB on GPU). Multilingual — the language is detected automatically.</p>
+        <p>Runs on your GPU when available — a GPU browser (Chrome or Safari) is recommended. Without WebGPU (e.g. Firefox) it falls back to the CPU and is several times slower.</p>
+        <p id="parakeet-device" style="opacity:0.7"></p>
+      </div>
+      <div class="modal-action">
+        <label id="parakeet-form-submit-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
       </div>
     </form>
   </template>
@@ -583,17 +602,22 @@ If you are creating an open source application under a license compatible with t
 
   <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width:36rem">
       <label id="close-modal" for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
       <h3 class="font-bold text-lg"  style="margin-bottom:16px">Transcribe</h3>
       <div role="tablist" class="tabs tabs-lifted">
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:160px" aria-label="Whisper (Local)" checked />
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Parakeet (Beta)" checked />
+        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+          <client-parakeet-service templateSelector="#parakeet-local-template"></client-parakeet-service>
+        </div>
+
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Whisper (Beta)"  />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
         </div>
-      
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:160px" aria-label="Deepgram (Cloud)"  />
+
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Deepgram"  />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
         </div>
