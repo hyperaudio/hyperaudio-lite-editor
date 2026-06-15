@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 0.6.8 — last changed in release 0.6.8
+ * @version 0.6.9 — last changed in release 0.6.9
  * @license MIT
  */
 
@@ -60,18 +60,53 @@ function loadParakeetClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=0.6.8";
+  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=0.6.9";
 
-  // Firefox has no usable WebGPU here, so Parakeet runs on the CPU – it works
-  // but is several times slower than the audio. Say so up front, the same way
-  // the Whisper tab warns about Firefox.
-  if (/firefox/i.test(navigator.userAgent)) {
+  // On Chrome (Chromium) Parakeet runs fp16 on the GPU (WebGPU) – fast, and the
+  // default. Firefox's WebGPU underperforms here and Safari's can exhaust memory
+  // on the large encoder (it has locked up the whole machine), so both default
+  // to the smaller int8 encoder on the CPU – it works but is several times
+  // slower than the audio. We still let the user opt in to the GPU path with a
+  // proportional warning, so capable setups can use it and we can gather
+  // real-world cases for browser makers. `gpuOptIn` is read at submit time.
+  const ua = navigator.userAgent;
+  const isFirefox = /firefox/i.test(ua);
+  const isSafari = /safari/i.test(ua) && !/chrome|chromium|crios|edg|opr|android|fxios/i.test(ua);
+  let gpuOptIn = null;
+  if (isFirefox || isSafari) {
     const form = modal.querySelector("form");
     if (form !== null) {
+      const browser = isSafari ? "Safari" : "Firefox";
       const note = document.createElement("div");
       note.setAttribute("role", "alert");
       note.style.cssText = "background:#fff7e0; border-left:4px solid #f0a800; border-radius:4px; padding:8px 12px; margin-bottom:12px; font-size:85%;";
-      note.textContent = "Firefox: Parakeet runs on the CPU here and is much slower than the audio length – Chrome or Safari (GPU) is recommended.";
+
+      const intro = document.createElement("div");
+      intro.textContent = `${browser}: Parakeet runs on the CPU here and is much slower than the audio length – Chrome is recommended for GPU acceleration.`;
+      note.appendChild(intro);
+
+      const optLabel = document.createElement("label");
+      optLabel.style.cssText = "display:flex; align-items:center; gap:6px; margin-top:8px; cursor:pointer;";
+      gpuOptIn = document.createElement("input");
+      gpuOptIn.type = "checkbox";
+      gpuOptIn.id = "parakeet-gpu-optin";
+      optLabel.appendChild(gpuOptIn);
+      optLabel.appendChild(document.createTextNode("Try GPU acceleration (experimental)"));
+      note.appendChild(optLabel);
+
+      const warn = document.createElement("div");
+      warn.style.cssText = "display:none; margin-top:6px; font-weight:600; color:#9a3412;";
+      // Proportional to the failure mode: Safari can take the whole OS down;
+      // Firefox stays contained (errors / poor performance).
+      warn.textContent = isSafari
+        ? "⚠️ On Safari this can use enough memory to freeze your entire computer – you may lose unsaved work in other apps. Save everything first. Enabling it helps us report real-world cases to browser makers."
+        : "⚠️ Firefox's WebGPU is experimental here and may error or run poorly (it should not crash your OS). Enabling it helps us report real-world cases to browser makers.";
+      note.appendChild(warn);
+
+      gpuOptIn.addEventListener("change", () => {
+        warn.style.display = gpuOptIn.checked ? "block" : "none";
+      });
+
       form.prepend(note);
     }
   }
@@ -101,15 +136,19 @@ function loadParakeetClient(modal, workerBaseUrl) {
     worker.onmessage = (event) => {
       const data = event.data;
       switch (data.type) {
-        case "progress":
+        case "progress": {
+          // data.kind ("GPU"/"CPU") names the model build so it's clear which one
+          // is downloading – and obvious if both ever download in one session.
+          const model = data.kind ? `${data.kind} model` : "model";
           updateLoadingMessage(data.phase === "download"
-            ? `Downloading model… ${data.progress}%`
+            ? `Downloading ${model}… ${data.progress}%`
             : data.phase === "prepare"
-              ? "Preparing model…"
+              ? `Preparing ${model}…`
               : data.progress === null
                 ? "Transcribing…"
                 : `Transcribing… ${data.progress}%`);
           break;
+        }
         case "device":
           console.log(`Parakeet running on ${data.device} (${data.dtype})`);
           lastDeviceLabel = data.device === "webgpu" ? "GPU (WebGPU)" : "CPU";
@@ -226,8 +265,12 @@ function loadParakeetClient(modal, workerBaseUrl) {
       return;
     }
 
+    // forceGpu: the user explicitly opted in to the GPU path on a browser we'd
+    // otherwise keep on the CPU (only present on Firefox/Safari).
+    const forceGpu = gpuOptIn !== null && gpuOptIn.checked;
+
     // transfer the buffer rather than copying it
-    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio }, [audio.buffer]);
+    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu }, [audio.buffer]);
   }
 
   async function readAudioFrom(file) {
