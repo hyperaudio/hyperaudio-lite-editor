@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 0.6.7 — last changed in release 0.6.7
+ * @version 0.6.9 — last changed in release 0.6.9
  * @license MIT
  */
 
@@ -168,7 +168,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
   function renderLoadingMessage() {
     const msg = document.querySelector("#hypertranscript .transcribing-msg");
     if (msg !== null) {
-      msg.textContent = `${progressMessage} (${formatElapsed(Date.now() - progressStart)})`;
+      msg.innerHTML = `${progressMessage} <span style="font-size:80%; opacity:0.55">(${formatElapsed(Date.now() - progressStart)})</span>`;
     }
   }
 
