@@ -1,6 +1,18 @@
+/* The layout is fully absolute-positioned, so <body> has no height and paints
+   nothing — the transcript card's rounded corners reveal the <html> canvas.
+   Under an OS dark theme DaisyUI sets :root --b1 (and color-scheme) dark, so
+   that canvas goes near-black. data-theme="light" on <html> forces the light
+   theme; !important pins the canvas to the chrome gray over DaisyUI's
+   higher-specificity :root rule. */
+html {
+  background-color: #f5f5f5 !important;
+  color-scheme: light;
+}
+
 body {
   font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Fira Sans','Droid Sans','Helvetica Neue',sans-serif;
   line-height: 1.8;
+  background-color: #f5f5f5;
 }
 
 input, output, select, button, textarea {
@@ -32,13 +44,46 @@ input[type="number"] {
   width: 42px;
 }
 
-#search {
-  width: 230px;
+/* DaisyUI makes navbar-start and navbar-end each 50% wide, which together leave
+   the center (search) no room so it overlaps the toolbar buttons. Make the side
+   sections flexible and let the center + search shrink. The .navbar prefix beats
+   DaisyUI's single-class specificity (it loads after this file). */
+.navbar .navbar-start,
+.navbar .navbar-end {
+  width: auto;
+  flex: 0 0 auto;        /* size to the buttons; never overflow into the center */
+}
+
+.navbar .navbar-center {
+  flex: 1 1 auto;        /* take the space between the sides, shrink when tight */
+  min-width: 0;
+}
+
+.navbar-center .form-control {
+  width: 100%;
+  min-width: 0;
+  align-items: center;   /* keep the search centered in the available space */
+}
+
+#search-box {
+  width: 100%;
+  max-width: 230px;
+  min-width: 0;
   margin-right: 4px;
 }
 
-#pbr-holder {
-  padding-top: 20px;
+/* Fixed-width side panel so its grey background fills to the transcript edge,
+   with an equal 16px gutter on both sides (matches left:400px on
+   .transcript-holder). Items fill the 368px content width, so the video and the
+   Local Storage panel line up with identical left/right gutters. */
+.side-panel {
+  width: 400px;
+  box-sizing: border-box;
+  padding-left: 16px;
+  padding-right: 16px;
+  /* stop content 52px above the bottom so the Files panel's bottom lines up
+     with the transcript (which ends at the play bar, bottom:52px) */
+  padding-bottom: 52px;
 }
 
 .top-bar-container {
@@ -67,16 +112,56 @@ dialog::backdrop {
 
 /* former inline styles */
 .transcript-holder {
-  display: flex; 
-  justify-content: center; 
-  background-color: #ffffff; 
+  display: flex;
+  justify-content: center;
+  background-color: #ffffff;
+  border-radius: 0.5rem;
   overflow-y:scroll;
   position: absolute;
   top: 70px;
   left: 400px;
   right: 0;
-  bottom: 0;
+  bottom: 52px;          /* leave room for the docked play bar */
   transition: left 0.5s ease;
+}
+
+/* Docked play bar: play/pause + full-width seek, spanning the transcript area.
+   Tracks the sidebar collapse the same way .transcript-holder does (left 400<->0). */
+#playbar {
+  position: absolute;
+  left: 0;                 /* full screen width — a global transport bar */
+  right: 0;
+  bottom: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background-color: #f5f5f5;
+  border-top: 1px solid #e5e7eb;
+  z-index: 3;
+}
+
+#playbar-seek {
+  flex: 1;
+}
+
+#playbar-volume {
+  flex: 0 0 90px;
+}
+
+/* match the play button (btn-sm) height so the bar reads as one row */
+#playbar-rate {
+  height: 2rem;
+  min-height: 2rem;
+  flex: 0 0 auto;
+}
+
+#playbar-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 80%;
+  opacity: 0.7;
+  white-space: nowrap;
 }
 
 .hyperaudio-transcript {
@@ -108,14 +193,16 @@ dialog::backdrop {
   }
 
   .transcript-holder {
-    display: block;
-    justify-content: center; 
-    background-color: #ffffff; 
+    /* keep flex-centering and let left:400/right:0 size the holder between the
+       sidebar and the edge — width:100% here overflowed past the right edge.
+       Clear the navbar (top) and play bar (bottom) to match the wide layout. */
+    display: flex;
+    justify-content: center;
+    background-color: #ffffff;
     overflow-y:scroll;
-    top: 0;
+    top: 50px;
     right: 0;
-    bottom: 0;
-    width: 100%;
+    bottom: 52px;
     padding: 8px;
   }
 
@@ -142,6 +229,10 @@ dialog::backdrop {
   }
 
   .transcript-holder {
+    left: 0px;
+  }
+
+  #playbar {
     left: 0px;
   }
 
@@ -229,5 +320,13 @@ dialog::backdrop {
    stays centred under the button. */
 #sidebar-toggle.tooltip::before {
   left: 0;
+  transform: none;
+}
+
+/* Info button sits at the right edge of the side panel, so right-anchor its
+   tooltip bubble so it opens inward instead of being clipped by the panel. */
+#info-btn.tooltip::before {
+  left: auto;
+  right: 0;
   transform: none;
 }

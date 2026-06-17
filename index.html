@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.9 (last changed in release 0.6.9) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.10 (last changed in release 0.6.10) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -14,11 +14,11 @@ If you are creating an open source application under a license compatible with t
 -->
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.9">
+  <meta name="version" content="0.6.10">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -46,7 +46,7 @@ If you are creating an open source application under a license compatible with t
     }
 
     .side-panel {
-      background-color: #efefef;
+      background-color: #f5f5f5;
       position: absolute;
       top: 0;
       left: 0;
@@ -62,9 +62,10 @@ If you are creating an open source application under a license compatible with t
     }
 
     .main-panel {
-      position: absolute; 
-      left:400px; 
+      position: absolute;
+      left:400px;
       right:0;
+      background-color: #f5f5f5;
       transition: left 0.5s ease;
     }
 
@@ -85,7 +86,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.6.10">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -234,48 +235,37 @@ If you are creating an open source application under a license compatible with t
 
   <div class="holder grid grid-flow-col auto-cols-max">
     <div class="side-panel">
-      <div>
-        <div class="top-bar-item">
+      <div style="display:flex; flex-direction:column; height:100%;">
+        <div class="top-bar-item" style="flex-shrink:0;">
           <!-- example src -->
           <div>
-            <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/audio/HLE_Intro.mp3" type="audio/mpeg" controls poster="images/poster.png" style="width:400px; margin-left: -8px;">
+            <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/audio/HLE_Intro.mp3" type="audio/mpeg" poster="images/poster.png" style="width:100%; border-radius:0.5rem; display:block;">
               <track id="hyperplayer-vtt" label="preview" kind="subtitles" src="">
             </video>
           </div>
-        </div>
-
-        <div class="top-bar-item">
-          <div id="pbr-holder" style="display: grid; grid-template-columns: 0.65fr 1.05fr 0.3fr; grid-gap: 10px;">
-            <div>
-              <label for="pbr">Playback Rate</label>
-            </div>
-            <div>
-              <input id="pbr" type="range" min="0.4" max="2.4" value="1" step="0.2" class="range range-md range-primary" />
-              <!--<div class="w-full flex justify-between text-xs px-2">-->
-            </div>
-
-            <div style="padding-right: 12px;">
-              <div class="hidden-label-holder">
-                <label style="width:0px;position:absolute;top:-100px" for="currentPbr">Playback Rate Value</label>
-              </div>
-              <input id="currentPbr" class="input input-bordered input-xs w-full max-w-xs" style="width:60px" type="number" id="pbr" name="pbr" value="1" step="0.2" min="0.4" max="2.4">
-            </div>
+          <div id="player-controls" style="display:flex; align-items:center; gap:8px; margin-top:4px; width:100%;">
+            <button id="pip-btn" type="button" class="btn btn-square btn-outline btn-sm tooltip" data-tip="Picture-in-picture" aria-label="Picture-in-picture" onclick="togglePictureInPicture()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-picture-in-picture-2"><path d="M21 9V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><rect width="10" height="7" x="12" y="13" rx="2"/></svg>
+            </button>
+            <button id="audio-only-btn" type="button" class="btn btn-square btn-outline btn-sm tooltip" data-tip="Audio only" aria-label="Toggle audio only" aria-pressed="false" onclick="toggleAudioOnly(this)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
+            </button>
+            <label for="show-speakers" style="display:flex; align-items:center; gap:6px; margin-left:4px; cursor:pointer; white-space:nowrap;">
+              Display speakers
+              <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="checkbox checkbox-primary checkbox-sm"/>
+            </label>
+            <label id="info-btn" for="info-modal" class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Transcription info" aria-label="Transcription info" style="margin-left:auto;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
+            </label>
           </div>
         </div>
 
-        <div class="form-control">
-          <span style="text-align: right; padding-right: 12px; padding-top: 12px;">
-            <label for="show-speakers">Display speakers </label>
-            <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="checkbox checkbox-primary"/>
-          </span>
+        <div class="tabs" style="justify-content:flex-start; margin-top:12px; flex-shrink:0;">
+          <a class="tab tab-lifted tab-active"><strong style="font-size:1.1rem">Files</strong></a>
         </div>
-
-        <div class="tabs">
-          <a class="tab tab-lifted tab-active"><strong>Local Storage</strong></a>
-        </div>
-        <div style="display: flex; overflow-y:scroll; ">
-          <div style="height:360px">
-            <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="width:360px; height:360px">
+        <div style="display: flex; overflow-y:scroll; flex:1 1 auto; min-height:0;">
+          <div style="width:100%; height:100%;">
+            <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="height:100%; border-radius:0.5rem;">
             </ul>
           </div>
         </div>
@@ -284,7 +274,7 @@ If you are creating an open source application under a license compatible with t
       </div>
     </div>
     <div class="main-panel" style="z-index: 2">
-      <div class="navbar bg-base-100" style="background-color: #ffffff; opacity:0.95; min-height:70px;">
+      <div class="navbar bg-base-100" style="background-color: #f5f5f5; min-height:70px;">
         <div class="navbar-start">
           <button id="sidebar-toggle" class="btn btn-square btn-outline tooltip" data-tip="Toggle sidebar" style="margin-right:4px" aria-label="Toggle Sidebar">
             <svg id="sidebar-close-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-close"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
@@ -298,7 +288,7 @@ If you are creating an open source application under a license compatible with t
             <span id="remove-gaps-active-dot" style="display:none;position:absolute;top:4px;right:4px;width:9px;height:9px;border-radius:9999px;background-color:oklch(var(--p));z-index:2;pointer-events:none;"></span>
           </label>
           <div class="dropdown menu-compact">
-            <label tabindex="0" class="btn btn-outline gap-2" style="margin-right:4px">
+            <label tabindex="0" class="btn btn-outline gap-2" style="margin-right:4px; flex-wrap:nowrap;">
               <span id="file-dropdown-text">FILE</span>
               <svg id="file-dropdown-symbol" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
               <svg id="file-dropdown-symbol-mobile" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
@@ -344,9 +334,6 @@ If you are creating an open source application under a license compatible with t
               <li><label for="file-import-vtt-dialog">Import VTT</label></li>
             </ul>
           </div>
-          <label for="info-modal" class="btn btn-ghost btn-primary gap-2 tooltip" data-tip="Transcription info" aria-label="Transcription info">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
-          </label>
           <input type="checkbox" id="info-modal" class="modal-toggle" />
           <div class="modal">
             <div class="modal-box relative">
@@ -585,6 +572,27 @@ If you are creating an open source application under a license compatible with t
           </section>
         </article>
       </div>
+    </div>
+    <div id="playbar">
+      <button id="playbar-toggle" type="button" class="btn btn-square btn-sm btn-primary" aria-label="Play / pause" onclick="togglePlay()">
+        <svg id="playbar-play-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" class="lucide lucide-play"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+        <svg id="playbar-pause-icon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" class="lucide lucide-pause"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>
+      </button>
+      <input id="playbar-seek" type="range" min="0" max="1000" value="0" step="1" class="range range-xs range-primary" aria-label="Seek" />
+      <span id="playbar-time">0:00 / 0:00</span>
+      <button id="playbar-mute" type="button" class="btn btn-square btn-sm btn-ghost tooltip" data-tip="Mute" aria-label="Mute" onclick="toggleMute()">
+        <svg id="playbar-volume-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <svg id="playbar-mute-icon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-x"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
+      </button>
+      <input id="playbar-volume" type="range" min="0" max="100" value="100" step="1" class="range range-xs range-primary" aria-label="Volume" />
+      <select id="playbar-rate" class="select select-bordered select-sm" aria-label="Playback rate" title="Playback rate">
+        <option value="2">2×</option>
+        <option value="1.7">1.7×</option>
+        <option value="1.5">1.5×</option>
+        <option value="1.2">1.2×</option>
+        <option value="1" selected>1×</option>
+        <option value="0.8">0.8×</option>
+      </select>
     </div>
     <div id="captionsource-alert" class="alert alert-info shadow-lg" style="visibility:hidden; z-index:2; position:absolute; top:50%; left:50%; width:480px; height:140px; margin: -240px 0 0 -240px;">
       <div>
@@ -1339,7 +1347,7 @@ If you are creating an open source application under a license compatible with t
       }
       
 
-      holder.innerHTML = '<div class="modal-action"><label id="regenerate-btn" for="regenerate-captions-modal" class="fixed bottom-8 right-8 btn btn-outline btn-primary" >Regenerate <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
+      holder.innerHTML = '<div class="modal-action"><label id="regenerate-btn" for="regenerate-captions-modal" class="fixed top-20 right-8 btn btn-outline btn-primary" >Regenerate <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
 
       if (captionCache === null ) {
         let newDiv = document.createElement('div');
@@ -1501,6 +1509,197 @@ If you are creating an open source application under a license compatible with t
       }
       document.querySelector('video').currentTime = seekTime;
     }
+
+    // Picture-in-picture: pops the video into a floating window so it stays
+    // visible while scrolling the transcript. Only meaningful for media with a
+    // video track, so the button disables itself for audio-only sources.
+    function togglePictureInPicture() {
+      const video = document.querySelector('#hyperplayer');
+      if (video === null) {
+        return;
+      }
+      const action = document.pictureInPictureElement
+        ? document.exitPictureInPicture()
+        : video.requestPictureInPicture();
+      Promise.resolve(action).catch((e) => console.warn('Picture-in-picture failed:', e));
+    }
+
+    // Audio-only: hide the video frame for audio files or to focus on the
+    // transcript. Playback is driven by the docked play bar, so the video stays
+    // in the DOM (audio keeps playing) — only its picture is hidden.
+    function toggleAudioOnly(btn) {
+      const video = document.querySelector('#hyperplayer');
+      if (video === null) {
+        return;
+      }
+      const on = video.classList.toggle('audio-only');
+      video.style.display = on ? 'none' : '';
+      btn.classList.toggle('btn-active', on);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.setAttribute('data-tip', on ? 'Show video' : 'Audio only');
+    }
+
+    // Docked play bar: a play/pause button + a full-width seek bar below the
+    // transcript, an alternative to the player's own (cramped) native scrubber.
+    function togglePlay() {
+      const video = document.querySelector('#hyperplayer');
+      if (video === null) {
+        return;
+      }
+      if (video.paused) {
+        video.play();
+      } else {
+        video.pause();
+      }
+    }
+
+    function toggleMute() {
+      const video = document.querySelector('#hyperplayer');
+      if (video === null) {
+        return;
+      }
+      video.muted = !video.muted;
+    }
+
+    (function initPlaybar() {
+      const video = document.querySelector('#hyperplayer');
+      const seek = document.querySelector('#playbar-seek');
+      const playIcon = document.querySelector('#playbar-play-icon');
+      const pauseIcon = document.querySelector('#playbar-pause-icon');
+      const timeEl = document.querySelector('#playbar-time');
+      const volume = document.querySelector('#playbar-volume');
+      const volumeIcon = document.querySelector('#playbar-volume-icon');
+      const muteIcon = document.querySelector('#playbar-mute-icon');
+      const rate = document.querySelector('#playbar-rate');
+      if (video === null || seek === null) {
+        return;
+      }
+
+      // Playback rate (discrete steps; 1× default). The old side-panel #pbr
+      // control is gone, so this select is the sole controller.
+      if (rate !== null) {
+        video.playbackRate = parseFloat(rate.value);
+        rate.addEventListener('change', () => {
+          video.playbackRate = parseFloat(rate.value);
+        });
+        video.addEventListener('ratechange', () => {
+          const v = String(video.playbackRate);
+          if (Array.from(rate.options).some((o) => o.value === v)) {
+            rate.value = v;
+          }
+        });
+      }
+      const SEEK_MAX = 1000;
+      let seeking = false;
+
+      const fmt = (s) => {
+        if (!isFinite(s) || s < 0) {
+          return '0:00';
+        }
+        const m = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        return m + ':' + String(sec).padStart(2, '0');
+      };
+
+      const syncFromVideo = () => {
+        if (!seeking && video.duration > 0) {
+          seek.value = String(Math.round((video.currentTime / video.duration) * SEEK_MAX));
+        }
+        timeEl.textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration);
+      };
+
+      const reflectPlayState = () => {
+        const playing = !video.paused && !video.ended;
+        playIcon.style.display = playing ? 'none' : '';
+        pauseIcon.style.display = playing ? '' : 'none';
+      };
+
+      video.addEventListener('timeupdate', syncFromVideo);
+      video.addEventListener('loadedmetadata', syncFromVideo);
+      video.addEventListener('durationchange', syncFromVideo);
+      video.addEventListener('play', reflectPlayState);
+      video.addEventListener('pause', reflectPlayState);
+      video.addEventListener('ended', reflectPlayState);
+
+      const reflectVolume = () => {
+        const silent = video.muted || video.volume === 0;
+        volumeIcon.style.display = silent ? 'none' : '';
+        muteIcon.style.display = silent ? '' : 'none';
+        volume.value = String(Math.round((video.muted ? 0 : video.volume) * 100));
+      };
+      video.addEventListener('volumechange', reflectVolume);
+      volume.addEventListener('input', () => {
+        video.muted = false;
+        video.volume = volume.value / 100;
+      });
+
+      // Live scrub: move playback AND drive the transcript (highlight + scroll)
+      // as the user drags. HyperaudioLite only runs its play-head loop while
+      // playing, so we call checkPlayHead() to update the transcript when
+      // scrubbing — including while paused, when that loop is stopped.
+      // Reconcile the transcript to a given time: highlight + greying + scroll.
+      // checkStatus() short-circuits while paused, so call the same updates it
+      // makes when playing, directly.
+      const syncTranscript = (t) => {
+        const hla = window.hyperaudioInstance;
+        if (hla && typeof hla.updateTranscriptVisualState === 'function') {
+          const indices = hla.updateTranscriptVisualState(t);
+          if (indices && indices.currentWordIndex > 0 && hla.autoscroll &&
+              typeof hla.scrollToParagraph === 'function') {
+            hla.scrollToParagraph(indices.currentParentElementIndex, indices.currentWordIndex);
+          }
+        }
+      };
+
+      const scrubTo = (commit) => {
+        if (video.duration > 0) {
+          const t = (seek.value / SEEK_MAX) * video.duration;
+          video.currentTime = t;
+          timeEl.textContent = fmt(t) + ' / ' + fmt(video.duration);
+          syncTranscript(t);
+        }
+        if (commit) {
+          seeking = false;
+        }
+      };
+
+      // After any seek settles, reconcile to the media's actual position. Fast
+      // scrubs coalesce intermediate updates, so the final 'seeked' is what
+      // guarantees every word you passed gets the correct read/greyed state.
+      video.addEventListener('seeked', () => syncTranscript(video.currentTime));
+      seek.addEventListener('input', () => {
+        seeking = true;
+        scrubTo(false);
+      });
+      seek.addEventListener('change', () => {
+        scrubTo(true);
+      });
+
+      syncFromVideo();
+      reflectPlayState();
+      reflectVolume();
+    })();
+
+    (function initPictureInPicture() {
+      const btn = document.querySelector('#pip-btn');
+      const video = document.querySelector('#hyperplayer');
+      if (btn === null || video === null) {
+        return;
+      }
+      if (!document.pictureInPictureEnabled || video.disablePictureInPicture) {
+        btn.style.display = 'none';   // unsupported – don't show a dead button
+        return;
+      }
+      const refresh = () => {
+        const hasVideo = video.videoWidth > 0;
+        btn.classList.toggle('btn-disabled', !hasVideo);
+        btn.setAttribute('aria-disabled', String(!hasVideo));
+        btn.setAttribute('data-tip', hasVideo ? 'Picture-in-picture' : 'Picture-in-picture (video only)');
+      };
+      refresh();
+      video.addEventListener('loadedmetadata', refresh);
+      video.addEventListener('emptied', refresh);
+    })();
 
     function addCaption(elem) {
       // Initialize the DOM parser and get the template
