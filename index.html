@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.10 (last changed in release 0.6.10) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.11 (last changed in release 0.6.11) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.10">
+  <meta name="version" content="0.6.11">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -725,7 +725,7 @@ If you are creating an open source application under a license compatible with t
 
 
   <script src="js/hyperaudio-push-notification.js"></script>
-  <script src="js/hyperaudio-lite.js"></script>
+  <script src="js/hyperaudio-lite.js?v=2.4.0"></script>
   <script src="js/hyperaudio-lite-extension.js"></script>
   <script src="js/caption-modified.js"></script>
   <script>
@@ -850,7 +850,7 @@ If you are creating an open source application under a license compatible with t
 
   function hyperaudio() {
     const minimizedMode = false;
-    const autoScroll = false;
+    const autoScroll = true;
     const doubleClick = true;
     const webMonetization = false;
     const playOnClick = false;
@@ -874,6 +874,34 @@ If you are creating an open source application under a license compatible with t
     };
 
     window.hyperaudioInstance = hyperaudioInstance;
+
+    // Autoscroll target: the element that actually scrolls is .transcript-holder,
+    // not #hypertranscript (the library's default scrollContainer, which is
+    // absolutely positioned and doesn't scroll here).
+    const scrollHolder = document.querySelector('.transcript-holder');
+    if (scrollHolder !== null) {
+      hyperaudioInstance.scrollContainer = scrollHolder;
+    }
+
+    // Pause autoscroll while the user is actively typing so it doesn't yank the
+    // view mid-edit; resume shortly after. Uses 'input' (content changes) so
+    // clicking a word to seek still autoscrolls. Attach once per transcript node.
+    const transcriptEl = document.querySelector('#hypertranscript');
+    if (transcriptEl !== null && transcriptEl.dataset.autoscrollPause !== '1') {
+      transcriptEl.dataset.autoscrollPause = '1';
+      let typingResume = null;
+      transcriptEl.addEventListener('input', () => {
+        if (window.hyperaudioInstance) {
+          window.hyperaudioInstance.autoscroll = false;
+        }
+        clearTimeout(typingResume);
+        typingResume = setTimeout(() => {
+          if (window.hyperaudioInstance) {
+            window.hyperaudioInstance.autoscroll = true;
+          }
+        }, 1500);
+      });
+    }
 
     const sanitisationCheck = function () {
 
