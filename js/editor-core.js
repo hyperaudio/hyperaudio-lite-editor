@@ -133,14 +133,15 @@
     // Strip detached entries before delegating — the next debounced
     // refreshHyperaudioInstance will rebuild wordArr from the live DOM.
     const originalUpdateVisualState = hyperaudioInstance.updateTranscriptVisualState.bind(hyperaudioInstance);
-    hyperaudioInstance.updateTranscriptVisualState = function (currentTime) {
+    hyperaudioInstance.updateTranscriptVisualState = function (...args) {
       if (hyperaudioInstance.wordArr) {
         const live = hyperaudioInstance.wordArr.filter(w => w.n && w.n.parentNode);
         if (live.length !== hyperaudioInstance.wordArr.length) {
           hyperaudioInstance.wordArr = live;
         }
       }
-      return originalUpdateVisualState(currentTime);
+      // forward all args (e.g. the second "force" flag the library passes on seek)
+      return originalUpdateVisualState(...args);
     };
 
     window.hyperaudioInstance = hyperaudioInstance;
@@ -153,6 +154,29 @@
       hyperaudioInstance.scrollContainer = scrollHolder;
     }
 
+    // The library scrolls the active paragraph flush to the top of the scroll
+    // container, which tucks it under the navbar. Override scrollToParagraph to
+    // leave a small gap at the top. (Stopgap until hyperaudio-lite supports a
+    // configurable scroll offset.)
+    const SCROLL_TOP_GAP = 24;
+    hyperaudioInstance.scrollToParagraph = function (currentParentElementIndex, index) {
+      if (currentParentElementIndex === this.parentElementIndex) {
+        return;
+      }
+      this.parentElementIndex = currentParentElementIndex;
+      if (!this.autoscroll) {
+        return;
+      }
+      const paragraph = this.parentElements[currentParentElementIndex];
+      if (!paragraph) {
+        return;
+      }
+      const containerRect = this.scrollContainer.getBoundingClientRect();
+      const paragraphRect = paragraph.getBoundingClientRect();
+      const target = this.scrollContainer.scrollTop + (paragraphRect.top - containerRect.top) - SCROLL_TOP_GAP;
+      this.smoothScrollTo(this.scrollContainer, Math.max(0, target), 800);
+    };
+
     // Pause autoscroll while the user is actively typing so it doesn't yank the
     // view mid-edit; resume shortly after. Uses 'input' (content changes) so
     // clicking a word to seek still autoscrolls. Attach once per transcript node.
@@ -161,13 +185,15 @@
       transcriptEl.dataset.autoscrollPause = '1';
       let typingResume = null;
       transcriptEl.addEventListener('input', () => {
-        if (window.hyperaudioInstance) {
-          window.hyperaudioInstance.autoscroll = false;
+        const hla = window.hyperaudioInstance;
+        if (hla && typeof hla.pauseAutoscroll === 'function') {
+          hla.pauseAutoscroll();
         }
         clearTimeout(typingResume);
         typingResume = setTimeout(() => {
-          if (window.hyperaudioInstance) {
-            window.hyperaudioInstance.autoscroll = true;
+          const inst = window.hyperaudioInstance;
+          if (inst && typeof inst.resumeAutoscroll === 'function') {
+            inst.resumeAutoscroll();
           }
         }, 1500);
       });
