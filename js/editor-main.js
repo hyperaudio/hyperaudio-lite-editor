@@ -208,6 +208,11 @@
       }
       const on = video.classList.toggle('audio-only');
       video.style.display = on ? 'none' : '';
+      // no video frame to hover over in audio-only mode, so hide the overlay too
+      const overlay = document.querySelector('#media-play-overlay');
+      if (overlay !== null) {
+        overlay.style.display = on ? 'none' : '';
+      }
       btn.classList.toggle('btn-active', on);
       btn.setAttribute('aria-pressed', String(on));
       btn.setAttribute('data-tip', on ? 'Show video' : 'Audio only');
@@ -282,10 +287,17 @@
         timeEl.textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration);
       };
 
+      const overlayPlayIcon = document.querySelector('#media-overlay-play-icon');
+      const overlayPauseIcon = document.querySelector('#media-overlay-pause-icon');
+      const playerFrame = document.querySelector('#player-frame');
       const reflectPlayState = () => {
         const playing = !video.paused && !video.ended;
         playIcon.style.display = playing ? 'none' : '';
         pauseIcon.style.display = playing ? '' : 'none';
+        // mirror on the media overlay; keep the overlay visible while paused
+        if (overlayPlayIcon) { overlayPlayIcon.style.display = playing ? 'none' : ''; }
+        if (overlayPauseIcon) { overlayPauseIcon.style.display = playing ? '' : 'none'; }
+        if (playerFrame) { playerFrame.classList.toggle('is-paused', !playing); }
       };
 
       video.addEventListener('timeupdate', syncFromVideo);

@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.13 (last changed in release 0.6.13) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.14 (last changed in release 0.6.14) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.13">
+  <meta name="version" content="0.6.14">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -86,7 +86,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.6.10">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.6.14">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -238,10 +238,16 @@ If you are creating an open source application under a license compatible with t
       <div style="display:flex; flex-direction:column; height:100%;">
         <div class="top-bar-item" style="flex-shrink:0;">
           <!-- example src -->
-          <div>
+          <div id="player-frame" style="position:relative;">
             <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/audio/HLE_Intro.mp3" type="audio/mpeg" poster="images/poster.png" style="width:100%; border-radius:0.5rem; display:block;">
               <track id="hyperplayer-vtt" label="preview" kind="subtitles" src="">
             </video>
+            <button id="media-play-overlay" type="button" aria-label="Play / pause" onclick="togglePlay()">
+              <span class="media-play-overlay-badge">
+                <svg id="media-overlay-play-icon" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                <svg id="media-overlay-pause-icon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>
+              </span>
+            </button>
           </div>
           <div id="player-controls" style="display:flex; align-items:center; gap:8px; margin-top:4px; width:100%;">
             <button id="pip-btn" type="button" class="btn btn-square btn-outline btn-sm tooltip" data-tip="Picture-in-picture" aria-label="Picture-in-picture" onclick="togglePictureInPicture()">
@@ -261,7 +267,7 @@ If you are creating an open source application under a license compatible with t
         </div>
 
         <div class="tabs" style="justify-content:flex-start; margin-top:12px; flex-shrink:0;">
-          <a class="tab tab-lifted tab-active"><strong style="font-size:1.1rem">Files</strong></a>
+          <a class="tab tab-lifted tab-active"><strong style="font-size:1.1rem">Recents</strong></a>
         </div>
         <div style="display: flex; overflow-y:scroll; flex:1 1 auto; min-height:0;">
           <div style="width:100%; height:100%;">
@@ -807,7 +813,7 @@ If you are creating an open source application under a license compatible with t
     }
 
   </style>
-  <script src="js/editor-main.js?v=0.6.13"></script>
+  <script src="js/editor-main.js?v=0.6.14"></script>
   <!-- end of caption editor additions -->
 
   <!-- service worker script for PWA -->
