@@ -164,6 +164,41 @@ dialog::backdrop {
   white-space: nowrap;
 }
 
+/* Hover play/pause overlay on the media (#336). Covers the video/poster; the
+   badge fades in on hover and while paused, and toggles play via togglePlay(). */
+#media-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 0.5rem;       /* match the video */
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+#player-frame:hover #media-play-overlay,
+#player-frame.is-paused #media-play-overlay,
+#media-play-overlay:focus-visible {
+  opacity: 1;
+}
+
+.media-play-overlay-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+
 .hyperaudio-transcript {
   position: absolute; 
   top: 10px; 
