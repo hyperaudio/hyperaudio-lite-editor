@@ -38,6 +38,8 @@ class ImportJson extends HTMLElement {
     fileInput.accept = 'application/json';
     fileInput.addEventListener('change', (event) => {
       const file = event.target.files[0];
+      if (!file) return;
+
       const reader = new FileReader();
       reader.addEventListener('load', (event) => {
         const jsonData = JSON.parse(event.target.result);
@@ -52,12 +54,10 @@ class ImportJson extends HTMLElement {
           if (mediaUrl) {
             document.querySelector("#hyperplayer").src = mediaUrl;
           }
+          document.dispatchEvent(new CustomEvent('hyperaudioInit'));
         }
       });
-      if (hypertranscript !== null) {
-        reader.readAsText(file);
-        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
-      }
+      reader.readAsText(file);
     });
     fileInput.click();
   }
@@ -70,6 +70,129 @@ class ImportJson extends HTMLElement {
 }
 
 customElements.define('import-json', ImportJson);
+
+class ExportGentleJson extends HTMLElement {
+
+  exportGentleJson() {
+    let hypertranscript = document.getElementById('hypertranscript');
+
+    if (hypertranscript === null) {
+      alert("Currently you can only export Gentle JSON from the transcript view.");
+      return;
+    }
+
+    downloadFile(
+      JSON.stringify(htmlToGentleJson(hypertranscript), null, 2),
+      'hyperaudio-gentle.json',
+      'application/json'
+    );
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Gentle JSON</a>`;
+    this.addEventListener('click', this.exportGentleJson);
+  }
+}
+
+customElements.define('export-gentle-json', ExportGentleJson);
+
+class ImportGentleJson extends HTMLElement {
+
+  importGentleJson() {
+    chooseTextFile('.json,application/json', (contents) => {
+      let hypertranscript = document.getElementById('hypertranscript');
+
+      if (hypertranscript === null) {
+        alert("Currently you can only import Gentle JSON from the Transcript View.");
+        return;
+      }
+
+      hypertranscript.innerHTML = gentleJsonToHtml(JSON.parse(contents));
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    });
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Import Gentle JSON</a>`;
+    this.addEventListener('click', this.importGentleJson);
+  }
+}
+
+customElements.define('import-gentle-json', ImportGentleJson);
+
+class ExportYoutubeXml extends HTMLElement {
+
+  exportYoutubeXml() {
+    let hypertranscript = document.getElementById('hypertranscript');
+
+    if (hypertranscript === null) {
+      alert("Currently you can only export YouTube XML from the transcript view.");
+      return;
+    }
+
+    downloadFile(
+      htmlToYoutubeXml(hypertranscript),
+      'hyperaudio-youtube.xml',
+      'application/xml'
+    );
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>YouTube AC XML</a>`;
+    this.addEventListener('click', this.exportYoutubeXml);
+  }
+}
+
+customElements.define('export-youtube-xml', ExportYoutubeXml);
+
+class ImportYoutubeXml extends HTMLElement {
+
+  importYoutubeXml() {
+    chooseTextFile('.xml,text/xml,application/xml', (contents) => {
+      let hypertranscript = document.getElementById('hypertranscript');
+
+      if (hypertranscript === null) {
+        alert("Currently you can only import YouTube XML from the Transcript View.");
+        return;
+      }
+
+      hypertranscript.innerHTML = wordsToHtml(youtubeXmlToWords(contents));
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    });
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>Import YouTube AC XML</a>`;
+    this.addEventListener('click', this.importYoutubeXml);
+  }
+}
+
+customElements.define('import-youtube-xml', ImportYoutubeXml);
+
+class ExportYoutubeVtt extends HTMLElement {
+
+  exportYoutubeVtt() {
+    let hypertranscript = document.getElementById('hypertranscript');
+
+    if (hypertranscript === null) {
+      alert("Currently you can only export YouTube VTT from the transcript view.");
+      return;
+    }
+
+    downloadFile(
+      htmlToYoutubeVtt(hypertranscript),
+      'hyperaudio-youtube.vtt',
+      'text/vtt'
+    );
+  }
+
+  connectedCallback() {
+    this.innerHTML = `<a>YouTube AC VTT</a>`;
+    this.addEventListener('click', this.exportYoutubeVtt);
+  }
+}
+
+customElements.define('export-youtube-vtt', ExportYoutubeVtt);
 
 class ImportDeepgramJson extends HTMLElement {
 
@@ -428,6 +551,33 @@ class ImportVtt extends HTMLElement {
 
 customElements.define('import-vtt', ImportVtt);
 
+function chooseTextFile(accept, onLoad) {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = accept;
+  fileInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.addEventListener('load', (event) => onLoad(event.target.result));
+    reader.readAsText(file);
+  });
+  fileInput.click();
+}
+
+function downloadFile(contents, filename, mimeType) {
+  const blob = new Blob([contents], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute('href', url);
+  downloadAnchorNode.setAttribute('download', filename);
+  document.body.appendChild(downloadAnchorNode);
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+  URL.revokeObjectURL(url);
+}
+
 function downloadJson(jsonData) {
   // download json file
   let dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(jsonData, null, 2));
@@ -560,6 +710,306 @@ function htmlToJson(html) {
   return { words, paragraphs, sections };
 }
 
+function htmlToGentleJson(html) {
+  const transcript = htmlToJson(html);
+
+  return {
+    transcript: transcript.words.map((word) => word.text).join(' '),
+    words: transcript.words.map((word) => ({
+      alignedWord: word.text,
+      case: 'success',
+      start: roundSeconds(word.start),
+      end: roundSeconds(word.end),
+      word: word.text
+    }))
+  };
+}
+
+function gentleJsonToHtml(jsonData) {
+  const gentleWords = (jsonData && jsonData.words) || [];
+  let lastEnd = 0;
+
+  const words = gentleWords
+    .map((word) => {
+      const text = (word.alignedWord || word.word || '').trim();
+      if (!text) return null;
+
+      let start = Number(word.start);
+      let end = Number(word.end);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        start = lastEnd;
+        end = start;
+      }
+
+      lastEnd = end;
+      return { start, end, text };
+    })
+    .filter(Boolean);
+
+  return wordsToHtml(words);
+}
+
+function htmlToYoutubeXml(html) {
+  const transcript = htmlToJson(html);
+  const paragraphs = getParagraphWordGroups(transcript);
+  const body = paragraphs.map((group) => {
+    const startMs = Math.round(group.start * 1000);
+    const durationMs = Math.max(0, Math.round((group.end - group.start) * 1000));
+    const words = group.words.map((word) => {
+      const offsetMs = Math.max(0, Math.round((word.start - group.start) * 1000));
+      return `<s t="${offsetMs}" ac="255">${escapeXml(word.text)}</s>`;
+    }).join('');
+
+    return `<p t="${startMs}" d="${durationMs}">${words}</p>`;
+  }).join('\n    ');
+
+  return [
+    '<?xml version="1.0" encoding="utf-8" ?>',
+    '<timedtext format="3">',
+    '  <body>',
+    `    ${body}`,
+    '  </body>',
+    '</timedtext>'
+  ].join('\n');
+}
+
+function youtubeXmlToWords(xmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) {
+    throw new Error('Could not parse YouTube XML captions.');
+  }
+
+  const words = [];
+  const paragraphNodes = Array.from(doc.querySelectorAll('p'));
+  for (const paragraph of paragraphNodes) {
+    const syllables = Array.from(paragraph.querySelectorAll('s'));
+    if (syllables.length === 0) continue;
+
+    const paragraphStartMs = parseNumberAttribute(paragraph, 't', 0);
+    const paragraphDurationMs = parseNumberAttribute(paragraph, 'd', 0);
+    for (let i = 0; i < syllables.length; i++) {
+      const syllable = syllables[i];
+      const text = syllable.textContent.trim();
+      if (!text) continue;
+
+      const startMs = paragraphStartMs + parseNumberAttribute(syllable, 't', 0);
+      const nextStartMs = i < syllables.length - 1
+        ? paragraphStartMs + parseNumberAttribute(syllables[i + 1], 't', startMs - paragraphStartMs)
+        : paragraphStartMs + paragraphDurationMs;
+      const endMs = Math.max(startMs, nextStartMs);
+
+      words.push({ start: startMs / 1000, end: endMs / 1000, text });
+    }
+  }
+
+  if (words.length > 0) return words;
+
+  const textNodes = Array.from(doc.querySelectorAll('text[start]'));
+  for (const node of textNodes) {
+    const start = parseNumberAttribute(node, 'start', 0);
+    const duration = parseNumberAttribute(node, 'dur', 0);
+    words.push(...splitTextToTimedWords(node.textContent, start, start + duration));
+  }
+
+  return words;
+}
+
+function htmlToYoutubeVtt(html) {
+  const transcript = htmlToJson(html);
+  const paragraphs = getParagraphWordGroups(transcript);
+  const cues = paragraphs.map((group, index) => {
+    const line = group.words.map((word) => {
+      return `<${formatVttTimestamp(word.start)}><c>${escapeHtml(word.text)} </c>`;
+    }).join('');
+
+    return [
+      String(index + 1),
+      `${formatVttTimestamp(group.start)} --> ${formatVttTimestamp(group.end)} align:start position:0%`,
+      line
+    ].join('\n');
+  });
+
+  return `WEBVTT\nKind: captions\nLanguage: en\n\n${cues.join('\n\n')}\n`;
+}
+
+function getParagraphWordGroups(transcript) {
+  if (!transcript.words.length) return [];
+
+  if (!transcript.paragraphs.length) {
+    return [{
+      start: transcript.words[0].start,
+      end: transcript.words[transcript.words.length - 1].end,
+      words: transcript.words
+    }];
+  }
+
+  return transcript.paragraphs.map((paragraph) => {
+    const words = transcript.words.filter((word) => {
+      return word.start >= paragraph.start && word.start <= paragraph.end;
+    });
+
+    return {
+      start: words[0] ? words[0].start : paragraph.start,
+      end: words[words.length - 1] ? words[words.length - 1].end : paragraph.end,
+      words
+    };
+  }).filter((group) => group.words.length > 0);
+}
+
+function wordsToHtml(words) {
+  const article = document.createElement('article');
+  const section = document.createElement('section');
+  let paragraph = document.createElement('p');
+  article.appendChild(section);
+  section.appendChild(paragraph);
+
+  let lastWord = null;
+  for (const word of words) {
+    if (lastWord && word.start - lastWord.end > 1.5 && /[.!?]$/.test(lastWord.text)) {
+      paragraph = document.createElement('p');
+      section.appendChild(paragraph);
+    }
+
+    const span = document.createElement('span');
+    span.setAttribute('data-m', String(Math.round(word.start * 1000)));
+    span.setAttribute('data-d', String(Math.max(0, Math.round((word.end - word.start) * 1000))));
+    span.textContent = `${word.text} `;
+    paragraph.appendChild(span);
+    lastWord = word;
+  }
+
+  const holder = document.createElement('div');
+  holder.appendChild(article);
+  return holder.innerHTML;
+}
+
+function parseNumberAttribute(node, name, fallback) {
+  const value = Number(node.getAttribute(name));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function splitTextToTimedWords(text, start, end) {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return [];
+
+  const duration = Math.max(0, end - start);
+  const totalLetters = tokens.reduce((total, token) => total + Math.max(1, token.length), 0);
+  let offset = 0;
+
+  return tokens.map((token) => {
+    const wordDuration = duration * (Math.max(1, token.length) / totalLetters);
+    const word = {
+      start: start + offset,
+      end: start + offset + wordDuration,
+      text: token
+    };
+    offset += wordDuration;
+    return word;
+  });
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function roundSeconds(value) {
+  return Math.round(value * 1000) / 1000;
+}
+
+function parseTimestamp(value) {
+  const parts = value.trim().split(':');
+  const secondsPart = parts.pop();
+  const seconds = Number(secondsPart.replace(',', '.'));
+  const minutes = Number(parts.pop() || 0);
+  const hours = Number(parts.pop() || 0);
+
+  if (![seconds, minutes, hours].every(Number.isFinite)) return 0;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function formatVttTimestamp(seconds) {
+  const totalMilliseconds = Math.round(Math.max(0, seconds) * 1000);
+  const hours = Math.floor(totalMilliseconds / 3600000);
+  const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
+  const wholeSeconds = Math.floor((totalMilliseconds % 60000) / 1000);
+  const milliseconds = totalMilliseconds % 1000;
+
+  return [
+    String(hours).padStart(2, '0'),
+    String(minutes).padStart(2, '0'),
+    `${String(wholeSeconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`
+  ].join(':');
+}
+
+function youtubeVttToWords(data) {
+  const lines = data.split(/(?:\r\n|\r|\n)/gm);
+  const words = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    if (!lines[i].trim() || lines[i].startsWith('WEBVTT') || lines[i].indexOf(':') !== -1 && lines[i].indexOf('-->') === -1) {
+      i++;
+      continue;
+    }
+
+    if (lines[i].indexOf('-->') === -1) {
+      i++;
+    }
+
+    if (i >= lines.length || lines[i].indexOf('-->') === -1) continue;
+
+    const time = lines[i].split(/[\t ]*-->[\t ]*/);
+    const cueStart = parseTimestamp(time[0]);
+    const cueEnd = parseTimestamp(time[1].split(/[\t ]/)[0]);
+    i++;
+
+    const textLines = [];
+    while (i < lines.length && lines[i].trim() !== '') {
+      textLines.push(lines[i]);
+      i++;
+    }
+
+    words.push(...parseYoutubeVttCueWords(textLines.join(' '), cueStart, cueEnd));
+  }
+
+  return words;
+}
+
+function parseYoutubeVttCueWords(text, cueStart, cueEnd) {
+  const normalized = text
+    .replace(/<\/?c[^>]*>/g, '')
+    .replace(/<v[^>]*>/g, '')
+    .replace(/<\/v>/g, '');
+  const matches = Array.from(normalized.matchAll(/<((?:\d{2}:)?\d{2}:\d{2}[\.,]\d{3})>([^<]*)/g));
+
+  if (!matches.length) return [];
+
+  const words = [];
+  for (let i = 0; i < matches.length; i++) {
+    const start = parseTimestamp(matches[i][1]);
+    const end = i < matches.length - 1 ? parseTimestamp(matches[i + 1][1]) : cueEnd;
+    const text = matches[i][2].trim();
+    if (!text) continue;
+
+    words.push(...splitTextToTimedWords(text, Math.max(cueStart, start), Math.max(start, end)));
+  }
+
+  return words;
+}
+
 
 // Convert JSON to Hypertranscript HTML. Accepts the flat shape
 // { words, paragraphs, sections } produced by htmlToJson.
@@ -630,6 +1080,12 @@ window.jsonToHtml = jsonToHtml;
 window.srtToHtml = srtToHtml;
 window.vttToHtml = vttToHtml;
 window.convertSrtToWebVtt = convertSrtToWebVtt;
+window.htmlToGentleJson = htmlToGentleJson;
+window.htmlToYoutubeXml = htmlToYoutubeXml;
+window.htmlToYoutubeVtt = htmlToYoutubeVtt;
+window.gentleJsonToHtml = gentleJsonToHtml;
+window.youtubeXmlToWords = youtubeXmlToWords;
+window.youtubeVttToWords = youtubeVttToWords;
 
 function srtToHtml(data) {
   let i = 0,
@@ -789,6 +1245,11 @@ function srtToHtml(data) {
  * @returns {string} - The converted HTML content
  */
 function vttToHtml(data) {
+  const youtubeWords = youtubeVttToWords(data);
+  if (youtubeWords.length > 0) {
+    return wordsToHtml(youtubeWords);
+  }
+
   let i = 0,
   len = 0,
   lines,
