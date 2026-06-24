@@ -197,6 +197,23 @@
           }
         }, 1500);
       });
+
+      // Strip non-breaking spaces (U+00A0) that contenteditable injects on edit,
+      // back to regular spaces (#339). On blur only — never during typing — so it
+      // has zero impact on editing smoothness and can't disturb the caret; the
+      // textContent check makes the common (no-nbsp) case a cheap early-out.
+      transcriptEl.addEventListener('blur', () => {
+        if (transcriptEl.textContent.indexOf('\u00A0') === -1) {
+          return;
+        }
+        const walker = document.createTreeWalker(transcriptEl, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (node.nodeValue.indexOf('\u00A0') !== -1) {
+            node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
+          }
+        }
+      });
     }
 
     const sanitisationCheck = function () {
