@@ -198,19 +198,77 @@
         }, 1500);
       });
 
-      // Strip non-breaking spaces (U+00A0) that contenteditable injects on edit,
-      // back to regular spaces (#339). On blur only — never during typing — so it
-      // has zero impact on editing smoothness and can't disturb the caret; the
-      // textContent check makes the common (no-nbsp) case a cheap early-out.
-      transcriptEl.addEventListener('blur', () => {
-        if (transcriptEl.textContent.indexOf('\u00A0') === -1) {
+      // --- Word-split timing (modular; set WORD_SPLIT_TIMING = false to remove) ---
+      // When the user types a space inside a word, contenteditable leaves two (or
+      // more) words inside one timed <span>. On blur we split that span into one
+      // span per word and estimate each word's timing by dividing the original
+      // span's [data-m, data-d] window pro-rata across the parts. Weighting is by
+      // estimated syllable count (vowel groups) rather than letters — a reasonable
+      // proxy for spoken duration in Latin-script languages.
+      const WORD_SPLIT_TIMING = true;
+
+      // Estimate syllables from contiguous vowel groups (Latin-script heuristic).
+      // Includes common Romance/Germanic accented vowels and y; floored at 1 so
+      // every part carries weight (no zero-duration or divide-by-zero parts).
+      const estimateSyllables = function (token) {
+        const groups = token.toLowerCase().match(/[aeiouyàáâäãèéêëìíîïòóôöõùúûüýÿ]+/g);
+        return Math.max(1, groups ? groups.length : 1);
+      };
+
+      // Split one multi-word span into per-word spans, distributing the original
+      // duration by syllable weight; parts stay contiguous and their durations sum
+      // exactly to the original (last part absorbs any rounding remainder).
+      const splitWordSpan = function (span) {
+        const tokens = span.textContent.split(/\s+/).filter(t => t.length > 0);
+        if (tokens.length < 2) {
           return;
         }
-        const walker = document.createTreeWalker(transcriptEl, NodeFilter.SHOW_TEXT);
-        let node;
-        while ((node = walker.nextNode())) {
-          if (node.nodeValue.indexOf('\u00A0') !== -1) {
-            node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
+        const m = parseInt(span.getAttribute('data-m'), 10) || 0;
+        const d = parseInt(span.getAttribute('data-d'), 10) || 0;
+        const weights = tokens.map(estimateSyllables);
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+        const frag = document.createDocumentFragment();
+        let start = m;
+        let allocated = 0;
+        for (let i = 0; i < tokens.length; i++) {
+          const dur = i === tokens.length - 1
+            ? Math.max(0, d - allocated)
+            : Math.round((d * weights[i]) / totalWeight);
+          allocated += dur;
+          const part = span.cloneNode(false); // preserve class and any data-* attrs
+          part.setAttribute('data-m', String(start));
+          part.setAttribute('data-d', String(dur));
+          part.textContent = tokens[i] + ' '; // keep the word separator
+          frag.appendChild(part);
+          start += dur;
+        }
+        span.replaceWith(frag);
+      };
+
+      transcriptEl.addEventListener('blur', () => {
+        // Strip non-breaking spaces (U+00A0) that contenteditable injects on edit,
+        // back to regular spaces (#339). The textContent check keeps the common
+        // (no-nbsp) case a cheap early-out.
+        if (transcriptEl.textContent.indexOf('\u00A0') !== -1) {
+          const walker = document.createTreeWalker(transcriptEl, NodeFilter.SHOW_TEXT);
+          let node;
+          while ((node = walker.nextNode())) {
+            if (node.nodeValue.indexOf('\u00A0') !== -1) {
+              node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
+            }
+          }
+        }
+
+        // Split any span that now holds more than one word (internal whitespace
+        // between non-space characters). Touches only affected spans, so the
+        // common single-word case costs one regex test per span.
+        if (WORD_SPLIT_TIMING) {
+          const spans = transcriptEl.querySelectorAll('span[data-m]');
+          for (let i = 0; i < spans.length; i++) {
+            if (/\S\s+\S/.test(spans[i].textContent)) {
+              splitWordSpan(spans[i]);
+            }
           }
         }
       });
