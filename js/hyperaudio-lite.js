@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.4.0 */
+/*! Version 2.4.8 */
 
 'use strict';
 
@@ -22,6 +22,7 @@ class BasePlayer {
   attachEventListeners(instance) {
     this.player.addEventListener('pause', instance.pausePlayHead.bind(instance), false);
     this.player.addEventListener('play', instance.preparePlayHead.bind(instance), false);
+    this.player.addEventListener('seeked', instance.handleSeeked.bind(instance), false);
   }
 
   // Method to get the current time of the player
@@ -141,8 +142,19 @@ class YouTubePlayer extends BasePlayer {
       firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
     }
 
-    // Set the global callback for the YouTube IFrame API
-    window.onYouTubeIframeAPIReady = this.onYouTubeIframeAPIReady.bind(this, instance);
+    // If the API has already loaded (e.g. another instance was created first
+    // and the script has finished loading), wire up immediately. Otherwise
+    // chain onto any existing onYouTubeIframeAPIReady so multiple instances on
+    // the same page don't clobber each other's setup.
+    if (window.YT && window.YT.Player) {
+      this.onYouTubeIframeAPIReady(instance);
+    } else {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof prev === 'function') prev();
+        this.onYouTubeIframeAPIReady(instance);
+      };
+    }
   }
 
   // Callback when YouTube IFrame API is ready
@@ -295,6 +307,7 @@ class HyperaudioLite {
     this.setPlayHead = this.setPlayHead.bind(this);
     this.checkPlayHead = this.checkPlayHead.bind(this);
     this.clearTimer = this.clearTimer.bind(this);
+    this.handleSeeked = this.handleSeeked.bind(this);
   }
 
   // Initialize the HyperaudioLite instance
@@ -544,13 +557,17 @@ class HyperaudioLite {
     this.highlightedText = false;
     this.clearActiveClasses();
 
+    const timeSecs = parseInt(target.dataset.m) / 1000;
+    this.updateTranscriptVisualState(timeSecs);
+
+    // Mark the clicked word as active AFTER updateTranscriptVisualState (which
+    // now wipes stale .active in its else-branch to fix #231). When playing,
+    // the playback loop owns the active word; when paused, we explicitly mark
+    // the clicked word so the user sees what they clicked.
     if (this.myPlayer.paused && target.dataset.m) {
       target.classList.add('active');
       target.parentNode.classList.add('active');
     }
-
-    const timeSecs = parseInt(target.dataset.m) / 1000;
-    this.updateTranscriptVisualState(timeSecs);
 
     if (!isNaN(timeSecs)) {
       this.end = null;
@@ -577,6 +594,29 @@ class HyperaudioLite {
   pausePlayHead() {
     this.clearTimer();
     this.myPlayer.paused = true;
+  }
+
+  // Update transcript visual state + scroll position to match a seek (works while paused).
+  // Forces the word-level `.active` class — without this, the default
+  // `.active > .active` CSS shows nothing on scrub-while-paused.
+  handleSeeked() {
+    (async () => {
+      this.currentTime = await this.myPlayer.getTime();
+      const indices = this.updateTranscriptVisualState(this.currentTime, true);
+      if (indices.currentWordIndex > 0 && this.autoscroll) {
+        this.scrollToParagraph(indices.currentParentElementIndex, indices.currentWordIndex);
+      }
+    })();
+  }
+
+  // Temporarily disable autoscroll (e.g. while a user is editing the transcript).
+  pauseAutoscroll() {
+    this.autoscroll = false;
+  }
+
+  // Re-enable autoscroll after a pauseAutoscroll() call.
+  resumeAutoscroll() {
+    this.autoscroll = true;
   }
 
   // Check the playhead position and update the transcript
@@ -726,7 +766,7 @@ class HyperaudioLite {
   }
 
   // Update the visual state of the transcript based on the current time
-  updateTranscriptVisualState(currentTime) {
+  updateTranscriptVisualState(currentTime, forceActiveWord = false) {
     let index = 0;
     let words = this.wordArr.length - 1;
 
@@ -754,7 +794,7 @@ class HyperaudioLite {
         parentClassList.remove('active');
       } else {
         classList.add('unread');
-        classList.remove('read');
+        classList.remove('read', 'active');
       }
     });
 
@@ -762,7 +802,7 @@ class HyperaudioLite {
     Array.from(this.parentElements).forEach(el => el.classList.remove('active'));
 
     if (index > 0) {
-      if (!this.myPlayer.paused) {
+      if (!this.myPlayer.paused || forceActiveWord) {
         this.wordArr[index - 1].n.classList.add('active');
       }
       this.wordArr[index - 1].n.parentNode.classList.add('active');

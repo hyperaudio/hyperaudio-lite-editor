@@ -311,36 +311,20 @@
       // as the user drags. HyperaudioLite only runs its play-head loop while
       // playing, so we call checkPlayHead() to update the transcript when
       // scrubbing — including while paused, when that loop is stopped.
-      // Reconcile the transcript to a given time: highlight + greying + scroll.
-      // checkStatus() short-circuits while paused, so call the same updates it
-      // makes when playing, directly.
-      const syncTranscript = (t) => {
-        const hla = window.hyperaudioInstance;
-        if (hla && typeof hla.updateTranscriptVisualState === 'function') {
-          const indices = hla.updateTranscriptVisualState(t);
-          if (indices && indices.currentWordIndex > 0 && hla.autoscroll &&
-              typeof hla.scrollToParagraph === 'function') {
-            hla.scrollToParagraph(indices.currentParentElementIndex, indices.currentWordIndex);
-          }
-        }
-      };
-
+      // Move playback to the scrubbed position. Setting currentTime fires the
+      // media 'seeked' event, which hyperaudio-lite (>= 2.4.x) handles itself to
+      // follow the transcript (highlight + scroll), so we don't reconcile here.
       const scrubTo = (commit) => {
         if (video.duration > 0) {
           const t = (seek.value / SEEK_MAX) * video.duration;
           video.currentTime = t;
           timeEl.textContent = fmt(t) + ' / ' + fmt(video.duration);
-          syncTranscript(t);
         }
         if (commit) {
           seeking = false;
         }
       };
 
-      // After any seek settles, reconcile to the media's actual position. Fast
-      // scrubs coalesce intermediate updates, so the final 'seeked' is what
-      // guarantees every word you passed gets the correct read/greyed state.
-      video.addEventListener('seeked', () => syncTranscript(video.currentTime));
       seek.addEventListener('input', () => {
         seeking = true;
         scrubTo(false);
