@@ -413,29 +413,30 @@ const caption = function () {
 
     if (video !== null) {
       video.addEventListener('loadedmetadata', function listener() {
-        //var track = document.createElement("track");
         const track = document.getElementById(`${playerId}-vtt`);
-        track.kind = 'captions';
 
-        //console.log("label = "+label);
+        if (track !== null) {
+          track.kind = 'captions';
 
-        if (label !== undefined) {
-          //console.log("setting label as "+label);
-          track.label = label;
+          if (label !== undefined) {
+            //console.log("setting label as "+label);
+            track.label = label;
+          }
+
+          if (srclang !== undefined) {
+            //console.log("setting srclang as "+srclang);
+            track.srclang = srclang;
+          }
+
+          track.src = `data:text/vtt,${encodeURIComponent(captionsVtt)}`;
+          video.textTracks[0].mode = 'showing';
+          video.removeEventListener('loadedmetadata', listener, true);
         }
-
-        if (srclang !== undefined) {
-          //console.log("setting srclang as "+srclang);
-          track.srclang = srclang;
-        }
-        //track.label = "English";
-        //track.srclang = "en";
-        track.src = `data:text/vtt,${encodeURIComponent(captionsVtt)}`;
-        video.textTracks[0].mode = 'showing';
-        video.removeEventListener('loadedmetadata', listener, true);
       }, true);
 
-      video.textTracks[0].mode = 'showing';
+      if (video.textTracks !== undefined && video.textTracks[0] !== undefined) {
+        video.textTracks[0].mode = 'showing';
+      }
     }
 
     function captionsObj(vtt, srt, data) {
