@@ -103,16 +103,22 @@ function jsonToHTML(jsonData) {
         word.start >= paragraphStart && word.start < paragraphEnd
       );
       
-      // Generate span for each word
-      paragraphWords.forEach(word => {
-        // Convert times from seconds to milliseconds
+      // One span per line (indented) for readability. A word flagged
+      // space:false has no trailing space and is kept adjacent to the next
+      // span — no newline between them — so split tokens stay glued (e.g.
+      // "speech" + "-to" + "-text" -> "speech-to-text"). Normal words carry a
+      // trailing space inside the span, so the newline between them collapses
+      // to a single rendered space as before.
+      paragraphWords.forEach((word, wordIndex) => {
         const startMs = Math.round(word.start * 1000);
         const endMs = Math.round(word.end * 1000);
         const durationMs = endMs - startMs;
-        
-        // Create span with timing attributes
-        html += `    <span data-m="${startMs}" data-d="${durationMs}">${word.text} </span>\n`;
+        const trail = word.space === false ? '' : ' ';
+        const gluedToPrev = wordIndex > 0 && paragraphWords[wordIndex - 1].space === false;
+        const lead = wordIndex === 0 ? '    ' : gluedToPrev ? '' : '\n    ';
+        html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${word.text}${trail}</span>`;
       });
+      html += '\n';
       
       html += '  </p>\n';
     });
@@ -122,14 +128,16 @@ function jsonToHTML(jsonData) {
     // No paragraph data, put all words in one <p>
     html += '  <p>\n';
     
-    words.forEach(word => {
-      // Convert times from seconds to milliseconds
+    words.forEach((word, wordIndex) => {
       const startMs = Math.round(word.start * 1000);
       const endMs = Math.round(word.end * 1000);
       const durationMs = endMs - startMs;
-      
-      html += `    <span data-m="${startMs}" data-d="${durationMs}">${word.text} </span>\n`;
+      const trail = word.space === false ? '' : ' ';
+      const gluedToPrev = wordIndex > 0 && words[wordIndex - 1].space === false;
+      const lead = wordIndex === 0 ? '    ' : gluedToPrev ? '' : '\n    ';
+      html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${word.text}${trail}</span>`;
     });
+    html += '\n';
     
     html += '  </p>\n';
   }
@@ -191,19 +199,30 @@ function htmlToJSON(html) {
   const wordSpans = doc.querySelectorAll('span[data-m][data-d]:not(.speaker)');
   
   wordSpans.forEach(span => {
-    const text = span.textContent.trim();
+    const raw = span.textContent;
+    const text = raw.trim();
     if (text) {
       // Parse timing attributes
       const startMs = parseInt(span.getAttribute('data-m'));
       const durationMs = parseInt(span.getAttribute('data-d'));
       const endMs = startMs + durationMs;
-      
+
       // Convert from milliseconds to seconds
-      words.push({
+      const word = {
         start: startMs / 1000,
         end: endMs / 1000,
         text: text
-      });
+      };
+
+      // Preserve whether a space follows this word. The editor encodes a word
+      // split across spans (e.g. "speech" "-to" "-text") as adjacent spans with
+      // no trailing space; flag those so they don't gain spaces on round-trip.
+      // Omitted (the common case) means a space follows.
+      if (!/\s$/.test(raw)) {
+        word.space = false;
+      }
+
+      words.push(word);
     }
   });
   

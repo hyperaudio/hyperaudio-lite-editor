@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.17 (last changed in release 0.6.17) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.18 (last changed in release 0.6.18) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.17">
+  <meta name="version" content="0.6.18">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -29,7 +29,8 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.9"></script>
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=0.6.9"></script>
   <script src="js/word-alignment.js"></script>
-  <script src="js/html-json-converter.js"></script>
+  <script src="js/html-json-converter.js?v=0.6.18"></script>
+  <script src="js/transcript-to-ionosphere.js?v=0.6.18"></script>
 
   <!-- Meta Tags required for
     Progressive Web App -->
@@ -334,6 +335,7 @@ If you are creating an open source application under a license compatible with t
                 </span>
               </li>
               <li><export-json></export-json></li>
+              <li><export-ionosphere></export-ionosphere></li>
               <li><import-json></import-json></li>
               <li><label for="file-import-deepgram-json-dialog">Import Deepgram JSON</label></li>
               <li><label for="file-import-srt-dialog">Import SRT</label></li>
