@@ -365,3 +365,16 @@ dialog::backdrop {
   right: 0;
   transform: none;
 }
+
+/* Search: highlight only the matched substring. searchPhrase wraps the match in
+   <mark class="search-mark"> and also tags the word .search-match — neutralise
+   the vendored whole-word background so just the mark shows, tinted with a much
+   lighter version of the signature purple (the DaisyUI primary at low opacity). */
+.hyperaudio-transcript .search-match {
+  background-color: transparent;
+}
+mark.search-mark {
+  background-color: oklch(var(--p) / 0.22);
+  color: inherit;
+  border-radius: 2px;
+}

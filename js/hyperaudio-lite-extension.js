@@ -21,54 +21,68 @@ document.querySelector('#search-box').addEventListener("keyup", (event) => {
 });
 
 
-let searchPhrase = function (phrase) {
-	
-  let htmlWords = document.querySelectorAll('[data-m]');
-  let htmlWordsLen = htmlWords.length;
-	
-  let phraseWords = phrase.split(" ");
-  let phraseWordsLen = phraseWords.length;
-  let matchedTimes = [];
+// searchPhrase + helpers ported verbatim from hyperaudio-lite v2.5.1's
+// extension. Walks consecutive [data-m] spans for multi-word phrases; for each
+// matching span it wraps just the matched substring in a <mark class="search-mark">
+// so only the searched characters are highlighted, not the whole word. Matching
+// is substring-based, so word fragments are found as you type.
+const SEARCH_PUNCT = /[.,\-\/#!$%\^&\*;:{}=_`~()\?\s]/g;
+const normalise = (text) => text.toLowerCase().replace(SEARCH_PUNCT, '');
 
-  // clear matched times
-  let searchMatched = document.querySelectorAll('.search-match');
-
-  searchMatched.forEach((match) => {
-    match.classList.remove('search-match');
+const clearPreviousSearch = () => {
+  document.querySelectorAll('mark.search-mark').forEach((mark) => {
+    mark.replaceWith(document.createTextNode(mark.textContent));
   });
+  document.querySelectorAll('.search-match').forEach((el) => {
+    el.classList.remove('search-match');
+    el.normalize(); // merge adjacent text nodes left behind by the unwrap
+  });
+};
 
-  for (let i = 0; i < htmlWordsLen; i++) {
-    let numWordsMatched = 0;
-    let potentiallyMatched = [];
+// Wrap the first occurrence of `needle` (case-insensitive) inside `span`'s
+// text with <mark class="search-mark">. Punctuation stays outside the mark.
+const highlightSubstring = (span, needle) => {
+  const original = span.textContent;
+  const idx = original.toLowerCase().indexOf(needle);
+  if (idx < 0) return;
+  const before = original.slice(0, idx);
+  const hit = original.slice(idx, idx + needle.length);
+  const after = original.slice(idx + needle.length);
+  span.textContent = '';
+  if (before) span.append(before);
+  const mark = document.createElement('mark');
+  mark.className = 'search-mark';
+  mark.textContent = hit;
+  span.append(mark);
+  if (after) span.append(after);
+};
 
-    for (let j = 0; j < phraseWordsLen; j++) {
-      let wordIndex = i + numWordsMatched;
+const searchPhrase = (phrase) => {
+  const spans = document.querySelectorAll('[data-m]');
+  if (!spans.length) return;
 
-      if (wordIndex >= htmlWordsLen) {
-        break;
-      }
+  clearPreviousSearch();
 
-      // regex removes punctuation - NB for htmlWords case we also remove the space
+  const needles = phrase
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(SEARCH_PUNCT, ''))
+    .filter(Boolean);
+  if (!needles.length) return;
 
-      if (phraseWords[j].toLowerCase() == htmlWords[wordIndex].innerHTML.toLowerCase().replace(/[\.,-\/#!$%\^&\*;:{}=\-_`~()\? ]/g,"")) {
-        potentiallyMatched.push(htmlWords[wordIndex].getAttribute('data-m'));
-        numWordsMatched++;
-      } else {
-        break;
-      }
-
-      // if the num of words matched equal the search phrase we have a winner!
-      if (numWordsMatched >= phraseWordsLen) {
-        matchedTimes = matchedTimes.concat(potentiallyMatched);
-      }
-    }
+  const lastStart = spans.length - needles.length;
+  for (let i = 0; i <= lastStart; i++) {
+    const hit = needles.every((needle, j) =>
+      normalise(spans[i + j].textContent).includes(needle)
+    );
+    if (!hit) continue;
+    needles.forEach((needle, j) => {
+      const span = spans[i + j];
+      span.classList.add('search-match');
+      highlightSubstring(span, needle);
+    });
   }
-
-  // display
-  matchedTimes.forEach(matchedTime => {
-    document.querySelectorAll("[data-m='"+matchedTime+"']")[0].classList.add("search-match");
-  });
-}
+};
 
 const playbackRateCtrl = document.getElementById('pbr');
 const currentPlaybackRate = document.getElementById('currentPbr');
