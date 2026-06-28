@@ -374,7 +374,7 @@ dialog::backdrop {
   background-color: transparent;
 }
 mark.search-mark {
-  background-color: oklch(var(--p) / 0.3);
+  background-color: oklch(var(--p) / 0.22);
   color: inherit;
   border-radius: 2px;
 }
