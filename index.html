@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.19 (last changed in release 0.6.19) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.20 (last changed in release 0.6.20) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.19">
+  <meta name="version" content="0.6.20">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -31,6 +31,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/word-alignment.js"></script>
   <script src="js/html-json-converter.js?v=0.6.18"></script>
   <script src="js/transcript-to-ionosphere.js?v=0.6.18"></script>
+  <script src="js/paragraph-timecodes.js?v=0.6.20"></script>
 
   <!-- Meta Tags required for
     Progressive Web App -->
@@ -258,8 +259,12 @@ If you are creating an open source application under a license compatible with t
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
             </button>
             <label for="show-speakers" style="display:flex; align-items:center; gap:6px; margin-left:4px; cursor:pointer; white-space:nowrap;">
-              Display speakers
+              Speakers
               <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="checkbox checkbox-primary checkbox-sm"/>
+            </label>
+            <label for="show-timecodes" style="display:flex; align-items:center; gap:6px; margin-left:4px; cursor:pointer; white-space:nowrap;">
+              Timecodes
+              <input type="checkbox" id="show-timecodes" name="show-timecodes" class="checkbox checkbox-primary checkbox-sm"/>
             </label>
             <label id="info-btn" for="info-modal" class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Transcription info" aria-label="Transcription info" style="margin-left:auto;">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
