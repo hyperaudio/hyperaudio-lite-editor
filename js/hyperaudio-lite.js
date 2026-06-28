@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.4.8 */
+/*! Version 2.5.1 */
 
 'use strict';
 
@@ -25,26 +25,23 @@ class BasePlayer {
     this.player.addEventListener('seeked', instance.handleSeeked.bind(instance), false);
   }
 
-  // Method to get the current time of the player
+  // Contract methods — subclasses must implement these for their player's API.
+  // BasePlayer is intentionally abstract; previous HTML5 defaults now live in
+  // NativePlayer so non-native subclasses can't silently inherit wrong behaviour.
   getTime() {
-    return Promise.resolve(this.player.currentTime);
+    throw new Error('getTime must be implemented by subclasses');
   }
 
-  // Method to set the current time of the player
   setTime(seconds) {
-    this.player.currentTime = seconds;
+    throw new Error('setTime must be implemented by subclasses');
   }
 
-  // Method to play the media
   play() {
-    this.player.play();
-    this.paused = false;
+    throw new Error('play must be implemented by subclasses');
   }
 
-  // Method to pause the media
   pause() {
-    this.player.pause();
-    this.paused = true;
+    throw new Error('pause must be implemented by subclasses');
   }
 }
 
@@ -53,6 +50,24 @@ class NativePlayer extends BasePlayer {
   // Initialize the native HTML5 player
   initPlayer(instance) {
     return instance.player;
+  }
+
+  getTime() {
+    return Promise.resolve(this.player.currentTime);
+  }
+
+  setTime(seconds) {
+    this.player.currentTime = seconds;
+  }
+
+  play() {
+    this.player.play();
+    this.paused = false;
+  }
+
+  pause() {
+    this.player.pause();
+    this.paused = true;
   }
 }
 
@@ -297,9 +312,37 @@ function hyperaudioPlayer(playerType, instance) {
 
 // Main class for HyperaudioLite functionality
 class HyperaudioLite {
-  constructor(transcriptId, mediaElementId, minimizedMode, autoscroll, doubleClick, webMonetization, playOnClick) {
-    this.transcript = document.getElementById(transcriptId);
-    this.init(mediaElementId, minimizedMode, autoscroll, doubleClick, webMonetization, playOnClick);
+  // Constructor accepts EITHER form:
+  //   new HyperaudioLite({ transcript, player, autoScroll, ... })   -- recommended
+  //   new HyperaudioLite(transcriptId, mediaElementId, ...flags)    -- deprecated, kept for BC
+  // The positional form continues to work indefinitely across the 2.x line.
+  constructor(...args) {
+    let opts;
+    if (typeof args[0] === 'object' && args[0] !== null) {
+      // Options-object form. Apply sensible defaults so common cases stay short.
+      opts = {
+        minimizedMode: false,
+        autoScroll: true,
+        doubleClick: false,
+        webMonetization: false,
+        playOnClick: true,
+        scrollOffset: 0,
+        ...args[0],
+      };
+    } else {
+      // Legacy positional form. Pass values through without applying defaults
+      // so existing callers get identical behaviour (undefined stays undefined).
+      HyperaudioLite._warnPositionalOnce();
+      const [transcript, player, minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick] = args;
+      opts = { transcript, player, minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick };
+    }
+
+    this.transcript = document.getElementById(opts.transcript);
+    this.init(opts.player, opts.minimizedMode, opts.autoScroll, opts.doubleClick, opts.webMonetization, opts.playOnClick);
+    // scrollOffset is read directly by scrollToParagraph; consumers can also
+    // set/change it on the instance after construction (e.g. for layouts that
+    // resize their sticky header).
+    this.scrollOffset = opts.scrollOffset || 0;
 
     // Ensure correct binding for class methods
     this.preparePlayHead = this.preparePlayHead.bind(this);
@@ -308,6 +351,20 @@ class HyperaudioLite {
     this.checkPlayHead = this.checkPlayHead.bind(this);
     this.clearTimer = this.clearTimer.bind(this);
     this.handleSeeked = this.handleSeeked.bind(this);
+  }
+
+  // Throttled deprecation warning — fires at most once per page load
+  // regardless of how many positional-form constructions happen.
+  static _warnPositionalOnce() {
+    if (HyperaudioLite._positionalWarned) return;
+    HyperaudioLite._positionalWarned = true;
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn(
+        'HyperaudioLite: the positional-argument constructor is deprecated. ' +
+        'Pass an options object instead — see the README. The positional form ' +
+        'continues to work across the 2.x line.'
+      );
+    }
   }
 
   // Initialize the HyperaudioLite instance
@@ -649,8 +706,8 @@ class HyperaudioLite {
         if (currentParagraph) {
           const containerRect = this.scrollContainer.getBoundingClientRect();
           const paragraphRect = currentParagraph.getBoundingClientRect();
-          const targetTop = this.scrollContainer.scrollTop + (paragraphRect.top - containerRect.top);
-          this.smoothScrollTo(this.scrollContainer, targetTop, 800);
+          const targetTop = this.scrollContainer.scrollTop + (paragraphRect.top - containerRect.top) - (this.scrollOffset || 0);
+          this.smoothScrollTo(this.scrollContainer, Math.max(0, targetTop), 800);
         }
       }
       this.parentElementIndex = currentParentElementIndex;
@@ -779,7 +836,12 @@ class HyperaudioLite {
       } else if (difference > 0) {
         words = guessIndex - 1;
       } else {
-        index = guessIndex;
+        // Exact match: treat the matched word as having just started, so
+        // wordArr[index - 1] (used downstream as the active word) points to
+        // this word, not the previous one. Without the +1 we'd land an
+        // off-by-one at every word boundary — visible on every click,
+        // since clicks set currentTime to a word's exact start time.
+        index = guessIndex + 1;
         break;
       }
     }

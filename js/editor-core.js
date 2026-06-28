@@ -119,19 +119,28 @@
   /* ----------------------------------------------------------- */
 
   function hyperaudio() {
-    const minimizedMode = false;
-    const autoScroll = true;
-    const doubleClick = true;
-    const webMonetization = false;
-    const playOnClick = false;
+    // Leave a small gap below the navbar when autoscrolling the active paragraph
+    // (passed natively as scrollOffset to the 2.5.x options-object constructor).
+    const SCROLL_TOP_GAP = 24;
 
-    const hyperaudioInstance = new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
+    const hyperaudioInstance = new HyperaudioLite({
+      transcript: "hypertranscript",
+      player: "hyperplayer",
+      minimizedMode: false,
+      autoScroll: true,
+      doubleClick: true,
+      webMonetization: false,
+      playOnClick: false,
+      scrollOffset: SCROLL_TOP_GAP,
+    });
 
     // Patch for #294: if the library's polling chain runs while wordArr
     // still references a span deleted by an in-progress edit, the original
     // throws on word.n.parentNode.classList and the chain dies silently.
     // Strip detached entries before delegating — the next debounced
     // refreshHyperaudioInstance will rebuild wordArr from the live DOM.
+    // (Still required in 2.5.1: updateTranscriptVisualState dereferences
+    // word.n.parentNode.classList unguarded.)
     const originalUpdateVisualState = hyperaudioInstance.updateTranscriptVisualState.bind(hyperaudioInstance);
     hyperaudioInstance.updateTranscriptVisualState = function (...args) {
       if (hyperaudioInstance.wordArr) {
@@ -154,28 +163,8 @@
       hyperaudioInstance.scrollContainer = scrollHolder;
     }
 
-    // The library scrolls the active paragraph flush to the top of the scroll
-    // container, which tucks it under the navbar. Override scrollToParagraph to
-    // leave a small gap at the top. (Stopgap until hyperaudio-lite supports a
-    // configurable scroll offset.)
-    const SCROLL_TOP_GAP = 24;
-    hyperaudioInstance.scrollToParagraph = function (currentParentElementIndex, index) {
-      if (currentParentElementIndex === this.parentElementIndex) {
-        return;
-      }
-      this.parentElementIndex = currentParentElementIndex;
-      if (!this.autoscroll) {
-        return;
-      }
-      const paragraph = this.parentElements[currentParentElementIndex];
-      if (!paragraph) {
-        return;
-      }
-      const containerRect = this.scrollContainer.getBoundingClientRect();
-      const paragraphRect = paragraph.getBoundingClientRect();
-      const target = this.scrollContainer.scrollTop + (paragraphRect.top - containerRect.top) - SCROLL_TOP_GAP;
-      this.smoothScrollTo(this.scrollContainer, Math.max(0, target), 800);
-    };
+    // (The top-gap scrollToParagraph override is gone — 2.5.x applies it natively
+    // via the scrollOffset option passed to the constructor above.)
 
     // Pause autoscroll while the user is actively typing so it doesn't yank the
     // view mid-edit; resume shortly after. Uses 'input' (content changes) so
