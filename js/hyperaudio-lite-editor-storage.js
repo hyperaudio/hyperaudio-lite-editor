@@ -23,6 +23,39 @@ const fileExtension = ".hyperaudio";
 let lastFilename = null;
 
 /*
+ * Completely remove the existing caption <track> and insert a fresh, empty one.
+ *
+ * On a Recents (or any media) load the <video> and its <track> are reused. The
+ * track stays in 'showing' mode across the swap, so Chromium can keep the
+ * PREVIOUS media's active cue *painted* even after track.src is reassigned — the
+ * new media starts at currentTime 0, where often no new cue is active yet, so
+ * the caption region never repaints and the old line lingers (the "double
+ * captions" of #356 / #287). Removing the <track> element drops its rendered
+ * output immediately; a fresh element cannot carry stale cues or stale paint.
+ *
+ * @return {HTMLTrackElement|null} the fresh, empty track (or null if no player)
+ */
+function resetCaptionTrack(videoDomId = 'hyperplayer', vttId = 'hyperplayer-vtt') {
+  const video = document.getElementById(videoDomId);
+  if (video === null) {
+    return null;
+  }
+
+  const old = document.getElementById(vttId);
+  if (old !== null) {
+    old.remove();
+  }
+
+  const track = document.createElement('track');
+  track.id = vttId;
+  track.label = 'preview';
+  track.kind = 'subtitles';
+  track.src = '';
+  video.appendChild(track);
+  return track;
+}
+
+/*
  * Render the HyperTranscript in the DOM
  * @return {void}
  */
@@ -34,8 +67,12 @@ function renderTranscript(
   vttId = 'hyperplayer-vtt',
   hypertranscriptHolder = '.transcript-holder',
 ) {
+  // Tear down the previous media's captions completely before loading the new
+  // file, so a stale cue from the old transcript can't stay painted (#356/#287).
+  resetCaptionTrack(videoDomId, vttId);
+
   let hypertranscriptElement = document.getElementById(hypertranscriptDomId);
- 
+
   if (hypertranscriptElement) {
     hypertranscriptElement.innerHTML = hypertranscriptstorage['hypertranscript'];
   } else {
@@ -69,6 +106,13 @@ function renderTranscript(
     // stop caption.js inserting VTT upon insertion of new video
 
     document.getElementById(vttId).src = hypertranscriptstorage['captions'];
+    // the fresh track (resetCaptionTrack) defaults to 'disabled'; restore the
+    // 'showing' mode the stored-caption path previously relied on (the reused
+    // track carried it across loads) so the new captions actually display
+    const video = document.getElementById(videoDomId);
+    if (video !== null && video.textTracks[0] !== undefined) {
+      video.textTracks[0].mode = 'showing';
+    }
     //remove data:text/vtt, and decode
     let plainVtt = decodeURIComponent(hypertranscriptstorage['captions'].split(',')[1]);
 
