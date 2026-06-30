@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 0.6.9 — last changed in release 0.6.9
+ * @version 0.6.24 — last changed in release 0.6.24
  * @license MIT
  */
 
@@ -286,7 +286,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     let audio;
     try {
-      audio = await readAudioFrom(file);
+      // shared 16 kHz mono decode helper (js/audio-source.js, #359)
+      audio = await decodeToMono16k(file);
     } catch (e) {
       console.error(e);
       handleError("Could not decode the media file.");
@@ -301,17 +302,5 @@ function loadWhisperClient(modal, workerBaseUrl) {
       model_name,
       language
     }, [audio.buffer]);
-  }
-
-  async function readAudioFrom(file) {
-    const sampling_rate = 16e3;
-    const audioCTX = new AudioContext({ sampleRate: sampling_rate });
-    try {
-      const response = await file.arrayBuffer();
-      const decoded = await audioCTX.decodeAudioData(response);
-      return decoded.getChannelData(0);
-    } finally {
-      audioCTX.close();
-    }
   }
 }
