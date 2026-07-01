@@ -586,3 +586,9 @@ mark.search-mark {
   color: inherit;
   border-radius: 2px;
 }
+
+/* Top-anchor the Transcribe modal. Its three tabs have different heights, and a
+   grid-centred modal re-centres (and visibly jumps) when you switch tabs. Pin it
+   to the top so it only grows downward. (#349 follow-up) */
+#transcribe-modal + .modal { align-items: start; }
+#transcribe-modal + .modal .modal-box { margin-top: 3rem; }
