@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 0.6.24 — last changed in release 0.6.24
+ * @version 0.6.26 — last changed in release 0.6.26
  * @license MIT
  */
 
@@ -52,6 +52,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
   // Distinct IDs from the Whisper tab: both templates live in the modal DOM
   // at the same time, so shared IDs would collide.
   const fileUploadBtn = document.getElementById("parakeet-file-input");
+  const mediaUrlInput = document.getElementById("parakeet-media");
   const formSubmitBtn = document.getElementById("parakeet-form-submit-btn");
   const deviceLabel = document.getElementById("parakeet-device");
   const videoPlayer = document.getElementById("hyperplayer");
@@ -116,11 +117,16 @@ function loadParakeetClient(modal, workerBaseUrl) {
   // the button is a styled <label>, so "disabled" is the btn-disabled class
   // (pointer-events: none) plus a guard in the handler
   function updateSubmitState() {
-    const ready = fileUploadBtn.files.length > 0;
+    const hasFile = fileUploadBtn.files.length > 0;
+    const hasUrl = mediaUrlInput !== null && mediaUrlInput.value.trim() !== "";
+    const ready = hasFile || hasUrl;
     formSubmitBtn.classList.toggle("btn-disabled", !ready);
     formSubmitBtn.setAttribute("aria-disabled", String(!ready));
   }
   fileUploadBtn.addEventListener("change", updateSubmitState);
+  if (mediaUrlInput !== null) {
+    mediaUrlInput.addEventListener("input", updateSubmitState);
+  }
   updateSubmitState();
 
   formSubmitBtn.addEventListener("click", async () => {
@@ -235,6 +241,9 @@ function loadParakeetClient(modal, workerBaseUrl) {
     document.querySelector('#transcript-editor-btn')?.click();
 
     const file = fileUploadBtn.files[0];
+    const mediaUrl = mediaUrlInput !== null ? mediaUrlInput.value.trim() : "";
+    // a file takes precedence; otherwise transcribe from the URL (HLS or plain)
+    const useUrl = (file === undefined || file === null) && mediaUrl !== "";
 
     pendingInfo = {
       service: "Parakeet (local, in your browser)",
@@ -242,7 +251,11 @@ function loadParakeetClient(modal, workerBaseUrl) {
       language: "Auto-detect",
     };
 
-    videoPlayer.src = URL.createObjectURL(file);
+    if (!useUrl) {
+      videoPlayer.src = URL.createObjectURL(file);
+    }
+    // for a URL, playback is set up inside readAudioFromUrl once the source is
+    // classified (HLS vs plain), so click-to-seek works after transcription.
 
     if (document.querySelector('#transcribe-dialog') !== null){
       document.querySelector('#transcribe-dialog').close();
@@ -258,11 +271,14 @@ function loadParakeetClient(modal, workerBaseUrl) {
 
     let audio;
     try {
-      // shared 16 kHz mono decode helper (js/audio-source.js, #359)
-      audio = await decodeToMono16k(file);
+      // shared 16 kHz mono decode helper (js/audio-source.js, #359); for a URL
+      // the bytes come from hls.js / fetch first (js/hls-source.js, #358)
+      audio = useUrl
+        ? await readAudioFromUrl(mediaUrl, videoPlayer, (p) => updateLoadingMessage(`Downloading audio… ${p}%`))
+        : await decodeToMono16k(file);
     } catch (e) {
       console.error(e);
-      handleError("Could not decode the media file.");
+      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.");
       return;
     }
 

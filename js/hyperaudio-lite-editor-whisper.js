@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 0.6.24 — last changed in release 0.6.24
+ * @version 0.6.26 — last changed in release 0.6.26
  * @license MIT
  */
 
@@ -54,6 +54,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
   console.log("loading whisper client");
 
   const fileUploadBtn = document.getElementById("file-input");
+  const mediaUrlInput = document.getElementById("media");
   const formSubmitBtn = document.getElementById("form-submit-btn");
   const modelNameSelectionInput = document.getElementById("model-name-input");
   const languageSelectionInput = document.getElementById("whisper-language");
@@ -85,11 +86,16 @@ function loadWhisperClient(modal, workerBaseUrl) {
   // the button is a styled <label>, so "disabled" is the btn-disabled class
   // (pointer-events: none) plus a guard in the handler
   function updateSubmitState() {
-    const ready = fileUploadBtn.files.length > 0;
+    const hasFile = fileUploadBtn.files.length > 0;
+    const hasUrl = mediaUrlInput !== null && mediaUrlInput.value.trim() !== "";
+    const ready = hasFile || hasUrl;
     formSubmitBtn.classList.toggle("btn-disabled", !ready);
     formSubmitBtn.setAttribute("aria-disabled", String(!ready));
   }
   fileUploadBtn.addEventListener("change", updateSubmitState);
+  if (mediaUrlInput !== null) {
+    mediaUrlInput.addEventListener("input", updateSubmitState);
+  }
   updateSubmitState();
 
   formSubmitBtn.addEventListener("click", async (event2) => {
@@ -260,6 +266,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
     };
     const model_name = (WHISPER_MODELS[size] || WHISPER_MODELS.base)[language === "en" ? "en" : "multi"];
     const file = fileUploadBtn.files[0];
+    const mediaUrl = mediaUrlInput !== null ? mediaUrlInput.value.trim() : "";
+    // a file takes precedence; otherwise transcribe from the URL (HLS or plain)
+    const useUrl = (file === undefined || file === null) && mediaUrl !== "";
 
     const SIZE_LABELS = { tiny: "Whisper Tiny", base: "Whisper Base", small: "Whisper Small", turbo: "Whisper Large v3 Turbo" };
     pendingInfo = {
@@ -270,7 +279,11 @@ function loadWhisperClient(modal, workerBaseUrl) {
         : "Auto-detect",
     };
 
-    videoPlayer.src = URL.createObjectURL(file);
+    if (!useUrl) {
+      videoPlayer.src = URL.createObjectURL(file);
+    }
+    // for a URL, playback is set up inside readAudioFromUrl once the source is
+    // classified (HLS vs plain), so click-to-seek works after transcription.
 
     if (document.querySelector('#transcribe-dialog') !== null){
       document.querySelector('#transcribe-dialog').close();
@@ -286,11 +299,14 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     let audio;
     try {
-      // shared 16 kHz mono decode helper (js/audio-source.js, #359)
-      audio = await decodeToMono16k(file);
+      // shared 16 kHz mono decode helper (js/audio-source.js, #359); for a URL
+      // the bytes come from hls.js / fetch first (js/hls-source.js, #358)
+      audio = useUrl
+        ? await readAudioFromUrl(mediaUrl, videoPlayer, (p) => updateLoadingMessage(`Downloading audio… ${p}%`))
+        : await decodeToMono16k(file);
     } catch (e) {
       console.error(e);
-      handleError("Could not decode the media file.");
+      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.");
       return;
     }
 
