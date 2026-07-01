@@ -424,7 +424,9 @@ dialog::backdrop {
   #sidebar-toggle { display: inline-flex; }
 
   /* fluid modals / overlays so they fit ~375px screens */
-  .modal-box { max-width: calc(100vw - 24px); }
+  /* !important beats the inline max-width:36rem on the transcribe modal so it
+     fits the viewport (and its tab row can then wrap instead of overflowing). */
+  .modal-box { max-width: calc(100vw - 24px) !important; }
   #captionsource-alert {
     width: calc(100vw - 24px) !important;
     max-width: 480px;
@@ -433,8 +435,22 @@ dialog::backdrop {
     margin: -70px auto 0 !important;
   }
   #captions-display { width: 100%; }
-  /* the three transcribe tabs must wrap/shrink instead of overflowing */
-  .modal-box [name="my_tabs_2"] { width: auto !important; flex: 1 1 auto; min-width: 0; }
+  /* The three transcribe tabs are a fixed 165px each (495px) with nowrap labels,
+     which overflowed the narrowed modal. Let them share the row and shrink
+     evenly, with the label WRAPPING to two lines rather than collapsing into an
+     overlapping garble. */
+  .modal-box [role="tablist"] { flex-wrap: wrap; width: 100%; box-sizing: border-box; }
+  .modal-box [name="my_tabs_2"] {
+    flex: 1 1 0;
+    width: auto !important;
+    min-width: 6rem;
+    white-space: normal !important;
+    height: auto;
+    min-height: 3rem;
+    line-height: 1.15;
+    font-size: 0.8rem;
+    padding: 4px 6px;
+  }
 
   /* Hide the scrollbars on the mobile scroll surfaces (touch scrolling still
      works) — otherwise the transcript's always-on scrollbar shows as a grey
@@ -570,3 +586,9 @@ mark.search-mark {
   color: inherit;
   border-radius: 2px;
 }
+
+/* Top-anchor the Transcribe modal. Its three tabs have different heights, and a
+   grid-centred modal re-centres (and visibly jumps) when you switch tabs. Pin it
+   to the top so it only grows downward. (#349 follow-up) */
+#transcribe-modal + .modal { align-items: start; }
+#transcribe-modal + .modal .modal-box { margin-top: 3rem; }
