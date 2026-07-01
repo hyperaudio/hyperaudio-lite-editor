@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.26 (last changed in release 0.6.26) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.27 (last changed in release 0.6.27) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.26">
+  <meta name="version" content="0.6.27">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -90,7 +90,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.6.22">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.6.27">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -241,10 +241,12 @@ If you are creating an open source application under a license compatible with t
 
   <!-- end of templates -->
 
+  <!-- Dimmed backdrop behind the Recents drawer on small screens (#349) -->
+  <div id="drawer-backdrop"></div>
   <div class="holder grid grid-flow-col auto-cols-max">
     <div class="side-panel">
       <div style="display:flex; flex-direction:column; height:100%;">
-        <div class="top-bar-item" style="flex-shrink:0;">
+        <div id="player-pane" class="top-bar-item" style="flex-shrink:0;">
           <!-- example src -->
           <div id="player-frame" style="position:relative;">
             <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/audio/HLE_Intro.mp3" type="audio/mpeg" poster="images/poster.png" style="width:100%; border-radius:0.5rem; display:block;">
@@ -275,16 +277,22 @@ If you are creating an open source application under a license compatible with t
             <label id="info-btn" for="info-modal" class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Transcription info" aria-label="Transcription info" style="margin-left:auto;">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
             </label>
+            <!-- Collapse the pinned player to reclaim editing space (phone layout only, #349) -->
+            <button id="player-collapse-toggle" type="button" class="btn btn-square btn-ghost btn-sm" aria-label="Collapse player" aria-expanded="true">
+              <svg id="player-collapse-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+            </button>
           </div>
         </div>
 
-        <div class="tabs" style="justify-content:flex-start; margin-top:12px; flex-shrink:0;">
-          <a class="tab tab-lifted tab-active"><strong style="font-size:1.1rem">Recents</strong></a>
-        </div>
-        <div style="display: flex; overflow-y:scroll; flex:1 1 auto; min-height:0;">
-          <div style="width:100%; height:100%;">
-            <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="height:100%; border-radius:0.5rem;">
-            </ul>
+        <div id="recents-pane" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
+          <div class="tabs" style="justify-content:flex-start; margin-top:12px; flex-shrink:0;">
+            <a class="tab tab-lifted tab-active"><strong style="font-size:1.1rem">Recents</strong></a>
+          </div>
+          <div style="display: flex; overflow-y:scroll; flex:1 1 auto; min-height:0;">
+            <div style="width:100%; height:100%;">
+              <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="height:100%; border-radius:0.5rem;">
+              </ul>
+            </div>
           </div>
         </div>
         <div style="position: absolute; bottom: 16px; ">
@@ -747,7 +755,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite.js?v=2.5.1"></script>
   <script src="js/hyperaudio-lite-extension.js?v=0.6.21"></script>
   <script src="js/caption.js?v=0.6.23"></script>
-  <script src="js/editor-core.js?v=0.6.21"></script>
+  <script src="js/editor-core.js?v=0.6.27"></script>
 
 
   <import-deepgram-json></import-deepgram-json>
@@ -828,6 +836,9 @@ If you are creating an open source application under a license compatible with t
   </style>
   <script src="js/editor-main.js?v=0.6.14"></script>
   <!-- end of caption editor additions -->
+
+  <!-- responsive small-screen UI toggles (#349) -->
+  <script src="js/responsive.js?v=0.6.27"></script>
 
   <!-- service worker script for PWA -->
   <script src="js/editor-service-worker.js?v=0.6.12"></script>

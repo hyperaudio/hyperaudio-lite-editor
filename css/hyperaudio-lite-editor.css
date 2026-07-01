@@ -262,49 +262,233 @@ dialog::backdrop {
 
 }
 
-@media screen and (max-width: 480px) {
-  
-  .hyperaudio-transcript {
-    top: 40px; 
-    bottom: 0px; 
-    background-color: #ffffff; 
-    padding-top: 48px; 
-    width: 100%; 
-    outline: none;
+/* The Recents drawer backdrop and the player-collapse toggle only exist on the
+   small-screen layout; hide them by default (desktop). */
+#drawer-backdrop { display: none; }
+#player-collapse-toggle { display: none; }
+
+/* =========================================================================
+   Small-screen layout (#349) — phones and tablet portrait.
+   A single column: fixed navbar at the very top, the video pinned just below
+   it (collapsible), the transcript scrolling full-width beneath, and the play
+   bar docked at the bottom. Recents becomes an off-canvas drawer. This replaces
+   the desktop absolute two-pane; !important is needed on a few rules to beat
+   the inline .style.left the sidebar-toggle JS writes.
+   ========================================================================= */
+@media screen and (max-width: 948px) {
+  body {
+    --nav-h: 70px;       /* matches the navbar's inline min-height */
+    --player-h: 210px;   /* video area + a 44px controls row */
+  }
+  body.player-collapsed {
+    --player-h: 44px;    /* controls row only; video hidden */
   }
 
+  /* the side panel no longer lays anything out — its children (player + recents)
+     are individually fixed below */
+  .side-panel {
+    position: static !important;
+    width: auto !important;
+    height: auto;
+    padding: 0;
+    background: none;
+    overflow: visible;
+  }
+
+  /* navbar (the .main-panel) pinned to the very top */
+  .main-panel {
+    position: fixed !important;
+    top: 0;
+    left: 0 !important;
+    right: 0;
+    width: auto;
+  }
+  .main-panel .navbar {
+    min-height: var(--nav-h);
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  /* pinned, collapsible player just below the navbar */
+  #player-pane {
+    position: fixed;
+    top: var(--nav-h);
+    left: 0;
+    right: 0;
+    height: var(--player-h);
+    z-index: 15;
+    background: #f5f5f5;
+    padding: 4px 8px 0;
+    box-sizing: border-box;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    transition: height 0.25s ease;
+    overflow: visible;   /* let control tooltips show; the video is clipped by #player-frame */
+  }
+  #player-pane #player-frame {
+    height: calc(var(--player-h) - 44px);   /* 0 when collapsed → video hidden */
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;   /* centre the video; grey shows either side */
+    transition: height 0.25s ease;
+  }
+  #player-pane #hyperplayer {
+    height: 100%;
+    width: auto !important;    /* size to the video's aspect, not the full frame */
+    max-width: 100%;
+    object-fit: contain;
+    background: transparent;   /* let the grey player background show, not black */
+    border-radius: 0.5rem;     /* rounded corners hug the video itself */
+  }
+  #player-pane #player-controls {
+    height: 40px;
+    margin-top: 4px;
+    overflow-x: auto;
+  }
+  /* Paragraph timecodes live in the transcript's left margin, which the
+     full-width mobile layout has no room for — hide the toggle and any nodes. */
+  #player-controls label[for="show-timecodes"] { display: none !important; }
+  .para-timecode { display: none; }
+  /* flip the collapse chevron when collapsed */
+  #player-collapse-toggle { display: inline-flex; }
+  body.player-collapsed #player-collapse-icon { transform: rotate(180deg); }
+
+  /* transcript fills the space between the pinned player and the play bar */
   .transcript-holder {
-    left: 0px;
+    position: fixed !important;
+    top: calc(var(--nav-h) + var(--player-h)) !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 52px !important;
+    transition: top 0.25s ease;
+  }
+  .hyperaudio-transcript {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px 48px;
   }
 
   #playbar {
-    left: 0px;
+    left: 0 !important;
+    right: 0;
+    gap: 8px;
+    padding: 0 8px;
   }
+  #playbar-seek { min-width: 0; }
 
-  .side-panel, #transcribe-label {
-    display: none;
-  }
+  html { overflow-x: hidden; }
+  /* let button tooltips drop below the bar over the video */
+  .main-panel .navbar { overflow: visible; }
 
-  .main-panel {
+  /* Lift the navbar above the pinned player and transcript so its tooltips (which
+     drop below the buttons, over the video) are not covered. Beats the inline
+     z-index:2 on .main-panel. */
+  .main-panel { z-index: 60 !important; }
+
+  /* Recents: off-canvas drawer, toggled by #sidebar-toggle (see responsive.js) */
+  #recents-pane {
+    position: fixed;
+    top: var(--nav-h);
+    bottom: 52px;
     left: 0;
+    width: min(85vw, 320px);
+    z-index: 45;
+    background: #f5f5f5;
+    padding: 8px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.25);
   }
+  body.drawer-open #recents-pane { transform: none; }
 
-  .holder {
-    left: 0;
+  #drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+    background: rgba(0,0,0,0.4);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s ease;
   }
+  body.drawer-open #drawer-backdrop { opacity: 1; visibility: visible; }
 
-  #search-box, #sidebar-toggle, #regenerate-icon{
-    display: none;
+  /* keep the sidebar toggle available (it opens the drawer); it was hidden at
+     ≤480 before */
+  #sidebar-toggle { display: inline-flex; }
+
+  /* fluid modals / overlays so they fit ~375px screens */
+  .modal-box { max-width: calc(100vw - 24px); }
+  #captionsource-alert {
+    width: calc(100vw - 24px) !important;
+    max-width: 480px;
+    left: 12px !important;
+    right: 12px;
+    margin: -70px auto 0 !important;
   }
+  #captions-display { width: 100%; }
+  /* the three transcribe tabs must wrap/shrink instead of overflowing */
+  .modal-box [name="my_tabs_2"] { width: auto !important; flex: 1 1 auto; min-width: 0; }
 
-  /*.navbar-start {
-    width: 36%;
-  }*/
+  /* Hide the scrollbars on the mobile scroll surfaces (touch scrolling still
+     works) — otherwise the transcript's always-on scrollbar shows as a grey
+     sliver at the right edge. */
+  .transcript-holder,
+  #player-controls,
+  #recents-pane { scrollbar-width: none; }
+  .transcript-holder::-webkit-scrollbar,
+  #player-controls::-webkit-scrollbar,
+  #recents-pane::-webkit-scrollbar { width: 0; height: 0; display: none; }
+}
 
-  .modal-box {
-    width:300px;
+/* =========================================================================
+   Compact toolbar for the narrowest screens (#349). Between 948px and 580px the
+   pinned/drawer layout is active but the navbar still shows the search box and
+   the full toolbar. Below 580px there is no longer room, so drop the search box
+   and FILE menu, shrink and right-align the buttons, and trim the play bar.
+   ========================================================================= */
+@media screen and (max-width: 580px) {
+  /* navbar: drop search + FILE menu, compact and right-align the rest */
+  .navbar-center { display: none; }
+  .navbar-start .dropdown { display: none; }
+  .main-panel .navbar {
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding-left: 4px;
+    padding-right: 4px;
   }
+  .navbar .navbar-start,
+  .navbar .navbar-end { gap: 2px; }
+  .navbar .btn {
+    margin-right: 0 !important;
+    height: 40px;
+    min-height: 40px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .navbar .btn-square { width: 40px; padding-left: 0; padding-right: 0; }
+  /* the Recents/drawer toggle stays hard left; everything else is pushed right */
+  .navbar .navbar-start { flex: 1 1 auto; min-width: 0; }
+  .navbar-start #sidebar-toggle { margin-right: auto !important; }
 
+  /* play bar: hardware volume/mute, slimmer rate select */
+  #playbar-volume,
+  #playbar-mute { display: none; }
+  #playbar-rate {
+    padding-inline-start: 8px;
+    padding-inline-end: 20px;
+    min-width: 0;
+    font-size: 85%;
+  }
+}
+
+@media screen and (max-width: 480px) {
   .caption-row input.line1, .caption-row input.line2 {
     width: 24ch;
   }
@@ -312,8 +496,6 @@ dialog::backdrop {
   .caption-row input.start, .caption-row input.end {
     width: 12ch;
   }
-
-
 }
 
 /* Minimal tooltip styling — mirrors DaisyUI .tooltip + data-tip so a future
