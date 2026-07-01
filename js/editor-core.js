@@ -502,20 +502,9 @@
     });
   }
 
-  if (window.matchMedia("(max-width: 480px)").matches === true){
-    let elem = document.querySelector("#hyperplayer");
-
-    // Create a copy of it
-    let clone = elem.cloneNode(true);
-    
-    clone.style.width = "100%";
-    clone.style.paddingTop = "72px";
-
-    // Inject it into the DOM
-
-    document.querySelector('.transcript-holder').prepend(clone);
-    elem.remove();
-  }
+  // (Removed the old ≤480px hack that cloned #hyperplayer into .transcript-holder
+  // and deleted the original — the responsive layout (#349) now keeps the player
+  // in its pinned pane, so moving it into the transcript broke both.)
 
   hyperaudio();
 
