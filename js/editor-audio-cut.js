@@ -1,5 +1,5 @@
 /* Extracted verbatim from index.html (#334) — loaded as a module in the same document order. */
-  import { AudioData, cutAudioApp } from "./audio-cut.js";
+  import { AudioData } from "./audio-cut.js";
 
   const audioDataArray = [];
   let skipListenersAttached = false;
@@ -228,70 +228,86 @@
   }
 
   function computePlayableSections(transcript) {
-    const words = transcript.querySelectorAll('[data-m]');
+    const wordEls = transcript.querySelectorAll('[data-m]');
     const player = document.getElementById("hyperplayer");
     const duration = (player && !isNaN(player.duration) && player.duration > 0) ? player.duration : Infinity;
 
-    if (words.length === 0) {
+    if (wordEls.length === 0) {
       return [{ start: 0, end: duration }];
     }
 
-    const sections = [];
-    let current = { start: 0 };
-    let inStruck = false;
-    let lastStruckEnd = 0;
-    let prevWordEnd = null;
-    let prevWordStruck = false;
+    const words = Array.from(wordEls).map(el => {
+      const start = parseInt(el.getAttribute('data-m')) / 1000;
+      return { start, end: start + (parseInt(el.getAttribute('data-d')) || 0) / 1000, struck: isStruck(el) };
+    });
 
-    words.forEach(word => {
-      const struck = isStruck(word);
-      const wordStart = parseInt(word.getAttribute('data-m')) / 1000;
-      const wordEnd = wordStart + (parseInt(word.getAttribute('data-d')) || 0) / 1000;
+    // Two passes. First, the regions between consecutive KEPT (unstruck) words:
+    // everything in such a region is non-speech once its struck words are cut,
+    // so with gap skipping on we treat the region as one combined pause — if
+    // the pause left after removing the struck words exceeds the threshold,
+    // cut the whole region (keeping a small buffer at each edge so word edges
+    // aren't clipped). Otherwise cut just the struck spans. The old one-pass
+    // version only gap-checked between two unstruck neighbours, so the pauses
+    // AROUND a struck filler word were never skipped.
+    const cuts = [];
+    let prevKeptEnd = null;
+    let pendingStruck = [];
 
-      // Long-gap skipping: when both surrounding words are unstruck and the
-      // gap exceeds the threshold, skip the middle of the gap, keeping a
-      // small buffer on each side so word edges aren't clipped.
-      if (
-        removeGapsEnabled &&
-        !inStruck && !struck &&
-        prevWordEnd !== null &&
-        !prevWordStruck &&
-        current !== null
-      ) {
-        const gap = wordStart - prevWordEnd;
-        if (gap > gapThreshold) {
-          const skipStart = prevWordEnd + gapBuffer;
-          const skipEnd = wordStart - gapBuffer;
-          if (skipEnd > skipStart) {
-            current.end = skipStart;
-            sections.push(current);
-            current = { start: skipEnd };
+    const flushRegion = (regionStart, regionEnd, struckSpans, bufferLeft, bufferRight) => {
+      if (removeGapsEnabled && regionStart !== null) {
+        const struckTotal = struckSpans.reduce((sum, s) => sum + (s.end - s.start), 0);
+        const effectivePause = (regionEnd - regionStart) - struckTotal;
+        if (effectivePause > gapThreshold) {
+          const cutStart = regionStart + (bufferLeft ? gapBuffer : 0);
+          const cutEnd = regionEnd - (bufferRight ? gapBuffer : 0);
+          if (cutEnd > cutStart) {
+            cuts.push({ start: cutStart, end: cutEnd });
+            return;
           }
         }
       }
+      // gaps kept (or gap skipping off): cut only the struck words themselves
+      struckSpans.forEach(s => cuts.push({ start: s.start, end: s.end }));
+    };
 
-      if (struck) {
-        if (!inStruck) {
-          current.end = wordStart;
-          sections.push(current);
-          current = null;
-          inStruck = true;
-        }
-        lastStruckEnd = wordEnd;
-      } else if (inStruck) {
-        current = { start: lastStruckEnd };
-        inStruck = false;
+    words.forEach(word => {
+      if (word.struck) {
+        pendingStruck.push(word);
+        return;
       }
-
-      prevWordEnd = wordEnd;
-      prevWordStruck = struck;
+      if (pendingStruck.length > 0 || prevKeptEnd !== null) {
+        const regionStart = prevKeptEnd !== null ? prevKeptEnd : (pendingStruck.length ? pendingStruck[0].start : null);
+        if (regionStart !== null && word.start > regionStart) {
+          flushRegion(regionStart, word.start, pendingStruck, prevKeptEnd !== null, true);
+        } else {
+          pendingStruck.forEach(s => cuts.push({ start: s.start, end: s.end }));
+        }
+      }
+      pendingStruck = [];
+      prevKeptEnd = word.end;
     });
 
-    if (current === null) {
-      current = { start: lastStruckEnd };
+    // trailing region after the last kept word
+    if (pendingStruck.length > 0) {
+      const regionStart = prevKeptEnd !== null ? prevKeptEnd : pendingStruck[0].start;
+      const regionEnd = pendingStruck[pendingStruck.length - 1].end;
+      if (regionEnd > regionStart) {
+        flushRegion(regionStart, regionEnd, pendingStruck, prevKeptEnd !== null, false);
+      }
     }
-    current.end = duration;
-    sections.push(current);
+
+    // Second pass: subtract the merged cuts from [0, duration].
+    cuts.sort((a, b) => a.start - b.start);
+    const sections = [];
+    let cursor = 0;
+    cuts.forEach(cut => {
+      const start = Math.max(cut.start, cursor);
+      if (start >= cut.end) { cursor = Math.max(cursor, cut.end); return; }
+      if (start > cursor) sections.push({ start: cursor, end: start });
+      cursor = cut.end;
+    });
+    if (cursor < duration) sections.push({ start: cursor, end: duration });
+    if (sections.length === 0) sections.push({ start: duration, end: duration });
 
     return sections;
   }
@@ -366,33 +382,14 @@
     }
   }
 
-  document
-    .getElementById("download-wav-cut")
-    .addEventListener("click", async () => {
-      // grab the filename if saved
-      const element = document.querySelector(".file-item.active");
-
-      let fileName;
-      if (element == null || typeof element === "undefined"){
-        fileName = "default";
-      } else {
-        fileName = element.textContent;
-      }
-
-      if (audioDataArray.length === 0) {
-        audioDataArray.push(
-          new AudioData(
-            document.querySelector("#hyperplayer").src,
-            0,
-            document.getElementById("hyperplayer").duration
-          )
-        );
-      }
-
-      let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
-      cutAudioApp.to_wav(wavBlob, fileName);
-      
-    });
+  // The old direct WAV download (which also mutated audioDataArray as a
+  // fallback, #290) is replaced by the export modal (js/media-export.js,
+  // #289/#291/#292). Expose the kept-sections model so the export can apply
+  // exactly the same strikeout + gap-skip cuts as playback does.
+  window.getPlayableSections = () => {
+    const transcript = getTranscript();
+    return transcript ? computePlayableSections(transcript) : null;
+  };
 
     // Add event listener for the new Upload & Transcribe button
     document.getElementById('upload-transcribe-btn').addEventListener('click', function() {

@@ -1,7 +1,7 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 0.6.9 — last changed in release 0.6.9
+ * @version 0.7.0 — last changed in release 0.7.0
  * @license MIT
  */
 
@@ -382,7 +382,15 @@ async function transcribeWindow(s, samples, offsetSeconds) {
 
   console.log(`  window: encoder ${encMs}ms, decode ${Date.now() - decT0}ms (${encLen} frames)`);
 
-  // 4. tokens -> words (▁ marks a word start); times offset by window start
+  // 4. tokens -> words (▁ marks a word start); times offset by window start.
+  // Punctuation-only tokens (. , ? ! …) are emitted AFTER the model has heard
+  // the following pause — it concludes the sentence ended partly BECAUSE
+  // silence follows — so extending the word's end to their emission frame
+  // would absorb that pause into the word's duration (#372: "cast." with
+  // data-d="2640"). Merge their text but keep the end of the last LEXICAL
+  // token, so durations stay honest and post-sentence pauses remain real
+  // inter-word gaps (which gap skipping can then catch).
+  const PUNCT_ONLY = /^[.,!?;:…'"’”„«»()\[\]{}%\-–—]+$/;
   const words = [];
   let cur = null;
   for (let i = 0; i < tokens.length; i++) {
@@ -393,7 +401,9 @@ async function transcribeWindow(s, samples, offsetSeconds) {
       cur = { word: piece.replace(/▁/g, ""), start: sec, end: sec + FRAME_SEC };
     } else {
       cur.word += piece;
-      cur.end = sec + FRAME_SEC;
+      if (!PUNCT_ONLY.test(piece)) {
+        cur.end = sec + FRAME_SEC;
+      }
     }
   }
   if (cur) words.push(cur);
