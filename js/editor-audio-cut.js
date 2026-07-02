@@ -8,11 +8,31 @@
   let gapThreshold = 0.5;
   let gapBuffer = 0.1;
 
-  document.querySelector('#strikethrough').addEventListener('click', () => {
+  const strikethroughBtn = document.querySelector('#strikethrough');
+
+  strikethroughBtn.addEventListener('click', () => {
+    if (strikethroughBtn.classList.contains('btn-disabled')) return;
     applyStrikeThroughToSelection();
     rebuildAudioDataArray();
     ensureSkipListeners();
   });
+
+  // #274: grey out the strikethrough button unless text is selected in the
+  // transcript. The selection survives clicking the button (which is what the
+  // click handler above relies on), so disabling via selectionchange can't
+  // race a legitimate click.
+  function updateStrikethroughState() {
+    const transcript = document.getElementById('hypertranscript');
+    const selection = window.getSelection();
+    let enabled = false;
+    if (transcript && selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+      enabled = selection.getRangeAt(0).intersectsNode(transcript);
+    }
+    strikethroughBtn.classList.toggle('btn-disabled', !enabled);
+    strikethroughBtn.setAttribute('aria-disabled', String(!enabled));
+  }
+  document.addEventListener('selectionchange', updateStrikethroughState);
+  updateStrikethroughState();
 
   function applyGapSettings() {
     const enabledEl = document.querySelector('#remove-gaps-enabled');
