@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.28 (last changed in release 0.6.28) -->
+<!--  Hyperaudio Lite Editor - Version 0.6.29 (last changed in release 0.6.29) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.28">
+  <meta name="version" content="0.6.29">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -90,7 +90,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.6.28">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.6.29">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -377,8 +377,26 @@ If you are creating an open source application under a license compatible with t
           </div>
         </div>
         <div class="navbar-center">
-          <div class="form-control">
-            <input id="search-box" type="text" placeholder="Search" class="input input-bordered" />
+          <div id="find-replace" class="form-control">
+            <div id="find-row">
+              <div id="search-wrap">
+                <input id="search-box" type="text" placeholder="Search" class="input input-bordered" />
+                <div id="replace-panel" hidden>
+                  <input id="replace-box" type="text" placeholder="Replace with…" class="input input-bordered input-sm" />
+                  <div id="replace-actions">
+                    <span id="find-match-count" aria-live="polite">0 / 0</span>
+                    <button id="find-prev" type="button" class="btn btn-xs btn-ghost" aria-label="Previous match" title="Previous match">‹</button>
+                    <button id="find-next" type="button" class="btn btn-xs btn-ghost" aria-label="Next match" title="Next match">›</button>
+                    <span class="replace-spacer"></span>
+                    <button id="replace-one" type="button" class="btn btn-xs">Replace</button>
+                    <button id="replace-all" type="button" class="btn btn-xs btn-primary">All</button>
+                  </div>
+                </div>
+              </div>
+              <button id="find-replace-toggle" type="button" class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Find & replace" aria-label="Find and replace" aria-expanded="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+              </button>
+            </div>
           </div>
         </div>
         <div class="navbar-end" style="padding-right: 8px;">
@@ -835,6 +853,7 @@ If you are creating an open source application under a license compatible with t
 
   </style>
   <script src="js/editor-main.js?v=0.6.14"></script>
+  <script src="js/find-replace.js?v=0.6.29"></script>
   <!-- end of caption editor additions -->
 
   <!-- responsive small-screen UI toggles (#349) -->

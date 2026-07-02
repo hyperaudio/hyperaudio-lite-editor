@@ -592,3 +592,48 @@ mark.search-mark {
    to the top so it only grows downward. (#349 follow-up) */
 #transcribe-modal + .modal { align-items: start; }
 #transcribe-modal + .modal .modal-box { margin-top: 3rem; }
+
+/* Find & replace (#25). The replace panel drops below the search box; the
+   currently-focused match is highlighted in a distinct colour from the other
+   (purple) search hits. */
+#find-row { display: flex; align-items: center; gap: 2px; }
+/* the search box + its dropdown panel; the panel is anchored to this wrapper so
+   it lines up with the search box (left edge and width) rather than the wider
+   centred form-control */
+#search-wrap { position: relative; flex: 1 1 auto; min-width: 0; max-width: 230px; }
+#search-wrap #search-box { width: 100%; max-width: none; margin-right: 0; }
+#replace-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 240px;   /* keep the action buttons visible when the search box is narrow */
+  max-width: 90vw;
+  z-index: 70;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  text-align: left;
+  overflow: hidden;
+}
+#replace-panel[hidden] { display: none; }
+/* the replace box fills the panel so it aligns edge-to-edge with the search box */
+#replace-panel #replace-box { width: 100%; border: 0; border-radius: 0; box-shadow: none; }
+#replace-panel input, #replace-panel button { margin-bottom: 0; }
+#replace-actions { display: flex; align-items: center; gap: 3px; padding: 6px; border-top: 1px solid #eee; }
+#replace-actions .btn-xs { padding-left: 6px; padding-right: 6px; }
+#find-match-count {
+  font-size: 78%;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.replace-spacer { flex: 1; }
+mark.search-mark.active { background-color: #f6c344; color: inherit; border-radius: 2px; }
+
+/* When the replace panel is open, drop the transcript start so the panel doesn't
+   cover the first line. */
+.hyperaudio-transcript { transition: padding-top 0.2s ease; }
+body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
