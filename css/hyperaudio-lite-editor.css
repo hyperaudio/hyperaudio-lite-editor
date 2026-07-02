@@ -637,3 +637,27 @@ mark.search-mark.active { background-color: #f6c344; color: inherit; border-radi
    cover the first line. */
 .hyperaudio-transcript { transition: padding-top 0.2s ease; }
 body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
+
+/* Export modal progress bar (#289) — the tailwind build doesn't include
+   DaisyUI's .progress component, so style the native element in the signature
+   purple (the DaisyUI primary), mirroring .progress-primary. */
+#export-progress {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: 9999px;
+  overflow: hidden;
+  background-color: oklch(var(--p) / 0.2);
+}
+#export-progress::-webkit-progress-bar { background-color: transparent; }
+#export-progress::-webkit-progress-value {
+  background-color: oklch(var(--p));
+  border-radius: 9999px;
+  transition: width 0.2s ease;
+}
+#export-progress::-moz-progress-bar {
+  background-color: oklch(var(--p));
+  border-radius: 9999px;
+}
