@@ -671,9 +671,13 @@ If you are creating an open source application under a license compatible with t
       </div>
       <label class="label-text" for="export-format">Format</label>
       <select id="export-format" class="select select-bordered w-full" style="margin-top:4px"></select>
+      <label id="export-rate-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-rate" class="checkbox checkbox-primary checkbox-sm" />
+        <span class="label-text">Apply the playback speed (<span id="export-rate-value">1×</span>) — pitch preserved</span>
+      </label>
       <label id="export-retime-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
         <input type="checkbox" id="export-retime" class="checkbox checkbox-primary checkbox-sm" checked />
-        <span class="label-text">Also download the transcript re-timed to the edited media</span>
+        <span class="label-text">Also download the transcript re-timed to the exported media</span>
       </label>
       <progress id="export-progress" class="progress progress-primary w-full" value="0" max="100" style="visibility:hidden; margin-top:14px"></progress>
       <div id="export-status" aria-live="polite" style="font-size:85%; opacity:0.75; min-height:1.3em; margin-top:2px"></div>

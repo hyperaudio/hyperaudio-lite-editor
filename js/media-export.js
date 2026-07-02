@@ -36,8 +36,12 @@
   // copy we encode with. A version-range URL here would load mediabunny twice.
   const MEDIABUNNY_CDN = 'https://cdn.jsdelivr.net/npm/mediabunny@1.50.3/+esm';
   const MP3_ENCODER_CDN = 'https://cdn.jsdelivr.net/npm/@mediabunny/mp3-encoder@1.50.3/+esm';
+  // SoundTouch (WSOLA) for pitch-preserved time-stretch when exporting at the
+  // playback speed. LGPL-2.1, loaded unmodified from CDN.
+  const SOUNDTOUCH_CDN = 'https://cdn.jsdelivr.net/npm/soundtouchjs@0.3.0/+esm';
 
   let mediabunnyPromise = null;
+  let soundtouchPromise = null;
   let mp3Registered = false;
 
   const loadMediabunny = () => {
@@ -45,6 +49,13 @@
       mediabunnyPromise = import(MEDIABUNNY_CDN);
     }
     return mediabunnyPromise;
+  };
+
+  const loadSoundtouch = () => {
+    if (soundtouchPromise === null) {
+      soundtouchPromise = import(SOUNDTOUCH_CDN);
+    }
+    return soundtouchPromise;
   };
 
   // MP3 encoding is not built into browsers; mediabunny's official extension
@@ -144,8 +155,9 @@
   };
 
   // Clone the transcript with struck words removed and every word's data-m
-  // mapped onto the edited timeline. Returns the transcript HTML.
-  const buildRetimedTranscriptHtml = (sections) => {
+  // mapped onto the edited timeline (and scaled when the playback speed is
+  // applied — data-d shrinks with the sped-up media too). Returns the HTML.
+  const buildRetimedTranscriptHtml = (sections, rate) => {
     const transcript = document.getElementById('hypertranscript');
     if (transcript === null) return null;
     const clone = transcript.cloneNode(true);
@@ -156,7 +168,11 @@
         return;
       }
       const t = parseInt(span.getAttribute('data-m'), 10) / 1000;
-      span.setAttribute('data-m', String(Math.round(mapTime(t, sections) * 1000)));
+      span.setAttribute('data-m', String(Math.round((mapTime(t, sections) / rate) * 1000)));
+      if (rate !== 1) {
+        const d = parseInt(span.getAttribute('data-d'), 10);
+        if (!isNaN(d)) span.setAttribute('data-d', String(Math.round(d / rate)));
+      }
     });
     clone.querySelectorAll('p').forEach((p) => {
       if (p.querySelector('[data-m]') === null) p.remove();
@@ -203,10 +219,60 @@
     return out;
   };
 
+  // Concatenate AudioBuffers (same sample rate) into one.
+  const concatAudioBuffers = (buffers) => {
+    if (buffers.length === 1) return buffers[0];
+    const channels = Math.max(...buffers.map((b) => b.numberOfChannels));
+    const sampleRate = buffers[0].sampleRate;
+    const length = buffers.reduce((sum, b) => sum + b.length, 0);
+    const out = new AudioBuffer({ length, numberOfChannels: channels, sampleRate });
+    let offset = 0;
+    for (const b of buffers) {
+      for (let c = 0; c < channels; c++) {
+        out.copyToChannel(b.getChannelData(Math.min(c, b.numberOfChannels - 1)), c, offset);
+      }
+      offset += b.length;
+    }
+    return out;
+  };
+
+  // Pitch-preserved time-stretch (SoundTouch/WSOLA): tempo = rate, so 1.5×
+  // yields audio 1/1.5 the length at the original pitch — matching what the
+  // player's preservesPitch playback sounds like.
+  const timeStretchBuffer = async (buffer, rate) => {
+    const st = await loadSoundtouch();
+    const shifter = new st.SoundTouch();
+    shifter.tempo = rate;
+    const source = new st.WebAudioBufferSource(buffer);
+    const filter = new st.SimpleFilter(source, shifter);
+    const FRAMES = 8192;
+    const tmp = new Float32Array(FRAMES * 2); // SoundTouch works in stereo interleaved
+    const chunks = [];
+    let n;
+    while ((n = filter.extract(tmp, FRAMES)) > 0) {
+      chunks.push(tmp.slice(0, n * 2));
+    }
+    let totalFrames = 0;
+    for (const c of chunks) totalFrames += c.length / 2;
+    const channels = Math.min(2, buffer.numberOfChannels);
+    const out = new AudioBuffer({ length: Math.max(1, totalFrames), numberOfChannels: channels, sampleRate: buffer.sampleRate });
+    const L = out.getChannelData(0);
+    const R = channels > 1 ? out.getChannelData(1) : null;
+    let i = 0;
+    for (const c of chunks) {
+      for (let j = 0; j < c.length; j += 2) {
+        L[i] = c[j];
+        if (R) R[i] = c[j + 1];
+        i++;
+      }
+    }
+    return out;
+  };
+
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
   // the sections concatenate without any timestamp bookkeeping.
-  const exportEditedAudio = async (mb, fmt, sections, onProgress) => {
+  const exportEditedAudio = async (mb, fmt, sections, rate, onProgress) => {
     const input = await makeInput(mb);
     const track = await input.getPrimaryAudioTrack();
     if (!track) throw new Error('The media has no audio track.');
@@ -217,17 +283,28 @@
     output.addAudioTrack(source);
     await output.start();
 
+    const stretch = rate !== 1;
     const total = keptDuration(sections);
     let done = 0;
+    const collected = stretch ? [] : null;
     for (const sec of sections) {
       for await (const wrapped of sink.buffers(sec.start, sec.end)) {
         const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
         if (trimmed !== null) {
-          await source.add(trimmed);
+          if (stretch) {
+            collected.push(trimmed);
+          } else {
+            await source.add(trimmed);
+          }
           done += trimmed.duration;
-          onProgress(Math.min(0.99, done / total));
+          onProgress(Math.min(0.99, (done / total) * (stretch ? 0.6 : 1)));
         }
       }
+    }
+    if (stretch) {
+      const stretched = await timeStretchBuffer(concatAudioBuffers(collected), rate);
+      onProgress(0.9);
+      await source.add(stretched);
     }
     source.close();
     await output.finalize();
@@ -237,7 +314,7 @@
   // Edited media with video: decode frames per kept section and re-timestamp
   // them onto the edited timeline; audio as above (its appended timestamps
   // already match the edited timeline).
-  const exportEditedVideo = async (mb, fmt, sections, onProgress) => {
+  const exportEditedVideo = async (mb, fmt, sections, rate, onProgress) => {
     const input = await makeInput(mb);
     const vTrack = await input.getPrimaryVideoTrack();
     const aTrack = await input.getPrimaryAudioTrack();
@@ -270,6 +347,7 @@
     }
     await output.start();
 
+    const stretch = rate !== 1;
     const total = keptDuration(sections) * (aTrack ? 2 : 1);
     let done = 0;
     let offset = 0;
@@ -277,16 +355,17 @@
 
     for (const sec of sections) {
       for await (const sample of vSink.samples(sec.start, sec.end)) {
-        // clamp the first frame (which may start before the section) and keep
-        // timestamps strictly increasing across section boundaries
-        let t = offset + Math.max(0, sample.timestamp - sec.start);
+        // clamp the first frame (which may start before the section), map onto
+        // the edited timeline (÷ rate when applying the playback speed), and
+        // keep timestamps strictly increasing across section boundaries
+        let t = (offset + Math.max(0, sample.timestamp - sec.start)) / rate;
         if (t <= prevT) t = prevT + 0.001;
         prevT = t;
-        const frameDur = Math.max(sample.duration || 1 / 30, 0.001);
+        const frameDur = Math.max(sample.duration || 1 / 30, 0.001) / rate;
         sample.draw(ctx2d, 0, 0, width, height);
         sample.close();
         await vSource.add(t, frameDur);
-        done += frameDur;
+        done += frameDur * rate;
         onProgress(Math.min(0.99, done / total));
       }
       offset += sec.end - sec.start;
@@ -294,15 +373,23 @@
     vSource.close();
 
     if (aSink !== null) {
+      const collected = stretch ? [] : null;
       for (const sec of sections) {
         for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
           const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
           if (trimmed !== null) {
-            await aSource.add(trimmed);
+            if (stretch) {
+              collected.push(trimmed);
+            } else {
+              await aSource.add(trimmed);
+            }
             done += trimmed.duration;
             onProgress(Math.min(0.99, done / total));
           }
         }
+      }
+      if (stretch) {
+        await aSource.add(await timeStretchBuffer(concatAudioBuffers(collected), rate));
       }
       aSource.close();
     }
@@ -340,6 +427,9 @@
   const sourceEntire = document.getElementById('export-source-entire');
   const sourceEdited = document.getElementById('export-source-edited');
   const editSummary = document.getElementById('export-edit-summary');
+  const rateRow = document.getElementById('export-rate-row');
+  const rateCheck = document.getElementById('export-rate');
+  const rateValue = document.getElementById('export-rate-value');
   const retimeRow = document.getElementById('export-retime-row');
   const retimeCheck = document.getElementById('export-retime');
   const progressBar = document.getElementById('export-progress');
@@ -361,8 +451,20 @@
     }
   };
 
+  const playbackRate = () => {
+    const player = document.getElementById('hyperplayer');
+    const r = player !== null ? player.playbackRate : 1;
+    return r > 0 ? r : 1;
+  };
+
+  const rateApplied = () =>
+    rateRow.style.display !== 'none' && rateCheck.checked && playbackRate() !== 1;
+
+  // The re-timed transcript makes sense whenever the exported media's timeline
+  // differs from the original: edits, an applied playback speed, or both.
   const updateRetimeVisibility = () => {
-    retimeRow.style.display = sourceEdited.checked && !sourceEdited.disabled ? 'flex' : 'none';
+    const edited = sourceEdited.checked && !sourceEdited.disabled;
+    retimeRow.style.display = edited || rateApplied() ? 'flex' : 'none';
   };
 
   const populateModal = async () => {
@@ -383,6 +485,16 @@
     } else {
       editSummary.textContent = '(no strikeouts or skipped silences)';
       sourceEntire.checked = true;
+    }
+
+    // offer the playback-speed option when the player isn't at 1×
+    const rate = playbackRate();
+    if (rate !== 1) {
+      rateValue.textContent = `${rate}×`;
+      rateRow.style.display = 'flex';
+    } else {
+      rateRow.style.display = 'none';
+      rateCheck.checked = false;
     }
     updateRetimeVisibility();
 
@@ -435,27 +547,31 @@
       if (fmt.needsMp3) await ensureMp3Encoder(mb);
 
       const edited = sourceEdited.checked && !sourceEdited.disabled;
+      const rate = rateApplied() ? playbackRate() : 1;
       const baseName = exportBaseName();
+      const suffix = `${edited ? '-edited' : ''}${rate !== 1 ? `-${rate}x` : ''}`;
       let blob;
 
-      if (!edited) {
+      if (!edited && rate === 1) {
         setStatus('Exporting entire media…');
         blob = await exportEntire(mb, fmt, setProgress);
         downloadBlob(blob, `${baseName}.${fmt.ext}`);
       } else {
+        // an applied playback speed also routes the entire media through the
+        // section pipeline (one full-length section) so it can be stretched
         const player = document.getElementById('hyperplayer');
         const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
-        const sections = editedSections(duration);
-        setStatus('Exporting edited media…');
+        const sections = edited ? editedSections(duration) : [{ start: 0, end: duration }];
+        setStatus(rate !== 1 ? `Exporting at ${rate}× — pitch preserved…` : 'Exporting edited media…');
         blob = fmt.kind === 'video'
-          ? await exportEditedVideo(mb, fmt, sections, setProgress)
-          : await exportEditedAudio(mb, fmt, sections, setProgress);
-        downloadBlob(blob, `${baseName}-edited.${fmt.ext}`);
+          ? await exportEditedVideo(mb, fmt, sections, rate, setProgress)
+          : await exportEditedAudio(mb, fmt, sections, rate, setProgress);
+        downloadBlob(blob, `${baseName}${suffix}.${fmt.ext}`);
 
-        if (retimeCheck.checked) {
-          const html = buildRetimedTranscriptHtml(sections);
+        if (retimeCheck.checked && retimeRow.style.display !== 'none') {
+          const html = buildRetimedTranscriptHtml(sections, rate);
           if (html !== null) {
-            downloadBlob(new Blob([html], { type: 'text/html' }), `${baseName}-edited-transcript.html`);
+            downloadBlob(new Blob([html], { type: 'text/html' }), `${baseName}${suffix}-transcript.html`);
           }
         }
       }
@@ -475,5 +591,6 @@
   modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
   sourceEntire.addEventListener('change', updateRetimeVisibility);
   sourceEdited.addEventListener('change', updateRetimeVisibility);
+  rateCheck.addEventListener('change', updateRetimeVisibility);
   startBtn.addEventListener('click', runExport);
 })();
