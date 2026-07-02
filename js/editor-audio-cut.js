@@ -1,5 +1,5 @@
 /* Extracted verbatim from index.html (#334) — loaded as a module in the same document order. */
-  import { AudioData, cutAudioApp } from "./audio-cut.js";
+  import { AudioData } from "./audio-cut.js";
 
   const audioDataArray = [];
   let skipListenersAttached = false;
@@ -366,33 +366,14 @@
     }
   }
 
-  document
-    .getElementById("download-wav-cut")
-    .addEventListener("click", async () => {
-      // grab the filename if saved
-      const element = document.querySelector(".file-item.active");
-
-      let fileName;
-      if (element == null || typeof element === "undefined"){
-        fileName = "default";
-      } else {
-        fileName = element.textContent;
-      }
-
-      if (audioDataArray.length === 0) {
-        audioDataArray.push(
-          new AudioData(
-            document.querySelector("#hyperplayer").src,
-            0,
-            document.getElementById("hyperplayer").duration
-          )
-        );
-      }
-
-      let wavBlob = await cutAudioApp.cutAudio(audioDataArray);
-      cutAudioApp.to_wav(wavBlob, fileName);
-      
-    });
+  // The old direct WAV download (which also mutated audioDataArray as a
+  // fallback, #290) is replaced by the export modal (js/media-export.js,
+  // #289/#291/#292). Expose the kept-sections model so the export can apply
+  // exactly the same strikeout + gap-skip cuts as playback does.
+  window.getPlayableSections = () => {
+    const transcript = getTranscript();
+    return transcript ? computePlayableSections(transcript) : null;
+  };
 
     // Add event listener for the new Upload & Transcribe button
     document.getElementById('upload-transcribe-btn').addEventListener('click', function() {

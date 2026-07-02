@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.6.30 (last changed in release 0.6.30) -->
+<!--  Hyperaudio Lite Editor - Version 0.7.0 (last changed in release 0.7.0) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.6.30">
+  <meta name="version" content="0.7.0">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -345,7 +345,7 @@ If you are creating an open source application under a license compatible with t
               <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
               <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
               <li><a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript</a></li>
-              <li><a id="download-wav-cut">WAV</a></li>
+              <li><label for="export-modal">Media (WAV / MP3 / MP4…)</label></li>
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
               <li class="menu-title">
@@ -653,6 +653,36 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
+  <!-- Media export modal (#289/#291/#292) — wired by js/media-export.js -->
+  <input type="checkbox" id="export-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box" style="max-width:26rem">
+      <label for="export-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <h3 class="font-bold text-lg" style="margin-bottom:12px">Export media</h3>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px">
+        <label style="display:flex; gap:10px; align-items:center; cursor:pointer">
+          <input type="radio" name="export-source" id="export-source-entire" class="radio radio-primary radio-sm" checked />
+          <span class="label-text">Entire media</span>
+        </label>
+        <label style="display:flex; gap:10px; align-items:center; cursor:pointer">
+          <input type="radio" name="export-source" id="export-source-edited" class="radio radio-primary radio-sm" />
+          <span class="label-text">Edited media <span id="export-edit-summary" style="opacity:0.6; font-size:85%"></span></span>
+        </label>
+      </div>
+      <label class="label-text" for="export-format">Format</label>
+      <select id="export-format" class="select select-bordered w-full" style="margin-top:4px"></select>
+      <label id="export-retime-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-retime" class="checkbox checkbox-primary checkbox-sm" checked />
+        <span class="label-text">Also download the transcript re-timed to the edited media</span>
+      </label>
+      <progress id="export-progress" class="progress progress-primary w-full" value="0" max="100" style="visibility:hidden; margin-top:14px"></progress>
+      <div id="export-status" aria-live="polite" style="font-size:85%; opacity:0.75; min-height:1.3em; margin-top:2px"></div>
+      <div class="modal-action">
+        <button id="export-start" class="btn btn-primary">EXPORT</button>
+      </div>
+    </div>
+  </div>
+
   <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
   <div class="modal">
     <div class="modal-box" style="max-width:36rem">
@@ -854,6 +884,7 @@ If you are creating an open source application under a license compatible with t
   </style>
   <script src="js/editor-main.js?v=0.6.14"></script>
   <script src="js/find-replace.js?v=0.6.29"></script>
+  <script src="js/media-export.js?v=0.7.0"></script>
   <!-- end of caption editor additions -->
 
   <!-- responsive small-screen UI toggles (#349) -->
@@ -861,7 +892,7 @@ If you are creating an open source application under a license compatible with t
 
   <!-- service worker script for PWA -->
   <script src="js/editor-service-worker.js?v=0.6.12"></script>
-  <script type="module" src="js/editor-audio-cut.js?v=0.6.30"></script>
+  <script type="module" src="js/editor-audio-cut.js?v=0.7.0"></script>
 
 
   <script src="js/editor-svg.js?v=0.6.12"></script>
