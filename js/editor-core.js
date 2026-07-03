@@ -123,6 +123,12 @@
     // (passed natively as scrollOffset to the 2.5.x options-object constructor).
     const SCROLL_TOP_GAP = 24;
 
+    // hyperaudio() runs on every transcript (re)load — tear down the previous
+    // instance so its player/document listeners don't accumulate (2.6.0 API).
+    if (window.hyperaudioInstance && typeof window.hyperaudioInstance.destroy === 'function') {
+      window.hyperaudioInstance.destroy();
+    }
+
     const hyperaudioInstance = new HyperaudioLite({
       transcript: "hypertranscript",
       player: "hyperplayer",
@@ -132,15 +138,19 @@
       webMonetization: false,
       playOnClick: false,
       scrollOffset: SCROLL_TOP_GAP,
+      // The element that actually scrolls is .transcript-holder, not
+      // #hypertranscript (the library default, which is absolutely positioned
+      // and doesn't scroll here). Official option since 2.6.0 (#254).
+      scrollContainer: document.querySelector('.transcript-holder'),
     });
 
     // Patch for #294: if the library's polling chain runs while wordArr
     // still references a span deleted by an in-progress edit, the original
-    // throws on word.n.parentNode.classList and the chain dies silently.
+    // can throw on a detached word's parentNode and the chain dies silently.
     // Strip detached entries before delegating — the next debounced
     // refreshHyperaudioInstance will rebuild wordArr from the live DOM.
-    // (Still required in 2.5.1: updateTranscriptVisualState dereferences
-    // word.n.parentNode.classList unguarded.)
+    // (Kept under 2.6.0: the delta-update rewrite is more defensive but some
+    // paths still walk parentNode on words an in-progress edit may detach.)
     const originalUpdateVisualState = hyperaudioInstance.updateTranscriptVisualState.bind(hyperaudioInstance);
     hyperaudioInstance.updateTranscriptVisualState = function (...args) {
       if (hyperaudioInstance.wordArr) {
@@ -154,14 +164,6 @@
     };
 
     window.hyperaudioInstance = hyperaudioInstance;
-
-    // Autoscroll target: the element that actually scrolls is .transcript-holder,
-    // not #hypertranscript (the library's default scrollContainer, which is
-    // absolutely positioned and doesn't scroll here).
-    const scrollHolder = document.querySelector('.transcript-holder');
-    if (scrollHolder !== null) {
-      hyperaudioInstance.scrollContainer = scrollHolder;
-    }
 
     // (The top-gap scrollToParagraph override is gone — 2.5.x applies it natively
     // via the scrollOffset option passed to the constructor above.)
