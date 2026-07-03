@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.5.1 */
+/*! Version 2.6.0 */
 
 'use strict';
 
@@ -20,9 +20,10 @@ class BasePlayer {
 
   // Method to attach common event listeners
   attachEventListeners(instance) {
-    this.player.addEventListener('pause', instance.pausePlayHead.bind(instance), false);
-    this.player.addEventListener('play', instance.preparePlayHead.bind(instance), false);
-    this.player.addEventListener('seeked', instance.handleSeeked.bind(instance), false);
+    const opts = { signal: instance.listenerController.signal };
+    this.player.addEventListener('pause', instance.pausePlayHead.bind(instance), opts);
+    this.player.addEventListener('play', instance.preparePlayHead.bind(instance), opts);
+    this.player.addEventListener('seeked', instance.handleSeeked.bind(instance), opts);
   }
 
   // Contract methods — subclasses must implement these for their player's API.
@@ -95,6 +96,18 @@ class SoundCloudPlayer extends BasePlayer {
   setTime(seconds) {
     this.player.seekTo(seconds * 1000);
   }
+
+  // Play the SoundCloud track
+  play() {
+    this.player.play();
+    this.paused = false;
+  }
+
+  // Pause the SoundCloud track
+  pause() {
+    this.player.pause();
+    this.paused = true;
+  }
 }
 
 // Class for VideoJS player
@@ -113,14 +126,27 @@ class VideoJSPlayer extends BasePlayer {
   setTime(seconds) {
     this.player.currentTime(seconds);
   }
+
+  // Play the VideoJS player
+  play() {
+    this.player.play();
+    this.paused = false;
+  }
+
+  // Pause the VideoJS player
+  pause() {
+    this.player.pause();
+    this.paused = true;
+  }
 }
 
 // Class for Vimeo player
 class VimeoPlayer extends BasePlayer {
   // Initialize the Vimeo player
   initPlayer(instance) {
-    const iframe = document.querySelector('iframe');
-    return new Vimeo.Player(iframe);
+    // Use the instance's own iframe — document.querySelector('iframe') bound
+    // to the first iframe anywhere on the page (#247).
+    return new Vimeo.Player(instance.player);
   }
 
   // Attach event listeners specific to Vimeo player
@@ -138,6 +164,18 @@ class VimeoPlayer extends BasePlayer {
   // Set the current time of the Vimeo player
   setTime(seconds) {
     this.player.setCurrentTime(seconds);
+  }
+
+  // Play the Vimeo video
+  play() {
+    this.player.play();
+    this.paused = false;
+  }
+
+  // Pause the Vimeo video
+  pause() {
+    this.player.pause();
+    this.paused = true;
   }
 }
 
@@ -233,6 +271,10 @@ class YouTubePlayer extends BasePlayer {
 class SpotifyPlayer extends BasePlayer {
   // Initialize the Spotify player by setting up the Spotify IFrame API
   initPlayer(instance) {
+    // Known position before the first playback_update arrives — getTime()
+    // used to resolve undefined and propagate NaN downstream (#250).
+    this.currentTime = 0;
+
     window.onSpotifyIframeApiReady = IFrameAPI => {
       const element = document.getElementById(instance.player.id);
       const srcValue = element.getAttribute('src');
@@ -286,7 +328,13 @@ class SpotifyPlayer extends BasePlayer {
 
   // Pause the Spotify track
   pause() {
-    this.player.togglePlay();
+    // Prefer the controller's real pause — togglePlay() STARTED playback
+    // whenever internal state was out of sync with the widget (#250).
+    if (typeof this.player.pause === 'function') {
+      this.player.pause();
+    } else {
+      this.player.togglePlay();
+    }
     this.paused = true;
   }
 }
@@ -303,11 +351,23 @@ const hyperaudioPlayerOptions = {
 
 // Factory function to create player instances
 function hyperaudioPlayer(playerType, instance) {
-  if (playerType) {
-    return new hyperaudioPlayerOptions[playerType](instance);
-  } else {
+  if (!playerType) {
     console.warn("HYPERAUDIO LITE WARNING: data-player-type attribute should be set on player if not native, e.g., SoundCloud, YouTube, Vimeo, VideoJS");
+    return null;
   }
+
+  const PlayerClass = hyperaudioPlayerOptions[playerType];
+  if (!PlayerClass) {
+    // A typo used to surface as a raw TypeError ("not a constructor") with
+    // no hint of the cause (#253).
+    console.warn(
+      `HYPERAUDIO LITE WARNING: unknown data-player-type "${playerType}" — ` +
+      `valid types are: ${Object.keys(hyperaudioPlayerOptions).join(', ')}`
+    );
+    return null;
+  }
+
+  return new PlayerClass(instance);
 }
 
 // Main class for HyperaudioLite functionality
@@ -327,6 +387,7 @@ class HyperaudioLite {
         webMonetization: false,
         playOnClick: true,
         scrollOffset: 0,
+        scrollContainer: null,
         ...args[0],
       };
     } else {
@@ -338,7 +399,10 @@ class HyperaudioLite {
     }
 
     this.transcript = document.getElementById(opts.transcript);
-    this.init(opts.player, opts.minimizedMode, opts.autoScroll, opts.doubleClick, opts.webMonetization, opts.playOnClick);
+    // Every DOM listener this instance adds is registered against this
+    // signal, so destroy() can remove them all in one call.
+    this.listenerController = new AbortController();
+    this.init(opts.player, opts.minimizedMode, opts.autoScroll, opts.doubleClick, opts.webMonetization, opts.playOnClick, opts.scrollContainer);
     // scrollOffset is read directly by scrollToParagraph; consumers can also
     // set/change it on the instance after construction (e.g. for layouts that
     // resize their sticky header).
@@ -351,6 +415,14 @@ class HyperaudioLite {
     this.checkPlayHead = this.checkPlayHead.bind(this);
     this.clearTimer = this.clearTimer.bind(this);
     this.handleSeeked = this.handleSeeked.bind(this);
+  }
+
+  // Register a custom player class for a data-player-type value (#253).
+  // The class should extend BasePlayer — or at minimum accept the
+  // HyperaudioLite instance in its constructor and implement
+  // getTime/setTime/play/pause.
+  static registerPlayer(type, playerClass) {
+    hyperaudioPlayerOptions[type] = playerClass;
   }
 
   // Throttled deprecation warning — fires at most once per page load
@@ -368,17 +440,18 @@ class HyperaudioLite {
   }
 
   // Initialize the HyperaudioLite instance
-  init(mediaElementId, minimizedMode, autoscroll, doubleClick, webMonetization, playOnClick) {
+  init(mediaElementId, minimizedMode, autoscroll, doubleClick, webMonetization, playOnClick, scrollContainer) {
     this.setupTranscriptHash();
     this.setupPopover();
     this.setupPlayer(mediaElementId);
     this.setupTranscriptWords();
     this.setupEventListeners(doubleClick, playOnClick);
-    this.setupInitialPlayHead();
-    this.setupAutoScroll(autoscroll);
+    this.setupAutoScroll(autoscroll, scrollContainer);
     this.minimizedMode = minimizedMode;
-    this.autoscroll = autoscroll;
     this.webMonetization = webMonetization;
+    // Must run AFTER setupAutoScroll: a share-link hash scrolls the selection
+    // into view only when the autoscroll setting is already in place (#246).
+    this.setupInitialPlayHead();
   }
 
   // Setup hash for transcript selection
@@ -396,46 +469,57 @@ class HyperaudioLite {
   // Setup the popover for text selection
   setupPopover() {
     if (typeof popover !== 'undefined') {
+      // Current selection, shared with the one-time button listener below.
+      this.selectionText = '';
+      const listenerOpts = { signal: this.listenerController.signal };
+
       this.transcript.addEventListener('mouseup', () => {
         const selection = window.getSelection();
         const popover = document.getElementById('popover');
-        let selectionText;
-  
+
         if (selection.toString().length > 0) {
-          selectionText = selection.toString().replaceAll("'", "`");
+          this.selectionText = selection.toString().replaceAll("'", "`");
           const range = selection.getRangeAt(0);
           const rect = range.getBoundingClientRect();
-  
+
           popover.style.left = `${rect.left + window.scrollX}px`;
           popover.style.top = `${rect.bottom + window.scrollY}px`;
           popover.style.display = 'block';
-  
+
           const mediaFragment = this.getSelectionMediaFragment();
-  
+
           if (mediaFragment) {
             document.location.hash = mediaFragment;
           }
         } else {
           popover.style.display = 'none';
         }
-  
-        const popoverBtn = document.getElementById('popover-btn');
-        popoverBtn.addEventListener('click', (e) => {
-          popover.style.display = 'none';
-          let cbText = `${selectionText} ${document.location}`;
-          navigator.clipboard.writeText(cbText);
-  
-          const dialog = document.getElementById("clipboard-dialog");
-          document.getElementById("clipboard-text").innerHTML = cbText;
-          dialog.showModal();
-  
-          const confirmButton = document.getElementById("clipboard-confirm");
-          confirmButton.addEventListener("click", () => dialog.close());
-  
-          e.preventDefault();
-          return false;
-        });
-      });
+      }, listenerOpts);
+
+      // Attach the copy/confirm listeners ONCE. Adding them inside the
+      // mouseup handler stacked a new listener per selection, so a single
+      // click copied to the clipboard N times and reopened the dialog N
+      // times (#248).
+      const popoverBtn = document.getElementById('popover-btn');
+      popoverBtn.addEventListener('click', (e) => {
+        document.getElementById('popover').style.display = 'none';
+        let cbText = `${this.selectionText} ${document.location}`;
+        navigator.clipboard.writeText(cbText);
+
+        const dialog = document.getElementById("clipboard-dialog");
+        // textContent: cbText contains arbitrary selected text — don't let it
+        // parse as HTML.
+        document.getElementById("clipboard-text").textContent = cbText;
+        dialog.showModal();
+
+        e.preventDefault();
+        return false;
+      }, listenerOpts);
+
+      const confirmButton = document.getElementById("clipboard-confirm");
+      confirmButton.addEventListener("click", () => {
+        document.getElementById("clipboard-dialog").close();
+      }, listenerOpts);
     }
   }
 
@@ -475,24 +559,49 @@ class HyperaudioLite {
     this.parentElements = this.transcript.getElementsByTagName(this.parentTag);
   }
 
-  setupAutoScroll(autoscroll) {
+  setupAutoScroll(autoscroll, scrollContainer) {
     this.autoscroll = autoscroll;
-    this.scrollContainer = this.transcript;
+    // scrollContainer option: an element or an element id (#254). Defaults to
+    // the transcript element itself. For layouts where the page scrolls
+    // rather than the transcript, pass document.scrollingElement.
+    if (typeof scrollContainer === 'string') {
+      this.scrollContainer = document.getElementById(scrollContainer) || this.transcript;
+    } else if (scrollContainer) {
+      this.scrollContainer = scrollContainer;
+    } else {
+      this.scrollContainer = this.transcript;
+    }
   }
 
   // Setup event listeners for interactions
   setupEventListeners(doubleClick, playOnClick) {
-    this.minimizedMode = false;
-    this.autoscroll = false;
+    // NOTE: minimizedMode / autoscroll / webMonetization are set by init() —
+    // resetting them here clobbered the real option values for any setup step
+    // that ran in between (#246).
     this.doubleClick = doubleClick;
-    this.webMonetization = false;
     this.playOnClick = playOnClick;
     this.highlightedText = false;
     this.start = null;
 
     const playHeadEvent = doubleClick ? 'dblclick' : 'click';
-    this.transcript.addEventListener(playHeadEvent, this.setPlayHead.bind(this), false);
-    this.transcript.addEventListener(playHeadEvent, this.checkPlayHead.bind(this), false);
+    const opts = { signal: this.listenerController.signal };
+    this.transcript.addEventListener(playHeadEvent, this.setPlayHead.bind(this), opts);
+    this.transcript.addEventListener(playHeadEvent, this.checkPlayHead.bind(this), opts);
+
+    // Keyboard support (#259): Enter or Space on a focused word behaves like
+    // a click. Words are spans, so they aren't focusable by default — give
+    // them tabindex="0" in your transcript markup to enable this.
+    this.transcript.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') {
+        return;
+      }
+      if (!e.target.dataset || e.target.dataset.m === undefined) {
+        return;
+      }
+      e.preventDefault(); // stop Space scrolling the page
+      this.setPlayHead(e);
+      this.checkPlayHead(e);
+    }, opts);
   }
 
   // Setup initial playhead position based on URL hash
@@ -531,6 +640,10 @@ class HyperaudioLite {
         }
         p = p.parentNode;
       }
+      // Reset to a clean baseline — stale read/active classes from a previous
+      // instance on the same DOM would survive the delta updates in
+      // updateTranscriptVisualState (#251).
+      word.classList.remove('read', 'active');
       word.classList.add('unread');
       return { n: word, m, p };
     });
@@ -541,14 +654,6 @@ class HyperaudioLite {
     if (selection.rangeCount === 0) return null;
 
     const range = selection.getRangeAt(0);
-    
-    // Helper function to get the closest span
-    function getClosestSpan(node) {
-      while (node && node.nodeType !== Node.ELEMENT_NODE) {
-        node = node.parentNode;
-      }
-      return node.closest('[data-m]');
-    }
 
     // Get all relevant spans
     const allSpans = Array.from(this.transcript.querySelectorAll('[data-m]'));
@@ -604,12 +709,17 @@ class HyperaudioLite {
     if (range === null) {
       return null;
     }
-    console.log(range);
-    return (this.transcript.id + '=' +range);
+    return (this.transcript.id + '=' + range);
   }
 
   // Set the playhead position in the media player based on the transcript
   setPlayHead(e) {
+    // The player factory returns null for a missing/unknown player type —
+    // the warning has already fired; don't crash on every click (#253).
+    if (!this.myPlayer) {
+      return;
+    }
+
     const target = e.target || e.srcElement;
     this.highlightedText = false;
     this.clearActiveClasses();
@@ -676,8 +786,27 @@ class HyperaudioLite {
     this.autoscroll = true;
   }
 
+  // Tear down the instance: stop the polling loop, cancel any in-flight
+  // scroll animation and remove every DOM listener this instance added
+  // (transcript, native player, popover). Embed players (YouTube, Vimeo,
+  // SoundCloud, Spotify) keep their own internal API listeners — discard
+  // the instance after calling destroy().
+  destroy() {
+    this.destroyed = true;
+    this.clearTimer();
+    if (this.scrollAnimationId) {
+      cancelAnimationFrame(this.scrollAnimationId);
+      this.scrollAnimationId = null;
+    }
+    this.listenerController.abort();
+  }
+
   // Check the playhead position and update the transcript
   checkPlayHead() {
+    if (!this.myPlayer) {
+      return;
+    }
+
     this.clearTimer();
 
     (async () => {
@@ -718,6 +847,14 @@ class HyperaudioLite {
     if (this.scrollAnimationId) {
       cancelAnimationFrame(this.scrollAnimationId);
     }
+    // Respect prefers-reduced-motion: jump straight to the target instead of
+    // animating (#259).
+    if (typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      container.scrollTop = targetTop;
+      this.scrollAnimationId = null;
+      return;
+    }
     const startTop = container.scrollTop;
     const distance = targetTop - startTop;
     if (distance === 0) return;
@@ -740,8 +877,16 @@ class HyperaudioLite {
 
   // Check the status of the playhead and update the transcript
   checkStatus() {
+    // An in-flight async checkPlayHead can land after destroy() — don't
+    // re-arm the polling loop on a torn-down instance.
+    if (this.destroyed) {
+      return;
+    }
+
     if (!this.myPlayer.paused) {
-      if (this.end && parseInt(this.end) < parseInt(this.currentTime)) {
+      // parseFloat: end and currentTime are fractional seconds — truncating
+      // them let playback overshoot a shared selection by up to 1s (#249).
+      if (this.end && parseFloat(this.end) < parseFloat(this.currentTime)) {
         this.myPlayer.pause();
         this.end = null;
       } else {
@@ -753,19 +898,13 @@ class HyperaudioLite {
         }
 
         if (this.minimizedMode) {
-          const elements = this.transcript.querySelectorAll('[data-m]');
-          let currentWord = '';
-          let lastWordIndex = this.wordIndex;
+          // The active word index is already known from the visual-state
+          // update — no need to rescan every span (#251).
+          const lastWordIndex = this.wordIndex;
+          this.wordIndex = index - 1;
 
-          for (let i = 0; i < elements.length; i++) {
-            if (elements[i].classList.contains('active')) {
-              currentWord = elements[i].innerHTML;
-              this.wordIndex = i;
-            }
-          }
-
-          if (this.wordIndex !== lastWordIndex) {
-            document.title = currentWord;
+          if (this.wordIndex !== lastWordIndex && this.wordIndex >= 0) {
+            document.title = this.wordArr[this.wordIndex].n.innerHTML;
           }
         }
 
@@ -846,31 +985,77 @@ class HyperaudioLite {
       }
     }
 
-    this.wordArr.forEach((word, i) => {
-      const classList = word.n.classList;
-      const parentClassList = word.n.parentNode.classList;
+    // Delta update (#251): only touch the words whose read/unread state
+    // changed since the last call, instead of sweeping every word on every
+    // tick — O(words moved past) rather than O(transcript length).
+    const wordCount = this.wordArr.length;
+    let prevIndex = this.prevWordIndex ?? 0;
+    if (prevIndex > wordCount) {
+      prevIndex = wordCount;
+    }
 
-      if (i < index) {
+    // Self-heal: if outside code (or another instance sharing this DOM) has
+    // rewritten the word classes, the read/unread boundary we last applied
+    // won't match the DOM any more — resync every word this one time.
+    const boundaryIntact =
+      (prevIndex === 0 || this.wordArr[prevIndex - 1].n.classList.contains('read')) &&
+      (prevIndex === wordCount || this.wordArr[prevIndex].n.classList.contains('unread'));
+
+    if (!boundaryIntact) {
+      this.wordArr.forEach((word, i) => {
+        const classList = word.n.classList;
+        if (i < index) {
+          classList.add('read');
+          classList.remove('unread', 'active');
+        } else {
+          classList.add('unread');
+          classList.remove('read', 'active');
+        }
+      });
+    } else {
+      for (let i = prevIndex; i < index; i++) {
+        // moved forward — words now behind the playhead become read
+        const classList = this.wordArr[i].n.classList;
         classList.add('read');
         classList.remove('unread', 'active');
-        parentClassList.remove('active');
-      } else {
+      }
+
+      for (let i = index; i < prevIndex; i++) {
+        // moved backward — words now ahead of the playhead become unread
+        const classList = this.wordArr[i].n.classList;
         classList.add('unread');
         classList.remove('read', 'active');
       }
-    });
-
-    this.parentElements = this.transcript.getElementsByTagName(this.parentTag);
-    Array.from(this.parentElements).forEach(el => el.classList.remove('active'));
-
-    if (index > 0) {
-      if (!this.myPlayer.paused || forceActiveWord) {
-        this.wordArr[index - 1].n.classList.add('active');
-      }
-      this.wordArr[index - 1].n.parentNode.classList.add('active');
     }
-  
-    const currentParentElementIndex = Array.from(this.parentElements).findIndex(el => el.classList.contains('active'));
+
+    this.prevWordIndex = index;
+
+    // Track the active word/paragraph elements directly rather than clearing
+    // 'active' from every parent element each tick. parentElements is a live
+    // HTMLCollection set up once in setupTranscriptWords.
+    const activeWord = index > 0 ? this.wordArr[index - 1].n : null;
+    const activeParent = activeWord ? activeWord.parentNode : null;
+
+    if (this.activeWordElement && this.activeWordElement !== activeWord) {
+      this.activeWordElement.classList.remove('active');
+    }
+    if (this.activeParentElement && this.activeParentElement !== activeParent) {
+      this.activeParentElement.classList.remove('active');
+    }
+
+    if (activeWord) {
+      if (!this.myPlayer.paused || forceActiveWord) {
+        activeWord.classList.add('active');
+      }
+      activeParent.classList.add('active');
+    }
+
+    this.activeWordElement = activeWord;
+    this.activeParentElement = activeParent;
+
+    const currentParentElementIndex = activeParent
+      ? Array.prototype.indexOf.call(this.parentElements, activeParent)
+      : -1;
 
     return {
       currentWordIndex: index,
@@ -881,5 +1066,5 @@ class HyperaudioLite {
 
 // Export for testing or module usage
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { HyperaudioLite };
+  module.exports = { HyperaudioLite, hyperaudioPlayerOptions, BasePlayer };
 }

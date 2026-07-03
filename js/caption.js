@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.1.6 */
+/*! Version 2.1.7 */
 'use strict';
 
 const caption = function () {
@@ -114,7 +114,9 @@ const caption = function () {
           thisSegmentMeta = new segmentMeta('', null, 0, 0, 0);
         }
 
-        thisSegmentMeta.speaker = word.innerText;
+        // textContent, not innerText: identical for plain transcript spans,
+        // doesn't force a layout pass, and works in jsdom for tests.
+        thisSegmentMeta.speaker = word.textContent;
       } else {
         let thisStart = parseInt(word.getAttribute('data-m'), 10) / 1000;
         let thisDuration = parseInt(word.getAttribute('data-d'), 10) / 1000;
@@ -138,7 +140,7 @@ const caption = function () {
           }
         }
 
-        const thisText = word.innerText;
+        const thisText = word.textContent;
 
         thisWordMeta = new wordMeta(thisStart, thisDuration, thisText);
 
@@ -161,6 +163,12 @@ const caption = function () {
         }
       }
     });
+
+    // Don't drop a trailing segment whose last word never hit a sentence
+    // delimiter — e.g. a transcript that ends mid-sentence (#258).
+    if (thisSegmentMeta !== null && thisSegmentMeta.start !== null) {
+      data.segments.push(thisSegmentMeta);
+    }
 
     //console.log(data.segments);
 
@@ -469,3 +477,8 @@ const caption = function () {
 
   return cap;
 };
+
+// Export for testing or module usage
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { caption };
+}
