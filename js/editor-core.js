@@ -1,6 +1,14 @@
 /* Extracted verbatim from index.html (#334) — loaded as a classic script in the same document order. */
 
-    console.log("version 3");
+  // Show the app version (from <meta name="version">) in the info modal, so a
+  // bug report can say exactly which build it is — including a stale cached one.
+  {
+    const versionMeta = document.querySelector('meta[name="version"]');
+    const versionOut = document.getElementById('app-version');
+    if (versionMeta !== null && versionOut !== null) {
+      versionOut.textContent = `Editor v${versionMeta.content}`;
+    }
+  }
 
   // Populates the Transcription section of the info modal. Called by the
   // transcription modules (Whisper, Deepgram) when a transcription completes.
