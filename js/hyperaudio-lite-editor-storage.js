@@ -359,7 +359,7 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   setFileSelectListeners();
 
   if (storage.length === 0) {
-    filePicker.insertAdjacentHTML("beforeend", `<li style="padding-left:16px; padding-top:16px">No files saved.</li>`);
+    filePicker.insertAdjacentHTML("beforeend", `<li style="padding:8px 16px; opacity:0.55">No files saved.</li>`);
   }
 }
 

@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.7.1 (last changed in release 0.7.1) -->
+<!--  Hyperaudio Lite Editor - Version 0.7.2 (last changed in release 0.7.2) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.7.1">
+  <meta name="version" content="0.7.2">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -90,7 +90,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.7.0">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.7.2">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -259,7 +259,7 @@ If you are creating an open source application under a license compatible with t
               </span>
             </button>
           </div>
-          <div id="player-controls" style="display:flex; align-items:center; gap:8px; margin-top:4px; width:100%;">
+          <div id="player-controls">
             <button id="pip-btn" type="button" class="btn btn-square btn-outline btn-sm tooltip" data-tip="Picture-in-picture" aria-label="Picture-in-picture" onclick="togglePictureInPicture()">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-picture-in-picture-2"><path d="M21 9V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><rect width="10" height="7" x="12" y="13" rx="2"/></svg>
             </button>
@@ -268,29 +268,23 @@ If you are creating an open source application under a license compatible with t
             </button>
             <label for="show-speakers" style="display:flex; align-items:center; gap:6px; margin-left:4px; cursor:pointer; white-space:nowrap;">
               Speakers
-              <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="checkbox checkbox-primary checkbox-sm"/>
+              <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="toggle toggle-primary"/>
             </label>
             <label for="show-timecodes" style="display:flex; align-items:center; gap:6px; margin-left:4px; cursor:pointer; white-space:nowrap;">
               Timecodes
-              <input type="checkbox" id="show-timecodes" name="show-timecodes" class="checkbox checkbox-primary checkbox-sm"/>
+              <input type="checkbox" id="show-timecodes" name="show-timecodes" class="toggle toggle-primary"/>
             </label>
             <label id="info-btn" for="info-modal" class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Transcription info" aria-label="Transcription info" style="margin-left:auto;">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
             </label>
-            <!-- Collapse the pinned player to reclaim editing space (phone layout only, #349) -->
-            <button id="player-collapse-toggle" type="button" class="btn btn-square btn-ghost btn-sm" aria-label="Collapse player" aria-expanded="true">
-              <svg id="player-collapse-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
-            </button>
           </div>
         </div>
 
         <div id="recents-pane" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
-          <div class="tabs" style="justify-content:flex-start; margin-top:12px; flex-shrink:0;">
-            <a class="tab tab-lifted tab-active"><strong style="font-size:1.1rem">Recents</strong></a>
-          </div>
-          <div style="display: flex; overflow-y:scroll; flex:1 1 auto; min-height:0;">
-            <div style="width:100%; height:100%;">
-              <ul id="file-picker" class="menu menu-compact bg-base-100 w-full" style="height:100%; border-radius:0.5rem;">
+          <div id="recents-card">
+            <h2 id="recents-title">Recents</h2>
+            <div id="recents-scroll">
+              <ul id="file-picker" class="menu menu-compact bg-base-100 w-full">
               </ul>
             </div>
           </div>
@@ -804,10 +798,10 @@ If you are creating an open source application under a license compatible with t
 
 
   <script src="js/hyperaudio-push-notification.js"></script>
-  <script src="js/hyperaudio-lite.js?v=2.6.0"></script>
-  <script src="js/hyperaudio-lite-extension.js?v=0.6.21"></script>
+  <script src="js/hyperaudio-lite.js?v=2.6.2"></script>
+  <script src="js/hyperaudio-lite-extension.js?v=0.7.2"></script>
   <script src="js/caption.js?v=0.7.1"></script>
-  <script src="js/editor-core.js?v=0.7.1"></script>
+  <script src="js/editor-core.js?v=0.7.2"></script>
 
 
   <import-deepgram-json></import-deepgram-json>
@@ -855,7 +849,7 @@ If you are creating an open source application under a license compatible with t
   </div>
  
 
-  <script src="./js/hyperaudio-lite-editor-storage.js?v=0.6.25"></script>
+  <script src="./js/hyperaudio-lite-editor-storage.js?v=0.7.2"></script>
 
   <script src="js/editor-file-menu.js?v=0.6.12"></script>
 
@@ -886,13 +880,13 @@ If you are creating an open source application under a license compatible with t
     }
 
   </style>
-  <script src="js/editor-main.js?v=0.6.14"></script>
+  <script src="js/editor-main.js?v=0.7.2"></script>
   <script src="js/find-replace.js?v=0.6.29"></script>
   <script src="js/media-export.js?v=0.7.0"></script>
   <!-- end of caption editor additions -->
 
   <!-- responsive small-screen UI toggles (#349) -->
-  <script src="js/responsive.js?v=0.6.27"></script>
+  <script src="js/responsive.js?v=0.7.2"></script>
 
   <!-- service worker script for PWA -->
   <script src="js/editor-service-worker.js?v=0.6.12"></script>

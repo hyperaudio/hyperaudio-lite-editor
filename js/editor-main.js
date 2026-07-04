@@ -207,12 +207,11 @@
         return;
       }
       const on = video.classList.toggle('audio-only');
-      video.style.display = on ? 'none' : '';
-      // no video frame to hover over in audio-only mode, so hide the overlay too
-      const overlay = document.querySelector('#media-play-overlay');
-      if (overlay !== null) {
-        overlay.style.display = on ? 'none' : '';
-      }
+      // body.video-collapsed drives everything in CSS: #player-frame slides
+      // shut (animated max-height/opacity — no display:none pop), the controls
+      // row aligns with the navbar, and the Recents card aligns with the
+      // transcript card (#375). Audio keeps playing throughout.
+      document.body.classList.toggle('video-collapsed', on);
       btn.classList.toggle('btn-active', on);
       btn.setAttribute('aria-pressed', String(on));
       btn.setAttribute('data-tip', on ? 'Show video' : 'Audio only');
