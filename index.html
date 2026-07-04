@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.7.3 (last changed in release 0.7.3) -->
+<!--  Hyperaudio Lite Editor - Version 0.7.4 (last changed in release 0.7.4) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,13 +18,27 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.7.3">
+  <meta name="version" content="0.7.4">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
   <link rel="stylesheet" href="css/hyperaudio-lite-player.css">
- 
+
+  <!-- Vendored ESM dependencies for media export (#381) — bare specifiers used
+       by js/media-export.js and by @mediabunny/mp3-encoder's internal
+       `import "mediabunny"` (the map guarantees one shared module instance).
+       Versions are lockstep: mediabunny and its mp3-encoder release together. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "mediabunny": "./js/vendor/mediabunny-1.50.3.min.js",
+      "@mediabunny/mp3-encoder": "./js/vendor/mediabunny-mp3-encoder-1.50.3.min.js",
+      "soundtouchjs": "./js/vendor/soundtouchjs-0.3.0.js"
+    }
+  }
+  </script>
+
   <script src="js/audio-source.js?v=0.6.24"></script>
   <script src="js/hls-source.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=0.6.7"></script>
@@ -883,7 +897,7 @@ If you are creating an open source application under a license compatible with t
   </style>
   <script src="js/editor-main.js?v=0.7.2"></script>
   <script src="js/find-replace.js?v=0.6.29"></script>
-  <script src="js/media-export.js?v=0.7.0"></script>
+  <script src="js/media-export.js?v=0.7.4"></script>
   <!-- end of caption editor additions -->
 
   <!-- responsive small-screen UI toggles (#349) -->

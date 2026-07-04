@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 0.7.0 — last changed in release 0.7.0
+ * @version 0.7.4 — last changed in release 0.7.4
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -23,22 +23,24 @@
  * kept sections' cumulative offsets, so the transcript stays in sync with the
  * exported file.
  *
- * mediabunny (and the MP3 encoder extension) load lazily from a CDN on first
- * use — non-exporting users pay nothing. Formats the browser can't encode are
+ * mediabunny (and the MP3 encoder extension) are vendored under js/vendor/
+ * (#381, so export works offline) and load lazily on first use —
+ * non-exporting users pay nothing. Formats the browser can't encode are
  * omitted from the format list at modal-open time.
  */
 
 (function () {
-  // The +esm builds (not dist/bundles) so the mp3-encoder extension's bare
-  // `import "mediabunny"` resolves; and EXACT lockstep versions (they release
-  // together) so the extension's rewritten import is the *same URL* as ours —
-  // one shared module instance, so registerMp3Encoder() registers into the
-  // copy we encode with. A version-range URL here would load mediabunny twice.
-  const MEDIABUNNY_CDN = 'https://cdn.jsdelivr.net/npm/mediabunny@1.50.3/+esm';
-  const MP3_ENCODER_CDN = 'https://cdn.jsdelivr.net/npm/@mediabunny/mp3-encoder@1.50.3/+esm';
+  // Bare specifiers, resolved to the vendored files in js/vendor/ by the
+  // import map in index.html (#381). The map is what guarantees the
+  // mp3-encoder extension's internal bare `import "mediabunny"` resolves to
+  // the SAME module instance we encode with — registerMp3Encoder() registers
+  // into our copy. Versions stay EXACT lockstep (mediabunny and the extension
+  // release together); bump both vendored files and the import map as a pair.
+  const MEDIABUNNY_SRC = 'mediabunny';
+  const MP3_ENCODER_SRC = '@mediabunny/mp3-encoder';
   // SoundTouch (WSOLA) for pitch-preserved time-stretch when exporting at the
-  // playback speed. LGPL-2.1, loaded unmodified from CDN.
-  const SOUNDTOUCH_CDN = 'https://cdn.jsdelivr.net/npm/soundtouchjs@0.3.0/+esm';
+  // playback speed. LGPL-2.1, vendored unmodified.
+  const SOUNDTOUCH_SRC = 'soundtouchjs';
 
   let mediabunnyPromise = null;
   let soundtouchPromise = null;
@@ -46,14 +48,14 @@
 
   const loadMediabunny = () => {
     if (mediabunnyPromise === null) {
-      mediabunnyPromise = import(MEDIABUNNY_CDN);
+      mediabunnyPromise = import(MEDIABUNNY_SRC);
     }
     return mediabunnyPromise;
   };
 
   const loadSoundtouch = () => {
     if (soundtouchPromise === null) {
-      soundtouchPromise = import(SOUNDTOUCH_CDN);
+      soundtouchPromise = import(SOUNDTOUCH_SRC);
     }
     return soundtouchPromise;
   };
@@ -63,7 +65,7 @@
   const ensureMp3Encoder = async (mb) => {
     if (mp3Registered) return true;
     try {
-      const ext = await import(MP3_ENCODER_CDN);
+      const ext = await import(MP3_ENCODER_SRC);
       ext.registerMp3Encoder();
       mp3Registered = true;
       return true;
