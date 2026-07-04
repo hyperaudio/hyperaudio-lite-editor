@@ -253,21 +253,35 @@
     let prevKeptEnd = null;
     let pendingStruck = [];
 
+    // A run of struck words in one region is always ONE cut spanning from the
+    // first struck word's start to the last one's end, so the silences BETWEEN
+    // struck words go with them (cutting only the word spans left those pauses
+    // playing back-to-back — audible fragments of the struck region).
+    const struckRunCut = (struckSpans) => {
+      if (struckSpans.length === 0) return null;
+      let end = struckSpans[0].end;
+      struckSpans.forEach(s => { if (s.end > end) end = s.end; }); // tolerate overlapping word timings
+      return { start: struckSpans[0].start, end };
+    };
+
     const flushRegion = (regionStart, regionEnd, struckSpans, bufferLeft, bufferRight) => {
+      const run = struckRunCut(struckSpans);
       if (removeGapsEnabled && regionStart !== null) {
         const struckTotal = struckSpans.reduce((sum, s) => sum + (s.end - s.start), 0);
         const effectivePause = (regionEnd - regionStart) - struckTotal;
         if (effectivePause > gapThreshold) {
-          const cutStart = regionStart + (bufferLeft ? gapBuffer : 0);
-          const cutEnd = regionEnd - (bufferRight ? gapBuffer : 0);
+          // cut the whole region; the edge buffers protect the neighbouring
+          // kept words' tails, but never at the price of keeping struck audio
+          const cutStart = Math.min(regionStart + (bufferLeft ? gapBuffer : 0), run !== null ? run.start : Infinity);
+          const cutEnd = Math.max(regionEnd - (bufferRight ? gapBuffer : 0), run !== null ? run.end : -Infinity);
           if (cutEnd > cutStart) {
             cuts.push({ start: cutStart, end: cutEnd });
             return;
           }
         }
       }
-      // gaps kept (or gap skipping off): cut only the struck words themselves
-      struckSpans.forEach(s => cuts.push({ start: s.start, end: s.end }));
+      // gaps kept (or gap skipping off): cut the struck run whole
+      if (run !== null) cuts.push(run);
     };
 
     words.forEach(word => {
@@ -280,7 +294,8 @@
         if (regionStart !== null && word.start > regionStart) {
           flushRegion(regionStart, word.start, pendingStruck, prevKeptEnd !== null, true);
         } else {
-          pendingStruck.forEach(s => cuts.push({ start: s.start, end: s.end }));
+          const run = struckRunCut(pendingStruck);
+          if (run !== null) cuts.push(run);
         }
       }
       pendingStruck = [];
