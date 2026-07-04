@@ -21,12 +21,14 @@ document.querySelector('#search-box').addEventListener("keyup", (event) => {
 });
 
 
-// searchPhrase + helpers ported verbatim from hyperaudio-lite v2.5.1's
+// searchPhrase + helpers ported verbatim from hyperaudio-lite v2.6.2's
 // extension. Walks consecutive [data-m] spans for multi-word phrases; for each
 // matching span it wraps just the matched substring in a <mark class="search-mark">
 // so only the searched characters are highlighted, not the whole word. Matching
 // is substring-based, so word fragments are found as you type.
 const SEARCH_PUNCT = /[.,\-\/#!$%\^&\*;:{}=_`~()\?\s]/g;
+// Non-global copy for single-character tests (a /g regex is stateful in .test()).
+const SEARCH_PUNCT_CHAR = new RegExp(SEARCH_PUNCT.source);
 const normalise = (text) => text.toLowerCase().replace(SEARCH_PUNCT, '');
 
 const clearPreviousSearch = () => {
@@ -39,15 +41,43 @@ const clearPreviousSearch = () => {
   });
 };
 
+// Find the range of `original` whose normalised form matches `needle` (already
+// lowercased and punctuation-stripped): walk the raw text consuming needle
+// characters and skipping punctuation inside the match (#260). Returns
+// [start, end) indices into `original`, or null when the needle isn't present.
+const findRawRange = (original, needle) => {
+  const lower = original.toLowerCase();
+  for (let start = 0; start < lower.length; start++) {
+    if (lower[start] !== needle[0]) continue;
+    let oi = start;
+    let ni = 0;
+    while (oi < lower.length && ni < needle.length) {
+      if (lower[oi] === needle[ni]) {
+        oi++;
+        ni++;
+      } else if (SEARCH_PUNCT_CHAR.test(lower[oi])) {
+        oi++;
+      } else {
+        break;
+      }
+    }
+    if (ni === needle.length) return [start, oi];
+  }
+  return null;
+};
+
 // Wrap the first occurrence of `needle` (case-insensitive) inside `span`'s
-// text with <mark class="search-mark">. Punctuation stays outside the mark.
+// text with <mark class="search-mark">. Leading and trailing punctuation stay
+// outside the mark; punctuation inside the match (the dash in "SPEAKER-2" for
+// the needle "speaker2") is included, so the visible word is highlighted
+// whole even though matching compares punctuation-stripped text (#260).
 const highlightSubstring = (span, needle) => {
   const original = span.textContent;
-  const idx = original.toLowerCase().indexOf(needle);
-  if (idx < 0) return;
-  const before = original.slice(0, idx);
-  const hit = original.slice(idx, idx + needle.length);
-  const after = original.slice(idx + needle.length);
+  const range = findRawRange(original, needle);
+  if (range === null) return;
+  const before = original.slice(0, range[0]);
+  const hit = original.slice(range[0], range[1]);
+  const after = original.slice(range[1]);
   span.textContent = '';
   if (before) span.append(before);
   const mark = document.createElement('mark');
