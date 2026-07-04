@@ -459,7 +459,11 @@
       if (sidebarOpen === true) {
         document.querySelector('.holder').style.left = 0;
         document.querySelector('.main-panel').style.left = 0;
-        document.querySelector('.transcript-holder').style.left = 0;
+        document.querySelector('.transcript-holder').style.left = '16px';
+        // slide the side panel off-screen too — otherwise it lingers
+        // underneath and the video peeks through the 8px gap above the
+        // floating transcript card (#375)
+        document.querySelector('.side-panel').style.left = '-400px';
         document.querySelector('#sidebar-close-icon').style.display = "none";
         document.querySelector('#sidebar-open-icon').style.display = "block";
         sidebarOpen = false;
@@ -467,6 +471,7 @@
         document.querySelector('.holder').style.left = "400px";
         document.querySelector('.main-panel').style.left = "400px";
         document.querySelector('.transcript-holder').style.left = "400px";
+        document.querySelector('.side-panel').style.left = '0px';
         document.querySelector('#sidebar-close-icon').style.display = "block";
         document.querySelector('#sidebar-open-icon').style.display = "none";
         sidebarOpen = true;

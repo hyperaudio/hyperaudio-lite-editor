@@ -9,7 +9,12 @@ html {
   color-scheme: light;
 }
 
-body {
+/* body[data-theme] (0,1,1) outguns DaisyUI's data-theme background (which
+   paints the body white and loads after this file) without needing !important —
+   the 8px gaps around the transcript card (#375) expose the body, so it must
+   be the chrome grey for the card corners to show. */
+body,
+body[data-theme="light"] {
   font-family: system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Fira Sans','Droid Sans','Helvetica Neue',sans-serif;
   line-height: 1.8;
   background-color: #f5f5f5;
@@ -91,9 +96,9 @@ input[type="number"] {
   box-sizing: border-box;
   padding-left: 16px;
   padding-right: 16px;
-  /* stop content 52px above the bottom so the Files panel's bottom lines up
-     with the transcript (which ends at the play bar, bottom:52px) */
-  padding-bottom: 52px;
+  /* stop content 60px above the bottom so the Recents card's bottom lines up
+     with the transcript card (play bar 52px + 8px float gap) */
+  padding-bottom: 60px;
 }
 
 .top-bar-container {
@@ -128,10 +133,10 @@ dialog::backdrop {
   border-radius: 0.5rem;
   overflow-y:scroll;
   position: absolute;
-  top: 70px;
+  top: 78px;             /* 8px of canvas below the navbar so the card floats */
   left: 400px;
-  right: 0;
-  bottom: 52px;          /* leave room for the docked play bar */
+  right: 16px;
+  bottom: 60px;          /* play bar (52px) + 8px gap — the corners read as a card */
   transition: left 0.5s ease;
 }
 
@@ -245,9 +250,9 @@ dialog::backdrop {
     justify-content: center;
     background-color: #ffffff;
     overflow-y:scroll;
-    top: 50px;
-    right: 0;
-    bottom: 52px;
+    top: 58px;
+    right: 16px;
+    bottom: 60px;
     padding: 8px;
   }
 
@@ -262,10 +267,9 @@ dialog::backdrop {
 
 }
 
-/* The Recents drawer backdrop and the player-collapse toggle only exist on the
-   small-screen layout; hide them by default (desktop). */
+/* The Recents drawer backdrop only exists on the small-screen layout; hide it
+   by default (desktop). */
 #drawer-backdrop { display: none; }
-#player-collapse-toggle { display: none; }
 
 /* =========================================================================
    Small-screen layout (#349) — phones and tablet portrait.
@@ -280,8 +284,8 @@ dialog::backdrop {
     --nav-h: 70px;       /* matches the navbar's inline min-height */
     --player-h: 210px;   /* video area + a 44px controls row */
   }
-  body.player-collapsed {
-    --player-h: 44px;    /* controls row only; video hidden */
+  body.video-collapsed {
+    --player-h: 44px;    /* controls row only; video hidden (audio-only button) */
   }
 
   /* the side panel no longer lays anything out — its children (player + recents)
@@ -345,13 +349,18 @@ dialog::backdrop {
     margin-top: 4px;
     overflow-x: auto;
   }
+  /* Keep the floating Regenerate button below the pinned player (its top-20
+     utility class would sit it on the video); tracks the collapse var. */
+  #regenerate-btn {
+    top: calc(var(--nav-h) + var(--player-h) + 8px);
+    right: 8px;
+    transition: top 0.25s ease;
+  }
+
   /* Paragraph timecodes live in the transcript's left margin, which the
      full-width mobile layout has no room for — hide the toggle and any nodes. */
   #player-controls label[for="show-timecodes"] { display: none !important; }
   .para-timecode { display: none; }
-  /* flip the collapse chevron when collapsed */
-  #player-collapse-toggle { display: inline-flex; }
-  body.player-collapsed #player-collapse-icon { transform: rotate(180deg); }
 
   /* transcript fills the space between the pinned player and the play bar */
   .transcript-holder {
@@ -660,4 +669,114 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
 #export-progress::-moz-progress-bar {
   background-color: oklch(var(--p));
   border-radius: 9999px;
+}
+
+/* =========================================================================
+   UI polish (#375)
+   ========================================================================= */
+
+/* Recents: the heading lives INSIDE the white card (so the card top can align
+   with the transcript card when the video is collapsed), and the card matches
+   the video/transcript corner treatment. */
+#recents-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 12px;
+  background: #ffffff;
+  border-radius: 0.5rem;
+}
+#recents-title {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 12px 16px 4px;
+  margin: 0;
+}
+#recents-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+/* The caption editor's floating Regenerate button is injected as
+   fixed top-20 right-8 with no z-index, so positioned content (the caption
+   rows / transcript holder) painted over it. Lift it above content, below
+   the drawer (45) and navbar (60). */
+#regenerate-btn { z-index: 20; }
+
+/* Video collapse (audio-only button), desktop: slide the frame shut instead
+   of a display:none pop, at the same 0.5s ease as the sidebar slide so all
+   panel motion matches. The controls row and Recents card animate in step
+   (their margins move under body.video-collapsed below). overflow hidden also
+   clips the play overlay while shut; 480px accommodates portrait videos at
+   the 368px card width. Mobile keeps its own pinned-pane animation. */
+@media screen and (min-width: 949px) {
+  #player-frame {
+    overflow: hidden;
+    max-height: 480px;
+    transition: max-height 0.5s ease, opacity 0.5s ease;
+  }
+  body.video-collapsed #player-frame {
+    max-height: 0;
+    opacity: 0;
+  }
+  #player-controls {
+    transition: margin-top 0.5s ease;
+  }
+  #recents-card {
+    transition: margin-top 0.5s ease;
+  }
+}
+
+/* Player controls row (formerly inline styles in index.html, moved here so
+   state rules below can override without !important). */
+#player-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+/* Speakers / Timecodes switches: the tailwind build has the DaisyUI .toggle
+   base but not the -sm / -primary variants, so size and tint them here. */
+#player-controls .toggle {
+  height: 1.25rem;
+  width: 2.5rem;
+  --handleoffset: 1.25rem;
+  margin-bottom: 0;
+  border: none;
+}
+#player-controls .toggle:checked {
+  color: oklch(var(--p));
+}
+
+/* Buttons pick up an 8px margin-bottom from the global input/button rule,
+   which nudges them off-centre in flex rows — neutralise in the bars. */
+.navbar .btn,
+#player-controls .btn,
+#player-controls button,
+#playbar .btn,
+#playbar button {
+  margin-bottom: 0;
+}
+
+/* a touch more air between the search box and the find/replace toggle */
+#find-row { gap: 6px; }
+
+/* With the video collapsed (audio-only), the controls row shares the line with
+   the navbar buttons (both centred in the 70px top band), and the Recents card
+   top aligns with the transcript card top. Values measured against the navbar
+   buttons' centre (y=35). Desktop two-pane only — the pinned-player layout
+   handles small screens. */
+@media screen and (min-width: 949px) {
+  body.video-collapsed #player-controls {
+    margin-top: 11px;
+  }
+  body.video-collapsed #recents-card {
+    margin-top: 27px;
+  }
 }
