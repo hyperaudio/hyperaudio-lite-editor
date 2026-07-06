@@ -364,6 +364,9 @@ If you are creating an open source application under a license compatible with t
               <li><export-json></export-json></li>
               <li><export-ionosphere></export-ionosphere></li>
               <li><import-json></import-json></li>
+              <li><export-youtube-vtt></export-youtube-vtt></li>
+              <li><export-youtube-xml></export-youtube-xml></li>
+              <li><label for="file-import-youtube-caption-dialog">Import YouTube captions</label></li>
               <li><label for="file-import-deepgram-json-dialog">Import Deepgram JSON</label></li>
               <li><label for="file-import-srt-dialog">Import SRT</label></li>
               <li><label for="file-import-vtt-dialog">Import VTT</label></li>
@@ -822,6 +825,7 @@ If you are creating an open source application under a license compatible with t
   <import-deepgram-json></import-deepgram-json>
   <import-srt></import-srt>
   <import-vtt></import-vtt>
+  <import-youtube-captions></import-youtube-captions>
   
   <!-- comment out if localstorage not required -->
 
@@ -868,6 +872,7 @@ If you are creating an open source application under a license compatible with t
 
   <script src="js/editor-file-menu.js?v=0.6.12"></script>
 
+  <script src="./js/youtube-caption-converter.js"></script>
   <script src="./js/hyperaudio-lite-editor-export.js" type="module"> </script>
   <!-- end of localstorage additions -->
 
