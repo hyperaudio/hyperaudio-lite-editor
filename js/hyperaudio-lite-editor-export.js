@@ -125,7 +125,7 @@ class ImportDeepgramJson extends HTMLElement {
     <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
         <h3 class="font-bold text-lg">Import Deepgram JSON Dialog</h3>
         <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or use local media file</span>
@@ -252,7 +252,7 @@ class ImportSrt extends HTMLElement {
     <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="file-import-srt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label for="file-import-srt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
         <h3 class="font-bold text-lg">Import SRT Dialog</h3>
         <input id="srt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or use local media file</span>
@@ -376,7 +376,7 @@ class ImportVtt extends HTMLElement {
     <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
-        <label id="close-modal" for="file-import-vtt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label for="file-import-vtt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
         <h3 class="font-bold text-lg">Import VTT Dialog</h3>
         <input id="vtt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or use local media file</span>

@@ -351,7 +351,7 @@ dialog::backdrop {
   }
   /* Keep the floating Regenerate button below the pinned player (its top-20
      utility class would sit it on the video); tracks the collapse var. */
-  #regenerate-btn {
+  #regenerate-float-btn {
     top: calc(var(--nav-h) + var(--player-h) + 8px);
     right: 8px;
     transition: top 0.25s ease;
@@ -705,7 +705,7 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
    fixed top-20 right-8 with no z-index, so positioned content (the caption
    rows / transcript holder) painted over it. Lift it above content, below
    the drawer (45) and navbar (60). */
-#regenerate-btn { z-index: 20; }
+#regenerate-float-btn { z-index: 20; }
 
 /* Video collapse (audio-only button), desktop: slide the frame shut instead
    of a display:none pop, at the same 0.5s ease as the sidebar slide so all
