@@ -445,19 +445,6 @@
       let track = document.querySelector('#hyperplayer-vtt');
       track.src = "data:text/vtt,"+encodeURIComponent(vttCaptions);
 
-      document
-      .querySelector("#download-hypertranscript")
-      .setAttribute(
-        "href",
-        "data:text/html," +
-          encodeURIComponent(
-            hyperaudioTemplate
-              .replace("{hypertranscript}", getTranscriptData())
-              .replace("{sourcemedia}", document.querySelector("#hyperplayer").src)
-              .replace("{sourcevtt}", track.src)
-          )
-      );
-
       document.querySelector('#download-vtt').setAttribute('href', "data:text/vtt,"+encodeURIComponent(vttCaptions));
       document.querySelector('#download-srt').setAttribute('href', "data:text/srt,"+encodeURIComponent(srtCaptions));
     }

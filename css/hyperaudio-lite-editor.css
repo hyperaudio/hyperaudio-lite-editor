@@ -754,6 +754,17 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
   color: oklch(var(--p));
 }
 
+/* Switches inside modals (export options, skip-gaps) — same build gap as the
+   player toggles: tint them primary when on, drop the global input margin, and
+   keep them from shrinking when the label text wraps. */
+.modal-box .toggle {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+.modal-box .toggle:checked {
+  color: oklch(var(--p));
+}
+
 /* Buttons pick up an 8px margin-bottom from the global input/button rule,
    which nudges them off-centre in flex rows — neutralise in the bars. */
 .navbar .btn,
