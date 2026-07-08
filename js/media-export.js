@@ -573,9 +573,14 @@
   const sourceEntire = document.getElementById('export-source-entire');
   const sourceEdited = document.getElementById('export-source-edited');
   const editSummary = document.getElementById('export-edit-summary');
-  const rateRow = document.getElementById('export-rate-row');
-  const rateCheck = document.getElementById('export-rate');
-  const rateValue = document.getElementById('export-rate-value');
+  const adjustRow = document.getElementById('export-adjust-row');
+  const adjustCheck = document.getElementById('export-adjust');
+  const adjustPanel = document.getElementById('export-adjust-panel');
+  const speedInput = document.getElementById('export-speed');
+  const speedSlider = document.getElementById('export-speed-slider');
+  const lengthInput = document.getElementById('export-length');
+  const lengthOrigEl = document.getElementById('export-length-orig');
+  const adjustReadout = document.getElementById('export-adjust-readout');
   const retimeRow = document.getElementById('export-retime-row');
   const retimeCheck = document.getElementById('export-retime');
   const vttRow = document.getElementById('export-vtt-row');
@@ -609,8 +614,79 @@
     return r > 0 ? r : 1;
   };
 
-  const rateApplied = () =>
-    rateRow.style.display !== 'none' && rateCheck.checked && playbackRate() !== 1;
+  // --- speed / length ("stretch to fit") ------------------------------------
+  const RATE_MIN = 0.25, RATE_MAX = 4;
+  const clampRate = (r) => (r > 0 ? Math.min(RATE_MAX, Math.max(RATE_MIN, r)) : 1);
+  const adjustApplied = () =>
+    adjustRow !== null && adjustRow.style.display !== 'none' && adjustCheck.checked;
+  const exportRate = () => (adjustApplied() ? clampRate(parseFloat(speedInput.value)) : 1);
+
+  // The EDITED content length (seconds) is what speed and target-length trade
+  // against, so it tracks the Entire/Edited choice.
+  const currentContentLength = () => {
+    const player = document.getElementById('hyperplayer');
+    const dur = player && !isNaN(player.duration) ? player.duration : 0;
+    if (!dur) return 0;
+    const edited = sourceEdited.checked && !sourceEdited.disabled;
+    return keptDuration(edited ? editedSections(dur) : [{ start: 0, end: dur }]);
+  };
+
+  const fmtLen = (s) => {
+    s = Math.max(0, Math.round(s));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const parseLen = (str) => {
+    const t = String(str).trim();
+    if (t === '') return NaN;
+    if (t.includes(':')) {
+      const [m, s] = t.split(':');
+      const mm = parseInt(m, 10), ss = parseInt(s, 10);
+      return (isNaN(mm) || isNaN(ss)) ? NaN : mm * 60 + ss;
+    }
+    const n = parseFloat(t);
+    return isNaN(n) ? NaN : n;
+  };
+
+  const updateAdjustReadout = () => {
+    if (adjustReadout === null) return;
+    const rate = clampRate(parseFloat(speedInput.value));
+    const len = currentContentLength() / rate;
+    const warn = (rate < 0.5 || rate > 2) ? '  ⚠ noticeable quality loss' : '';
+    adjustReadout.textContent = `→ ${fmtLen(len)} at ${+rate.toFixed(2)}×, pitch preserved${warn}`;
+  };
+  // Speed is the source of truth; mirror it to the slider and derive the length.
+  const syncFromSpeed = () => {
+    const rate = clampRate(parseFloat(speedInput.value));
+    speedInput.value = String(+rate.toFixed(2));
+    if (speedSlider !== null) speedSlider.value = String(rate);
+    if (lengthInput !== null) lengthInput.value = fmtLen(currentContentLength() / rate);
+    updateAdjustReadout();
+  };
+  const syncFromSlider = () => {
+    speedInput.value = String(+parseFloat(speedSlider.value).toFixed(2));
+    syncFromSpeed();
+  };
+  const syncFromLength = () => {
+    const target = parseLen(lengthInput.value);
+    const content = currentContentLength();
+    if (target > 0 && content > 0) {
+      speedInput.value = String(+clampRate(content / target).toFixed(2));
+    }
+    syncFromSpeed();   // reformat length to the (possibly clamped) rate
+  };
+  const updateAdjustVisibility = () => {
+    if (adjustPanel === null || adjustCheck === null || adjustRow === null) return;
+    adjustPanel.style.display =
+      (adjustCheck.checked && adjustRow.style.display !== 'none') ? 'block' : 'none';
+  };
+  // Content length changed (Entire vs Edited) — refresh the "was m:ss" hint and
+  // re-derive the length from the current speed.
+  const refreshAdjustForContent = () => {
+    if (adjustRow === null) return;
+    const orig = currentContentLength();
+    if (lengthOrigEl !== null) lengthOrigEl.textContent = orig > 0 ? `(was ${fmtLen(orig)})` : '';
+    if (adjustCheck.checked) syncFromSpeed();
+  };
 
   // The re-timed transcript makes sense whenever the exported media's timeline
   // differs from the original: edits, an applied playback speed, or both.
@@ -650,7 +726,8 @@
     try {
       window.localStorage.setItem(EXPORT_OPTS_KEY, JSON.stringify({
         burn: burnCheck.checked,
-        rate: rateCheck.checked,
+        adjust: adjustCheck !== null && adjustCheck.checked,
+        speed: adjustCheck !== null ? clampRate(parseFloat(speedInput.value)) : 1,
         retime: retimeCheck.checked,
         vtt: vttCheck !== null && vttCheck.checked,
         srt: srtCheck !== null && srtCheck.checked,
@@ -685,15 +762,17 @@
     if (vttCheck !== null) vttCheck.checked = opts.vtt === true;
     if (srtCheck !== null) srtCheck.checked = opts.srt === true;
 
-    // offer the playback-speed option when the player isn't at 1×
-    const rate = playbackRate();
-    if (rate !== 1) {
-      rateValue.textContent = `${rate}×`;
-      rateRow.style.display = 'flex';
-      rateCheck.checked = opts.rate === true;
-    } else {
-      rateRow.style.display = 'none';
-      rateCheck.checked = false;
+    // speed / length: offer it whenever there's media; restore the toggle and
+    // the last speed, defaulting to the player's current rate so a playback
+    // speed set in the editor still carries into the export.
+    if (adjustRow !== null) {
+      adjustRow.style.display = currentContentLength() > 0 ? 'flex' : 'none';
+      adjustCheck.checked = opts.adjust === true;
+      const startSpeed = clampRate(typeof opts.speed === 'number' ? opts.speed : playbackRate());
+      speedInput.value = String(+startSpeed.toFixed(2));
+      refreshAdjustForContent();
+      syncFromSpeed();
+      updateAdjustVisibility();
     }
     updateRetimeVisibility();
 
@@ -747,14 +826,15 @@
       if (fmt.needsMp3) await ensureMp3Encoder(mb);
 
       const edited = sourceEdited.checked && !sourceEdited.disabled;
-      const rate = rateApplied() ? playbackRate() : 1;
+      const rate = exportRate();
+      const rateLabel = +rate.toFixed(2);
       const burn = fmt.kind === 'video' && burnRow !== null &&
         burnRow.style.display !== 'none' && burnCheck.checked;
       const wantRetime = retimeCheck.checked && retimeRow.style.display !== 'none';
       const wantVtt = vttCheck !== null && vttCheck.checked && vttRow.style.display !== 'none';
       const wantSrt = srtCheck !== null && srtCheck.checked && srtRow.style.display !== 'none';
       const baseName = exportBaseName();
-      const suffix = `${edited ? '-edited' : ''}${rate !== 1 ? `-${rate}x` : ''}${burn ? '-captioned' : ''}`;
+      const suffix = `${edited ? '-edited' : ''}${rate !== 1 ? `-${rateLabel}x` : ''}${burn ? '-captioned' : ''}`;
 
       const player = document.getElementById('hyperplayer');
       const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
@@ -770,7 +850,7 @@
         blob = await exportEntire(mb, fmt, setProgress);
       } else {
         const captions = burn ? buildCaptionChunks(sections, rate) : null;
-        setStatus(burn ? 'Exporting with captions…' : (rate !== 1 ? `Exporting at ${rate}× — pitch preserved…` : 'Exporting edited media…'));
+        setStatus(burn ? 'Exporting with captions…' : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…` : 'Exporting edited media…'));
         blob = fmt.kind === 'video'
           ? await exportEditedVideo(mb, fmt, sections, rate, setProgress, captions)
           : await exportEditedAudio(mb, fmt, sections, rate, setProgress);
@@ -826,11 +906,20 @@
   };
 
   modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
-  sourceEntire.addEventListener('change', updateRetimeVisibility);
-  sourceEdited.addEventListener('change', updateRetimeVisibility);
-  rateCheck.addEventListener('change', updateRetimeVisibility);
+  sourceEntire.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
+  sourceEdited.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
   formatSelect.addEventListener('change', updateBurnVisibility);
-  [burnCheck, rateCheck, retimeCheck, vttCheck, srtCheck].forEach((el) => {
+  if (adjustCheck !== null) {
+    adjustCheck.addEventListener('change', () => {
+      updateAdjustVisibility();
+      if (adjustCheck.checked) syncFromSpeed();
+      saveExportOpts();
+    });
+    speedInput.addEventListener('input', () => { syncFromSpeed(); saveExportOpts(); });
+    if (speedSlider !== null) speedSlider.addEventListener('input', () => { syncFromSlider(); saveExportOpts(); });
+    lengthInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
+  }
+  [burnCheck, retimeCheck, vttCheck, srtCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', saveExportOpts);
   });
   startBtn.addEventListener('click', runExport);

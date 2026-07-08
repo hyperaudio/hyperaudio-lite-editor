@@ -684,13 +684,27 @@ If you are creating an open source application under a license compatible with t
       </div>
       <label class="label-text" for="export-format">Format</label>
       <select id="export-format" class="select select-bordered w-full" style="margin-top:4px"></select>
+      <label id="export-adjust-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-adjust" class="toggle toggle-primary" />
+        <span class="label-text">Adjust speed / length (pitch preserved)</span>
+      </label>
+      <div id="export-adjust-panel" style="display:none; margin-top:10px; padding-left:2px">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+          <span class="label-text" style="min-width:48px">Speed</span>
+          <input id="export-speed-slider" type="range" min="0.25" max="4" step="0.05" value="1" class="range range-xs range-primary" style="flex:1; min-width:110px" aria-label="Export speed" />
+          <input id="export-speed" type="number" min="0.25" max="4" step="0.05" value="1" class="input input-bordered input-sm" style="width:92px" aria-label="Export speed factor" />
+          <span class="label-text">×</span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:8px">
+          <span class="label-text" style="min-width:48px">Length</span>
+          <input id="export-length" type="text" inputmode="numeric" placeholder="m:ss" class="input input-bordered input-sm" style="width:92px" aria-label="Export length" />
+          <span id="export-length-orig" class="label-text" style="opacity:0.6"></span>
+        </div>
+        <div id="export-adjust-readout" style="font-size:85%; opacity:0.8; margin-top:8px"></div>
+      </div>
       <label id="export-burn-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
         <input type="checkbox" id="export-burn" class="toggle toggle-primary" />
         <span class="label-text">Burn captions into the video (word-level highlight)</span>
-      </label>
-      <label id="export-rate-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
-        <input type="checkbox" id="export-rate" class="toggle toggle-primary" />
-        <span class="label-text">Apply the playback speed (<span id="export-rate-value">1×</span>) — pitch preserved</span>
       </label>
       <label id="export-retime-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
         <input type="checkbox" id="export-retime" class="toggle toggle-primary" />
