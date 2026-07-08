@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 0.7.7 — last changed in release 0.7.7
+ * @version 0.8.0 — last changed in release 0.8.0
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
