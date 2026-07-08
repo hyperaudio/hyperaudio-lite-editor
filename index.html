@@ -42,6 +42,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/audio-source.js?v=0.6.24"></script>
   <script src="js/hls-source.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=0.6.7"></script>
+  <script src="js/hyperaudio-lite-editor-assemblyai.js?v=0.8.1"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=0.7.0"></script>
   <script src="js/word-alignment.js"></script>
@@ -137,6 +138,33 @@ If you are creating an open source application under a license compatible with t
       </div>
       <div class="modal-action">
         <label id="transcribe-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
+      </div>
+    </form>
+  </template>
+
+  <template id="assemblyai-modal-template">
+    <form id="assemblyai-form" name="assemblyai-form">
+      <div class="flex flex-col gap-4 w-full">
+        <input id="assemblyai-key" type="text" placeholder="AssemblyAI API key" class="input input-bordered w-full max-w-xs" />
+        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+        <input id="assemblyai-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <span class="label-text">or</span>
+        <input id="assemblyai-file" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+
+        <span class="label-text">Model</span>
+        <select id="assemblyai-model" name="assemblyai-model" class="select select-bordered w-full max-w-xs"></select>
+
+        <span class="label-text">Language</span>
+        <select id="assemblyai-language" name="assemblyai-language" class="select select-bordered w-full max-w-xs"></select>
+
+        <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
+          <input id="assemblyai-diarize" type="checkbox" class="toggle toggle-primary" />
+          <span class="label-text">Detect speakers (diarization)</span>
+        </label>
+      </div>
+      <div class="modal-action">
+        <label id="assemblyai-submit-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
       </div>
     </form>
   </template>
@@ -747,24 +775,29 @@ If you are creating an open source application under a license compatible with t
 
   <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box" style="max-width:36rem">
+    <div class="modal-box" style="max-width:42rem">
       <label for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
       <h3 class="font-bold text-lg"  style="margin-bottom:16px">Transcribe</h3>
       <div role="tablist" class="tabs tabs-lifted">
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Parakeet" checked />
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="Parakeet" checked />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <client-parakeet-service templateSelector="#parakeet-local-template"></client-parakeet-service>
         </div>
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Whisper"  />
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="Whisper"  />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
         </div>
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:165px; white-space:nowrap" aria-label="Deepgram"  />
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="Deepgram"  />
         <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
           <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
+        </div>
+
+        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="AssemblyAI"  />
+        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+          <assemblyai-service templateSelector="#assemblyai-modal-template"></assemblyai-service>
         </div>
 
       </div>
