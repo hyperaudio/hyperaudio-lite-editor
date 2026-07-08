@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.7.6 (last changed in release 0.7.6) -->
+<!--  Hyperaudio Lite Editor - Version 0.7.7 (last changed in release 0.7.7) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.7.6">
+  <meta name="version" content="0.7.7">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -104,7 +104,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.7.6">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.7.7">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -350,9 +350,10 @@ If you are creating an open source application under a license compatible with t
                 </span>
               </li>
               <li><a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT (Captions)</a></li>
+              <li><a id="download-vtt-words" href="" download="hyperaudio.words.vtt">WebVTT (Word-level / Karaoke)</a></li>
               <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
               <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
-              <li><a id="download-hypertranscript" href="" download="hyperaudio.html">Interactive Transcript</a></li>
+              <li><label id="download-hypertranscript" for="interactive-export-modal">Interactive Transcript</label></li>
               <li><label for="export-modal">Media (WAV / MP3 / MP4…)</label></li>
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
@@ -429,6 +430,9 @@ If you are creating an open source application under a license compatible with t
               <!--<caption-service></caption-service>-->
             </div>
           </div>
+          <label id="export-media-btn" for="export-modal" class="btn btn-square btn-primary tooltip" data-tip="Export media" style="margin-right:4px" aria-label="Export media">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          </label>
           <label for="transcribe-modal" class="btn btn-primary gap-2">
             <span id="transcribe-label">NEW</span>
             <span id="transcribe-label-mobile">NEW</span>
@@ -680,18 +684,63 @@ If you are creating an open source application under a license compatible with t
       </div>
       <label class="label-text" for="export-format">Format</label>
       <select id="export-format" class="select select-bordered w-full" style="margin-top:4px"></select>
-      <label id="export-rate-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
-        <input type="checkbox" id="export-rate" class="checkbox checkbox-primary checkbox-sm" />
-        <span class="label-text">Apply the playback speed (<span id="export-rate-value">1×</span>) — pitch preserved</span>
+      <label class="label-text" for="export-name" style="display:block; margin-top:14px">Save as</label>
+      <input id="export-name" type="text" class="input input-bordered w-full" style="margin-top:4px" placeholder="file name (no extension)" />
+      <div style="font-size:82%; opacity:0.7; margin-top:6px">All exported files use this name. The interactive transcript links the video by it — keep the downloads together in one folder.</div>
+      <label id="export-adjust-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-adjust" class="toggle toggle-primary" />
+        <span class="label-text">Adjust speed / length (pitch preserved)</span>
+      </label>
+      <div id="export-adjust-panel" style="display:none; margin-top:10px; padding-left:2px">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+          <span class="label-text" style="min-width:48px">Speed</span>
+          <input id="export-speed-slider" type="range" min="0.25" max="4" step="0.05" value="1" class="range range-xs range-primary" style="flex:1; min-width:110px" aria-label="Export speed" />
+          <input id="export-speed" type="number" min="0.25" max="4" step="0.05" value="1" class="input input-bordered input-sm" style="width:92px" aria-label="Export speed factor" />
+          <span class="label-text">×</span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:8px">
+          <span class="label-text" style="min-width:48px">Length</span>
+          <input id="export-length" type="text" inputmode="numeric" placeholder="m:ss" class="input input-bordered input-sm" style="width:92px" aria-label="Export length" />
+          <span id="export-length-orig" class="label-text" style="opacity:0.6"></span>
+        </div>
+        <div id="export-adjust-readout" style="font-size:85%; opacity:0.8; margin-top:8px"></div>
+      </div>
+      <label id="export-burn-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-burn" class="toggle toggle-primary" />
+        <span class="label-text">Burn captions into the video (word-level highlight)</span>
       </label>
       <label id="export-retime-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
-        <input type="checkbox" id="export-retime" class="checkbox checkbox-primary checkbox-sm" checked />
-        <span class="label-text">Also download the transcript re-timed to the exported media</span>
+        <input type="checkbox" id="export-retime" class="toggle toggle-primary" />
+        <span class="label-text">Download an interactive transcript (re-timed, links the exported media)</span>
+      </label>
+      <label id="export-vtt-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-vtt" class="toggle toggle-primary" />
+        <span class="label-text">Download WebVTT (.vtt) captions</span>
+      </label>
+      <label id="export-srt-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-srt" class="toggle toggle-primary" />
+        <span class="label-text">Download SRT (.srt) captions</span>
       </label>
       <progress id="export-progress" class="progress progress-primary w-full" value="0" max="100" style="visibility:hidden; margin-top:14px"></progress>
       <div id="export-status" aria-live="polite" style="font-size:85%; opacity:0.75; min-height:1.3em; margin-top:2px"></div>
       <div class="modal-action">
         <button id="export-start" class="btn btn-primary">EXPORT</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="checkbox" id="interactive-export-modal" class="modal-toggle" />
+  <div class="modal">
+    <div class="modal-box" style="max-width:26rem">
+      <label for="interactive-export-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <h3 class="font-bold text-lg" style="margin-bottom:12px">Export interactive transcript</h3>
+      <label class="label-text" for="interactive-media-filename">Media file or URL</label>
+      <input id="interactive-media-filename" type="text" class="input input-bordered w-full" placeholder="e.g. my-video.mp4" style="margin-top:4px" />
+      <div style="font-size:85%; opacity:0.75; margin-top:8px">
+        The page links to your media by this path and loads the Hyperaudio Lite player so words stay clickable. For a local file, save the downloaded HTML in the same folder as the media file so it can be found.
+      </div>
+      <div class="modal-action">
+        <button id="interactive-export-download" class="btn btn-primary">Download</button>
       </div>
     </div>
   </div>
@@ -816,7 +865,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite.js?v=2.6.2"></script>
   <script src="js/hyperaudio-lite-extension.js?v=0.7.2"></script>
   <script src="js/caption.js?v=0.7.1"></script>
-  <script src="js/editor-core.js?v=0.7.3"></script>
+  <script src="js/editor-core.js?v=0.7.7"></script>
 
 
   <import-deepgram-json></import-deepgram-json>
@@ -895,9 +944,11 @@ If you are creating an open source application under a license compatible with t
     }
 
   </style>
-  <script src="js/editor-main.js?v=0.7.6"></script>
+  <script src="js/editor-main.js?v=0.7.7"></script>
   <script src="js/find-replace.js?v=0.6.29"></script>
-  <script src="js/media-export.js?v=0.7.5"></script>
+  <script src="js/media-export.js?v=0.7.7"></script>
+  <!-- word-level / karaoke VTT export (#387 part 1) -->
+  <script src="js/word-vtt.js?v=0.7.7"></script>
   <!-- end of caption editor additions -->
 
   <!-- responsive small-screen UI toggles (#349) -->

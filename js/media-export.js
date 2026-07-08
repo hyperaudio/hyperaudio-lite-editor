@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 0.7.5 — last changed in release 0.7.5
+ * @version 0.7.7 — last changed in release 0.7.7
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -22,6 +22,11 @@
  * media: struck words are dropped and each word's data-m is mapped through the
  * kept sections' cumulative offsets, so the transcript stays in sync with the
  * exported file.
+ *
+ * A video export can optionally BURN word-level captions into the frames (#387):
+ * the same re-timed word data is grouped into short karaoke chunks (word-vtt.js)
+ * and drawn onto each frame's canvas — a read-along highlight (spoken words full
+ * white, upcoming words dimmed) — before the frame is encoded.
  *
  * mediabunny (and the MP3 encoder extension) are vendored under js/vendor/
  * (#381, so export works offline) and load lazily on first use —
@@ -183,6 +188,144 @@
     return clone.innerHTML;
   };
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Re-timed WebVTT + SRT captions for the exported (edited) media. Generated
+  // off a DETACHED copy of the re-timed transcript via the shared caption.js, so
+  // struck words are dropped and times map onto the edited timeline. Passing a
+  // non-existent playerId makes caption()'s player-side effects (setting the live
+  // track src, forcing captions to show) a no-op — the live editor is untouched.
+  // Returns { vtt, srt } or null.
+  const genRetimedCaptions = (sections, rate) => {
+    if (typeof caption !== 'function') return null;
+    const inner = buildRetimedTranscriptHtml(sections, rate);
+    if (inner === null) return null;
+    const host = document.createElement('div');
+    const t = document.createElement('div');
+    t.id = 'hypertranscript';
+    t.innerHTML = inner;
+    host.appendChild(t);
+    try {
+      return caption().init('hypertranscript', 'media-export-no-player', '37', '21', null, null, host);
+    } catch (e) {
+      console.warn('Caption generation for export failed:', e);
+      return null;
+    }
+  };
+
+  // A standalone interactive transcript page (hyperaudio-lite from CDN) that
+  // links the exported media by its relative filename; the transcript is the
+  // re-timed, struck-words-removed clone. trackSrc: a captions URL to link/embed,
+  // or null to omit the <track> entirely (e.g. when captions are burned in).
+  const buildInteractiveExportHtml = (sections, rate, mediaSrc, trackSrc) => {
+    if (typeof hyperaudioTemplate !== 'string' || hyperaudioTemplate === '') return null;
+    const inner = buildRetimedTranscriptHtml(sections, rate);
+    if (inner === null) return null;
+    let html = hyperaudioTemplate
+      .replace('{hypertranscript}', () => inner)
+      .replace('{sourcemedia}', () => mediaSrc)
+      .replace('{sourcevtt}', () => (trackSrc || ''));
+    if (!trackSrc) html = html.replace(/<track[^>]*>/i, '');
+    return html;
+  };
+
+  // Word chunks for burn-in, already mapped onto the EDITED/output timeline.
+  // buildRetimedTranscriptHtml drops struck words and maps each data-m through
+  // the kept sections (÷ rate), so feeding its output to the shared chunker
+  // (word-vtt.js) yields chunks whose times line up with the `t` the video loop
+  // stamps on each frame — no separate mapping needed here. Returns null when
+  // there is no transcript, no words, or word-vtt.js isn't loaded.
+  const buildCaptionChunks = (sections, rate) => {
+    if (typeof window.hyperaudioWordChunks !== 'function') return null;
+    const html = buildRetimedTranscriptHtml(sections, rate);
+    if (html === null) return null;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const chunks = window.hyperaudioWordChunks({ source: tmp });
+    return chunks.length ? chunks : null;
+  };
+
+  // Read-along caption colours, matching the editor transcript's states: the
+  // word currently being spoken is accented (cf. .highlight.active), words
+  // already spoken are full white (.read), upcoming words dimmed (.unread).
+  const CAPTION_READ = 'rgba(255,255,255,1)';
+  const CAPTION_ACTIVE = '#ffe14d';
+  const CAPTION_UNREAD = 'rgba(255,255,255,0.45)';
+
+  // Paint the active caption chunk onto the frame for output-timeline time `t`.
+  // Chunks are held until the next one starts so captions stay continuous.
+  // Legibility comes from a soft shadow + a THIN outline: a thick stroke eats
+  // the fill on slender glyph strokes and bleeds into letter counters (the holes
+  // in o/e/a/d), so it is kept small and the fill is drawn shadow-free on top.
+  const drawCaptionOverlay = (ctx, t, chunks, w, h) => {
+    let active = null;
+    for (const c of chunks) {
+      if (c[0].start <= t) active = c; else break;
+    }
+    if (active === null) return;
+
+    // Exactly one active word: the last whose start has been reached. Earlier
+    // words are "read", later ones "unread".
+    let activeIdx = -1;
+    for (let i = 0; i < active.length; i++) {
+      if (active[i].start <= t) activeIdx = i; else break;
+    }
+
+    const fontSize = Math.max(16, Math.round(h * 0.055));
+    ctx.save();
+    ctx.font = `700 ${fontSize}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineJoin = 'round';
+    const spaceW = ctx.measureText(' ').width;
+    const maxWidth = w * 0.86;
+
+    // wrap the chunk's words into lines that fit the safe width, keeping each
+    // word's index within the chunk so its read/active/unread state is known
+    const lines = [];
+    let line = [];
+    let lineW = 0;
+    for (let i = 0; i < active.length; i++) {
+      const wW = ctx.measureText(active[i].text).width;
+      if (line.length && lineW + spaceW + wW > maxWidth) {
+        lines.push(line);
+        line = [];
+        lineW = 0;
+      }
+      lineW += (line.length ? spaceW : 0) + wW;
+      line.push({ text: active[i].text, index: i });
+    }
+    if (line.length) lines.push(line);
+
+    const lineH = fontSize * 1.25;
+    const bottomMargin = h * 0.10;                       // lower-third, safe-area
+    let y = h - bottomMargin - (lines.length - 1) * lineH;
+    const strokeW = Math.max(2, fontSize * 0.06);
+    for (const ln of lines) {
+      let total = 0;
+      ln.forEach((e, i) => { total += (i ? spaceW : 0) + ctx.measureText(e.text).width; });
+      let x = (w - total) / 2;                            // centre each line
+      for (let i = 0; i < ln.length; i++) {
+        if (i) x += spaceW;
+        const { text, index } = ln[i];
+        // shadow halo + thin outline for legibility over any footage
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = fontSize * 0.16;
+        ctx.lineWidth = strokeW;
+        ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+        ctx.strokeText(text, x, y);
+        // crisp fill with the shadow disabled so interiors stay clean
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = index < activeIdx ? CAPTION_READ
+          : (index === activeIdx ? CAPTION_ACTIVE : CAPTION_UNREAD);
+        ctx.fillText(text, x, y);
+        x += ctx.measureText(text).width;
+      }
+      y += lineH;
+    }
+    ctx.restore();
+  };
+
   // ---------------------------------------------------------------------------
   // Export pipelines
   // ---------------------------------------------------------------------------
@@ -316,7 +459,7 @@
   // Edited media with video: decode frames per kept section and re-timestamp
   // them onto the edited timeline; audio as above (its appended timestamps
   // already match the edited timeline).
-  const exportEditedVideo = async (mb, fmt, sections, rate, onProgress) => {
+  const exportEditedVideo = async (mb, fmt, sections, rate, onProgress, captions) => {
     const input = await makeInput(mb);
     const vTrack = await input.getPrimaryVideoTrack();
     const aTrack = await input.getPrimaryAudioTrack();
@@ -366,6 +509,7 @@
         const frameDur = Math.max(sample.duration || 1 / 30, 0.001) / rate;
         sample.draw(ctx2d, 0, 0, width, height);
         sample.close();
+        if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
         await vSource.add(t, frameDur);
         done += frameDur * rate;
         onProgress(Math.min(0.99, done / total));
@@ -426,14 +570,26 @@
 
   const modalToggle = document.getElementById('export-modal');
   const formatSelect = document.getElementById('export-format');
+  const nameInput = document.getElementById('export-name');
   const sourceEntire = document.getElementById('export-source-entire');
   const sourceEdited = document.getElementById('export-source-edited');
   const editSummary = document.getElementById('export-edit-summary');
-  const rateRow = document.getElementById('export-rate-row');
-  const rateCheck = document.getElementById('export-rate');
-  const rateValue = document.getElementById('export-rate-value');
+  const adjustRow = document.getElementById('export-adjust-row');
+  const adjustCheck = document.getElementById('export-adjust');
+  const adjustPanel = document.getElementById('export-adjust-panel');
+  const speedInput = document.getElementById('export-speed');
+  const speedSlider = document.getElementById('export-speed-slider');
+  const lengthInput = document.getElementById('export-length');
+  const lengthOrigEl = document.getElementById('export-length-orig');
+  const adjustReadout = document.getElementById('export-adjust-readout');
   const retimeRow = document.getElementById('export-retime-row');
   const retimeCheck = document.getElementById('export-retime');
+  const vttRow = document.getElementById('export-vtt-row');
+  const vttCheck = document.getElementById('export-vtt');
+  const srtRow = document.getElementById('export-srt-row');
+  const srtCheck = document.getElementById('export-srt');
+  const burnRow = document.getElementById('export-burn-row');
+  const burnCheck = document.getElementById('export-burn');
   const progressBar = document.getElementById('export-progress');
   const statusEl = document.getElementById('export-status');
   const startBtn = document.getElementById('export-start');
@@ -459,14 +615,125 @@
     return r > 0 ? r : 1;
   };
 
-  const rateApplied = () =>
-    rateRow.style.display !== 'none' && rateCheck.checked && playbackRate() !== 1;
+  // --- speed / length ("stretch to fit") ------------------------------------
+  const RATE_MIN = 0.25, RATE_MAX = 4;
+  const clampRate = (r) => (r > 0 ? Math.min(RATE_MAX, Math.max(RATE_MIN, r)) : 1);
+  const adjustApplied = () =>
+    adjustRow !== null && adjustRow.style.display !== 'none' && adjustCheck.checked;
+  const exportRate = () => (adjustApplied() ? clampRate(parseFloat(speedInput.value)) : 1);
+
+  // The EDITED content length (seconds) is what speed and target-length trade
+  // against, so it tracks the Entire/Edited choice.
+  const currentContentLength = () => {
+    const player = document.getElementById('hyperplayer');
+    const dur = player && !isNaN(player.duration) ? player.duration : 0;
+    if (!dur) return 0;
+    const edited = sourceEdited.checked && !sourceEdited.disabled;
+    return keptDuration(edited ? editedSections(dur) : [{ start: 0, end: dur }]);
+  };
+
+  const fmtLen = (s) => {
+    s = Math.max(0, Math.round(s));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  const parseLen = (str) => {
+    const t = String(str).trim();
+    if (t === '') return NaN;
+    if (t.includes(':')) {
+      const [m, s] = t.split(':');
+      const mm = parseInt(m, 10), ss = parseInt(s, 10);
+      return (isNaN(mm) || isNaN(ss)) ? NaN : mm * 60 + ss;
+    }
+    const n = parseFloat(t);
+    return isNaN(n) ? NaN : n;
+  };
+
+  const updateAdjustReadout = () => {
+    if (adjustReadout === null) return;
+    const rate = clampRate(parseFloat(speedInput.value));
+    const len = currentContentLength() / rate;
+    const warn = (rate < 0.5 || rate > 2) ? '  ⚠ noticeable quality loss' : '';
+    adjustReadout.textContent = `→ ${fmtLen(len)} at ${+rate.toFixed(2)}×, pitch preserved${warn}`;
+  };
+  // Speed is the source of truth; mirror it to the slider and derive the length.
+  const syncFromSpeed = () => {
+    const rate = clampRate(parseFloat(speedInput.value));
+    speedInput.value = String(+rate.toFixed(2));
+    if (speedSlider !== null) speedSlider.value = String(rate);
+    if (lengthInput !== null) lengthInput.value = fmtLen(currentContentLength() / rate);
+    updateAdjustReadout();
+  };
+  const syncFromSlider = () => {
+    speedInput.value = String(+parseFloat(speedSlider.value).toFixed(2));
+    syncFromSpeed();
+  };
+  const syncFromLength = () => {
+    const target = parseLen(lengthInput.value);
+    const content = currentContentLength();
+    if (target > 0 && content > 0) {
+      speedInput.value = String(+clampRate(content / target).toFixed(2));
+    }
+    syncFromSpeed();   // reformat length to the (possibly clamped) rate
+  };
+  const updateAdjustVisibility = () => {
+    if (adjustPanel === null || adjustCheck === null || adjustRow === null) return;
+    adjustPanel.style.display =
+      (adjustCheck.checked && adjustRow.style.display !== 'none') ? 'block' : 'none';
+  };
+  // Content length changed (Entire vs Edited) — refresh the "was m:ss" hint and
+  // re-derive the length from the current speed.
+  const refreshAdjustForContent = () => {
+    if (adjustRow === null) return;
+    const orig = currentContentLength();
+    if (lengthOrigEl !== null) lengthOrigEl.textContent = orig > 0 ? `(was ${fmtLen(orig)})` : '';
+    if (adjustCheck.checked) syncFromSpeed();
+  };
 
   // The re-timed transcript makes sense whenever the exported media's timeline
   // differs from the original: edits, an applied playback speed, or both.
+  // The transcript/caption sidecars (interactive transcript, VTT, SRT) are all
+  // offered whenever there's a transcript to derive them from — they re-time
+  // themselves to whatever edits/speed the export uses.
   const updateRetimeVisibility = () => {
-    const edited = sourceEdited.checked && !sourceEdited.disabled;
-    retimeRow.style.display = edited || rateApplied() ? 'flex' : 'none';
+    const show = hasTranscript() ? 'flex' : 'none';
+    retimeRow.style.display = show;
+    if (vttRow !== null) vttRow.style.display = show;
+    if (srtRow !== null) srtRow.style.display = show;
+  };
+
+  const hasTranscript = () => {
+    const t = document.getElementById('hypertranscript');
+    return t !== null && t.querySelector('[data-m]') !== null;
+  };
+
+  // Burn-in is a video-only, frame-by-frame operation and needs a transcript to
+  // draw. Offer it only when both hold (#387 part 2).
+  const updateBurnVisibility = () => {
+    if (burnRow === null) return;
+    const fmt = FORMATS.find((f) => f.id === formatSelect.value);
+    const show = fmt && fmt.kind === 'video' && hasTranscript();
+    burnRow.style.display = show ? 'flex' : 'none';
+  };
+
+  // Persist the option toggles so the user's choices stick across sessions.
+  // Defaults are all-off; a stored value overrides on open, and any change
+  // re-saves. Rate is stored too but only applied when the media isn't at 1×.
+  const EXPORT_OPTS_KEY = 'hyperaudioExportOptions';
+  const loadExportOpts = () => {
+    try { return JSON.parse(window.localStorage.getItem(EXPORT_OPTS_KEY)) || {}; }
+    catch (e) { return {}; }
+  };
+  const saveExportOpts = () => {
+    try {
+      window.localStorage.setItem(EXPORT_OPTS_KEY, JSON.stringify({
+        burn: burnCheck.checked,
+        adjust: adjustCheck !== null && adjustCheck.checked,
+        speed: adjustCheck !== null ? clampRate(parseFloat(speedInput.value)) : 1,
+        retime: retimeCheck.checked,
+        vtt: vttCheck !== null && vttCheck.checked,
+        srt: srtCheck !== null && srtCheck.checked,
+      }));
+    } catch (e) { /* storage unavailable (private mode / quota) — non-fatal */ }
   };
 
   const populateModal = async () => {
@@ -489,14 +756,27 @@
       sourceEntire.checked = true;
     }
 
-    // offer the playback-speed option when the player isn't at 1×
-    const rate = playbackRate();
-    if (rate !== 1) {
-      rateValue.textContent = `${rate}×`;
-      rateRow.style.display = 'flex';
-    } else {
-      rateRow.style.display = 'none';
-      rateCheck.checked = false;
+    // default the export name to the project/media base name
+    if (nameInput !== null) nameInput.value = exportBaseName();
+
+    // restore the user's last export-option choices (default: all off)
+    const opts = loadExportOpts();
+    burnCheck.checked = opts.burn === true;
+    retimeCheck.checked = opts.retime === true;
+    if (vttCheck !== null) vttCheck.checked = opts.vtt === true;
+    if (srtCheck !== null) srtCheck.checked = opts.srt === true;
+
+    // speed / length: offer it whenever there's media; restore the toggle and
+    // the last speed, defaulting to the player's current rate so a playback
+    // speed set in the editor still carries into the export.
+    if (adjustRow !== null) {
+      adjustRow.style.display = currentContentLength() > 0 ? 'flex' : 'none';
+      adjustCheck.checked = opts.adjust === true;
+      const startSpeed = clampRate(typeof opts.speed === 'number' ? opts.speed : playbackRate());
+      speedInput.value = String(+startSpeed.toFixed(2));
+      refreshAdjustForContent();
+      syncFromSpeed();
+      updateAdjustVisibility();
     }
     updateRetimeVisibility();
 
@@ -528,6 +808,7 @@
       if (withVideo && formatSelect.querySelector('option[value="mp4"]') !== null) {
         formatSelect.value = 'mp4';
       }
+      updateBurnVisibility();
       setStatus('');
     } catch (e) {
       console.error(e);
@@ -549,33 +830,73 @@
       if (fmt.needsMp3) await ensureMp3Encoder(mb);
 
       const edited = sourceEdited.checked && !sourceEdited.disabled;
-      const rate = rateApplied() ? playbackRate() : 1;
-      const baseName = exportBaseName();
-      const suffix = `${edited ? '-edited' : ''}${rate !== 1 ? `-${rate}x` : ''}`;
-      let blob;
+      const rate = exportRate();
+      const rateLabel = +rate.toFixed(2);
+      const burn = fmt.kind === 'video' && burnRow !== null &&
+        burnRow.style.display !== 'none' && burnCheck.checked;
+      const wantRetime = retimeCheck.checked && retimeRow.style.display !== 'none';
+      const wantVtt = vttCheck !== null && vttCheck.checked && vttRow.style.display !== 'none';
+      const wantSrt = srtCheck !== null && srtCheck.checked && srtRow.style.display !== 'none';
+      // user-chosen export name (verbatim, so the media file and the transcript's
+      // <video src> always agree); light sanitise for filename safety
+      const rawName = nameInput !== null ? nameInput.value.trim() : '';
+      const baseName = (rawName || exportBaseName() || 'export').replace(/[\/\\:*?"<>|]+/g, '_');
 
-      if (!edited && rate === 1) {
+      const player = document.getElementById('hyperplayer');
+      const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
+      const sections = edited ? editedSections(duration) : [{ start: 0, end: duration }];
+
+      // 1. the media file. Burning captions requires the frame-by-frame canvas
+      // path, so it always routes through the section pipeline (as an applied
+      // speed does), even for an unedited "entire" export at 1×.
+      let blob;
+      const straightCopy = !edited && rate === 1 && !burn;
+      if (straightCopy) {
         setStatus('Exporting entire media…');
         blob = await exportEntire(mb, fmt, setProgress);
-        downloadBlob(blob, `${baseName}.${fmt.ext}`);
       } else {
-        // an applied playback speed also routes the entire media through the
-        // section pipeline (one full-length section) so it can be stretched
-        const player = document.getElementById('hyperplayer');
-        const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
-        const sections = edited ? editedSections(duration) : [{ start: 0, end: duration }];
-        setStatus(rate !== 1 ? `Exporting at ${rate}× — pitch preserved…` : 'Exporting edited media…');
+        const captions = burn ? buildCaptionChunks(sections, rate) : null;
+        setStatus(burn ? 'Exporting with captions…' : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…` : 'Exporting edited media…'));
         blob = fmt.kind === 'video'
-          ? await exportEditedVideo(mb, fmt, sections, rate, setProgress)
+          ? await exportEditedVideo(mb, fmt, sections, rate, setProgress, captions)
           : await exportEditedAudio(mb, fmt, sections, rate, setProgress);
-        downloadBlob(blob, `${baseName}${suffix}.${fmt.ext}`);
+      }
+      const mediaName = `${baseName}.${fmt.ext}`;
+      const outputs = [{ blob, name: mediaName }];
 
-        if (retimeCheck.checked && retimeRow.style.display !== 'none') {
-          const html = buildRetimedTranscriptHtml(sections, rate);
+      // 2. caption sidecars + interactive transcript, all re-timed to the export
+      if (wantRetime || wantVtt || wantSrt) {
+        const subs = genRetimedCaptions(sections, rate);
+        const vttName = `${baseName}.vtt`;
+        const srtName = `${baseName}.srt`;
+        if (wantVtt && subs && subs.vtt) {
+          outputs.push({ blob: new Blob([subs.vtt], { type: 'text/vtt' }), name: vttName });
+        }
+        if (wantSrt && subs && subs.srt) {
+          outputs.push({ blob: new Blob([subs.srt], { type: 'text/plain' }), name: srtName });
+        }
+        if (wantRetime) {
+          // captions track inside the interactive transcript:
+          //   burned in    -> none (they are already painted into the video)
+          //   VTT exported -> link the sidecar .vtt file
+          //   otherwise    -> embed the re-timed VTT inline (self-contained)
+          let trackSrc = null;
+          if (!burn) {
+            if (wantVtt) trackSrc = encodeURI(vttName);
+            else if (subs && subs.vtt) trackSrc = 'data:text/vtt,' + encodeURIComponent(subs.vtt);
+          }
+          const html = buildInteractiveExportHtml(sections, rate, encodeURI(mediaName), trackSrc);
           if (html !== null) {
-            downloadBlob(new Blob([html], { type: 'text/html' }), `${baseName}${suffix}-transcript.html`);
+            outputs.push({ blob: new Blob([html], { type: 'text/html' }), name: `${baseName}-transcript.html` });
           }
         }
+      }
+
+      // 3. hand the browser each file, spaced out so Safari doesn't drop all but
+      // the last of a multi-file download
+      for (let i = 0; i < outputs.length; i++) {
+        downloadBlob(outputs[i].blob, outputs[i].name);
+        if (i < outputs.length - 1) await sleep(250);
       }
 
       setProgress(1);
@@ -591,8 +912,21 @@
   };
 
   modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
-  sourceEntire.addEventListener('change', updateRetimeVisibility);
-  sourceEdited.addEventListener('change', updateRetimeVisibility);
-  rateCheck.addEventListener('change', updateRetimeVisibility);
+  sourceEntire.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
+  sourceEdited.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
+  formatSelect.addEventListener('change', updateBurnVisibility);
+  if (adjustCheck !== null) {
+    adjustCheck.addEventListener('change', () => {
+      updateAdjustVisibility();
+      if (adjustCheck.checked) syncFromSpeed();
+      saveExportOpts();
+    });
+    speedInput.addEventListener('input', () => { syncFromSpeed(); saveExportOpts(); });
+    if (speedSlider !== null) speedSlider.addEventListener('input', () => { syncFromSlider(); saveExportOpts(); });
+    lengthInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
+  }
+  [burnCheck, retimeCheck, vttCheck, srtCheck].forEach((el) => {
+    if (el !== null) el.addEventListener('change', saveExportOpts);
+  });
   startBtn.addEventListener('click', runExport);
 })();

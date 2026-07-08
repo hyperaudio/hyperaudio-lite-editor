@@ -75,8 +75,6 @@
 
   window.document.addEventListener('hyperaudioInit', hyperaudio, false);
   window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
-  window.document.addEventListener('hyperaudioTranscriptLoaded', updateInteractiveTranscriptDownloadLink, false);
-
   let hyperaudioTemplate = "";
 
   fetch('hyperaudio-template.html')
@@ -90,6 +88,55 @@
   .catch(function(err) {
       console.log('Failed to fetch page: ', err);
   });
+
+  // Interactive-transcript export dialog. The exported page links the media by a
+  // RELATIVE path (or its URL), never the session-only blob: URL — so, saved
+  // next to the media file, it plays and stays interactive (the template already
+  // loads the hyperaudio-lite lib from CDN and boots it). The user confirms the
+  // media reference because a freshly-uploaded file's real name isn't retained.
+  {
+    const iaModal = document.getElementById('interactive-export-modal');
+    const iaInput = document.getElementById('interactive-media-filename');
+    const iaDownload = document.getElementById('interactive-export-download');
+
+    // Remote media can be linked by its URL as-is; a blob:/data: source (local
+    // upload or Recents) has no usable path, so the field starts empty for the
+    // user to type the local filename.
+    const guessMediaSrc = () => {
+      const src = document.querySelector('#hyperplayer') ? document.querySelector('#hyperplayer').src : '';
+      return /^https?:/i.test(src) ? src : '';
+    };
+
+    if (iaModal !== null && iaInput !== null) {
+      iaModal.addEventListener('change', () => {
+        if (iaModal.checked && iaInput.value.trim() === '') {
+          iaInput.value = guessMediaSrc();
+        }
+      });
+    }
+
+    if (iaDownload !== null && iaInput !== null) {
+      iaDownload.addEventListener('click', () => {
+        const mediaSrc = iaInput.value.trim();
+        if (mediaSrc === '') { iaInput.focus(); return; }
+        const track = document.querySelector('#hyperplayer-vtt');
+        // function replacements so a literal $ in the transcript/filename isn't
+        // treated as a replacement pattern
+        const html = hyperaudioTemplate
+          .replace('{hypertranscript}', () => getTranscriptData())
+          .replace('{sourcemedia}', () => mediaSrc)
+          .replace('{sourcevtt}', () => (track !== null ? track.src : ''));
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'interactive-transcript.html';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        if (iaModal !== null) iaModal.checked = false;
+      });
+    }
+  }
 
   /* ----------------------------------------------------------- */
 
@@ -396,7 +443,6 @@
 
         let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
         document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
-        updateInteractiveTranscriptDownloadLink();
 
         if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
           const words = document.querySelectorAll("[data-m]");
@@ -548,19 +594,6 @@
     //track.srclang = "en";
     track.src = "data:text/vtt,"+encodeURIComponent(subs.vtt);
 
-    document
-      .querySelector("#download-hypertranscript")
-      .setAttribute(
-        "href",
-        "data:text/html," +
-          encodeURIComponent(
-            hyperaudioTemplate
-              .replace("{hypertranscript}", hypertranscript)
-              .replace("{sourcemedia}", sourceMedia)
-              .replace("{sourcevtt}", track.src)
-          )
-      );
-
     // check to see if it's an mp3 or m4a, in which case we don't display captions
     let extension = document.querySelector('#hyperplayer').src.split('.').pop();
     if (extension === "mp3" || extension === "m4a") {
@@ -569,27 +602,6 @@
       document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
     }
     return subs.data;
-  }
-
-  function updateInteractiveTranscriptDownloadLink() {
-
-    // m4a ?
-    //let isAudio = document.querySelector('#hyperplayer').src.split('.').pop() === "mp3";
-
-    document
-    .querySelector("#download-hypertranscript")
-    .setAttribute(
-      "href",
-      "data:text/html," +
-        encodeURIComponent(
-          hyperaudioTemplate
-            .replace("{hypertranscript}", getTranscriptData())
-            // check to see if it's an mp3, in which case we don't display captions
-            .replace("{sourcemedia}", document.querySelector("#hyperplayer").src) 
-            .replace("{sourcevtt}", document.querySelector("#hyperplayer-vtt").src)
-            //.replace("{sourcevtt}", isAudio ? "" : document.querySelector("#hyperplayer-vtt").src)
-        )
-    );
   }
 
   function hasParent(element, parent) {
