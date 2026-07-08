@@ -570,6 +570,7 @@
 
   const modalToggle = document.getElementById('export-modal');
   const formatSelect = document.getElementById('export-format');
+  const nameInput = document.getElementById('export-name');
   const sourceEntire = document.getElementById('export-source-entire');
   const sourceEdited = document.getElementById('export-source-edited');
   const editSummary = document.getElementById('export-edit-summary');
@@ -755,6 +756,9 @@
       sourceEntire.checked = true;
     }
 
+    // default the export name to the project/media base name
+    if (nameInput !== null) nameInput.value = exportBaseName();
+
     // restore the user's last export-option choices (default: all off)
     const opts = loadExportOpts();
     burnCheck.checked = opts.burn === true;
@@ -833,8 +837,10 @@
       const wantRetime = retimeCheck.checked && retimeRow.style.display !== 'none';
       const wantVtt = vttCheck !== null && vttCheck.checked && vttRow.style.display !== 'none';
       const wantSrt = srtCheck !== null && srtCheck.checked && srtRow.style.display !== 'none';
-      const baseName = exportBaseName();
-      const suffix = `${edited ? '-edited' : ''}${rate !== 1 ? `-${rateLabel}x` : ''}${burn ? '-captioned' : ''}`;
+      // user-chosen export name (verbatim, so the media file and the transcript's
+      // <video src> always agree); light sanitise for filename safety
+      const rawName = nameInput !== null ? nameInput.value.trim() : '';
+      const baseName = (rawName || exportBaseName() || 'export').replace(/[\/\\:*?"<>|]+/g, '_');
 
       const player = document.getElementById('hyperplayer');
       const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
@@ -855,14 +861,14 @@
           ? await exportEditedVideo(mb, fmt, sections, rate, setProgress, captions)
           : await exportEditedAudio(mb, fmt, sections, rate, setProgress);
       }
-      const mediaName = straightCopy ? `${baseName}.${fmt.ext}` : `${baseName}${suffix}.${fmt.ext}`;
+      const mediaName = `${baseName}.${fmt.ext}`;
       const outputs = [{ blob, name: mediaName }];
 
       // 2. caption sidecars + interactive transcript, all re-timed to the export
       if (wantRetime || wantVtt || wantSrt) {
         const subs = genRetimedCaptions(sections, rate);
-        const vttName = `${baseName}${suffix}.vtt`;
-        const srtName = `${baseName}${suffix}.srt`;
+        const vttName = `${baseName}.vtt`;
+        const srtName = `${baseName}.srt`;
         if (wantVtt && subs && subs.vtt) {
           outputs.push({ blob: new Blob([subs.vtt], { type: 'text/vtt' }), name: vttName });
         }
@@ -881,7 +887,7 @@
           }
           const html = buildInteractiveExportHtml(sections, rate, encodeURI(mediaName), trackSrc);
           if (html !== null) {
-            outputs.push({ blob: new Blob([html], { type: 'text/html' }), name: `${baseName}${suffix}-transcript.html` });
+            outputs.push({ blob: new Blob([html], { type: 'text/html' }), name: `${baseName}-transcript.html` });
           }
         }
       }
