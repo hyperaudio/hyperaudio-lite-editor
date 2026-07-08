@@ -43,6 +43,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hls-source.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=0.6.7"></script>
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=0.8.1"></script>
+  <script src="js/transcribe-prefs.js?v=0.8.1"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=0.7.0"></script>
   <script src="js/word-alignment.js"></script>
@@ -105,7 +106,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.8.0">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.8.1">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -118,7 +119,17 @@ If you are creating an open source application under a license compatible with t
    <template id="deepgram-modal-template">
     <form id="deepgram-form" name="deepgram-form">
       <div class="flex flex-col gap-4 w-full">
-        <input id="token" type="text" placeholder="Deepgram token" class="input input-bordered w-full max-w-xs" />
+        <div class="key-field">
+          <input id="token" type="password" placeholder="Deepgram token" class="input input-bordered w-full" />
+          <button type="button" class="key-eye" aria-label="Show key" tabindex="-1">
+            <svg class="eye-open" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+          </button>
+        </div>
+        <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
+          <input id="deepgram-remember-key" type="checkbox" class="toggle toggle-primary" checked />
+          <span class="label-text" style="font-size:0.85rem; opacity:0.85">Remember key on this device</span>
+        </label>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="deepgram-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or</span>
@@ -145,7 +156,17 @@ If you are creating an open source application under a license compatible with t
   <template id="assemblyai-modal-template">
     <form id="assemblyai-form" name="assemblyai-form">
       <div class="flex flex-col gap-4 w-full">
-        <input id="assemblyai-key" type="text" placeholder="AssemblyAI API key" class="input input-bordered w-full max-w-xs" />
+        <div class="key-field">
+          <input id="assemblyai-key" type="password" placeholder="AssemblyAI API key" class="input input-bordered w-full" />
+          <button type="button" class="key-eye" aria-label="Show key" tabindex="-1">
+            <svg class="eye-open" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+          </button>
+        </div>
+        <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
+          <input id="assemblyai-remember-key" type="checkbox" class="toggle toggle-primary" checked />
+          <span class="label-text" style="font-size:0.85rem; opacity:0.85">Remember key on this device</span>
+        </label>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="assemblyai-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or</span>
@@ -775,31 +796,42 @@ If you are creating an open source application under a license compatible with t
 
   <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
   <div class="modal">
-    <div class="modal-box" style="max-width:42rem">
+    <div class="modal-box" style="max-width:36rem">
       <label for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
       <h3 class="font-bold text-lg"  style="margin-bottom:16px">Transcribe</h3>
-      <div role="tablist" class="tabs tabs-lifted">
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="Parakeet" checked />
-        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-          <client-parakeet-service templateSelector="#parakeet-local-template"></client-parakeet-service>
+      <!-- Local / Cloud service switch — CSS-only via these sibling radios -->
+      <input type="radio" name="service-mode" id="service-local" class="service-mode-radio" checked />
+      <input type="radio" name="service-mode" id="service-cloud" class="service-mode-radio" />
+      <div class="service-switch" role="tablist" aria-label="Service type">
+        <label for="service-local" role="tab">Local</label>
+        <label for="service-cloud" role="tab">Cloud</label>
+      </div>
+
+      <div id="local-group">
+        <div role="tablist" class="tabs tabs-lifted">
+          <input type="radio" name="local_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Parakeet" checked />
+          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+            <client-parakeet-service templateSelector="#parakeet-local-template"></client-parakeet-service>
+          </div>
+          <input type="radio" name="local_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Whisper" />
+          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+            <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
+          </div>
         </div>
+      </div>
 
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="Whisper"  />
-        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-          <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
+      <div id="cloud-group">
+        <div role="tablist" class="tabs tabs-lifted">
+          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Deepgram" checked />
+          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+            <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
+          </div>
+          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="AssemblyAI" />
+          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+            <assemblyai-service templateSelector="#assemblyai-modal-template"></assemblyai-service>
+          </div>
         </div>
-
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="Deepgram"  />
-        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-          <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
-        </div>
-
-        <input type="radio" name="my_tabs_2" role="tab" class="tab" style="width:135px; white-space:nowrap" aria-label="AssemblyAI"  />
-        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-          <assemblyai-service templateSelector="#assemblyai-modal-template"></assemblyai-service>
-        </div>
-
       </div>
     </div>
   </div>
