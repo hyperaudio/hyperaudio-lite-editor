@@ -2,27 +2,85 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Hyperaudio – Interactive Transcript</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hyperaudio – Interactive Transcript</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/css/hyperaudio-lite-player.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/css/share-this.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/velocity/1.5.0/velocity.js"></script>
   <script src="https://platform.twitter.com/widgets.js"></script>
+  <style>
+    body {
+      margin: 0;
+      background: #f7f7f8;
+      color: #1a1a1a;
+    }
+    /* Constrain everything to a comfortable reading column and centre it. */
+    .ht-wrap {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 28px 18px 56px;
+    }
+    /* A modest, centred player rather than a full-width one. */
+    #hyperplayer {
+      width: 100%;
+      max-width: 420px;
+      display: block;
+      margin: 0 auto 24px;
+      border-radius: 10px;
+      background: #000;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14);
+    }
+    /* The transcript stays a scroll box (the read-along autoscroll scrolls
+       within it), but with a constrained line length and calmer styling.
+       ID selector overrides the player CSS's .hyperaudio-transcript rules. */
+    #hypertranscript {
+      max-width: 34rem;
+      margin: 0 auto;
+      height: 58vh;
+      min-height: 320px;
+      overflow-y: auto;
+      border: 1px solid #e6e6e6;
+      border-radius: 12px;
+      background: #fff;
+      padding: 20px 24px;
+      font-size: 1.06rem;
+      line-height: 1.75;
+    }
+    /* Read-along contrast: spoken text solid, upcoming text muted. */
+    .hyperaudio-transcript .read,
+    .hyperaudio-transcript .active > .active { color: #111; }
+    .hyperaudio-transcript .unread { color: #a2a2a2; }
+    .hyperaudio-transcript .speaker { font-weight: 700; }
+    /* Playback-speed control, kept subtle under the transcript. */
+    .ht-controls {
+      max-width: 34rem;
+      margin: 16px auto 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      color: #666;
+    }
+    .ht-controls input[type="range"] { flex: 0 0 130px; }
+  </style>
 </head>
 <body>
-  <video id="hyperplayer" class="hyperaudio-player" style="z-index: 5000000; position:relative; width:100%" src="{sourcemedia}" type="video/mp4" controls>
-    <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="{sourcevtt}">
-  </video>
+  <main class="ht-wrap">
+    <video id="hyperplayer" class="hyperaudio-player" playsinline controls src="{sourcemedia}" type="video/mp4">
+      <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="{sourcevtt}">
+    </video>
 
-  <div id="hypertranscript" class="hyperaudio-transcript" style="overflow-y:scroll; height:600px; position:relative; border-style:dashed; border-width: 1px; border-color:#999; padding: 8px">
+    <div id="hypertranscript" class="hyperaudio-transcript">
 {hypertranscript}
-  </div>
-  
-  <p>
-    <form id="searchForm" style="float:right">
-      Playback Rate <span id="currentPbr">1</span><input id="pbr" type="range" value="1" min="0.5" max="3" step="0.1" style="width:50px">
-    </form>
-  </p>
-  
+    </div>
+
+    <div class="ht-controls">
+      <label for="pbr">Speed</label>
+      <input id="pbr" type="range" value="1" min="0.5" max="3" step="0.1">
+      <span id="currentPbr">1</span>×
+    </div>
+  </main>
+
   <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/hyperaudio-lite.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/hyperaudio-lite-extension.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/share-this.js"></script>
@@ -42,6 +100,19 @@
   let playOnClick = true;
 
   new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
+
+  // Wire the playback-speed slider to the player.
+  (function () {
+    var pbr = document.getElementById("pbr");
+    var player = document.getElementById("hyperplayer");
+    var out = document.getElementById("currentPbr");
+    if (pbr && player) {
+      pbr.addEventListener("input", function () {
+        player.playbackRate = parseFloat(pbr.value);
+        if (out) { out.textContent = pbr.value; }
+      });
+    }
+  })();
 
   </script>
 </body>
