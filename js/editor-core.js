@@ -173,6 +173,141 @@
 
   /* ----------------------------------------------------------- */
 
+  // --- Transcript span normalization (modular; set WORD_SPLIT_TIMING=false to
+  // disable the split/merge/reflow timing repairs) ---------------------------
+  // Top-level so BOTH the blur handler and the debounced sanitise pass can run
+  // it — editing + clicking words to seek doesn't always fire a blur, so the
+  // debounced pass keeps the spans (and the player's word index) correct
+  // mid-edit too (#394).
+  const WORD_SPLIT_TIMING = true;
+
+  // Estimate syllables from contiguous vowel groups (Latin-script heuristic);
+  // floored at 1 so every part carries weight.
+  function estimateSyllables(token) {
+    const groups = token.toLowerCase().match(/[aeiouyàáâäãèéêëìíîïòóôöõùúûüýÿ]+/g);
+    return Math.max(1, groups ? groups.length : 1);
+  }
+
+  // Split one multi-word span into per-word spans, dividing the original
+  // duration by syllable weight (last part absorbs the rounding remainder).
+  function splitWordSpan(span) {
+    const tokens = span.textContent.split(/\s+/).filter((t) => t.length > 0);
+    if (tokens.length < 2) return;
+    const m = parseInt(span.getAttribute('data-m'), 10) || 0;
+    const d = parseInt(span.getAttribute('data-d'), 10) || 0;
+    const weights = tokens.map(estimateSyllables);
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    const frag = document.createDocumentFragment();
+    let start = m;
+    let allocated = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      const dur = i === tokens.length - 1
+        ? Math.max(0, d - allocated)
+        : Math.round((d * weights[i]) / totalWeight);
+      allocated += dur;
+      const part = span.cloneNode(false);
+      part.setAttribute('data-m', String(start));
+      part.setAttribute('data-d', String(dur));
+      part.textContent = tokens[i] + ' ';
+      frag.appendChild(part);
+      start += dur;
+    }
+    span.replaceWith(frag);
+  }
+
+  // True when nothing but whitespace text sits between nodes a and b.
+  function onlyWhitespaceBetween(a, b) {
+    let n = a.nextSibling;
+    while (n && n !== b) {
+      if (n.nodeType === Node.ELEMENT_NODE) return false;
+      if (n.nodeType === Node.TEXT_NODE && n.nodeValue.trim() !== '') return false;
+      n = n.nextSibling;
+    }
+    return n === b;
+  }
+
+  // Repair a letter that LEAKED across a word boundary (#394): retyping a word's
+  // first letter appends it after the PREVIOUS span's trailing space ("Lite " +
+  // "Editor " -> "Lite E" + "ditor "). Signature: internal space + no trailing
+  // space. Move the post-space fragment to the front of the next word span,
+  // reconstituting the word with each span's ORIGINAL data-m/data-d intact.
+  function reflowLeakedFragments(root) {
+    const spans = Array.from(root.querySelectorAll('span[data-m]'));
+    for (let i = 0; i < spans.length; i++) {
+      const span = spans[i];
+      if (!span.isConnected || span.classList.contains('speaker')) continue;
+      const txt = span.textContent;
+      if (!/\S\s+\S/.test(txt) || /\s$/.test(txt)) continue;
+      const next = span.nextElementSibling;
+      if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) continue;
+      if (!onlyWhitespaceBetween(span, next)) continue;
+      const cut = txt.lastIndexOf(' ');
+      span.textContent = txt.slice(0, cut).replace(/\s+$/, '') + ' ';
+      next.textContent = txt.slice(cut + 1) + next.textContent;
+    }
+  }
+
+  // Merge spans JOINED by deleting the space between two words — the inverse of
+  // splitWordSpan (#394): a span with no trailing space, followed by a word
+  // span, is glued back into one (start of first, end of last); chains for 3+.
+  function mergeJoinedSpans(root) {
+    const spans = Array.from(root.querySelectorAll('span[data-m]'));
+    for (let i = 0; i < spans.length; i++) {
+      const span = spans[i];
+      if (!span.isConnected || span.classList.contains('speaker')) continue;
+      while (span.textContent.length > 0 && !/\s$/.test(span.textContent)) {
+        const next = span.nextElementSibling;
+        if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) break;
+        if (!onlyWhitespaceBetween(span, next)) break;
+        const m = parseInt(span.getAttribute('data-m'), 10) || 0;
+        const nm = parseInt(next.getAttribute('data-m'), 10) || 0;
+        const nd = parseInt(next.getAttribute('data-d'), 10) || 0;
+        span.setAttribute('data-d', String(Math.max(0, (nm + nd) - m)));
+        span.textContent = span.textContent + next.textContent;
+        next.remove();
+      }
+    }
+  }
+
+  // Run the span repairs on `root` and, if the set of word spans changed
+  // (split added / merge removed), rebuild the player's word index so the new
+  // spans highlight and removed ones don't linger. Reflow only moves text
+  // between existing nodes, so it never changes the count. Called from both the
+  // blur handler and the debounced sanitise pass.
+  function normalizeTranscriptSpans(root) {
+    if (!root) return;
+    // nbsp -> normal space (#339)
+    if (root.textContent.indexOf(' ') !== -1) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.nodeValue.indexOf(' ') !== -1) {
+          node.nodeValue = node.nodeValue.replace(/ /g, ' ');
+        }
+      }
+    }
+    if (!WORD_SPLIT_TIMING) return;
+    // disjoint conditions, in order: reflow (internal space + no trailing),
+    // merge (no internal + no trailing), split (internal space + trailing).
+    const countBefore = root.querySelectorAll('span[data-m]').length;
+    reflowLeakedFragments(root);
+    mergeJoinedSpans(root);
+    const spans = root.querySelectorAll('span[data-m]');
+    for (let i = 0; i < spans.length; i++) {
+      if (/\S\s+\S/.test(spans[i].textContent)) splitWordSpan(spans[i]);
+    }
+    const inst = window.hyperaudioInstance;
+    if (inst && typeof inst.setupTranscriptWords === 'function'
+        && root.querySelectorAll('span[data-m]').length !== countBefore) {
+      inst.setupTranscriptWords();
+      if (typeof inst.updateTranscriptVisualState === 'function') {
+        const player = document.querySelector('#hyperplayer');
+        const t = player && !isNaN(player.currentTime) ? player.currentTime : (inst.currentTime || 0);
+        inst.updateTranscriptVisualState(t, true);
+      }
+    }
+  }
+
   function hyperaudio() {
     // Leave a small gap below the navbar when autoscrolling the active paragraph
     // (passed natively as scrollOffset to the 2.5.x options-object constructor).
@@ -244,150 +379,11 @@
         }, 1500);
       });
 
-      // --- Word-split timing (modular; set WORD_SPLIT_TIMING = false to remove) ---
-      // When the user types a space inside a word, contenteditable leaves two (or
-      // more) words inside one timed <span>. On blur we split that span into one
-      // span per word and estimate each word's timing by dividing the original
-      // span's [data-m, data-d] window pro-rata across the parts. Weighting is by
-      // estimated syllable count (vowel groups) rather than letters — a reasonable
-      // proxy for spoken duration in Latin-script languages.
-      const WORD_SPLIT_TIMING = true;
-
-      // Estimate syllables from contiguous vowel groups (Latin-script heuristic).
-      // Includes common Romance/Germanic accented vowels and y; floored at 1 so
-      // every part carries weight (no zero-duration or divide-by-zero parts).
-      const estimateSyllables = function (token) {
-        const groups = token.toLowerCase().match(/[aeiouyàáâäãèéêëìíîïòóôöõùúûüýÿ]+/g);
-        return Math.max(1, groups ? groups.length : 1);
-      };
-
-      // Split one multi-word span into per-word spans, distributing the original
-      // duration by syllable weight; parts stay contiguous and their durations sum
-      // exactly to the original (last part absorbs any rounding remainder).
-      const splitWordSpan = function (span) {
-        const tokens = span.textContent.split(/\s+/).filter(t => t.length > 0);
-        if (tokens.length < 2) {
-          return;
-        }
-        const m = parseInt(span.getAttribute('data-m'), 10) || 0;
-        const d = parseInt(span.getAttribute('data-d'), 10) || 0;
-        const weights = tokens.map(estimateSyllables);
-        const totalWeight = weights.reduce((a, b) => a + b, 0);
-
-        const frag = document.createDocumentFragment();
-        let start = m;
-        let allocated = 0;
-        for (let i = 0; i < tokens.length; i++) {
-          const dur = i === tokens.length - 1
-            ? Math.max(0, d - allocated)
-            : Math.round((d * weights[i]) / totalWeight);
-          allocated += dur;
-          const part = span.cloneNode(false); // preserve class and any data-* attrs
-          part.setAttribute('data-m', String(start));
-          part.setAttribute('data-d', String(dur));
-          part.textContent = tokens[i] + ' '; // keep the word separator
-          frag.appendChild(part);
-          start += dur;
-        }
-        span.replaceWith(frag);
-      };
-
-      // True when nothing but whitespace text sits between nodes a and b.
-      const onlyWhitespaceBetween = function (a, b) {
-        let n = a.nextSibling;
-        while (n && n !== b) {
-          if (n.nodeType === Node.ELEMENT_NODE) return false;
-          if (n.nodeType === Node.TEXT_NODE && n.nodeValue.trim() !== '') return false;
-          n = n.nextSibling;
-        }
-        return n === b;
-      };
-
-      // Repair a letter that LEAKED across a word boundary (#394). Retyping the
-      // first letter of a word (delete "e", type "E") makes contenteditable
-      // append the new letter after the PREVIOUS span's trailing space, so
-      // "Lite " + "Editor " becomes "Lite E" + "ditor ". Signature: a span with
-      // an internal space AND no trailing space (distinct from a paste, which
-      // keeps a trailing space, and from a join, which has no internal space).
-      // Move the post-space fragment to the front of the next word span, which
-      // reconstitutes the original word and — because each span keeps its own
-      // data-m/data-d — its original timing.
-      const reflowLeakedFragments = function (root) {
-        const spans = Array.from(root.querySelectorAll('span[data-m]'));
-        for (let i = 0; i < spans.length; i++) {
-          const span = spans[i];
-          if (!span.isConnected || span.classList.contains('speaker')) continue;
-          const txt = span.textContent;
-          if (!/\S\s+\S/.test(txt) || /\s$/.test(txt)) continue;
-          const next = span.nextElementSibling;
-          if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) continue;
-          if (!onlyWhitespaceBetween(span, next)) continue;
-          const cut = txt.lastIndexOf(' ');
-          span.textContent = txt.slice(0, cut).replace(/\s+$/, '') + ' ';
-          next.textContent = txt.slice(cut + 1) + next.textContent;
-        }
-      };
-
-      // Merge spans JOINED by deleting the space between two words — the inverse
-      // of splitWordSpan (#394). Every well-formed word span ends in whitespace;
-      // if one doesn't and is immediately followed by another word span, the user
-      // deleted the boundary space to glue the words, so combine them into one
-      // timed span: start of the first, end of the last (data-d = next.m + next.d
-      // − this.m). The inner loop absorbs a chain when more than two were joined.
-      const mergeJoinedSpans = function (root) {
-        const spans = Array.from(root.querySelectorAll('span[data-m]'));
-        for (let i = 0; i < spans.length; i++) {
-          const span = spans[i];
-          if (!span.isConnected || span.classList.contains('speaker')) continue;
-          while (span.textContent.length > 0 && !/\s$/.test(span.textContent)) {
-            const next = span.nextElementSibling;
-            if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) break;
-            if (!onlyWhitespaceBetween(span, next)) break;
-            const m = parseInt(span.getAttribute('data-m'), 10) || 0;
-            const nm = parseInt(next.getAttribute('data-m'), 10) || 0;
-            const nd = parseInt(next.getAttribute('data-d'), 10) || 0;
-            span.setAttribute('data-d', String(Math.max(0, (nm + nd) - m)));
-            // span carries no trailing space; next brings its own — the glued
-            // word keeps a single trailing separator
-            span.textContent = span.textContent + next.textContent;
-            next.remove();
-          }
-        }
-      };
-
-      transcriptEl.addEventListener('blur', () => {
-        // Strip non-breaking spaces (U+00A0) that contenteditable injects on edit,
-        // back to regular spaces (#339). The textContent check keeps the common
-        // (no-nbsp) case a cheap early-out.
-        if (transcriptEl.textContent.indexOf('\u00A0') !== -1) {
-          const walker = document.createTreeWalker(transcriptEl, NodeFilter.SHOW_TEXT);
-          let node;
-          while ((node = walker.nextNode())) {
-            if (node.nodeValue.indexOf('\u00A0') !== -1) {
-              node.nodeValue = node.nodeValue.replace(/\u00A0/g, ' ');
-            }
-          }
-        }
-
-        if (WORD_SPLIT_TIMING) {
-          // Order matters and the three conditions are disjoint: reflow a leaked
-          // boundary letter first (internal space + no trailing space), then
-          // merge words glued by a deleted space (no internal space + no trailing
-          // space), then split words separated by an added space (internal space
-          // + trailing space). A clean word is left untouched by all three.
-          reflowLeakedFragments(transcriptEl);
-          mergeJoinedSpans(transcriptEl);
-          // Split any span that now holds more than one word (internal whitespace
-          // between non-space characters). Touches only affected spans, so the
-          // common single-word case costs one regex test per span.
-          const spans = transcriptEl.querySelectorAll('span[data-m]');
-          for (let i = 0; i < spans.length; i++) {
-            if (/\S\s+\S/.test(spans[i].textContent)) {
-              splitWordSpan(spans[i]);
-            }
-          }
-        }
-      });
+      // Word-span normalization (split/merge/reflow + re-index) runs on blur,
+      // and the debounced sanitise pass runs it too so it also fires while
+      // editing without a blur (e.g. clicking words to seek). See normalize-
+      // TranscriptSpans above and the sanitise() call below.
+      transcriptEl.addEventListener('blur', () => normalizeTranscriptSpans(transcriptEl));
     }
 
     const sanitisationCheck = function () {
@@ -412,6 +408,12 @@
         if (rootnode.querySelector("span[data-m]") === null) {
           return;
         }
+
+        // Repair split/merged/reflowed word spans on the debounced pass too, not
+        // just on blur — editing while clicking words to seek never fires a blur,
+        // so this keeps the spans and the player's word index correct mid-edit
+        // (#394). Self-contained: it re-indexes when the span set changes.
+        normalizeTranscriptSpans(rootnode);
 
         // check that transcript has the focus
 
