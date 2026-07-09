@@ -70,7 +70,7 @@ Bake word‑level, read‑along captions straight into the video — spoken word
 
 Export edited media (WAV / MP3 / MP4 / WebM) with cuts, gap‑skips and playback speed applied; adjust the speed or fit to a target length; and download captions (WebVTT / SRT) or a self‑contained interactive transcript that links your exported media.
 
-<img alt="Export with burned‑in captions" src="docs/images/export-with-burned-in-captions.png" width="330"> <img alt="Flexible export options" src="docs/images/flexible-export.png" width="330">
+<img alt="Flexible export options" src="docs/images/flexible-export.png" width="330"> <img alt="Export with burned‑in captions" src="docs/images/export-with-burned-in-captions.png" width="330">
 
 <img alt="Export and download menu" src="docs/images/export-and-download.png" width="500">
 
