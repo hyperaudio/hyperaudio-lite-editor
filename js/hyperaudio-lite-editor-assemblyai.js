@@ -83,7 +83,6 @@ class AssemblyAIService extends HTMLElement {
     const apiKey = document.querySelector('#assemblyai-key').value.trim();
     const language = document.querySelector('#assemblyai-language').value;
     const model = document.querySelector('#assemblyai-model').value;
-    const diarize = document.querySelector('#assemblyai-diarize').checked;
     let media = document.querySelector('#assemblyai-media').value.trim();
     const file = document.querySelector('#assemblyai-file').files[0];
 
@@ -116,7 +115,7 @@ class AssemblyAIService extends HTMLElement {
       document.querySelector('#assemblyai-media').value = "";
     }
 
-    runAssemblyAI(apiKey, file, media, { language, model, diarize }).catch(displayAssemblyAIError);
+    runAssemblyAI(apiKey, file, media, { language, model }).catch(displayAssemblyAIError);
   }
 
   connectedCallback() {
@@ -202,7 +201,7 @@ async function runAssemblyAI(apiKey, file, media, opts) {
   const params = {
     audio_url: audioUrl,
     speech_model: opts.model,
-    speaker_labels: !!opts.diarize,
+    speaker_labels: true,
   };
   if (opts.language === "auto") {
     params.language_detection = true;

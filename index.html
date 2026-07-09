@@ -178,11 +178,6 @@ If you are creating an open source application under a license compatible with t
 
         <span class="label-text">Language</span>
         <select id="assemblyai-language" name="assemblyai-language" class="select select-bordered w-full max-w-xs"></select>
-
-        <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
-          <input id="assemblyai-diarize" type="checkbox" class="toggle toggle-primary" />
-          <span class="label-text">Detect speakers (diarization)</span>
-        </label>
       </div>
       <div class="modal-action">
         <label id="assemblyai-submit-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
@@ -823,13 +818,13 @@ If you are creating an open source application under a license compatible with t
 
       <div id="cloud-group">
         <div role="tablist" class="tabs tabs-lifted">
-          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Deepgram" checked />
-          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
-            <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
-          </div>
-          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="AssemblyAI" />
+          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="AssemblyAI" checked />
           <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <assemblyai-service templateSelector="#assemblyai-modal-template"></assemblyai-service>
+          </div>
+          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Deepgram" />
+          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+            <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
           </div>
         </div>
       </div>

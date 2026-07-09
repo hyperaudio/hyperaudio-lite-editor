@@ -21,7 +21,7 @@
   // (Deepgram repopulates its language list from the chosen model).
   const MODEL_IDS = ['language-model', 'assemblyai-model', 'model-name-input'];
   const VALUE_IDS = ['token', 'assemblyai-key', 'language', 'assemblyai-language'];
-  const CHECK_IDS = ['assemblyai-diarize', 'deepgram-remember-key', 'assemblyai-remember-key'];
+  const CHECK_IDS = ['deepgram-remember-key', 'assemblyai-remember-key'];
   // A key is only persisted while its "remember" toggle is on (opt-out).
   const REMEMBER_MAP = { 'token': 'deepgram-remember-key', 'assemblyai-key': 'assemblyai-remember-key' };
 
