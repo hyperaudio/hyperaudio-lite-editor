@@ -23,8 +23,8 @@ const ASSEMBLYAI_POLL_MS = 3000;
 const assemblyaiSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ASSEMBLYAI_MODELS = [
-  { value: "best", label: "Best (most accurate)" },
-  { value: "nano", label: "Nano (fast, more languages)" },
+  { value: "universal-3-5-pro", label: "Universal-3.5 Pro (highest accuracy, 18 languages)" },
+  { value: "universal-2", label: "Universal-2 (cost-effective, 99 languages)" },
 ];
 
 const ASSEMBLYAI_LANGUAGES = [
@@ -200,7 +200,7 @@ async function runAssemblyAI(apiKey, file, media, opts) {
   setAssemblyAIStatus("Submitting…");
   const params = {
     audio_url: audioUrl,
-    speech_model: opts.model,
+    speech_models: [opts.model],   // plural array; singular speech_model is deprecated
     speaker_labels: true,
   };
   if (opts.language === "auto") {
