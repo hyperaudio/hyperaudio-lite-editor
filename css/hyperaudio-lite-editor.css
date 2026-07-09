@@ -765,6 +765,71 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
   color: oklch(var(--p));
 }
 
+/* Transcribe modal — Local / Cloud service switch (#390). CSS-only: the two
+   sr-only sibling radios drive both the segmented control's active state and
+   which engine tab-group is shown, so no extra JS is needed. */
+.service-mode-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.service-switch {
+  display: inline-flex;
+  gap: 3px;
+  margin-bottom: 16px;
+  padding: 3px;
+  border: 1px solid oklch(var(--bc) / 0.2);
+  border-radius: 9999px;
+}
+.service-switch label {
+  padding: 5px 22px;
+  border-radius: 9999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  user-select: none;
+}
+#service-local:checked ~ .service-switch label[for="service-local"],
+#service-cloud:checked ~ .service-switch label[for="service-cloud"] {
+  background-color: oklch(var(--p));
+  color: oklch(var(--pc));
+}
+#cloud-group { display: none; }
+#service-cloud:checked ~ #local-group { display: none; }
+#service-cloud:checked ~ #cloud-group { display: block; }
+
+/* API key field with a show/hide eye toggle (#390). */
+.key-field {
+  position: relative;
+  width: 100%;
+  max-width: 20rem;
+}
+.key-field .input {
+  padding-right: 2.4rem;
+}
+.key-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.55;
+}
+.key-eye:hover { opacity: 1; }
+
 /* Buttons pick up an 8px margin-bottom from the global input/button rule,
    which nudges them off-centre in flex rows — neutralise in the bars. */
 .navbar .btn,
