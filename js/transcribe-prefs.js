@@ -1,7 +1,7 @@
 /**
  * transcribe-prefs.js
  * (C) The Hyperaudio Project
- * @version 0.8.1 — last changed in release 0.8.1
+ * @version 0.8.2 — last changed in release 0.8.2
  * @license MIT
  *
  * Remembers the Transcribe modal's choices across sessions (#390): the
@@ -20,10 +20,14 @@
   // Text/selse inputs persisted by value. Models are restored before languages
   // (Deepgram repopulates its language list from the chosen model).
   const MODEL_IDS = ['language-model', 'assemblyai-model', 'model-name-input'];
-  const VALUE_IDS = ['token', 'assemblyai-key', 'language', 'assemblyai-language'];
-  const CHECK_IDS = ['deepgram-remember-key', 'assemblyai-remember-key'];
+  const VALUE_IDS = ['token', 'assemblyai-key', 'parakeet-hf-key', 'language', 'assemblyai-language', 'parakeet-hf-language'];
+  const CHECK_IDS = ['deepgram-remember-key', 'assemblyai-remember-key', 'parakeet-hf-remember-key'];
   // A key is only persisted while its "remember" toggle is on (opt-out).
-  const REMEMBER_MAP = { 'token': 'deepgram-remember-key', 'assemblyai-key': 'assemblyai-remember-key' };
+  const REMEMBER_MAP = {
+    'token': 'deepgram-remember-key',
+    'assemblyai-key': 'assemblyai-remember-key',
+    'parakeet-hf-key': 'parakeet-hf-remember-key',
+  };
 
   const byId = (id) => document.getElementById(id);
 
@@ -83,7 +87,7 @@
     (prefs.checks ? Object.keys(prefs.checks) : []).forEach((id) => { const el = byId(id); if (el) el.checked = !!prefs.checks[id]; });
 
     // let each engine re-evaluate its TRANSCRIBE button now the key is filled in
-    ['token', 'assemblyai-key', 'assemblyai-media', 'deepgram-media'].forEach((id) => {
+    ['token', 'assemblyai-key', 'parakeet-hf-key', 'assemblyai-media', 'deepgram-media', 'parakeet-hf-media'].forEach((id) => {
       const el = byId(id);
       if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
     });

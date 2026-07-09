@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 0.8.1 (last changed in release 0.8.1) -->
+<!--  Hyperaudio Lite Editor - Version 0.8.2 (last changed in release 0.8.2) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="0.8.1">
+  <meta name="version" content="0.8.2">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -43,7 +43,8 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hls-source.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=0.6.7"></script>
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=0.8.1"></script>
-  <script src="js/transcribe-prefs.js?v=0.8.1"></script>
+  <script src="js/hyperaudio-lite-editor-parakeet.js?v=0.8.2"></script>
+  <script src="js/transcribe-prefs.js?v=0.8.2"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=0.7.0"></script>
   <script src="js/word-alignment.js"></script>
@@ -181,6 +182,36 @@ If you are creating an open source application under a license compatible with t
       </div>
       <div class="modal-action">
         <label id="assemblyai-submit-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
+      </div>
+    </form>
+  </template>
+
+  <template id="parakeet-hf-modal-template">
+    <form id="parakeet-hf-form" name="parakeet-hf-form">
+      <div class="flex flex-col gap-4 w-full">
+        <div class="key-field">
+          <input id="parakeet-hf-key" type="password" placeholder="HuggingFace token" class="input input-bordered w-full" />
+          <button type="button" class="key-eye" aria-label="Show key" tabindex="-1">
+            <svg class="eye-open" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+          </button>
+        </div>
+        <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
+          <input id="parakeet-hf-remember-key" type="checkbox" class="toggle toggle-primary" checked />
+          <span class="label-text" style="font-size:0.85rem; opacity:0.85">Remember key on this device</span>
+        </label>
+        <span class="label-text" style="font-size:0.8rem; opacity:0.7">Create a free token at huggingface.co/settings/tokens</span>
+        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+        <input id="parakeet-hf-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <span class="label-text">or</span>
+        <input id="parakeet-hf-file" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+
+        <span class="label-text">Language</span>
+        <select id="parakeet-hf-language" name="parakeet-hf-language" class="select select-bordered w-full max-w-xs"></select>
+      </div>
+      <div class="modal-action">
+        <label id="parakeet-hf-submit-btn" for="transcribe-modal" class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>
       </div>
     </form>
   </template>
@@ -825,6 +856,10 @@ If you are creating an open source application under a license compatible with t
           <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Deepgram" />
           <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
+          </div>
+          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Parakeet (HF)" />
+          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+            <parakeet-hf-service templateSelector="#parakeet-hf-modal-template"></parakeet-hf-service>
           </div>
         </div>
       </div>
