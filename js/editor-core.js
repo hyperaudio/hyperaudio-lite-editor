@@ -292,6 +292,69 @@
         span.replaceWith(frag);
       };
 
+      // True when nothing but whitespace text sits between nodes a and b.
+      const onlyWhitespaceBetween = function (a, b) {
+        let n = a.nextSibling;
+        while (n && n !== b) {
+          if (n.nodeType === Node.ELEMENT_NODE) return false;
+          if (n.nodeType === Node.TEXT_NODE && n.nodeValue.trim() !== '') return false;
+          n = n.nextSibling;
+        }
+        return n === b;
+      };
+
+      // Repair a letter that LEAKED across a word boundary (#394). Retyping the
+      // first letter of a word (delete "e", type "E") makes contenteditable
+      // append the new letter after the PREVIOUS span's trailing space, so
+      // "Lite " + "Editor " becomes "Lite E" + "ditor ". Signature: a span with
+      // an internal space AND no trailing space (distinct from a paste, which
+      // keeps a trailing space, and from a join, which has no internal space).
+      // Move the post-space fragment to the front of the next word span, which
+      // reconstitutes the original word and — because each span keeps its own
+      // data-m/data-d — its original timing.
+      const reflowLeakedFragments = function (root) {
+        const spans = Array.from(root.querySelectorAll('span[data-m]'));
+        for (let i = 0; i < spans.length; i++) {
+          const span = spans[i];
+          if (!span.isConnected || span.classList.contains('speaker')) continue;
+          const txt = span.textContent;
+          if (!/\S\s+\S/.test(txt) || /\s$/.test(txt)) continue;
+          const next = span.nextElementSibling;
+          if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) continue;
+          if (!onlyWhitespaceBetween(span, next)) continue;
+          const cut = txt.lastIndexOf(' ');
+          span.textContent = txt.slice(0, cut).replace(/\s+$/, '') + ' ';
+          next.textContent = txt.slice(cut + 1) + next.textContent;
+        }
+      };
+
+      // Merge spans JOINED by deleting the space between two words — the inverse
+      // of splitWordSpan (#394). Every well-formed word span ends in whitespace;
+      // if one doesn't and is immediately followed by another word span, the user
+      // deleted the boundary space to glue the words, so combine them into one
+      // timed span: start of the first, end of the last (data-d = next.m + next.d
+      // − this.m). The inner loop absorbs a chain when more than two were joined.
+      const mergeJoinedSpans = function (root) {
+        const spans = Array.from(root.querySelectorAll('span[data-m]'));
+        for (let i = 0; i < spans.length; i++) {
+          const span = spans[i];
+          if (!span.isConnected || span.classList.contains('speaker')) continue;
+          while (span.textContent.length > 0 && !/\s$/.test(span.textContent)) {
+            const next = span.nextElementSibling;
+            if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) break;
+            if (!onlyWhitespaceBetween(span, next)) break;
+            const m = parseInt(span.getAttribute('data-m'), 10) || 0;
+            const nm = parseInt(next.getAttribute('data-m'), 10) || 0;
+            const nd = parseInt(next.getAttribute('data-d'), 10) || 0;
+            span.setAttribute('data-d', String(Math.max(0, (nm + nd) - m)));
+            // span carries no trailing space; next brings its own — the glued
+            // word keeps a single trailing separator
+            span.textContent = span.textContent + next.textContent;
+            next.remove();
+          }
+        }
+      };
+
       transcriptEl.addEventListener('blur', () => {
         // Strip non-breaking spaces (U+00A0) that contenteditable injects on edit,
         // back to regular spaces (#339). The textContent check keeps the common
@@ -306,10 +369,17 @@
           }
         }
 
-        // Split any span that now holds more than one word (internal whitespace
-        // between non-space characters). Touches only affected spans, so the
-        // common single-word case costs one regex test per span.
         if (WORD_SPLIT_TIMING) {
+          // Order matters and the three conditions are disjoint: reflow a leaked
+          // boundary letter first (internal space + no trailing space), then
+          // merge words glued by a deleted space (no internal space + no trailing
+          // space), then split words separated by an added space (internal space
+          // + trailing space). A clean word is left untouched by all three.
+          reflowLeakedFragments(transcriptEl);
+          mergeJoinedSpans(transcriptEl);
+          // Split any span that now holds more than one word (internal whitespace
+          // between non-space characters). Touches only affected spans, so the
+          // common single-word case costs one regex test per span.
           const spans = transcriptEl.querySelectorAll('span[data-m]');
           for (let i = 0; i < spans.length; i++) {
             if (/\S\s+\S/.test(spans[i].textContent)) {
