@@ -9,6 +9,8 @@ self.addEventListener("install", function (e) {
     "./js/vendor/mediabunny-1.50.3.min.js",
     "./js/vendor/mediabunny-mp3-encoder-1.50.3.min.js",
     "./js/vendor/soundtouchjs-0.3.0.js",
+    // Vendored zip library — precached so saving .hyperaudio projects works offline.
+    "./js/vendor/jszip-3.10.1.min.js",
    ]);
   })
  );

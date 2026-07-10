@@ -9,6 +9,7 @@ Third-party libraries vendored for offline use (#381). Loaded lazily by
 | `mediabunny-1.50.3.min.js` | [mediabunny](https://www.npmjs.com/package/mediabunny) | 1.50.3 | MPL-2.0 | `dist/bundles/mediabunny.min.mjs` |
 | `mediabunny-mp3-encoder-1.50.3.min.js` | [@mediabunny/mp3-encoder](https://www.npmjs.com/package/@mediabunny/mp3-encoder) | 1.50.3 | MPL-2.0 | `dist/bundles/mediabunny-mp3-encoder.min.mjs` |
 | `soundtouchjs-0.3.0.js` | [soundtouchjs](https://www.npmjs.com/package/soundtouchjs) | 0.3.0 | LGPL-2.1 | `dist/soundtouch.js` |
+| `jszip-3.10.1.min.js` | [jszip](https://www.npmjs.com/package/jszip) | 3.10.1 | MIT (dual MIT/GPL-3.0; used under MIT) | `dist/jszip.min.js` |
 
 All files are unmodified copies of the packages' published dist builds;
 license headers are retained in each file.
