@@ -22,6 +22,9 @@
  *   ]
  * }
  * - Times in SECONDS (floating point)
+ * - A redacted (struck-out) word carries "struck": true; the default (false)
+ *   is not serialized. In HTML a redaction is the inline style
+ *   text-decoration: line-through on the word span (see editor-audio-cut.js).
  * 
  * HTML (Legacy format):
  * <article><section>
@@ -142,9 +145,10 @@ function jsonToHTML(jsonData) {
         const endMs = Math.round(word.end * 1000);
         const durationMs = endMs - startMs;
         const trail = word.space === false ? '' : ' ';
+        const strike = word.struck === true ? ' style="text-decoration: line-through;"' : '';
         const gluedToPrev = wordIndex > 0 && paragraphWords[wordIndex - 1].space === false;
         const lead = wordIndex === 0 ? '    ' : gluedToPrev ? '' : '\n    ';
-        html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${escapeHTMLText(word.text)}${trail}</span>`;
+        html += `${lead}<span data-m="${startMs}" data-d="${durationMs}"${strike}>${escapeHTMLText(word.text)}${trail}</span>`;
       });
       html += '\n';
       
@@ -161,9 +165,10 @@ function jsonToHTML(jsonData) {
       const endMs = Math.round(word.end * 1000);
       const durationMs = endMs - startMs;
       const trail = word.space === false ? '' : ' ';
+      const strike = word.struck === true ? ' style="text-decoration: line-through;"' : '';
       const gluedToPrev = wordIndex > 0 && words[wordIndex - 1].space === false;
       const lead = wordIndex === 0 ? '    ' : gluedToPrev ? '' : '\n    ';
-      html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${escapeHTMLText(word.text)}${trail}</span>`;
+      html += `${lead}<span data-m="${startMs}" data-d="${durationMs}"${strike}>${escapeHTMLText(word.text)}${trail}</span>`;
     });
     html += '\n';
     
@@ -250,6 +255,13 @@ function htmlToJSON(html) {
       // Omitted (the common case) means a space follows.
       if (!/\s$/.test(raw)) {
         word.space = false;
+      }
+
+      // Preserve redactions: the editor marks a struck-out word with the
+      // inline style text-decoration: line-through (editor-audio-cut.js).
+      // Omitted (the common case) means not struck.
+      if (/line-through/.test(span.getAttribute('style') || '')) {
+        word.struck = true;
       }
 
       words.push(word);
