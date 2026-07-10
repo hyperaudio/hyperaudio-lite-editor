@@ -1,4 +1,4 @@
-// Unit tests for the .hyperaudio save format (spec: docs/format/hyperaudio-format.md).
+// Unit tests for the .hyperaudio save format (spec: issue #403).
 // Exercises the pure FORMAT and CONTAINER layers of js/hyperaudio-save.js —
 // version rules, validation, container round-trip, whitelist-read and the
 // mimetype-first convention — plus the struck round-trip in the converter.
@@ -108,6 +108,18 @@ test('validateProjectJson: flags unknown kind, bad path, bad words', () => {
   assert.ok(save.validateProjectJson(p).errors.some((e) => e.code === 'format'));
 });
 
+test('validateProjectJson: link kind needs an http(s) url, and nothing else', () => {
+  const p = save.buildProjectJson(sampleState());
+  p.media = { kind: 'link', path: null, url: 'https://example.org/media.mp3', filename: '', mimeType: '', durationSeconds: 62.5, sizeBytes: 0 };
+  assert.deepEqual(save.validateProjectJson(p), { ok: true, errors: [] });
+
+  p.media.url = 'file:///etc/passwd';
+  assert.ok(save.validateProjectJson(p).errors.some((e) => e.code === 'media'));
+
+  p.media.url = null;
+  assert.ok(save.validateProjectJson(p).errors.some((e) => e.code === 'media'));
+});
+
 /* ---------- converter: struck round-trip (writer side) ---------- */
 
 test('jsonToHTML: struck word carries the line-through style, others do not', () => {
@@ -152,6 +164,22 @@ test('container: round-trip preserves project, media bytes, captions, origin', a
   assert.match(loaded.captionsVtt, /^WEBVTT/);
   assert.match(loaded.originalText, /benvenuti/);
   assert.match(loaded.htmlText, /Benvenuti/);
+  assert.deepEqual(loaded.warnings, []);
+});
+
+test('container: a link project round-trips with no media entry (v1.1)', async () => {
+  const files = sampleFiles();
+  const project = JSON.parse(files.json);
+  project.media = { kind: 'link', path: null, url: 'https://example.org/media.mp3', filename: '', mimeType: '', durationSeconds: 62.5, sizeBytes: 0 };
+  files.json = JSON.stringify(project);
+  files.media = null;
+  const out = await save.zipProject(files, JSZip, 'uint8array');
+  const loaded = await save.unzipProject(out, JSZip);
+
+  assert.equal(loaded.recovered, false);
+  assert.equal(loaded.project.media.kind, 'link');
+  assert.equal(loaded.project.media.url, 'https://example.org/media.mp3');
+  assert.equal(loaded.mediaData, null);
   assert.deepEqual(loaded.warnings, []);
 });
 

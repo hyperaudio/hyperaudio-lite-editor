@@ -3,7 +3,9 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * Implements the .hyperaudio format v1.0 (full spec + worked example: issue #403).
+ * Implements the .hyperaudio format v1.1 (full spec + worked example: issue #403;
+ * 1.1 adds media.kind "link": remote media embedded when CORS allows, saved as
+ * a declared URL-only link otherwise, reconciled on open per spec § 7.3).
  * The format in ten lines — a renamed ZIP; a working SAVE, never an export:
  *   mimetype                   first entry, STORE: "application/vnd.hyperaudio+zip"
  *   hyperaudio.json            source of truth: format version + media descriptor
@@ -32,7 +34,7 @@
   'use strict';
 
   const FORMAT_NAME = 'hyperaudio';
-  const FORMAT_VERSION = '1.0';
+  const FORMAT_VERSION = '1.1'; // 1.1 adds media.kind "link" (spec § 7.2)
   const READER_MAJOR = 1;
   const CONTAINER_MIMETYPE = 'application/vnd.hyperaudio+zip';
   const FILE_EXTENSION = '.hyperaudio';
@@ -416,6 +418,8 @@
     provenanceAt: 0,    // when the engine reported it (staleness guard)
     language: '',
     mediaFile: null,    // the original File, captured at import
+    mediaFileFromUrl: null, // set when mediaFile was fetched from this remote URL (embed, § 7.2)
+    pendingReconcile: null, // media descriptor awaiting reconciliation (§ 7.3)
     hasOriginal: false,
     originalJson: null, // the origin as serialized JSON (in-memory copy; work/ holds it across reloads)
   };
@@ -450,11 +454,21 @@
       ? Math.round(player.duration * 1000) / 1000 : 0;
     const src = player !== null ? player.src : '';
     if (/^https?:/i.test(src)) {
-      // The player is on a remote URL (URL-mode transcription): any File
-      // captured for a PREVIOUS project is stale — the URL wins.
-      // Kept as a link descriptor in the WORKING COPY only — saveToFile()
-      // refuses to write it into a downloadable container (v1 writes kind
-      // "original" only; "link" is a future formula, spec § 7.2).
+      // The player is on a remote URL (URL-mode transcription): a File captured
+      // for a PREVIOUS project is stale — the URL wins. The exception is a file
+      // fetched from this very URL (opportunistic embed, § 7.2): that IS this
+      // project's media and the save is self-contained.
+      if (session.mediaFile !== null && session.mediaFileFromUrl === src) {
+        return {
+          kind: 'original',
+          path: MEDIA_DIR + session.mediaFile.name,
+          url: null,
+          filename: session.mediaFile.name,
+          mimeType: session.mediaFile.type || '',
+          durationSeconds: duration,
+          sizeBytes: session.mediaFile.size,
+        };
+      }
       return { kind: 'link', path: null, url: src, filename: '', mimeType: '', durationSeconds: duration, sizeBytes: 0 };
     }
     if (session.mediaFile !== null) {
@@ -764,6 +778,8 @@
     session.active = true;
     session.created = nowIso();
     session.hasOriginal = false;
+    session.mediaFileFromUrl = null;
+    session.pendingReconcile = null;
     // Provenance is only this project's if the engine reported it moments ago
     // (imports fire hyperaudioInit without any setTranscriptionInfo call —
     // a previous transcription's provenance must not leak into them).
@@ -780,21 +796,52 @@
     }
   }
 
+  // Opportunistic embed (§ 7.2): try to download the remote media so the save
+  // is self-contained. Whether this works is the server's call (CORS).
+  async function fetchRemoteMediaFile(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const blob = await response.blob();
+    let name = '';
+    try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || ''); } catch (e) { /* fallback below */ }
+    if (name === '' || name.indexOf('.') === -1) {
+      const ext = ((blob.type || '').split('/')[1] || 'bin').split(';')[0];
+      name = (name || 'media') + '.' + ext;
+    }
+    return new File([blob], name, { type: blob.type || '' });
+  }
+
   async function saveToFile() {
-    const mediaFile = await resolveMediaFile();
+    let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
-    if (mediaFile === null) {
-      if (player !== null && /^https?:/i.test(player.src)) {
-        alert('This project references remote media (a URL). Version 1 of the .hyperaudio format only saves projects with a local media file — the "link" formula is coming later.');
+    const remoteSrc = player !== null && /^https?:/i.test(player.src) ? player.src : null;
+    let saveAsLink = false;
+
+    if (mediaFile === null && remoteSrc !== null) {
+      if (session.mediaFile !== null && session.mediaFileFromUrl === remoteSrc) {
+        mediaFile = session.mediaFile; // already embedded by a previous save of this project
       } else {
-        alert('No media loaded — there is nothing to save yet.');
+        try {
+          mediaFile = await fetchRemoteMediaFile(remoteSrc);
+          session.mediaFile = mediaFile;
+          session.mediaFileFromUrl = remoteSrc;
+          await writeMediaOnce(); // the working copy becomes self-contained too
+        } catch (e) {
+          // CORS or network said no: fall back to a link save (§ 7.2), declared.
+          const proceed = confirm('The remote media cannot be downloaded by the browser (the server does not allow it), so it cannot be embedded in the file.\n\nSave the project with a LINK to the URL instead? The file will contain all your work, but playing it back will need internet access and the URL staying available.');
+          if (!proceed) return;
+          saveAsLink = true;
+        }
       }
+    }
+    if (mediaFile === null && !saveAsLink) {
+      alert('No media loaded — there is nothing to save yet.');
       return;
     }
 
     const lowMem = typeof navigator.deviceMemory === 'number' && navigator.deviceMemory < 4;
     const warnAt = lowMem ? LARGE_MEDIA_WARN_BYTES_LOWMEM : LARGE_MEDIA_WARN_BYTES;
-    if (mediaFile.size > warnAt) {
+    if (mediaFile !== null && mediaFile.size > warnAt) {
       const mb = Math.round(mediaFile.size / (1024 * 1024));
       if (!confirm(`The media file is large (~${mb} MB). Building the .hyperaudio file needs roughly that much memory and may take a while. Continue?`)) {
         return;
@@ -822,7 +869,7 @@
       html: state.html,
       originalJson,
       captionsVtt: getCaptionsVtt() || null,
-      media: { name: mediaFile.name, data: mediaFile },
+      media: mediaFile !== null ? { name: mediaFile.name, data: mediaFile } : null,
     }, JSZipImpl, 'blob');
 
     const safeTitle = (state.texts.title || 'project')
@@ -859,6 +906,7 @@
       return;
     }
 
+    let reconcileNow = null; // § 7.3: original-kind container missing its media entry
     if (loaded.mediaData !== null && loaded.mediaEntryName !== null) {
       const mimeType = loaded.project !== null ? (loaded.project.media.mimeType || '') : '';
       loaded.mediaFile = new File([loaded.mediaData], loaded.mediaEntryName, { type: mimeType });
@@ -866,6 +914,8 @@
       loaded.mediaFile = null;
       if (!loaded.recovered && loaded.project.media.kind === 'link') {
         alert('Note: this project references its media by URL — it is not self-contained. Playback will use the remote URL.');
+      } else if (!loaded.recovered && loaded.project.media.kind === 'original') {
+        reconcileNow = loaded.project.media;
       }
     }
 
@@ -880,6 +930,9 @@
       session.provenance = (!loaded.recovered && loaded.project.provenance) || null;
       session.language = (!loaded.recovered && loaded.project.texts && loaded.project.texts.language) || '';
       session.mediaFile = loaded.mediaFile;
+      session.mediaFileFromUrl = null;
+      session.pendingReconcile = (!loaded.recovered && loaded.project.media.kind === 'link')
+        ? loaded.project.media : null;
       session.hasOriginal = loaded.originalText !== null;
       session.originalJson = loaded.originalText;
 
@@ -900,6 +953,58 @@
         alert('The project file was not fully conformant; the transcript was recovered from its HTML copy. Saving again will produce a fully conformant file.');
       }
     }
+
+    if (reconcileNow !== null) {
+      offerMediaReconciliation(reconcileNow);
+    }
+  }
+
+  /* ==========================================================================
+   * Media reconciliation (spec § 7.3): when a project's media is unavailable
+   * (link URL unreachable, or an original-kind container missing its media
+   * entry), offer to re-attach a local copy. Verification is heuristic — size
+   * and filename when recorded, duration once metadata loads — and the next
+   * save makes the project self-contained again (kind "original").
+   * ======================================================================== */
+
+  let reconcileTarget = null;
+  let reconcileInput = null;
+
+  function offerMediaReconciliation(desc) {
+    const why = desc.url
+      ? 'The media URL this project points to cannot be played (offline, moved, or gone).'
+      : 'The media file is missing from the project container.';
+    if (!confirm(why + '\n\nThe text is loaded and editable. If you have the media on this computer you can re-attach it now — the next save will make the project self-contained again.\n\nChoose the media file?')) {
+      return;
+    }
+    reconcileTarget = desc;
+    reconcileInput.value = '';
+    reconcileInput.click();
+  }
+
+  function attachReconciledMedia(file, desc) {
+    const doubts = [];
+    if (desc.sizeBytes > 0 && desc.sizeBytes !== file.size) doubts.push('its size differs from the saved project');
+    if (desc.filename && desc.filename !== file.name) doubts.push('its name differs (project media was "' + desc.filename + '")');
+    if (doubts.length > 0
+        && !confirm('This may not be the right file: ' + doubts.join('; ') + '.\n\nAttach it anyway?')) {
+      return;
+    }
+    const player = document.querySelector('#hyperplayer');
+    session.mediaFile = file;
+    session.mediaFileFromUrl = null;
+    session.pendingReconcile = null;
+    player.src = URL.createObjectURL(file);
+    if (desc.durationSeconds > 0) {
+      player.addEventListener('loadedmetadata', function check() {
+        player.removeEventListener('loadedmetadata', check);
+        if (Number.isFinite(player.duration) && Math.abs(player.duration - desc.durationSeconds) > 2) {
+          alert('Warning: the attached media lasts ~' + Math.round(player.duration) + 's but the project was saved with ~' + Math.round(desc.durationSeconds) + 's — it may be the wrong file.');
+        }
+      });
+    }
+    writeMediaOnce();
+    scheduleAutosave();
   }
 
   // Boot restore: the synchronous localStorage hint decides whether to probe
@@ -929,6 +1034,8 @@
       session.provenance = project.provenance || null;
       session.language = (project.texts && project.texts.language) || '';
       session.mediaFile = mediaFile;
+      session.mediaFileFromUrl = null;
+      session.pendingReconcile = project.media.kind === 'link' ? project.media : null;
       session.hasOriginal = originalText !== null;
       session.originalJson = originalText;
     } catch (e) {
@@ -971,6 +1078,19 @@
     input.style.display = 'none';
     document.body.appendChild(input);
 
+    reconcileInput = document.createElement('input');
+    reconcileInput.type = 'file';
+    reconcileInput.id = 'project-reconcile-input';
+    reconcileInput.accept = 'audio/*,video/*';
+    reconcileInput.style.display = 'none';
+    document.body.appendChild(reconcileInput);
+    reconcileInput.addEventListener('change', () => {
+      if (reconcileInput.files.length === 1 && reconcileTarget !== null) {
+        attachReconciledMedia(reconcileInput.files[0], reconcileTarget);
+        reconcileTarget = null;
+      }
+    });
+
     document.querySelector('#project-save-hyperaudio').addEventListener('click', () => {
       saveToFile().catch((e) => {
         console.error('hyperaudio-save: save failed', e);
@@ -1001,9 +1121,22 @@
         el.addEventListener('change', () => {
           if (el.files && el.files.length === 1) {
             session.mediaFile = el.files[0];
+            session.mediaFileFromUrl = null;
           }
         });
       });
+
+    // Reconciliation trigger for link projects (§ 7.3): the URL doesn't need
+    // CORS to play, so reachability can only be judged by the player itself.
+    const playerEl = document.querySelector('#hyperplayer');
+    if (playerEl !== null) {
+      playerEl.addEventListener('error', () => {
+        const desc = session.pendingReconcile;
+        if (desc === null || !desc.url || playerEl.src !== desc.url) return;
+        session.pendingReconcile = null; // one shot
+        offerMediaReconciliation(desc);
+      });
+    }
 
     // New transcript (transcribe / JSON / SRT import) → new project + origin.
     document.addEventListener('hyperaudioInit', () => {
