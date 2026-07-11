@@ -1,11 +1,12 @@
 {
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "autoprefixer": "^10.4.14",
+    "axe-core": "^4.12.1",
     "cssnano": "^6.0.1",
     "daisyui": "^4.4.2",
     "postcss": "^8.4.24",
-    "tailwindcss": "^3.3.2",
-    "@playwright/test": "^1.49.0"
+    "tailwindcss": "^3.3.2"
   },
   "name": "hyperaudio-lite-editor",
   "private": true,

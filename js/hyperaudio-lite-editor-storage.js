@@ -359,7 +359,9 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   setFileSelectListeners();
 
   if (storage.length === 0) {
-    filePicker.insertAdjacentHTML("beforeend", `<li style="padding:8px 16px; opacity:0.55">No files saved.</li>`);
+    // opacity 0.75 (not 0.55) so the composited grey still meets the 4.5:1
+    // contrast ratio on the white card (#402)
+    filePicker.insertAdjacentHTML("beforeend", `<li style="padding:8px 16px; opacity:0.75">No files saved.</li>`);
   }
 }
 
