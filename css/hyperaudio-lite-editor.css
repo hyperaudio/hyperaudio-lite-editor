@@ -444,12 +444,15 @@ dialog::backdrop {
     margin: -70px auto 0 !important;
   }
   #captions-display { width: 100%; }
-  /* The three transcribe tabs are a fixed 165px each (495px) with nowrap labels,
-     which overflowed the narrowed modal. Let them share the row and shrink
-     evenly, with the label WRAPPING to two lines rather than collapsing into an
-     overlapping garble. */
-  .modal-box [role="tablist"] { flex-wrap: wrap; width: 100%; box-sizing: border-box; }
-  .modal-box [name="my_tabs_2"] {
+  /* The transcribe tabs are a fixed 150px each with nowrap labels, which
+     overflowed the narrowed modal. Let them share the row and shrink evenly,
+     with the label WRAPPING to two lines rather than collapsing into an
+     overlapping garble. (Selectors are class/name-based — the ARIA tab roles
+     were removed in #402, and the radio groups were renamed when the modal
+     gained the Local/Cloud switch.) */
+  .modal-box .tabs { flex-wrap: wrap; width: 100%; box-sizing: border-box; }
+  .modal-box [name="local_tabs"],
+  .modal-box [name="cloud_tabs"] {
     flex: 1 1 0;
     width: auto !important;
     min-width: 6rem;
@@ -803,6 +806,14 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
 #cloud-group { display: none; }
 #service-cloud:checked ~ #local-group { display: none; }
 #service-cloud:checked ~ #cloud-group { display: block; }
+
+/* Modal label-buttons made keyboard-focusable by js/a11y.js (#402): give them
+   a clear focus ring — as labels they don't get the browser's button focus
+   styling for free. */
+label[data-a11y-wired]:focus-visible {
+  outline: 2px solid oklch(var(--p));
+  outline-offset: 2px;
+}
 
 /* API key field with a show/hide eye toggle (#390). */
 .key-field {

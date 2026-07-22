@@ -107,7 +107,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.8.1">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.8.3">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -134,16 +134,16 @@ If you are creating an open source application under a license compatible with t
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="deepgram-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or</span>
-        <input id="deepgram-file" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <input id="deepgram-file" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
   
-        <span class="label-text">Model</span>
+        <label class="label-text" for="language-model">Model</label>
         <div>
           <select id="language-model" name="language-model" placeholder="language-model" class="select select-bordered w-full max-w-xs">
           </select>
         </div>
   
-        <span class="label-text">Language</span>
+        <label class="label-text" for="language">Language</label>
         <select id="language" name="language" placeholder="language" class="select select-bordered w-full max-w-xs">
         </select>
 
@@ -171,13 +171,13 @@ If you are creating an open source application under a license compatible with t
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="assemblyai-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or</span>
-        <input id="assemblyai-file" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <input id="assemblyai-file" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
 
-        <span class="label-text">Model</span>
+        <label class="label-text" for="assemblyai-model">Model</label>
         <select id="assemblyai-model" name="assemblyai-model" class="select select-bordered w-full max-w-xs"></select>
 
-        <span class="label-text">Language</span>
+        <label class="label-text" for="assemblyai-language">Language</label>
         <select id="assemblyai-language" name="assemblyai-language" class="select select-bordered w-full max-w-xs"></select>
       </div>
       <div class="modal-action">
@@ -204,10 +204,10 @@ If you are creating an open source application under a license compatible with t
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="parakeet-hf-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         <span class="label-text">or</span>
-        <input id="parakeet-hf-file" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <input id="parakeet-hf-file" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
 
-        <span class="label-text">Language</span>
+        <label class="label-text" for="parakeet-hf-language">Language</label>
         <select id="parakeet-hf-language" name="parakeet-hf-language" class="select select-bordered w-full max-w-xs"></select>
       </div>
       <div class="modal-action">
@@ -222,7 +222,7 @@ If you are creating an open source application under a license compatible with t
         <input id="media" type="text" placeholder="Media or HLS (.m3u8) URL" class="input input-bordered w-full max-w-xs" />
         <span style="display:block; padding:6px 0 0; font-size:80%; opacity:0.7" class="label-text">The source must allow cross-origin access (CORS).</span>
         <span style="display:block; padding:16px" class="label-text">or</span>
-        <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
       </div>
       <div class="mb-3">
@@ -287,7 +287,7 @@ If you are creating an open source application under a license compatible with t
         <input id="parakeet-media" type="text" placeholder="Media or HLS (.m3u8) URL" class="input input-bordered w-full max-w-xs" />
         <span style="display:block; padding:6px 0 0; font-size:80%; opacity:0.7" class="label-text">The source must allow cross-origin access (CORS).</span>
         <span style="display:block; padding:16px" class="label-text">or</span>
-        <input id="parakeet-file-input" name="file" type="file" class="file-input w-full max-w-xs" title="" />
+        <input id="parakeet-file-input" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" />
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
       </div>
       <div class="form-text" style="font-size: 90%;">
@@ -445,10 +445,10 @@ If you are creating an open source application under a license compatible with t
               <li><label for="file-import-vtt-dialog">Import VTT</label></li>
             </ul>
           </div>
-          <input type="checkbox" id="info-modal" class="modal-toggle" />
+          <input type="checkbox" id="info-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
           <div class="modal">
             <div class="modal-box relative">
-              <label for="info-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+              <label for="info-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
               <h3 class="text-lg font-bold">Transcription</h3>
               <div id="transcription-info" class="py-4">
                 <p>Nothing transcribed yet – details of the service, model and processing time will appear here.</p>
@@ -494,10 +494,10 @@ If you are creating an open source application under a license compatible with t
           <button id="transcript-editor-btn" class="btn btn-square btn-outline tooltip" data-tip="Edit transcript" style="margin-right:4px" aria-label="Edit transcript" disabled>
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
           </button>
-          <input type="checkbox" id="captions-modal" class="modal-toggle" />
+          <input type="checkbox" id="captions-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
           <div class="modal" style="content-visibility: hidden;">
             <div class="modal-box relative">
-              <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+              <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
               <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
               <div id="caption-editor">
                 <center>Preparing captions....</center>
@@ -741,10 +741,10 @@ If you are creating an open source application under a license compatible with t
   </div>
 
   <!-- Media export modal (#289/#291/#292) — wired by js/media-export.js -->
-  <input type="checkbox" id="export-modal" class="modal-toggle" />
+  <input type="checkbox" id="export-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
     <div class="modal-box" style="max-width:26rem">
-      <label for="export-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="export-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <h3 class="font-bold text-lg" style="margin-bottom:12px">Export media</h3>
       <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px">
         <label style="display:flex; gap:10px; align-items:center; cursor:pointer">
@@ -803,10 +803,10 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-  <input type="checkbox" id="interactive-export-modal" class="modal-toggle" />
+  <input type="checkbox" id="interactive-export-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
     <div class="modal-box" style="max-width:26rem">
-      <label for="interactive-export-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="interactive-export-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <h3 class="font-bold text-lg" style="margin-bottom:12px">Export interactive transcript</h3>
       <label class="label-text" for="interactive-media-filename">Media file or URL</label>
       <input id="interactive-media-filename" type="text" class="input input-bordered w-full" placeholder="e.g. my-video.mp4" style="margin-top:4px" />
@@ -819,45 +819,49 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-  <input type="checkbox" id="transcribe-modal" class="modal-toggle" />
+  <input type="checkbox" id="transcribe-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
     <div class="modal-box" style="max-width:36rem">
-      <label for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="transcribe-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <h3 class="font-bold text-lg"  style="margin-bottom:16px">Transcribe</h3>
 
       <!-- Local / Cloud service switch — CSS-only via these sibling radios -->
       <input type="radio" name="service-mode" id="service-local" class="service-mode-radio" checked />
       <input type="radio" name="service-mode" id="service-cloud" class="service-mode-radio" />
-      <div class="service-switch" role="tablist" aria-label="Service type">
-        <label for="service-local" role="tab">Local</label>
-        <label for="service-cloud" role="tab">Cloud</label>
+      <!-- The switch is a native radio pair (the sr-only inputs above); labels
+           carry the visible UI. No ARIA tab roles: label/input don't allow
+           role="tab" and the CSS-only pattern can't satisfy tablist's required
+           structure (#402) — native radio semantics announce correctly. -->
+      <div class="service-switch">
+        <label for="service-local">Local</label>
+        <label for="service-cloud">Cloud</label>
       </div>
 
       <div id="local-group">
-        <div role="tablist" class="tabs tabs-lifted">
-          <input type="radio" name="local_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Parakeet" checked />
-          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+        <div class="tabs tabs-lifted">
+          <input type="radio" name="local_tabs" class="tab" style="width:150px; white-space:nowrap" aria-label="Parakeet" checked />
+          <div class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <client-parakeet-service templateSelector="#parakeet-local-template"></client-parakeet-service>
           </div>
-          <input type="radio" name="local_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Whisper" />
-          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+          <input type="radio" name="local_tabs" class="tab" style="width:150px; white-space:nowrap" aria-label="Whisper" />
+          <div class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <client-whisper-service templateSelector="#whisper-client-template"></client-whisper-service>
           </div>
         </div>
       </div>
 
       <div id="cloud-group">
-        <div role="tablist" class="tabs tabs-lifted">
-          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="AssemblyAI" checked />
-          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+        <div class="tabs tabs-lifted">
+          <input type="radio" name="cloud_tabs" class="tab" style="width:150px; white-space:nowrap" aria-label="AssemblyAI" checked />
+          <div class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <assemblyai-service templateSelector="#assemblyai-modal-template"></assemblyai-service>
           </div>
-          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Deepgram" />
-          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+          <input type="radio" name="cloud_tabs" class="tab" style="width:150px; white-space:nowrap" aria-label="Deepgram" />
+          <div class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
           </div>
-          <input type="radio" name="cloud_tabs" role="tab" class="tab" style="width:150px; white-space:nowrap" aria-label="Parakeet (HF)" />
-          <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-10">
+          <input type="radio" name="cloud_tabs" class="tab" style="width:150px; white-space:nowrap" aria-label="Parakeet (HF)" />
+          <div class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <parakeet-hf-service templateSelector="#parakeet-hf-modal-template"></parakeet-hf-service>
           </div>
         </div>
@@ -865,10 +869,10 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-  <input type="checkbox" id="align-modal" class="modal-toggle" />
+  <input type="checkbox" id="align-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
     <div class="modal-box">
-      <label for="align-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="align-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <h3 class="font-bold text-lg"  style="margin-bottom:16px">Align</h3>
       
       <div class="flex flex-col gap-4 w-full">
@@ -887,10 +891,10 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-  <input type="checkbox" id="remove-gaps-modal" class="modal-toggle" />
+  <input type="checkbox" id="remove-gaps-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
     <div class="modal-box">
-      <label for="remove-gaps-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="remove-gaps-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <h3 class="font-bold text-lg" style="margin-bottom:16px">Remove Silent Gaps</h3>
 
       <div class="flex flex-col gap-4 w-full">
@@ -938,10 +942,10 @@ If you are creating an open source application under a license compatible with t
     </div>
   </div>
 
-  <input type="checkbox" id="regenerate-captions-modal" class="modal-toggle" />
+  <input type="checkbox" id="regenerate-captions-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
     <div class="modal-box">
-      <label for="regenerate-captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="regenerate-captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <div class="flex flex-col gap-4 w-full">
         <h3 class="font-bold text-lg">Caption Regeneration </h3>
         <p>Any changes you made to the captions will be lost.</p>
@@ -971,11 +975,11 @@ If you are creating an open source application under a license compatible with t
   <div class="hidden-label-holder">
   <label for="file-save-dialog">Open Save to Local Storage Dialog</label>
   </div>
-  <input type="checkbox" id="file-save-dialog" class="modal-toggle" />
+  <input type="checkbox" id="file-save-dialog" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
   <div class="modal-box">
     <div class="flex flex-col gap-4 w-full">
-      <label for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <h3 class="font-bold text-lg">Save to Local Storage</h3>
       <input type="text" id="save-localstorage-filename" name="save-localstorage-filename" placeholder="File name" class="input input-bordered w-full max-w-xs" />
     </div>
@@ -990,13 +994,13 @@ If you are creating an open source application under a license compatible with t
   <div class="hidden-label-holder">
   <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
   </div>
-  <input type="checkbox" id="file-load-dialog" class="modal-toggle" />
+  <input type="checkbox" id="file-load-dialog" class="modal-toggle" tabindex="-1" aria-hidden="true" />
   <div class="modal">
   <div class="modal-box">
     <div class="flex flex-col gap-4 w-full">
-      <label for="file-load-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+      <label for="file-load-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <h3 class="font-bold text-lg">Load from Local Storage</h3>
-      <select id="load-localstorage-filename" class="select select-bordered w-full max-w-xs">
+      <select id="load-localstorage-filename" aria-label="Load a saved project" class="select select-bordered w-full max-w-xs">
       </select>
     </div>
     <div class="modal-action">
@@ -1007,11 +1011,11 @@ If you are creating an open source application under a license compatible with t
   </div>
  
 
-  <script src="./js/hyperaudio-lite-editor-storage.js?v=0.7.2"></script>
+  <script src="./js/hyperaudio-lite-editor-storage.js?v=0.8.3"></script>
 
   <script src="js/editor-file-menu.js?v=0.6.12"></script>
 
-  <script src="./js/hyperaudio-lite-editor-export.js?v=0.7.6" type="module"> </script>
+  <script src="./js/hyperaudio-lite-editor-export.js?v=0.8.3" type="module"> </script>
   <!-- end of localstorage additions -->
 
   <!-- caption editor additions -->
@@ -1047,6 +1051,9 @@ If you are creating an open source application under a license compatible with t
 
   <!-- responsive small-screen UI toggles (#349) -->
   <script src="js/responsive.js?v=0.7.2"></script>
+
+  <!-- keyboard operability for modal label-buttons (#402) -->
+  <script src="js/a11y.js?v=0.8.3"></script>
 
   <!-- service worker script for PWA -->
   <script src="js/editor-service-worker.js?v=0.6.12"></script>

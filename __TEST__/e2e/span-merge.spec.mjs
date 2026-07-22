@@ -81,6 +81,27 @@ test('retyping a word\'s first letter reflows the leaked char back, keeping orig
   expect(r.editor).toEqual({ t: 'Editor ', m: r.orig.editorM, d: r.orig.editorD });
 });
 
+test('splitting a word re-indexes the player wordArr so the new spans can highlight', async ({ page }) => {
+  // A stale wordArr is why split words don't highlight; after a split (span
+  // count changes) the editor must rebuild it to match the DOM (#394).
+  const r = await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const inst = window.hyperaudioInstance;
+    const domBefore = t.querySelectorAll('span[data-m]').length;
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'makes');
+    span.textContent = 'ma kes ';                       // add a space -> split on blur
+    t.dispatchEvent(new Event('blur'));
+    const domNodes = [...t.querySelectorAll('span[data-m]')];
+    const arrNodes = inst.wordArr.map((w) => w.n);
+    return {
+      grew: t.querySelectorAll('span[data-m]').length === domBefore + 1,
+      arrMatchesDom: arrNodes.length === domNodes.length && domNodes.every((n) => arrNodes.includes(n)),
+    };
+  });
+  expect(r.grew).toBe(true);
+  expect(r.arrMatchesDom).toBe(true);
+});
+
 test('a clean transcript is untouched on blur (no spurious merges)', async ({ page }) => {
   const { before, after } = await page.evaluate(() => {
     const t = document.querySelector('#hypertranscript');
