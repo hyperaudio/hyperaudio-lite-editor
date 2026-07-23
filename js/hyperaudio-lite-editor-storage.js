@@ -340,19 +340,36 @@ function saveHyperTranscriptToLocalStorage(
   }
 }
 
+// Escape text/keys interpolated into picker markup (#410) — a saved filename
+// containing < or " must not break (or script) the list.
+function escapeStorageMarkup(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function loadLocalStorageOptions(storage = window.localStorage) {
 
   let fileSelect = document.querySelector("#load-localstorage-filename");
   let filePicker = document.querySelector("#file-picker");
-  
+
   fileSelect.innerHTML = '<option value="default">Select file…</option>';
   filePicker.innerHTML = "";
 
+  // Entries are referenced by their KEY STRING, never by storage.key(i)
+  // position (#410): key order is implementation-defined and shifts whenever
+  // ANY key is written — and other modules write keys at arbitrary times
+  // (prefs on every toggle) — so a positional index resolved at click time
+  // could load a different entry than the one listed.
   for (let i = 0; i < storage.length; i++) {
     if (storage.key(i).indexOf(fileExtension) > 0) {
-      let filename = storage.key(i).substring(0,storage.key(i).lastIndexOf(fileExtension));
-      fileSelect.insertAdjacentHTML("beforeend", `<option value=${i}>${filename}</option>`);
-      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" title="..." data-index=${i}>${filename}</a></li>`);
+      const key = storage.key(i);
+      const filename = escapeStorageMarkup(key.substring(0, key.lastIndexOf(fileExtension)));
+      const keyAttr = escapeStorageMarkup(key);
+      fileSelect.insertAdjacentHTML("beforeend", `<option value="${keyAttr}">${filename}</option>`);
+      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" title="..." data-key="${keyAttr}">${filename}</a></li>`);
     }
   }
 
@@ -377,7 +394,7 @@ function setFileSelectListeners() {
 }
 
 function fileSelectHandleClick(event) {
-  loadHyperTranscriptFromLocalStorage(event.target.getAttribute("data-index"));
+  loadHyperTranscriptFromLocalStorage(event.target.getAttribute("data-key"));
 
   let files = document.querySelectorAll('.file-item');
 
@@ -391,28 +408,46 @@ function fileSelectHandleClick(event) {
 }
 
 function fileSelectHandleHover(event) {
-  loadSummaryFromLocalStorage(event.target.getAttribute("data-index"), event.target);
+  loadSummaryFromLocalStorage(event.target.getAttribute("data-key"), event.target);
   event.preventDefault();
   return false;
 }
 
-function loadHyperTranscriptFromLocalStorage(fileindex, storage = window.localStorage){
-  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
-
-  if (hypertranscriptstorage) {
-
-    lastFilename = storage.key(fileindex).substring(0,storage.key(fileindex).lastIndexOf(fileExtension));
-    renderTranscript(hypertranscriptstorage, lastFilename);
-    
-    document.querySelector('#save-localstorage-filename').value = lastFilename;
+// Read an entry by its key string. A corrupted value must not throw out of the
+// click handler (that permanently broke the picker), and an entry missing the
+// expected fields must not half-populate the editor (renderTranscript reads
+// .video and .hypertranscript unguarded) — so parse defensively and validate.
+function readTranscriptEntry(fileKey, storage) {
+  if (!fileKey) return null;
+  try {
+    return JSON.parse(storage.getItem(fileKey));
+  } catch (e) {
+    console.warn(`Could not parse saved transcript "${fileKey}":`, e);
+    return null;
   }
 }
 
-function loadSummaryFromLocalStorage(fileindex, target, storage = window.localStorage){
-  
-  let hypertranscriptstorage = JSON.parse(storage.getItem(storage.key(fileindex)));
+function loadHyperTranscriptFromLocalStorage(fileKey, storage = window.localStorage){
+  let hypertranscriptstorage = readTranscriptEntry(fileKey, storage);
 
-  if (hypertranscriptstorage) {
-    target.setAttribute("title", hypertranscriptstorage.summary + "\n\nTopics: " + getTopicsString(hypertranscriptstorage.topics)); 
+  if (hypertranscriptstorage
+      && typeof hypertranscriptstorage.hypertranscript === 'string'
+      && typeof hypertranscriptstorage.video === 'string') {
+
+    lastFilename = fileKey.substring(0, fileKey.lastIndexOf(fileExtension));
+    renderTranscript(hypertranscriptstorage, lastFilename);
+
+    document.querySelector('#save-localstorage-filename').value = lastFilename;
+  } else if (hypertranscriptstorage) {
+    console.warn(`Saved entry "${fileKey}" is missing transcript/video fields — not loading.`);
+  }
+}
+
+function loadSummaryFromLocalStorage(fileKey, target, storage = window.localStorage){
+
+  let hypertranscriptstorage = readTranscriptEntry(fileKey, storage);
+
+  if (hypertranscriptstorage && hypertranscriptstorage.summary !== undefined) {
+    target.setAttribute("title", hypertranscriptstorage.summary + "\n\nTopics: " + getTopicsString(hypertranscriptstorage.topics));
   }
 }
