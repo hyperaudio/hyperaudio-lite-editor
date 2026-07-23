@@ -95,7 +95,27 @@ function jsonToHTML(jsonData) {
   if (paragraphs.length > 0) {
     // ===== MULTI-PARAGRAPH CASE =====
     // Generate separate <p> tags based on paragraph data
-    
+
+    // Assign EVERY word to a paragraph — never drop (#408). The old half-open
+    // range filter (start >= pStart && start < pEnd) silently deleted words:
+    // a zero-duration last word (end == start) failed its own paragraph's
+    // range, and diarizer paragraph times that don't exactly bracket word
+    // times left gap/trailing words unmatched. Rule: a word belongs to the
+    // last paragraph that has started by the word's start time; words before
+    // the first paragraph go to the first.
+    const assignedWords = paragraphs.map(() => []);
+    words.forEach(word => {
+      let idx = 0;
+      let bestStart = -Infinity;
+      paragraphs.forEach((p, i) => {
+        if (word.start >= p.start && p.start >= bestStart) {
+          idx = i;
+          bestStart = p.start;
+        }
+      });
+      assignedWords[idx].push(word);
+    });
+
     paragraphs.forEach((paragraph, paragraphIndex) => {
       html += '  <p>\n';
       
@@ -108,14 +128,8 @@ function jsonToHTML(jsonData) {
         html += `    <span data-m="${speakerTime}" data-d="0" class="speaker">[${escapeHTMLText(paragraph.speaker)}] </span>\n`;
       }
       
-      // Find all words that belong to this paragraph
-      // Words belong to a paragraph if their start time is within the paragraph's time range
-      const paragraphStart = paragraph.start;
-      const paragraphEnd = paragraph.end;
-      
-      const paragraphWords = words.filter(word => 
-        word.start >= paragraphStart && word.start < paragraphEnd
-      );
+      // Words pre-assigned above — every word renders exactly once
+      const paragraphWords = assignedWords[paragraphIndex];
       
       // One span per line (indented) for readability. A word flagged
       // space:false has no trailing space and is kept adjacent to the next
@@ -208,17 +222,19 @@ function htmlToJSON(html) {
   const doc = parser.parseFromString(html, 'text/html');
   
   // ===== EXTRACT WORDS =====
-  // Find all spans with timing data that are NOT speaker labels
+  // Find all spans with timing data that are NOT speaker labels. data-d is
+  // OPTIONAL in the hyperaudio format (caption.js handles its absence), so the
+  // selector must not require it (#408) — a missing/invalid duration reads as 0.
   const words = [];
-  const wordSpans = doc.querySelectorAll('span[data-m][data-d]:not(.speaker)');
-  
+  const wordSpans = doc.querySelectorAll('span[data-m]:not(.speaker)');
+
   wordSpans.forEach(span => {
     const raw = span.textContent;
     const text = raw.trim();
     if (text) {
       // Parse timing attributes
       const startMs = parseInt(span.getAttribute('data-m'));
-      const durationMs = parseInt(span.getAttribute('data-d'));
+      const durationMs = parseInt(span.getAttribute('data-d')) || 0;
       const endMs = startMs + durationMs;
 
       // Convert from milliseconds to seconds
@@ -258,17 +274,18 @@ function htmlToJSON(html) {
       }
     }
     
-    // Find all word spans in this paragraph (excluding speaker)
-    const paragraphWordSpans = pElement.querySelectorAll('span[data-m][data-d]:not(.speaker)');
-    
+    // Find all word spans in this paragraph (excluding speaker); data-d
+    // optional here too (#408)
+    const paragraphWordSpans = pElement.querySelectorAll('span[data-m]:not(.speaker)');
+
     if (paragraphWordSpans.length > 0) {
       // Get start time from first word and end time from last word
       const firstSpan = paragraphWordSpans[0];
       const lastSpan = paragraphWordSpans[paragraphWordSpans.length - 1];
-      
+
       const startMs = parseInt(firstSpan.getAttribute('data-m'));
       const lastStartMs = parseInt(lastSpan.getAttribute('data-m'));
-      const lastDurationMs = parseInt(lastSpan.getAttribute('data-d'));
+      const lastDurationMs = parseInt(lastSpan.getAttribute('data-d')) || 0;
       const endMs = lastStartMs + lastDurationMs;
       
       // Create paragraph object

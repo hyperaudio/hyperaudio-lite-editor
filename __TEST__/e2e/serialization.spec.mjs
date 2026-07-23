@@ -44,6 +44,26 @@ test('the HTML download reflects canonical serialization after the sanitise tick
   expect(href).not.toMatch(/class="unread"|class="read"/);
 });
 
+test('HTML→JSON→HTML round trip preserves every word, incl. zero-duration and no-data-d (#408)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const html = `<article><section>
+      <p><span data-m="1000" data-d="0" class="speaker">[A] </span>
+         <span data-m="1000" data-d="500">one </span>
+         <span data-m="1600">nodur </span>
+         <span data-m="2000" data-d="0">zerolast </span></p>
+      <p><span data-m="5000" data-d="0" class="speaker">[B] </span>
+         <span data-m="5000" data-d="400">two </span></p>
+    </section></article>`;
+    const json = htmlToJSON(html);
+    const back = jsonToHTML(json);
+    return { jsonWords: json.words.map((w) => w.text), back };
+  });
+  expect(r.jsonWords).toEqual(['one', 'nodur', 'zerolast', 'two']);
+  for (const w of ['one ', 'nodur ', 'zerolast ', 'two ']) {
+    expect(r.back).toContain(`>${w}</span>`);
+  }
+});
+
 test('strikethrough survives serialization; word text is escaped', async ({ page }) => {
   const html = await page.evaluate(() => {
     const t = document.querySelector('#hypertranscript');

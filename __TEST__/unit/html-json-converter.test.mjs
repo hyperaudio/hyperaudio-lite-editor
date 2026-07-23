@@ -40,6 +40,41 @@ test('an XSS payload in transcript JSON is neutralised (#406)', () => {
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
+test('a zero-duration last word is not dropped by its own paragraph range (#408)', () => {
+  const html = jsonToHTML({
+    words: [
+      { start: 1.0, end: 1.5, text: 'first' },
+      { start: 2.0, end: 2.0, text: 'last' },      // end == start == paragraph.end
+    ],
+    paragraphs: [{ speaker: 'A', start: 1.0, end: 2.0 }],
+  });
+  expect_word(html, 'last');
+});
+
+test('gap and trailing words are assigned to a paragraph, never dropped (#408)', () => {
+  const html = jsonToHTML({
+    words: [
+      { start: 0.5, end: 0.8, text: 'early' },     // before the first paragraph
+      { start: 12.0, end: 12.5, text: 'gapword' }, // between paragraph ranges
+      { start: 25.0, end: 25.5, text: 'trailing' },// after the last paragraph end
+      { start: 1.5, end: 2.0, text: 'inP1' },
+      { start: 16.0, end: 16.5, text: 'inP2' },
+    ],
+    paragraphs: [
+      { speaker: 'A', start: 1.0, end: 10.0 },
+      { speaker: 'B', start: 15.0, end: 20.0 },
+    ],
+  });
+  for (const w of ['early', 'gapword', 'trailing', 'inP1', 'inP2']) expect_word(html, w);
+  // placement: early -> P1 (before B's speaker label), trailing -> P2
+  assert.ok(html.indexOf('early') < html.indexOf('[B]'), 'early lands in the first paragraph');
+  assert.ok(html.indexOf('trailing') > html.indexOf('[B]'), 'trailing lands in the last paragraph');
+});
+
+function expect_word(html, word) {
+  assert.ok(html.includes(`>${word} </span>`) || html.includes(`>${word}</span>`), `word "${word}" survives`);
+}
+
 test('clean text is untouched', () => {
   const html = jsonToHTML({
     words: [{ start: 4.76, end: 5.28, text: 'Testing' }],
