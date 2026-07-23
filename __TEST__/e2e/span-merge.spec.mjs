@@ -134,6 +134,38 @@ test('typing a speaker name gets labelled as a speaker, not split as words (#416
   expect(r.wordD).toBe(r.orig.d);
 });
 
+test('contenteditable style pollution is scrubbed; functional styles survive (#415)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    // WebKit-style pollution: font-size on a word, a style-only wrapper span
+    spans[1].setAttribute('style', 'font-size: 13pt;');
+    spans[1].insertAdjacentHTML('afterend', '<span style="font-size: 13pt;"> </span>');
+    // functional styles that MUST survive: a struck word, a hidden speaker
+    spans[2].style.textDecoration = 'line-through';
+    spans[2].style.fontSize = '13pt';                    // struck + polluted
+    const speaker = t.querySelector('span.speaker');
+    if (speaker) speaker.style.display = 'none';
+    t.dispatchEvent(new Event('blur'));
+    return {
+      pollutedGone: !spans[1].hasAttribute('style'),
+      wrapperGone: t.querySelector('span[style*="font-size"]:not([data-m])') === null,
+      struckKept: spans[2].style.textDecoration.includes('line-through'),
+      struckPollutionGone: spans[2].style.fontSize === '',
+      speakerDisplayKept: speaker ? speaker.style.display === 'none' : true,
+      textIntact: spans[1].textContent.length > 0,
+    };
+  });
+  expect(r).toEqual({
+    pollutedGone: true,
+    wrapperGone: true,
+    struckKept: true,
+    struckPollutionGone: true,
+    speakerDisplayKept: true,
+    textIntact: true,
+  });
+});
+
 test('a clean transcript is untouched on blur (no spurious merges)', async ({ page }) => {
   const { before, after } = await page.evaluate(() => {
     const t = document.querySelector('#hypertranscript');

@@ -123,7 +123,9 @@
         // function replacements so a literal $ in the transcript/filename isn't
         // treated as a replacement pattern
         const html = hyperaudioTemplate
-          .replace('{hypertranscript}', () => getTranscriptData())
+          .replace('{hypertranscript}', () => (typeof serializeTranscriptHtml === 'function'
+            ? serializeTranscriptHtml(document.querySelector('#hypertranscript'))
+            : getTranscriptData()))
           .replace('{sourcemedia}', () => mediaSrc)
           .replace('{sourcevtt}', () => (track !== null ? track.src : ''));
         const blob = new Blob([html], { type: 'text/html' });
@@ -215,6 +217,27 @@
     span.replaceWith(frag);
   }
 
+  // Scrub contenteditable artifacts (#415): WebKit injects inline styles
+  // (font-size etc.) on paste/splits, plus style-only wrapper spans with no
+  // data-m — all of which persisted into exports and confused downstream
+  // consumers. Only two inline styles are FUNCTIONAL on transcript spans:
+  // line-through (the strikeout/cut model) and display on speaker labels (the
+  // Speakers toggle). Preserve those, drop everything else, and unwrap
+  // non-data-m wrapper spans so their text folds back into the flow.
+  function scrubEditingArtifacts(root) {
+    root.querySelectorAll('span[style]').forEach((span) => {
+      const display = span.classList.contains('speaker') ? span.style.display : '';
+      const struck = (span.style.textDecoration || '').includes('line-through');
+      span.removeAttribute('style');
+      if (display) span.style.display = display;
+      if (struck) span.style.textDecoration = 'line-through';
+    });
+    root.querySelectorAll('span:not([data-m])').forEach((span) => {
+      if (span.classList.contains('speaker')) return;
+      span.replaceWith(...span.childNodes);
+    });
+  }
+
   // Spans containing a bracket belong to the SPEAKER machinery, not word
   // normalization (#416): "[Maria] The " must survive until sanitise's speaker
   // pass extracts the label — splitting it first turns "[Maria] " into a plain
@@ -300,6 +323,8 @@
         }
       }
     }
+    // artifact hygiene runs regardless of the timing-repair switch (#415)
+    scrubEditingArtifacts(root);
     if (!WORD_SPLIT_TIMING) return;
     // disjoint conditions, in order: reflow (internal space + no trailing),
     // merge (no internal + no trailing), split (internal space + trailing).
@@ -527,7 +552,13 @@
           }
         }
 
-        let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
+        // Canonical serialization (transcript-serializer.js): one span per
+        // line, two-space indents, data-m before data-d, runtime noise
+        // dropped. Replaces the old raw-innerHTML + strip-all-classes regex —
+        // which also (wrongly) removed the semantic speaker class.
+        let hypertranscript = typeof serializeTranscriptHtml === 'function'
+          ? serializeTranscriptHtml(rootnode)
+          : rootnode.innerHTML.replace(/ class=".*?"/g, '');
         document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
 
         if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
