@@ -71,6 +71,20 @@
  *     <span data-m="4760" data-d="520">Testing </span>
  *   </p></section></article>
  */
+
+// Escape text destined for markup (#406): word text and speaker names come
+// from transcripts (possibly third-party JSON) and may contain "<inaudible>",
+// "AT&T", or hostile payloads — interpolated raw they become live markup when
+// the result lands in innerHTML (stored XSS), and round-trips corrupt.
+// htmlToJSON reads textContent, which decodes entities, so the mirror is free.
+function escapeHTMLText(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function jsonToHTML(jsonData) {
   const words = jsonData.words || [];
   const paragraphs = jsonData.paragraphs || [];
@@ -91,7 +105,7 @@ function jsonToHTML(jsonData) {
         const speakerTime = Math.round(paragraph.start * 1000);
         
         // Speaker span has zero duration (data-d="0")
-        html += `    <span data-m="${speakerTime}" data-d="0" class="speaker">[${paragraph.speaker}] </span>\n`;
+        html += `    <span data-m="${speakerTime}" data-d="0" class="speaker">[${escapeHTMLText(paragraph.speaker)}] </span>\n`;
       }
       
       // Find all words that belong to this paragraph
@@ -116,7 +130,7 @@ function jsonToHTML(jsonData) {
         const trail = word.space === false ? '' : ' ';
         const gluedToPrev = wordIndex > 0 && paragraphWords[wordIndex - 1].space === false;
         const lead = wordIndex === 0 ? '    ' : gluedToPrev ? '' : '\n    ';
-        html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${word.text}${trail}</span>`;
+        html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${escapeHTMLText(word.text)}${trail}</span>`;
       });
       html += '\n';
       
@@ -135,7 +149,7 @@ function jsonToHTML(jsonData) {
       const trail = word.space === false ? '' : ' ';
       const gluedToPrev = wordIndex > 0 && words[wordIndex - 1].space === false;
       const lead = wordIndex === 0 ? '    ' : gluedToPrev ? '' : '\n    ';
-      html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${word.text}${trail}</span>`;
+      html += `${lead}<span data-m="${startMs}" data-d="${durationMs}">${escapeHTMLText(word.text)}${trail}</span>`;
     });
     html += '\n';
     
