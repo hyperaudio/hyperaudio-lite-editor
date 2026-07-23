@@ -166,6 +166,42 @@ test('contenteditable style pollution is scrubbed; functional styles survive (#4
   });
 });
 
+test('the caret survives join/split normalization on the debounced pass', async ({ page }) => {
+  // The repairs rewrite text nodes, which used to throw the caret to the start
+  // of the affected word mid-edit. It's now saved as a character offset and
+  // re-resolved after the pass.
+  const abs = () => page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const sel = getSelection();
+    if (!sel.rangeCount) return null;
+    const r = sel.getRangeAt(0);
+    const pre = document.createRange();
+    pre.selectNodeContents(t);
+    pre.setEnd(r.startContainer, r.startOffset);
+    return pre.toString().length;
+  });
+
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    const a = spans[1];
+    a.textContent = a.textContent.replace(/\s+$/, '');   // join: user deleted the boundary space
+    const sel = getSelection();
+    const r = document.createRange();
+    r.setStart(a.firstChild, a.firstChild.length);       // caret at the join point
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+  });
+  const before = await abs();
+  await page.waitForTimeout(1400);                       // debounced sanitise fires
+  expect(await abs()).toBe(before);
+  // and the merge actually happened (caret preserved on the merged span)
+  expect(await page.evaluate(() => getSelection().anchorNode.nodeValue)).toContain('HyperaudioLite');
+});
+
 test('a clean transcript is untouched on blur (no spurious merges)', async ({ page }) => {
   const { before, after } = await page.evaluate(() => {
     const t = document.querySelector('#hypertranscript');

@@ -217,6 +217,45 @@
     span.replaceWith(frag);
   }
 
+  // --- Caret preservation across normalization -------------------------------
+  // The span repairs rewrite text nodes (textContent =, replaceWith), which
+  // destroys the browser's selection anchor — mid-edit the caret jumped to the
+  // start of the joined/split word. All the passes preserve the transcript's
+  // character CONTENT though, so the caret can be saved as an absolute
+  // character offset and re-resolved onto whatever nodes exist afterwards.
+  function saveCaretOffset(root) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!root.contains(range.startContainer)) return null;
+    const pre = document.createRange();
+    pre.selectNodeContents(root);
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().length;
+  }
+
+  function restoreCaretOffset(root, chars) {
+    const sel = window.getSelection();
+    const range = document.createRange();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    let remaining = chars;
+    while ((node = walker.nextNode())) {
+      if (remaining <= node.nodeValue.length) {
+        range.setStart(node, remaining);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+      remaining -= node.nodeValue.length;
+    }
+    range.selectNodeContents(root);   // past the end — clamp to the end
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
   // Scrub contenteditable artifacts (#415): WebKit injects inline styles
   // (font-size etc.) on paste/splits, plus style-only wrapper spans with no
   // data-m — all of which persisted into exports and confused downstream
@@ -265,6 +304,7 @@
   // space. Move the post-space fragment to the front of the next word span,
   // reconstituting the word with each span's ORIGINAL data-m/data-d intact.
   function reflowLeakedFragments(root) {
+    let changed = false;
     const spans = Array.from(root.querySelectorAll('span[data-m]'));
     for (let i = 0; i < spans.length; i++) {
       const span = spans[i];
@@ -279,13 +319,16 @@
       const cut = txt.lastIndexOf(' ');
       span.textContent = txt.slice(0, cut).replace(/\s+$/, '') + ' ';
       next.textContent = txt.slice(cut + 1) + next.textContent;
+      changed = true;
     }
+    return changed;
   }
 
   // Merge spans JOINED by deleting the space between two words — the inverse of
   // splitWordSpan (#394): a span with no trailing space, followed by a word
   // span, is glued back into one (start of first, end of last); chains for 3+.
   function mergeJoinedSpans(root) {
+    let changed = false;
     const spans = Array.from(root.querySelectorAll('span[data-m]'));
     for (let i = 0; i < spans.length; i++) {
       const span = spans[i];
@@ -302,8 +345,10 @@
         span.setAttribute('data-d', String(Math.max(0, (nm + nd) - m)));
         span.textContent = span.textContent + next.textContent;
         next.remove();
+        changed = true;
       }
     }
+    return changed;
   }
 
   // Run the span repairs on `root` and, if the set of word spans changed
@@ -326,14 +371,26 @@
     // artifact hygiene runs regardless of the timing-repair switch (#415)
     scrubEditingArtifacts(root);
     if (!WORD_SPLIT_TIMING) return;
+    // The repairs rewrite text nodes, which would throw the caret to the start
+    // of the affected word mid-edit — save it as a character offset first and
+    // re-resolve after, but only when the transcript actually has focus (on
+    // blur there is nothing to preserve) and a rewrite actually happened.
+    const hasFocus = document.activeElement === root;
+    const caret = hasFocus ? saveCaretOffset(root) : null;
     // disjoint conditions, in order: reflow (internal space + no trailing),
     // merge (no internal + no trailing), split (internal space + trailing).
     const countBefore = root.querySelectorAll('span[data-m]').length;
-    reflowLeakedFragments(root);
-    mergeJoinedSpans(root);
+    let rewrote = reflowLeakedFragments(root);
+    rewrote = mergeJoinedSpans(root) || rewrote;
     const spans = root.querySelectorAll('span[data-m]');
     for (let i = 0; i < spans.length; i++) {
-      if (!isSpeakerText(spans[i]) && /\S\s+\S/.test(spans[i].textContent)) splitWordSpan(spans[i]);
+      if (!isSpeakerText(spans[i]) && /\S\s+\S/.test(spans[i].textContent)) {
+        splitWordSpan(spans[i]);
+        rewrote = true;
+      }
+    }
+    if (caret !== null && rewrote) {
+      restoreCaretOffset(root, caret);
     }
     const inst = window.hyperaudioInstance;
     if (inst && typeof inst.setupTranscriptWords === 'function'
