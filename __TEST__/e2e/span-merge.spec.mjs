@@ -102,6 +102,38 @@ test('splitting a word re-indexes the player wordArr so the new spans can highli
   expect(r.arrMatchesDom).toBe(true);
 });
 
+test('typing a speaker name gets labelled as a speaker, not split as words (#416)', async ({ page }) => {
+  // Typing "[Maria] " at the start of a word span must survive normalization
+  // (bracketed text belongs to sanitise's speaker pass) — the regression split
+  // it into a plain "[Maria] " word span, stealing timing and never labelling.
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const p = t.querySelectorAll('p')[1]; // a paragraph without a speaker
+    const span = p.querySelector('span[data-m]');
+    window.__orig = { m: span.getAttribute('data-m'), d: span.getAttribute('data-d') };
+    span.textContent = '[Maria] ' + span.textContent;
+    document.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+  });
+  await page.waitForTimeout(1400); // past sanitise's 1s debounce
+  const r = await page.evaluate(() => {
+    const p = document.querySelectorAll('#hypertranscript p')[1];
+    const speaker = p.querySelector('span.speaker');
+    const word = p.querySelector('span[data-m]:not(.speaker)');
+    return {
+      speakerText: speaker ? speaker.textContent.trim() : null,
+      speakerD: speaker ? speaker.getAttribute('data-d') : null,
+      wordM: word.getAttribute('data-m'),
+      wordD: word.getAttribute('data-d'),
+      orig: window.__orig,
+    };
+  });
+  expect(r.speakerText).toBe('[Maria]');
+  expect(r.speakerD).toBe('0');                 // speaker spans carry no duration
+  expect(r.wordM).toBe(r.orig.m);               // the word's timing is untouched
+  expect(r.wordD).toBe(r.orig.d);
+});
+
 test('a clean transcript is untouched on blur (no spurious merges)', async ({ page }) => {
   const { before, after } = await page.evaluate(() => {
     const t = document.querySelector('#hypertranscript');

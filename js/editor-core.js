@@ -215,6 +215,16 @@
     span.replaceWith(frag);
   }
 
+  // Spans containing a bracket belong to the SPEAKER machinery, not word
+  // normalization (#416): "[Maria] The " must survive until sanitise's speaker
+  // pass extracts the label — splitting it first turns "[Maria] " into a plain
+  // word span (starts-with-[ AND ends-with-], which the extraction branch
+  // skips), steals timing from the real word, and throws the caret. A bare "["
+  // (not a complete [..] pair) also guards half-typed names during a pause.
+  function isSpeakerText(span) {
+    return span.textContent.indexOf('[') !== -1 || span.textContent.indexOf(']') !== -1;
+  }
+
   // True when nothing but whitespace text sits between nodes a and b.
   function onlyWhitespaceBetween(a, b) {
     let n = a.nextSibling;
@@ -236,10 +246,12 @@
     for (let i = 0; i < spans.length; i++) {
       const span = spans[i];
       if (!span.isConnected || span.classList.contains('speaker')) continue;
+      if (isSpeakerText(span)) continue;
       const txt = span.textContent;
       if (!/\S\s+\S/.test(txt) || /\s$/.test(txt)) continue;
       const next = span.nextElementSibling;
       if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) continue;
+      if (isSpeakerText(next)) continue;
       if (!onlyWhitespaceBetween(span, next)) continue;
       const cut = txt.lastIndexOf(' ');
       span.textContent = txt.slice(0, cut).replace(/\s+$/, '') + ' ';
@@ -255,9 +267,11 @@
     for (let i = 0; i < spans.length; i++) {
       const span = spans[i];
       if (!span.isConnected || span.classList.contains('speaker')) continue;
+      if (isSpeakerText(span)) continue;
       while (span.textContent.length > 0 && !/\s$/.test(span.textContent)) {
         const next = span.nextElementSibling;
         if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) break;
+        if (isSpeakerText(next)) break;
         if (!onlyWhitespaceBetween(span, next)) break;
         const m = parseInt(span.getAttribute('data-m'), 10) || 0;
         const nm = parseInt(next.getAttribute('data-m'), 10) || 0;
@@ -294,7 +308,7 @@
     mergeJoinedSpans(root);
     const spans = root.querySelectorAll('span[data-m]');
     for (let i = 0; i < spans.length; i++) {
-      if (/\S\s+\S/.test(spans[i].textContent)) splitWordSpan(spans[i]);
+      if (!isSpeakerText(spans[i]) && /\S\s+\S/.test(spans[i].textContent)) splitWordSpan(spans[i]);
     }
     const inst = window.hyperaudioInstance;
     if (inst && typeof inst.setupTranscriptWords === 'function'
