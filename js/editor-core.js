@@ -183,6 +183,13 @@
   // mid-edit too (#394).
   const WORD_SPLIT_TIMING = true;
 
+  // Skip normalization while an IME composition is in flight — rewriting the
+  // text nodes under an active composition (CJK etc.) breaks it. The skipped
+  // pass simply happens on the next keyup/blur.
+  let imeComposing = false;
+  document.addEventListener('compositionstart', () => { imeComposing = true; });
+  document.addEventListener('compositionend', () => { imeComposing = false; });
+
   // Estimate syllables from contiguous vowel groups (Latin-script heuristic);
   // floored at 1 so every part carries weight.
   function estimateSyllables(token) {
@@ -223,35 +230,54 @@
   // start of the joined/split word. All the passes preserve the transcript's
   // character CONTENT though, so the caret can be saved as an absolute
   // character offset and re-resolved onto whatever nodes exist afterwards.
+  // Both endpoints are saved so a non-collapsed SELECTION (e.g. words selected
+  // for striking) survives too, not just a caret.
   function saveCaretOffset(root) {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return null;
     const range = sel.getRangeAt(0);
-    if (!root.contains(range.startContainer)) return null;
-    const pre = document.createRange();
-    pre.selectNodeContents(root);
-    pre.setEnd(range.startContainer, range.startOffset);
-    return pre.toString().length;
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+    const measure = (container, offset) => {
+      const pre = document.createRange();
+      pre.selectNodeContents(root);
+      pre.setEnd(container, offset);
+      return pre.toString().length;
+    };
+    return {
+      start: measure(range.startContainer, range.startOffset),
+      end: range.collapsed ? null : measure(range.endContainer, range.endOffset),
+    };
   }
 
-  function restoreCaretOffset(root, chars) {
-    const sel = window.getSelection();
-    const range = document.createRange();
+  // Resolve an absolute character offset back to a (text node, offset) pair;
+  // clamps past-the-end to the final position.
+  function resolveCharOffset(root, chars) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let node;
+    let last = null;
     let remaining = chars;
     while ((node = walker.nextNode())) {
       if (remaining <= node.nodeValue.length) {
-        range.setStart(node, remaining);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        return;
+        return { node, offset: remaining };
       }
       remaining -= node.nodeValue.length;
+      last = node;
     }
-    range.selectNodeContents(root);   // past the end — clamp to the end
-    range.collapse(false);
+    return last ? { node: last, offset: last.nodeValue.length } : null;
+  }
+
+  function restoreCaretOffset(root, saved) {
+    const start = resolveCharOffset(root, saved.start);
+    if (start === null) return;
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    if (saved.end !== null) {
+      const end = resolveCharOffset(root, saved.end);
+      if (end !== null) range.setEnd(end.node, end.offset);
+    } else {
+      range.collapse(true);
+    }
     sel.removeAllRanges();
     sel.addRange(range);
   }
@@ -357,7 +383,7 @@
   // between existing nodes, so it never changes the count. Called from both the
   // blur handler and the debounced sanitise pass.
   function normalizeTranscriptSpans(root) {
-    if (!root) return;
+    if (!root || imeComposing) return;
     // nbsp -> normal space (#339)
     if (root.textContent.indexOf(' ') !== -1) {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -379,22 +405,26 @@
     const caret = hasFocus ? saveCaretOffset(root) : null;
     // disjoint conditions, in order: reflow (internal space + no trailing),
     // merge (no internal + no trailing), split (internal space + trailing).
-    const countBefore = root.querySelectorAll('span[data-m]').length;
-    let rewrote = reflowLeakedFragments(root);
-    rewrote = mergeJoinedSpans(root) || rewrote;
+    const reflowed = reflowLeakedFragments(root);
+    let merged = mergeJoinedSpans(root);
+    let split = false;
     const spans = root.querySelectorAll('span[data-m]');
     for (let i = 0; i < spans.length; i++) {
       if (!isSpeakerText(spans[i]) && /\S\s+\S/.test(spans[i].textContent)) {
         splitWordSpan(spans[i]);
-        rewrote = true;
+        split = true;
       }
     }
-    if (caret !== null && rewrote) {
+    if (caret !== null && (reflowed || merged || split)) {
       restoreCaretOffset(root, caret);
     }
+    // Re-index whenever merge or split FIRED — not on a span-count comparison:
+    // a merge (−1) plus a split (+1) in the same pass nets zero yet leaves
+    // wordArr holding removed nodes and missing new ones. Reflow keeps the
+    // span elements themselves, so it needs no re-index.
     const inst = window.hyperaudioInstance;
     if (inst && typeof inst.setupTranscriptWords === 'function'
-        && root.querySelectorAll('span[data-m]').length !== countBefore) {
+        && (merged || split)) {
       inst.setupTranscriptWords();
       if (typeof inst.updateTranscriptVisualState === 'function') {
         const player = document.querySelector('#hyperplayer');

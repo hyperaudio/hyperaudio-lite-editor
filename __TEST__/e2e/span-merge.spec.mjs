@@ -202,6 +202,61 @@ test('the caret survives join/split normalization on the debounced pass', async 
   expect(await page.evaluate(() => getSelection().anchorNode.nodeValue)).toContain('HyperaudioLite');
 });
 
+test('a non-collapsed selection survives a rewrite on the debounced pass', async ({ page }) => {
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    spans[1].textContent = spans[1].textContent.replace(/\s+$/, '');  // pending join elsewhere
+    const makes = spans.find((s) => s.textContent.trim() === 'makes');
+    const sel = getSelection();
+    const r = document.createRange();
+    r.setStart(makes.firstChild, 0);
+    r.setEnd(makes.firstChild, 5);                                    // "makes" selected
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+  });
+  await page.waitForTimeout(1400);
+  expect(await page.evaluate(() => getSelection().toString())).toBe('makes');
+});
+
+test('merge and split in the same pass still re-index wordArr (net-zero span count)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    spans[5].textContent = spans[5].textContent.replace(/\s+$/, '');                        // join: −1 span
+    spans[8].textContent = spans[8].textContent.trim().replace(/^(..)/, '$1 ') + ' ';       // split: +1 span
+    t.dispatchEvent(new Event('blur'));
+    const domNodes = [...t.querySelectorAll('span[data-m]')];
+    const arrNodes = window.hyperaudioInstance.wordArr.map((w) => w.n);
+    return {
+      sameLength: domNodes.length === arrNodes.length,
+      allLive: arrNodes.every((n) => domNodes.includes(n)),
+      allIndexed: domNodes.every((n) => arrNodes.includes(n)),
+    };
+  });
+  expect(r).toEqual({ sameLength: true, allLive: true, allIndexed: true });
+});
+
+test('normalization is skipped during IME composition and runs after it ends', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    const a = spans[10];
+    a.textContent = a.textContent.replace(/\s+$/, '');                // pending join
+    document.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    t.dispatchEvent(new Event('blur'));
+    const untouchedWhileComposing = a.isConnected && !/\s$/.test(a.textContent);
+    document.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    t.dispatchEvent(new Event('blur'));
+    const mergedAfter = !a.isConnected || /\s$/.test(a.textContent);
+    return { untouchedWhileComposing, mergedAfter };
+  });
+  expect(r).toEqual({ untouchedWhileComposing: true, mergedAfter: true });
+});
+
 test('a clean transcript is untouched on blur (no spurious merges)', async ({ page }) => {
   const { before, after } = await page.evaluate(() => {
     const t = document.querySelector('#hypertranscript');
