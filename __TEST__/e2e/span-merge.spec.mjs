@@ -134,6 +134,129 @@ test('typing a speaker name gets labelled as a speaker, not split as words (#416
   expect(r.wordD).toBe(r.orig.d);
 });
 
+test('contenteditable style pollution is scrubbed; functional styles survive (#415)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    // WebKit-style pollution: font-size on a word, a style-only wrapper span
+    spans[1].setAttribute('style', 'font-size: 13pt;');
+    spans[1].insertAdjacentHTML('afterend', '<span style="font-size: 13pt;"> </span>');
+    // functional styles that MUST survive: a struck word, a hidden speaker
+    spans[2].style.textDecoration = 'line-through';
+    spans[2].style.fontSize = '13pt';                    // struck + polluted
+    const speaker = t.querySelector('span.speaker');
+    if (speaker) speaker.style.display = 'none';
+    t.dispatchEvent(new Event('blur'));
+    return {
+      pollutedGone: !spans[1].hasAttribute('style'),
+      wrapperGone: t.querySelector('span[style*="font-size"]:not([data-m])') === null,
+      struckKept: spans[2].style.textDecoration.includes('line-through'),
+      struckPollutionGone: spans[2].style.fontSize === '',
+      speakerDisplayKept: speaker ? speaker.style.display === 'none' : true,
+      textIntact: spans[1].textContent.length > 0,
+    };
+  });
+  expect(r).toEqual({
+    pollutedGone: true,
+    wrapperGone: true,
+    struckKept: true,
+    struckPollutionGone: true,
+    speakerDisplayKept: true,
+    textIntact: true,
+  });
+});
+
+test('the caret survives join/split normalization on the debounced pass', async ({ page }) => {
+  // The repairs rewrite text nodes, which used to throw the caret to the start
+  // of the affected word mid-edit. It's now saved as a character offset and
+  // re-resolved after the pass.
+  const abs = () => page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const sel = getSelection();
+    if (!sel.rangeCount) return null;
+    const r = sel.getRangeAt(0);
+    const pre = document.createRange();
+    pre.selectNodeContents(t);
+    pre.setEnd(r.startContainer, r.startOffset);
+    return pre.toString().length;
+  });
+
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    const a = spans[1];
+    a.textContent = a.textContent.replace(/\s+$/, '');   // join: user deleted the boundary space
+    const sel = getSelection();
+    const r = document.createRange();
+    r.setStart(a.firstChild, a.firstChild.length);       // caret at the join point
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+  });
+  const before = await abs();
+  await page.waitForTimeout(1400);                       // debounced sanitise fires
+  expect(await abs()).toBe(before);
+  // and the merge actually happened (caret preserved on the merged span)
+  expect(await page.evaluate(() => getSelection().anchorNode.nodeValue)).toContain('HyperaudioLite');
+});
+
+test('a non-collapsed selection survives a rewrite on the debounced pass', async ({ page }) => {
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    spans[1].textContent = spans[1].textContent.replace(/\s+$/, '');  // pending join elsewhere
+    const makes = spans.find((s) => s.textContent.trim() === 'makes');
+    const sel = getSelection();
+    const r = document.createRange();
+    r.setStart(makes.firstChild, 0);
+    r.setEnd(makes.firstChild, 5);                                    // "makes" selected
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+  });
+  await page.waitForTimeout(1400);
+  expect(await page.evaluate(() => getSelection().toString())).toBe('makes');
+});
+
+test('merge and split in the same pass still re-index wordArr (net-zero span count)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    spans[5].textContent = spans[5].textContent.replace(/\s+$/, '');                        // join: −1 span
+    spans[8].textContent = spans[8].textContent.trim().replace(/^(..)/, '$1 ') + ' ';       // split: +1 span
+    t.dispatchEvent(new Event('blur'));
+    const domNodes = [...t.querySelectorAll('span[data-m]')];
+    const arrNodes = window.hyperaudioInstance.wordArr.map((w) => w.n);
+    return {
+      sameLength: domNodes.length === arrNodes.length,
+      allLive: arrNodes.every((n) => domNodes.includes(n)),
+      allIndexed: domNodes.every((n) => arrNodes.includes(n)),
+    };
+  });
+  expect(r).toEqual({ sameLength: true, allLive: true, allIndexed: true });
+});
+
+test('normalization is skipped during IME composition and runs after it ends', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const spans = [...t.querySelectorAll('span[data-m]')].filter((s) => !s.classList.contains('speaker'));
+    const a = spans[10];
+    a.textContent = a.textContent.replace(/\s+$/, '');                // pending join
+    document.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    t.dispatchEvent(new Event('blur'));
+    const untouchedWhileComposing = a.isConnected && !/\s$/.test(a.textContent);
+    document.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    t.dispatchEvent(new Event('blur'));
+    const mergedAfter = !a.isConnected || /\s$/.test(a.textContent);
+    return { untouchedWhileComposing, mergedAfter };
+  });
+  expect(r).toEqual({ untouchedWhileComposing: true, mergedAfter: true });
+});
+
 test('a clean transcript is untouched on blur (no spurious merges)', async ({ page }) => {
   const { before, after } = await page.evaluate(() => {
     const t = document.querySelector('#hypertranscript');
