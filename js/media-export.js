@@ -185,7 +185,11 @@
       if (p.querySelector('[data-m]') === null) p.remove();
     });
     clone.normalize();
-    return clone.innerHTML;
+    // canonical formatting (one span per line, data-m before data-d) so the
+    // retimed transcript exports as clean as the plain HTML export
+    return typeof window.serializeTranscriptHtml === 'function'
+      ? window.serializeTranscriptHtml(clone)
+      : clone.innerHTML;
   };
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
