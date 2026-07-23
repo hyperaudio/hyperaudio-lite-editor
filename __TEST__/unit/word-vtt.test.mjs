@@ -74,3 +74,21 @@ test('generateWordVtt: header, cue timing, inline per-word timestamps', () => {
 test('generateWordVtt: no words yields just the header', () => {
   assert.equal(generateWordVtt({ source: mockRoot([]) }), 'WEBVTT\n');
 });
+
+test('generateWordVtt: cue text is escaped so <tags> and & survive parsing (#409)', () => {
+  const root = mockRoot([
+    { m: 1000, d: 300, t: '<inaudible>' },
+    { m: 1400, d: 300, t: 'AT&T' },
+  ]);
+  const vtt = generateWordVtt({ source: root });
+  // words become entities, not markup…
+  assert.match(vtt, /<00:00:01\.000>&lt;inaudible&gt; <00:00:01\.400>AT&amp;T\n/);
+  // …while the timestamp tags themselves stay raw
+  assert.match(vtt, /<00:00:01\.000>/);
+  assert.doesNotMatch(vtt, /<inaudible>/);
+});
+
+test('buildWordChunks stays raw for the burn-in renderer (no escaping)', () => {
+  const chunks = require('../../js/word-vtt.js').buildWordChunks({ source: mockRoot([{ m: 0, d: 100, t: '<laughs>' }]) });
+  assert.equal(chunks[0][0].text, '<laughs>');
+});
