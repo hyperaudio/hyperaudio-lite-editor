@@ -589,9 +589,16 @@
             if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().endsWith(']') === false) {
              
 
-              //look for text in square brackets
-              const regex = / *\[[^\]]*]/g;
+              //look for text in square brackets — extract one label per pass;
+              //any further bracketed labels stay in the text for the next pass
+              //(match() returns an array: coercing it to a string corrupted
+              //"[A] words [B]" into a single "[A], [B]" label)
+              const regex = / *\[[^\]]*]/;
               const found = walker.currentNode.textContent.match(regex);
+
+              // includes('[') + includes(']') admits reversed brackets
+              // ("]foo[") with no complete [..] pair — nothing to extract
+              if (found === null) { continue; }
 
               let startsWithSpeaker = false;
               if (walker.currentNode.textContent.trim().startsWith('[') === true){
@@ -601,7 +608,7 @@
               walker.currentNode.textContent = walker.currentNode.textContent.replace(regex, '');
 
               let span = document.createElement("span");
-              span.textContent = found + ' ';
+              span.textContent = found[0] + ' ';
 
               if (span.textContent.includes('[') && span.textContent.includes(']')) {
                 span.classList.add("speaker");
