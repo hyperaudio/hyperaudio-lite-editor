@@ -368,55 +368,14 @@
     return out;
   };
 
-  // Concatenate AudioBuffers (same sample rate) into one.
-  const concatAudioBuffers = (buffers) => {
-    if (buffers.length === 1) return buffers[0];
-    const channels = Math.max(...buffers.map((b) => b.numberOfChannels));
-    const sampleRate = buffers[0].sampleRate;
-    const length = buffers.reduce((sum, b) => sum + b.length, 0);
-    const out = new AudioBuffer({ length, numberOfChannels: channels, sampleRate });
-    let offset = 0;
-    for (const b of buffers) {
-      for (let c = 0; c < channels; c++) {
-        out.copyToChannel(b.getChannelData(Math.min(c, b.numberOfChannels - 1)), c, offset);
-      }
-      offset += b.length;
-    }
-    return out;
-  };
-
   // Pitch-preserved time-stretch (SoundTouch/WSOLA): tempo = rate, so 1.5×
   // yields audio 1/1.5 the length at the original pitch — matching what the
-  // player's preservesPitch playback sounds like.
-  const timeStretchBuffer = async (buffer, rate) => {
-    const st = await loadSoundtouch();
-    const shifter = new st.SoundTouch();
-    shifter.tempo = rate;
-    const source = new st.WebAudioBufferSource(buffer);
-    const filter = new st.SimpleFilter(source, shifter);
-    const FRAMES = 8192;
-    const tmp = new Float32Array(FRAMES * 2); // SoundTouch works in stereo interleaved
-    const chunks = [];
-    let n;
-    while ((n = filter.extract(tmp, FRAMES)) > 0) {
-      chunks.push(tmp.slice(0, n * 2));
-    }
-    let totalFrames = 0;
-    for (const c of chunks) totalFrames += c.length / 2;
-    const channels = Math.min(2, buffer.numberOfChannels);
-    const out = new AudioBuffer({ length: Math.max(1, totalFrames), numberOfChannels: channels, sampleRate: buffer.sampleRate });
-    const L = out.getChannelData(0);
-    const R = channels > 1 ? out.getChannelData(1) : null;
-    let i = 0;
-    for (const c of chunks) {
-      for (let j = 0; j < c.length; j += 2) {
-        L[i] = c[j];
-        if (R) R[i] = c[j + 1];
-        i++;
-      }
-    }
-    return out;
-  };
+  // player's preservesPitch playback sounds like. The incremental pipeline
+  // (#405) lives in stream-stretch.js: push() trimmed buffers as they decode
+  // and stretched blocks are emitted as soon as SoundTouch produces them;
+  // flush() drains the pipeline at the end.
+  const startStreamStretcher = async (rate, emit) =>
+    makeStreamStretcher(await loadSoundtouch(), rate, emit);
 
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
@@ -432,29 +391,24 @@
     output.addAudioTrack(source);
     await output.start();
 
-    const stretch = rate !== 1;
     const total = keptDuration(sections);
     let done = 0;
-    const collected = stretch ? [] : null;
+    const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => source.add(b)) : null;
     for (const sec of sections) {
       for await (const wrapped of sink.buffers(sec.start, sec.end)) {
         const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
         if (trimmed !== null) {
-          if (stretch) {
-            collected.push(trimmed);
+          if (stretcher !== null) {
+            await stretcher.push(trimmed);
           } else {
             await source.add(trimmed);
           }
           done += trimmed.duration;
-          onProgress(Math.min(0.99, (done / total) * (stretch ? 0.6 : 1)));
+          onProgress(Math.min(0.99, done / total));
         }
       }
     }
-    if (stretch) {
-      const stretched = await timeStretchBuffer(concatAudioBuffers(collected), rate);
-      onProgress(0.9);
-      await source.add(stretched);
-    }
+    if (stretcher !== null) await stretcher.flush();
     source.close();
     await output.finalize();
     return new Blob([output.target.buffer], { type: fmt.mime });
@@ -496,7 +450,6 @@
     }
     await output.start();
 
-    const stretch = rate !== 1;
     const total = keptDuration(sections) * (aTrack ? 2 : 1);
     let done = 0;
     let offset = 0;
@@ -523,13 +476,13 @@
     vSource.close();
 
     if (aSink !== null) {
-      const collected = stretch ? [] : null;
+      const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => aSource.add(b)) : null;
       for (const sec of sections) {
         for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
           const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
           if (trimmed !== null) {
-            if (stretch) {
-              collected.push(trimmed);
+            if (stretcher !== null) {
+              await stretcher.push(trimmed);
             } else {
               await aSource.add(trimmed);
             }
@@ -538,9 +491,7 @@
           }
         }
       }
-      if (stretch) {
-        await aSource.add(await timeStretchBuffer(concatAudioBuffers(collected), rate));
-      }
+      if (stretcher !== null) await stretcher.flush();
       aSource.close();
     }
 
