@@ -1,7 +1,7 @@
 /**
  * hls-source.js
  * (C) The Hyperaudio Project
- * @version 0.6.26 — last changed in release 0.6.26
+ * @version 0.8.6 — last changed in release 0.8.6
  * @license MIT
  *
  * Transcribe from a remote media URL — including HLS VOD (.m3u8) — by resolving
@@ -18,9 +18,12 @@
  * For a plain (non-HLS) media URL we just fetch the bytes (CORS-permitting) and
  * decode them directly.
  *
- * hls.js is loaded lazily from a CDN the first time it is needed, so non-HLS
- * users pay nothing. Loaded as a plain <script> after audio-source.js (it calls
- * the global `decodeToMono16k`).
+ * hls.js and mp4box are vendored under js/vendor/ at pinned versions (#412,
+ * the same posture as mediabunny in #381) and load lazily the first time they
+ * are needed, so non-HLS users pay nothing — and the paths work offline,
+ * self-hosted, and under a CSP with no CDN allowlist. This file itself is
+ * loaded as a plain <script> after audio-source.js (it calls the global
+ * `decodeToMono16k`).
  *
  * Scope (v1): VOD only, sources hls.js can load, fully client-side. Live HLS,
  * DRM, and a server-side proxy for non-CORS hosts are out of scope.
@@ -28,13 +31,15 @@
 
 /* eslint-disable no-undef */
 
-const HLS_CDN_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.mjs';
+// Bare specifier, resolved to the vendored file in js/vendor/ by the import
+// map in index.html (#412) — pinned bytes instead of a floating CDN major.
+const HLS_SRC = 'hls.js';
 let hlsModulePromise = null;
 
 // Lazy-load hls.js (ESM) once, returning the Hls constructor.
 function loadHlsLibrary() {
   if (hlsModulePromise === null) {
-    hlsModulePromise = import(HLS_CDN_URL).then((mod) => mod.default);
+    hlsModulePromise = import(HLS_SRC).then((mod) => mod.default);
   }
   return hlsModulePromise;
 }
@@ -247,6 +252,17 @@ function parseMediaPlaylist(text, baseUrl) {
       continue;
     }
 
+    // Encrypted streams (#412): this path fetches and concatenates raw segment
+    // bytes and cannot decrypt them — AES-128 VOD used to surface downstream
+    // as a baffling MP4 demux error. Fail fast with a clear message instead.
+    if (/^#EXT-X-KEY:/i.test(line)) {
+      const method = (line.match(/METHOD=([^,\s]+)/i) || [])[1];
+      if (method && method.toUpperCase() !== 'NONE') {
+        throw new Error(`This stream is encrypted (${method}) — encrypted HLS streams are not supported.`);
+      }
+      continue;
+    }
+
     if (line.startsWith('#')) continue;  // EXTINF and other tags
 
     // a media segment URI
@@ -355,7 +371,9 @@ async function readAudioFromHls(url, onProgress) {
  * decodeAudioData as a best effort.
  * ------------------------------------------------------------------------- */
 
-const MP4BOX_CDN_URL = 'https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js';
+// Vendored (#412) — classic script exposing the MP4Box global, so it is
+// loaded by path rather than through the import map.
+const MP4BOX_SRC = 'js/vendor/mp4box-0.5.2.all.min.js';
 let mp4boxPromise = null;
 
 function loadMp4Box() {
@@ -366,7 +384,7 @@ function loadMp4Box() {
         return;
       }
       const script = document.createElement('script');
-      script.src = MP4BOX_CDN_URL;
+      script.src = MP4BOX_SRC;
       script.onload = () => {
         if (window.MP4Box) resolve(window.MP4Box);
         else reject(new Error('MP4Box did not load.'));
@@ -504,4 +522,13 @@ async function decodeFragmentedMp4ToMono16k(arrayBuffer) {
   for (const part of pcmParts) { monoNative.set(part, off); off += part.length; }
 
   return resampleMonoTo16k(monoNative, nativeRate);
+}
+
+// Export pure helpers for the unit lane (#412); the file only declares
+// functions at load time, so requiring it in Node is safe.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    isHlsUrl,
+    parseMediaPlaylist
+  };
 }
