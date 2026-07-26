@@ -345,7 +345,13 @@
     if (fmt.kind === 'audio') options.video = { discard: true };
     const conversion = await mb.Conversion.init(options);
     conversion.onProgress = (p) => onProgress(p);
-    await conversion.execute();
+    try {
+      await conversion.execute();
+    } catch (err) {
+      // release the underlying encoder/decoder instances (#407)
+      try { await conversion.cancel(); } catch (_) { /* already torn down */ }
+      throw err;
+    }
     return new Blob([output.target.buffer], { type: fmt.mime });
   };
 
@@ -391,26 +397,32 @@
     output.addAudioTrack(source);
     await output.start();
 
-    const total = keptDuration(sections);
-    let done = 0;
-    const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => source.add(b)) : null;
-    for (const sec of sections) {
-      for await (const wrapped of sink.buffers(sec.start, sec.end)) {
-        const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
-        if (trimmed !== null) {
-          if (stretcher !== null) {
-            await stretcher.push(trimmed);
-          } else {
-            await source.add(trimmed);
+    try {
+      const total = keptDuration(sections);
+      let done = 0;
+      const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => source.add(b)) : null;
+      for (const sec of sections) {
+        for await (const wrapped of sink.buffers(sec.start, sec.end)) {
+          const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
+          if (trimmed !== null) {
+            if (stretcher !== null) {
+              await stretcher.push(trimmed);
+            } else {
+              await source.add(trimmed);
+            }
+            done += trimmed.duration;
+            onProgress(Math.min(0.99, done / total));
           }
-          done += trimmed.duration;
-          onProgress(Math.min(0.99, done / total));
         }
       }
+      if (stretcher !== null) await stretcher.flush();
+      source.close();
+      await output.finalize();
+    } catch (err) {
+      // release the underlying encoder instances (#407)
+      try { await output.cancel(); } catch (_) { /* already torn down */ }
+      throw err;
     }
-    if (stretcher !== null) await stretcher.flush();
-    source.close();
-    await output.finalize();
     return new Blob([output.target.buffer], { type: fmt.mime });
   };
 
@@ -450,52 +462,66 @@
     }
     await output.start();
 
-    const total = keptDuration(sections) * (aTrack ? 2 : 1);
-    let done = 0;
-    let offset = 0;
-    let prevT = -1;
+    try {
+      const total = keptDuration(sections) * (aTrack ? 2 : 1);
+      let done = 0;
+      let offset = 0;
+      let prevT = -1;
 
-    for (const sec of sections) {
-      for await (const sample of vSink.samples(sec.start, sec.end)) {
-        // clamp the first frame (which may start before the section), map onto
-        // the edited timeline (÷ rate when applying the playback speed), and
-        // keep timestamps strictly increasing across section boundaries
-        let t = (offset + Math.max(0, sample.timestamp - sec.start)) / rate;
-        if (t <= prevT) t = prevT + 0.001;
-        prevT = t;
-        const frameDur = Math.max(sample.duration || 1 / 30, 0.001) / rate;
-        sample.draw(ctx2d, 0, 0, width, height);
-        sample.close();
-        if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
-        await vSource.add(t, frameDur);
-        done += frameDur * rate;
-        onProgress(Math.min(0.99, done / total));
-      }
-      offset += sec.end - sec.start;
-    }
-    vSource.close();
-
-    if (aSink !== null) {
-      const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => aSource.add(b)) : null;
       for (const sec of sections) {
-        for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
-          const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
-          if (trimmed !== null) {
-            if (stretcher !== null) {
-              await stretcher.push(trimmed);
-            } else {
-              await aSource.add(trimmed);
-            }
-            done += trimmed.duration;
+        for await (const sample of vSink.samples(sec.start, sec.end)) {
+          // close the in-flight sample even when draw()/add() throws (#407);
+          // the early close after draw keeps the decoder's frame pool moving
+          let closed = false;
+          try {
+            // clamp the first frame (which may start before the section), map onto
+            // the edited timeline (÷ rate when applying the playback speed), and
+            // keep timestamps strictly increasing across section boundaries
+            let t = (offset + Math.max(0, sample.timestamp - sec.start)) / rate;
+            if (t <= prevT) t = prevT + 0.001;
+            prevT = t;
+            const frameDur = Math.max(sample.duration || 1 / 30, 0.001) / rate;
+            sample.draw(ctx2d, 0, 0, width, height);
+            sample.close();
+            closed = true;
+            if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
+            await vSource.add(t, frameDur);
+            done += frameDur * rate;
             onProgress(Math.min(0.99, done / total));
+          } finally {
+            if (!closed) sample.close();
           }
         }
+        offset += sec.end - sec.start;
       }
-      if (stretcher !== null) await stretcher.flush();
-      aSource.close();
-    }
+      vSource.close();
 
-    await output.finalize();
+      if (aSink !== null) {
+        const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => aSource.add(b)) : null;
+        for (const sec of sections) {
+          for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
+            const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
+            if (trimmed !== null) {
+              if (stretcher !== null) {
+                await stretcher.push(trimmed);
+              } else {
+                await aSource.add(trimmed);
+              }
+              done += trimmed.duration;
+              onProgress(Math.min(0.99, done / total));
+            }
+          }
+        }
+        if (stretcher !== null) await stretcher.flush();
+        aSource.close();
+      }
+
+      await output.finalize();
+    } catch (err) {
+      // release the underlying encoder instances (#407)
+      try { await output.cancel(); } catch (_) { /* already torn down */ }
+      throw err;
+    }
     return new Blob([output.target.buffer], { type: fmt.mime });
   };
 
