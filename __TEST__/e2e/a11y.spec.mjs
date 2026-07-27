@@ -52,6 +52,25 @@ test('default view (with Recents content) has no #402-class violations', async (
   expect(await runAxe(page)).toEqual([]);
 });
 
+test('file inputs suppress the native "No file chosen" tooltip AND keep an accessible name (#402 regression)', async ({ page }) => {
+  // #402 replaced title="" with aria-label, which restored the a11y name but
+  // brought back Chrome's "No file chosen" hover tooltip. Both are needed:
+  // an empty title suppresses the tooltip, aria-label/<label> names the field.
+  const r = await page.evaluate(() => {
+    const inputs = [...document.querySelectorAll('input[type="file"]')];
+    return inputs.map((el) => ({
+      id: el.id,
+      titleSuppressed: el.getAttribute('title') === '',
+      named: !!el.getAttribute('aria-label') || document.querySelector(`label[for="${el.id}"]`) !== null,
+    }));
+  });
+  expect(r.length).toBeGreaterThanOrEqual(5);
+  for (const inp of r) {
+    expect(inp.titleSuppressed, `${inp.id} title=""`).toBe(true);
+    expect(inp.named, `${inp.id} has accessible name`).toBe(true);
+  }
+});
+
 test('transcribe modal (Local and Cloud tabs) has no #402-class violations', async ({ page }) => {
   await page.evaluate(() => { document.getElementById('transcribe-modal').checked = true; });
   expect(await runAxe(page, '.modal-box')).toEqual([]);
