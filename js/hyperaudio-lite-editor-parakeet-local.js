@@ -83,7 +83,10 @@ function loadParakeetClient(modal, workerBaseUrl) {
       note.style.cssText = "background:#fff7e0; border-left:4px solid #f0a800; border-radius:4px; padding:8px 12px; margin-bottom:12px; font-size:85%;";
 
       const intro = document.createElement("div");
-      intro.textContent = `${browser}: Parakeet runs on the CPU here and is much slower than the audio length – Chrome is recommended for GPU acceleration.`;
+      // Honest about the int8 accuracy limitation too (#388): quantization can
+      // push soft boundary speech below the decoder's blank threshold, so the
+      // words vanish while the output still looks complete.
+      intro.textContent = `${browser}: Parakeet runs on the CPU here – much slower than the audio length, and softly-spoken words at the very start or end of a recording may be missed. Chrome is recommended for GPU acceleration and better accuracy.`;
       note.appendChild(intro);
 
       const optLabel = document.createElement("label");
@@ -159,7 +162,11 @@ function loadParakeetClient(modal, workerBaseUrl) {
           console.log(`Parakeet running on ${data.device} (${data.dtype})`);
           lastDeviceLabel = data.device === "webgpu" ? "GPU (WebGPU)" : "CPU";
           if (deviceLabel !== null) {
-            deviceLabel.textContent = `Running on ${lastDeviceLabel}`;
+            // The CPU caveat also reaches Chromium users who silently fell
+            // back from WebGPU and never saw the Safari/Firefox note (#388).
+            deviceLabel.textContent = data.device === "webgpu"
+              ? `Running on ${lastDeviceLabel}`
+              : `Running on ${lastDeviceLabel} – soft speech at the very start/end may be missed`;
           }
           break;
         case "result":
