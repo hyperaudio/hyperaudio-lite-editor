@@ -1,7 +1,7 @@
 /**
  * hls-source.js
  * (C) The Hyperaudio Project
- * @version 0.8.6 — last changed in release 0.8.6
+ * @version 0.8.10 — last changed in release 0.8.10
  * @license MIT
  *
  * Transcribe from a remote media URL — including HLS VOD (.m3u8) — by resolving
@@ -88,8 +88,22 @@ async function classifyMediaUrl(url) {
     }
   }
 
-  if (response === null || !response.ok) {
-    throw new Error(`Could not fetch the media (HTTP ${response ? response.status : 'network / CORS error'}).`);
+  if (response === null) {
+    // fetch() rejected without a status: the host is either unreachable or —
+    // far more often — reachable but missing CORS headers. Disambiguate with a
+    // no-cors HEAD probe, which succeeds (opaquely) whenever the server
+    // responds at all, so a pass here pins the failure on CORS. The distinction
+    // matters because playback and fetching are gated differently: a URL that
+    // plays fine in the <video> element can still be unreadable to fetch(),
+    // which reads as an app bug unless the message says otherwise.
+    const reachable = await fetch(url, { method: 'HEAD', mode: 'no-cors' }).then(() => true, () => false);
+    if (reachable) {
+      throw new Error("This media host doesn't allow web pages to read it (no CORS headers), so it can play but can't be transcribed from a URL. Download it and transcribe the local file, or enable CORS on the host.");
+    }
+    throw new Error('Could not fetch the media (network error — check the URL and your connection).');
+  }
+  if (!response.ok) {
+    throw new Error(`Could not fetch the media (HTTP ${response.status}).`);
   }
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
@@ -546,6 +560,7 @@ async function decodeFragmentedMp4ToMono16k(arrayBuffer) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     isHlsUrl,
-    parseMediaPlaylist
+    parseMediaPlaylist,
+    classifyMediaUrl
   };
 }

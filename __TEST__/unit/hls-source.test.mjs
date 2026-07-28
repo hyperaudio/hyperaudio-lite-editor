@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { isHlsUrl, parseMediaPlaylist } = require('../../js/hls-source.js');
+const { isHlsUrl, parseMediaPlaylist, classifyMediaUrl } = require('../../js/hls-source.js');
 const { readFileSync, readdirSync } = require('node:fs');
 
 const BASE = 'https://example.com/vod/playlist.m3u8';
@@ -88,6 +88,46 @@ test('SAMPLE-AES is likewise rejected', () => {
   ].join('\n');
   assert.throws(() => parseMediaPlaylist(text, BASE), /encrypted/i);
 });
+
+// classifyMediaUrl error paths: a rejected fetch() carries no status, so the
+// code probes with a no-cors HEAD to tell "host unreachable" apart from "host
+// reachable but missing CORS headers". The CORS case matters most — the URL
+// still PLAYS in the <video> element (playback is CORS-exempt), so without a
+// message that says so, users read the failure as an app bug.
+function withMockFetch(impl, run) {
+  const original = global.fetch;
+  global.fetch = impl;
+  return Promise.resolve().then(run).finally(() => { global.fetch = original; });
+}
+
+test('classifyMediaUrl: reachable host without CORS headers names CORS, suggests local file', () =>
+  withMockFetch(
+    (url, options) => (options && options.mode === 'no-cors')
+      ? Promise.resolve({ ok: false, type: 'opaque' })   // probe reaches the server
+      : Promise.reject(new TypeError('Failed to fetch')), // normal fetch is CORS-blocked
+    () => assert.rejects(
+      classifyMediaUrl('https://media.example.com/clip.mp4'),
+      (e) => /CORS/.test(e.message) && /play/.test(e.message) && /local file/.test(e.message),
+    ),
+  ));
+
+test('classifyMediaUrl: unreachable host reports a network error, not CORS', () =>
+  withMockFetch(
+    () => Promise.reject(new TypeError('Failed to fetch')),
+    () => assert.rejects(
+      classifyMediaUrl('https://media.example.com/clip.mp4'),
+      (e) => /network error/.test(e.message) && !/CORS/.test(e.message),
+    ),
+  ));
+
+test('classifyMediaUrl: an HTTP error status is reported as-is', () =>
+  withMockFetch(
+    () => Promise.resolve({ ok: false, status: 404 }),
+    () => assert.rejects(
+      classifyMediaUrl('https://media.example.com/clip.mp4'),
+      /HTTP 404/,
+    ),
+  ));
 
 test('METHOD=NONE is not encryption and still parses', () => {
   const { segments } = parseMediaPlaylist([
