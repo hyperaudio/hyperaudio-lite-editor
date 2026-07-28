@@ -403,47 +403,45 @@ If you are creating an open source application under a license compatible with t
               <svg id="file-dropdown-symbol" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg>
               <svg id="file-dropdown-symbol-mobile" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
             </label>
-            <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52">
-              <li class="menu-title">
-                <span>
-                  Upload
-                </span>
-              </li>
+            <!-- width set inline (not a Tailwind w-* class): the prebuilt/purged
+                 tailwind-min.css only ships width utilities used at build time, so
+                 an unbuilt class silently collapses the menu. Wide enough that the
+                 longest indented submenu item stays on one line. -->
+            <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box" style="width:20rem">
               <li><a id="upload-transcribe-btn">Upload & Transcribe</a></li>
-              <hr
-              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
-              <li class="menu-title">
-                <span>
-                  Align
-                </span>
-              </li>
               <li><a id="upload-align-btn">Add Transcript</a></li>
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
-              <li class="menu-title">
-                <span>
-                  Download as
-                </span>
+              <!-- Long output/input lists live in inline-expanding submenus (DaisyUI
+                   <details>) so the File menu stays short; ids/targets unchanged so
+                   all wiring (download links, modal toggles, custom elements) still
+                   works. Mirrors the Glider native File menu (#428). -->
+              <li>
+                <details id="file-download-submenu">
+                  <summary>Download as</summary>
+                  <ul>
+                    <li><a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT (Captions)</a></li>
+                    <li><a id="download-vtt-words" href="" download="hyperaudio.words.vtt">WebVTT (Word-level / Karaoke)</a></li>
+                    <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
+                    <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
+                    <li><label id="download-hypertranscript" for="interactive-export-modal">Interactive Transcript</label></li>
+                    <li><label for="export-modal">Media (WAV / MP3 / MP4…)</label></li>
+                  </ul>
+                </details>
               </li>
-              <li><a id="download-vtt" href="" download="hyperaudio.vtt">WebVTT (Captions)</a></li>
-              <li><a id="download-vtt-words" href="" download="hyperaudio.words.vtt">WebVTT (Word-level / Karaoke)</a></li>
-              <li><a id="download-srt" href="" download="hyperaudio.srt">SRT (Captions)</a></li>
-              <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
-              <li><label id="download-hypertranscript" for="interactive-export-modal">Interactive Transcript</label></li>
-              <li><label for="export-modal">Media (WAV / MP3 / MP4…)</label></li>
-              <hr
-              class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
-              <li class="menu-title">
-                <span>
-                  Export / Import
-                </span>
+              <li>
+                <details id="file-exportimport-submenu">
+                  <summary>Export / Import</summary>
+                  <ul>
+                    <li><export-json></export-json></li>
+                    <li><export-ionosphere></export-ionosphere></li>
+                    <li><import-json></import-json></li>
+                    <li><label for="file-import-deepgram-json-dialog">Import Deepgram JSON</label></li>
+                    <li><label for="file-import-srt-dialog">Import SRT</label></li>
+                    <li><label for="file-import-vtt-dialog">Import VTT</label></li>
+                  </ul>
+                </details>
               </li>
-              <li><export-json></export-json></li>
-              <li><export-ionosphere></export-ionosphere></li>
-              <li><import-json></import-json></li>
-              <li><label for="file-import-deepgram-json-dialog">Import Deepgram JSON</label></li>
-              <li><label for="file-import-srt-dialog">Import SRT</label></li>
-              <li><label for="file-import-vtt-dialog">Import VTT</label></li>
             </ul>
           </div>
           <input type="checkbox" id="info-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
