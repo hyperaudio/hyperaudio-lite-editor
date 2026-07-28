@@ -52,6 +52,7 @@ test('regenerating captions resets the <track>, so a prior cue cannot linger (#3
       textTrackCount: video.textTracks.length,
       sameElement: secondTrack === firstTrack,          // pre-fix: true (reused)
       stampSurvived: secondTrack.dataset.gen === 'A',   // pre-fix: true (reused)
+      finalMode: video.textTracks[0] && video.textTracks[0].mode,
     };
   });
 
@@ -60,4 +61,9 @@ test('regenerating captions resets the <track>, so a prior cue cannot linger (#3
   expect(result.textTrackCount).toBe(1);               // no stale TextTrack left behind
   expect(result.sameElement).toBe(false);              // the fix: fresh element each regenerate
   expect(result.stampSurvived).toBe(false);
+  // The ::cue ghost-flush toggles mode hidden→showing; it must settle back on
+  // 'showing' (the flush is a no-op if the track ends up hidden). The stale-paint
+  // itself is native ::cue rendering and not inspectable headlessly — this guards
+  // that the toggle path doesn't leave captions disabled.
+  expect(result.finalMode).toBe('showing');
 });
