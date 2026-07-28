@@ -10,7 +10,7 @@ self.addEventListener("install", function (e) {
     "./js/vendor/mediabunny-mp3-encoder-1.50.3.min.js",
     "./js/vendor/soundtouchjs-0.3.0.js",
     // Vendored HLS / remote-URL dependencies (#412) — likewise.
-    "./js/vendor/hls-1.6.16.mjs",
+    "./js/vendor/hls-1.6.16.js",
     "./js/vendor/mp4box-0.5.2.all.min.js",
    ]);
   })

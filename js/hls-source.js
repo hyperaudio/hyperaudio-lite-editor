@@ -136,6 +136,17 @@ function detachHls(videoEl) {
 async function attachMediaPlayback(videoEl, url, isHls) {
   detachHls(videoEl);
 
+  // Clear any previous source before (re)attaching. detachHls only tears down a
+  // prior hls.js instance; a plain-URL source from earlier media leaves
+  // videoEl.src set, and hls.js will not reliably replace an existing src — which
+  // left the PREVIOUS media in the player after transcribing a new remote/HLS URL.
+  // Also record the real, user-facing URL: the HLS path turns videoEl.src into an
+  // opaque blob: MediaSource URL, so the interactive-transcript export needs the
+  // original URL from here to reference the right media.
+  videoEl.removeAttribute('src');
+  videoEl.load();
+  videoEl.dataset.mediaRef = url;
+
   if (isHls === undefined) {
     try { isHls = (await classifyMediaUrl(url)).isHls; }
     catch (e) { isHls = isHlsUrl(url); }
@@ -150,6 +161,12 @@ async function attachMediaPlayback(videoEl, url, isHls) {
   if (Hls && Hls.isSupported()) {
     const hls = new Hls();
     videoEl._hls = hls;
+    // Surface fatal playback errors instead of failing silently — the caller
+    // wraps this in a catch (transcription must not be blocked by a playback
+    // issue), so without this an hls.js error left the player mysteriously blank.
+    hls.on(Hls.Events.ERROR, (evt, data) => {
+      if (data && data.fatal) console.warn('HLS playback error:', data.type, data.details);
+    });
     hls.loadSource(url);
     hls.attachMedia(videoEl);
   } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {

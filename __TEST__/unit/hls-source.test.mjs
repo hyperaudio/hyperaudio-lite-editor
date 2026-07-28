@@ -9,8 +9,27 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { isHlsUrl, parseMediaPlaylist } = require('../../js/hls-source.js');
+const { readFileSync, readdirSync } = require('node:fs');
 
 const BASE = 'https://example.com/vod/playlist.m3u8';
+
+test('vendored ES modules are served as .js, not .mjs (strict-MIME safe)', () => {
+  // Some static servers return an empty/incorrect MIME for .mjs, which browsers
+  // reject for module scripts — silently breaking dynamic import() (this is what
+  // stopped hls.js loading, so HLS playback showed a blank player). Keep vendored
+  // modules as .js so they load on any server; guard both the importmap and the
+  // service-worker precache, and that no .mjs lingers in js/vendor.
+  const root = new URL('../../', import.meta.url);
+  const html = readFileSync(new URL('index.html', root), 'utf8');
+  const importmap = (html.match(/<script type="importmap">([\s\S]*?)<\/script>/) || [])[1] || '';
+  assert.ok(!/\.mjs"/.test(importmap), 'importmap must map to .js, not .mjs');
+
+  const sw = readFileSync(new URL('serviceworker.js', root), 'utf8');
+  assert.ok(!/\.mjs"/.test(sw), 'service worker must precache .js, not .mjs');
+
+  const vendor = readdirSync(new URL('js/vendor/', root));
+  assert.deepEqual(vendor.filter((f) => f.endsWith('.mjs')), [], 'no .mjs in js/vendor');
+});
 
 test('isHlsUrl: .m3u8 with query/fragment yes, plain media no', () => {
   assert.ok(isHlsUrl('https://x.test/a.m3u8'));
