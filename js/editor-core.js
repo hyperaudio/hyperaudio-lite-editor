@@ -98,14 +98,32 @@
     const iaModal = document.getElementById('interactive-export-modal');
     const iaInput = document.getElementById('interactive-media-filename');
     const iaDownload = document.getElementById('interactive-export-download');
+    let lastLoadedMediaName = '';
 
-    // Remote media can be linked by its URL as-is; a blob:/data: source (local
-    // upload or Recents) has no usable path, so the field starts empty for the
-    // user to type the local filename.
+    // Remote media can be linked by its URL as-is. A blob:/data: source (local
+    // upload) has no usable path, so we fall back to the real filename captured
+    // when the file was loaded (below) — which lets the field pre-fill for local
+    // files instead of forcing the user to type the reference by hand.
     const guessMediaSrc = () => {
       const src = document.querySelector('#hyperplayer') ? document.querySelector('#hyperplayer').src : '';
-      return /^https?:/i.test(src) ? src : '';
+      return /^https?:/i.test(src) ? src : lastLoadedMediaName;
     };
+
+    // Capture the real filename of a locally-loaded media file so guessMediaSrc
+    // can offer it (a blob: URL carries no name). Read centrally from any media
+    // file input; import inputs (JSON/SRT/VTT) are skipped by the media check.
+    // Loading new media also clears the field, so a name typed for the PREVIOUS
+    // clip can't linger and be exported by mistake (the src="test" footgun).
+    const MEDIA_EXTENSION = /\.(mp4|webm|ogv|ogg|mov|m4v|mkv|mp3|m4a|wav|aac|flac|opus)$/i;
+    document.addEventListener('change', (e) => {
+      const input = e.target;
+      if (!input || input.type !== 'file' || !input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      const isMedia = /^(audio|video)\//i.test(file.type || '') || MEDIA_EXTENSION.test(file.name);
+      if (!isMedia) return;
+      lastLoadedMediaName = file.name;
+      if (iaInput !== null) iaInput.value = '';
+    }, true);
 
     if (iaModal !== null && iaInput !== null) {
       iaModal.addEventListener('change', () => {
