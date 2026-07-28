@@ -782,9 +782,35 @@
 
   function hyperaudioGenerateCaptionsFromTranscript() {
     let sourceMedia = document.querySelector("#hyperplayer").src;
-    let track = document.querySelector('#hyperplayer-vtt');
+
+    // Tear down the previous media's caption <track> before regenerating. A fresh
+    // transcription reuses the same <video>/<track>; left in 'showing' mode the old
+    // track keeps the PREVIOUS media's cue painted, so the new captions render on
+    // top of the stale line (the "double captions" of #356/#287). The Recents-load
+    // path already resets via resetCaptionTrack (storage.js) — the transcribe /
+    // regenerate path must too. Fall back to the existing track if storage.js is
+    // absent. (Note: this is the from-scratch entry point; the live-edit sanitise
+    // path calls generateCaptionsFromTranscript directly and must NOT reset here,
+    // or every keystroke would swap the track and churn the caption paint.)
+    let track = (typeof resetCaptionTrack === 'function' && resetCaptionTrack())
+      || document.querySelector('#hyperplayer-vtt');
 
     populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
+
+    // Swapping the <track> element drops the old cue's DATA, but a PAUSED video
+    // won't re-composite its native caption overlay on its own — so the previous
+    // cue's PIXELS stay stranded on screen under the new captions (the remaining
+    // half of #356/#287; the load path avoids it because loading new media forces
+    // a full video relayout, which the transcribe path never triggers). Toggling
+    // the track's display mode forces the overlay to rebuild, flushing the stale
+    // ::cue paint. Only meaningful while the intended mode is 'showing' — mp3/m4a
+    // are deliberately 'hidden' by generateCaptionsFromTranscript, nothing to flush.
+    const player = document.getElementById('hyperplayer');
+    const captionTrack = player && player.textTracks[0];
+    if (captionTrack && captionTrack.mode === 'showing') {
+      captionTrack.mode = 'hidden';
+      captionTrack.mode = 'showing';
+    }
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
