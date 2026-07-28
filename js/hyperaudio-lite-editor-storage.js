@@ -71,6 +71,12 @@ function renderTranscript(
   // file, so a stale cue from the old transcript can't stay painted (#356/#287).
   resetCaptionTrack(videoDomId, vttId);
 
+  // Drop any media reference stamped by a previous local/remote load so the
+  // interactive-transcript export can't offer it for this Recents entry (a remote
+  // http src is read from the player directly; a local one falls back to empty).
+  const loadedVideo = document.getElementById(videoDomId);
+  if (loadedVideo) delete loadedVideo.dataset.mediaRef;
+
   let hypertranscriptElement = document.getElementById(hypertranscriptDomId);
 
   if (hypertranscriptElement) {

@@ -1,13 +1,15 @@
-// Interactive-transcript export: pre-fill the media reference from the real
-// filename of a locally-loaded file, and clear a stale value when new media is
-// loaded. A local file is a blob: URL with no usable path, so previously the
-// export modal's "Media file or URL" field started empty and whatever the user
-// last typed (famously "test") could linger and be exported into src="…".
+// Interactive-transcript export: the "Media file or URL" field must reference the
+// CURRENT media — a local file's real name, a plain remote URL, or an HLS source's
+// original URL — and never a value left over from a previous clip.
+//
+// A local upload is a blob: URL and an HLS source is a blob: MediaSource URL, so
+// neither carries a usable reference in player.src; those are stamped on
+// #hyperplayer.dataset.mediaRef (the filename by the central file-input capture,
+// the URL by attachMediaPlayback). guessMediaSrc prefers an http(s) src (so a fresh
+// remote URL always wins) and otherwise uses the stamped ref. The dialog refreshes
+// the field to the current media every time it opens.
 import { test, expect } from '@playwright/test';
 
-// Simulate a local media load: a blob: player src (so the URL branch of
-// guessMediaSrc doesn't win) plus a media file selected on a throwaway input,
-// which the central capture listener reads for its name.
 const loadLocalMedia = async (page, name, mimeType) => {
   await page.evaluate(() => {
     document.getElementById('hyperplayer').src = 'blob:http://localhost/fake-local-media';
@@ -41,23 +43,54 @@ test('pre-fills the export modal with a locally-loaded media filename', async ({
   expect(await openExportModalValue(page)).toBe('my-clip.mp4');
 });
 
-test('loading new media clears a stale filename so it cannot be exported by mistake', async ({ page }) => {
+test('the field refreshes to the current media on open, dropping a stale/typed value', async ({ page }) => {
   await loadLocalMedia(page, 'first-take.mp4', 'video/mp4');
   // user types something bogus into the field (the "test" footgun)
   await page.evaluate(() => { document.getElementById('interactive-media-filename').value = 'test'; });
-  // loading a different clip must drop that stale value…
+  // loading a different clip then re-opening must show the NEW clip's name, not "test"
   await loadLocalMedia(page, 'second-take.webm', 'video/webm');
-  expect(await page.evaluate(() => document.getElementById('interactive-media-filename').value)).toBe('');
-  // …and (re)opening offers the new clip's real name, not "test"
   expect(await openExportModalValue(page)).toBe('second-take.webm');
 });
 
-test('non-media (import) file inputs do not overwrite the export filename', async ({ page }) => {
+test('non-media (import) file inputs do not change the media reference', async ({ page }) => {
   await loadLocalMedia(page, 'interview.mp3', 'audio/mpeg');
-  await page.evaluate(() => { document.getElementById('interactive-media-filename').value = 'interview.mp3'; });
-  // selecting a JSON/SRT/VTT import file must NOT clear or change the media name
+  // selecting a JSON/SRT/VTT import file must NOT overwrite the media reference
   await page.setInputFiles('#__test_media_input', {
     name: 'transcript.json', mimeType: 'application/json', buffer: Buffer.from('{}'),
   });
-  expect(await page.evaluate(() => document.getElementById('interactive-media-filename').value)).toBe('interview.mp3');
+  expect(await openExportModalValue(page)).toBe('interview.mp3');
+});
+
+test('a plain remote URL is linked directly and replaces a stale previous source', async ({ page }) => {
+  await page.evaluate(async () => {
+    const v = document.getElementById('hyperplayer');
+    v.src = 'https://lab.hyperaud.io/audio/HLE_Intro_3.mp3';   // previous media
+    await window.attachMediaPlayback(v, 'https://example.com/new/clip.mp4', false);
+  });
+  // the player src is the new URL, and the export references it
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').src))
+    .toBe('https://example.com/new/clip.mp4');
+  expect(await openExportModalValue(page)).toBe('https://example.com/new/clip.mp4');
+});
+
+test('an HLS source: player src becomes a blob but the export references the original URL', async ({ page }) => {
+  const HLS = 'https://stream.place/xrpc/place.stream.playback.getVideoPlaylist?uri=at%3A%2F%2Fexample';
+  await page.evaluate(async (hls) => {
+    const v = document.getElementById('hyperplayer');
+    v.src = 'https://lab.hyperaud.io/audio/HLE_Intro_3.mp3';   // stale previous media
+    await window.attachMediaPlayback(v, hls, true);            // HLS → hls.js MediaSource
+  }, HLS);
+  // player src is now an opaque blob: (the previous mp3 is gone), and the export
+  // links the real HLS URL rather than the blob or the stale mp3
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').src.startsWith('blob:'))).toBe(true);
+  expect(await openExportModalValue(page)).toBe(HLS);
+});
+
+test('a fresh remote URL wins over a stale stamped local reference', async ({ page }) => {
+  await page.evaluate(() => {
+    const v = document.getElementById('hyperplayer');
+    v.dataset.mediaRef = 'old-local.mp4';                      // left over from a prior local file
+    v.src = 'https://example.com/fresh/remote.mp3';            // a cloud engine set a new URL
+  });
+  expect(await openExportModalValue(page)).toBe('https://example.com/fresh/remote.mp3');
 });
