@@ -17,6 +17,7 @@ const {
   migrateLegacyEntries,
   renameTranscriptEntry,
   deleteTranscriptEntry,
+  mediaNameFromRef,
 } = require('../../js/hyperaudio-lite-editor-storage.js');
 
 function fakeStorage(init = {}) {
@@ -128,6 +129,15 @@ test('delete: removes the entry, including an unparseable legacy one', () => {
   deleteTranscriptEntry('broken.hyperaudio', s);
   assert.equal(s.getItem('broken.hyperaudio'), null);
   assert.equal(listDocEntries(s).length, 0);
+});
+
+test('mediaNameFromRef: URL basename (decoded), plain filename passthrough, Untitled fallback (#435)', () => {
+  assert.equal(mediaNameFromRef('https://example.com/media/clip.mp4'), 'clip.mp4');
+  assert.equal(mediaNameFromRef('https://example.com/media/My%20Interview.mp3?token=1#t=10'), 'My Interview.mp3');
+  assert.equal(mediaNameFromRef('https://example.com/'), 'Untitled');        // no basename in the path
+  assert.equal(mediaNameFromRef('interview.mp4'), 'interview.mp4');          // a local file's real name
+  assert.equal(mediaNameFromRef(''), 'Untitled');
+  assert.equal(mediaNameFromRef(null), 'Untitled');
 });
 
 test('entryName / entryMediaKey fall back sensibly for malformed entries', () => {

@@ -54,6 +54,10 @@ const MEDIA_STORE = "media";
 // delete clears it.
 let activeDocKey = null;
 
+// docKey + '|' + blob-URL of the media most recently written to IndexedDB, so
+// debounced autosaves skip re-encoding an unchanged blob (see the save path).
+let savedMediaStamp = null;
+
 function isDocKey(key) {
   return typeof key === "string" && key.startsWith(DOC_KEY_PREFIX);
 }
@@ -465,8 +469,12 @@ function saveHyperTranscriptToLocalStorage(
 
   // if media url begins with blob it means it's locally cached only for the session
   // we need to save the media to indexdb so that we can retrieve outside the session
+  // — but only once per document+source: debounced edit autosaves must not
+  // re-encode and re-write a large media blob on every pause in typing.
 
-  if (video.startsWith("blob:") === true) {
+  const mediaStamp = docKey + '|' + video;
+  if (video.startsWith("blob:") === true && savedMediaStamp !== mediaStamp) {
+    savedMediaStamp = mediaStamp;
     initializeDatabase(MEDIA_DATABASE, MEDIA_STORE)
     .then(() => {
       let blobURL = video;
@@ -493,7 +501,14 @@ function saveHyperTranscriptToLocalStorage(
 
   let summary = document.getElementById("summary").innerHTML;
   let topics = document.getElementById("topics").innerHTML.split(", ");
+  // Only store real caption data. At auto-add time (hyperaudioInit) the track
+  // has been reset and not yet regenerated, so its src is empty — storing that
+  // would break the load path; leaving captions undefined makes load fall into
+  // its regenerate branch instead.
   let captions = document.getElementById(vttId).src;
+  if (typeof captions !== 'string' || captions.indexOf('data:') !== 0) {
+    captions = undefined;
+  }
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary, topics, captions, meta);
 
 
@@ -546,21 +561,127 @@ function deleteTranscriptEntry(fileKey, storage = window.localStorage) {
   }
 }
 
-// Non-blocking notice above the Recents list (quota problems etc.) — replaces
-// the old blocking alert(). Auto-dismisses.
-function showStorageNotice(message) {
+// Non-blocking notice above the Recents list — replaces the old blocking
+// alert(). Error tone auto-dismisses; opts {tone:'info', sticky:true} gives a
+// neutral note that stays until its ✕ is clicked (the autosave disclosure).
+function showStorageNotice(message, opts = {}) {
   const picker = document.querySelector('#file-picker');
   if (picker === null || picker.parentElement === null) return;
   let el = document.getElementById('recents-notice');
   if (el === null) {
     el = document.createElement('div');
     el.id = 'recents-notice';
-    el.setAttribute('role', 'alert');
     picker.parentElement.insertBefore(el, picker);
   }
-  el.textContent = message;
+  el.setAttribute('role', opts.tone === 'info' ? 'status' : 'alert');
+  el.className = opts.tone === 'info' ? 'notice-info' : 'notice-error';
+  el.textContent = '';
+  el.appendChild(document.createTextNode(message));
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.className = 'recents-notice-dismiss';
+  dismiss.setAttribute('aria-label', 'Dismiss');
+  dismiss.textContent = '✕';
+  dismiss.addEventListener('click', () => { el.remove(); });
+  el.appendChild(dismiss);
   clearTimeout(showStorageNotice._timer);
-  showStorageNotice._timer = setTimeout(() => { el.remove(); }, 8000);
+  if (opts.sticky !== true) {
+    showStorageNotice._timer = setTimeout(() => { el.remove(); }, 8000);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * Autosave (#435): every new transcription or import lands in Recents
+ * automatically, and edits autosave to the active entry.
+ *
+ * hyperaudioInit is the "a new document just landed" moment — all five
+ * transcription engines and the JSON/SRT/VTT import paths dispatch it, and
+ * neither the initial demo transcript nor a Recents load does, so listening
+ * here can never duplicate an existing entry. The entry is named after its
+ * media; edits then autosave debounced to the same entry.
+ * ------------------------------------------------------------------------- */
+
+const AUTOSAVE_NOTICE_FLAG = 'hyperaudioAutosaveNoticeShown';
+const AUTOSAVE_DEBOUNCE_MS = 2000;
+
+// Display name for the media the player holds: an http(s) src wins (fresh
+// remote URL beats a stale stamp — same preference as guessMediaSrc in
+// editor-core), then the stamped mediaRef (a local file's real name, or the
+// original URL for remote/HLS — #426).
+function mediaDisplayName() {
+  const player = document.querySelector('#hyperplayer');
+  if (player === null) return 'Untitled';
+  const ref = (/^https?:/i.test(player.src) ? player.src : player.dataset.mediaRef) || '';
+  return mediaNameFromRef(ref);
+}
+
+// Pure part of the above: URL → decoded basename of its path; a plain string
+// is already a filename; empty → 'Untitled'.
+function mediaNameFromRef(ref) {
+  if (!ref) return 'Untitled';
+  if (/^https?:/i.test(ref)) {
+    try {
+      const path = new URL(ref).pathname;
+      const base = decodeURIComponent(path.substring(path.lastIndexOf('/') + 1));
+      return base !== '' ? base : 'Untitled';
+    } catch (e) {
+      return 'Untitled';
+    }
+  }
+  return ref;
+}
+
+// One-time disclosure the first time something autosaves: storage is local to
+// this browser/device, and Recents is where to manage it. Informational, not
+// a permission gate — shown once ever (flag persists), dismissible.
+function maybeShowAutosaveNotice(storage = window.localStorage) {
+  try {
+    if (storage.getItem(AUTOSAVE_NOTICE_FLAG) !== null) return;
+    storage.setItem(AUTOSAVE_NOTICE_FLAG, String(Date.now()));
+  } catch (e) {
+    return;
+  }
+  showStorageNotice(
+    'Transcripts are saved to Recents automatically — stored in your browser, on this device only.',
+    { tone: 'info', sticky: true }
+  );
+}
+
+let autosaveTimer = null;
+
+function scheduleAutosave() {
+  if (activeDocKey === null) return; // nothing has landed yet this session
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    if (activeDocKey === null) return; // deleted while the timer was pending
+    const entry = readTranscriptEntry(activeDocKey, window.localStorage);
+    saveHyperTranscriptToLocalStorage(entry !== null ? entryName(activeDocKey, entry) : undefined);
+    loadLocalStorageOptions(); // reflect the new "updated" order
+  }, AUTOSAVE_DEBOUNCE_MS);
+}
+
+if (typeof document !== 'undefined') {
+  // A new transcription/import: always a NEW entry (never overwrite whatever
+  // was active before), named after its media.
+  window.document.addEventListener('hyperaudioInit', () => {
+    activeDocKey = null;
+    saveHyperTranscriptToLocalStorage(mediaDisplayName());
+    loadLocalStorageOptions();
+    const saveInput = document.querySelector('#save-localstorage-filename');
+    if (saveInput !== null && activeDocKey !== null) {
+      saveInput.value = entryName(activeDocKey, readTranscriptEntry(activeDocKey, window.localStorage));
+    }
+    maybeShowAutosaveNotice();
+  }, false);
+
+  // Debounced autosave of edits — transcript (contenteditable) and caption
+  // editor inputs both bubble input events.
+  document.addEventListener('input', (event) => {
+    const target = event.target;
+    if (target && target.closest && target.closest('#hypertranscript, #caption-editor') !== null) {
+      scheduleAutosave();
+    }
+  });
 }
 
 // Escape text/keys interpolated into picker markup (#410) — a saved filename
@@ -796,5 +917,6 @@ if (typeof module !== 'undefined' && module.exports) {
     deleteTranscriptEntry,
     readTranscriptEntry,
     escapeStorageMarkup,
+    mediaNameFromRef,
   };
 }

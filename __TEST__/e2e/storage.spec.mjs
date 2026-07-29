@@ -152,6 +152,68 @@ test('clicking a row loads it and marks it active; the highlight survives a re-r
   await expect(page.locator('.file-item.active')).toHaveText('beta');
 });
 
+test('a new transcription auto-saves to Recents named after its media; repeats get a suffix (#435)', async ({ page }) => {
+  await seed(page);
+  const transcribe = () => page.evaluate(() => {
+    document.querySelector('#hyperplayer').src = 'https://example.com/media/clip.mp4';
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">FRESH </span></p></section></article>';
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await transcribe();
+  await expect(page.locator('.file-item', { hasText: 'clip.mp4' })).toHaveCount(1);
+  // the new entry is active and sits first (newest updated)
+  await expect(page.locator('.file-item.active')).toHaveText('clip.mp4');
+  expect(await page.evaluate(() => document.querySelector('.file-item').textContent)).toBe('clip.mp4');
+  // a second transcription of the same media coexists rather than overwriting
+  await transcribe();
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('.file-item')].map((a) => a.textContent));
+  expect(names).toContain('clip.mp4');
+  expect(names).toContain('clip.mp4 (2)');
+});
+
+test('the autosave disclosure shows once ever, is info-toned, and dismisses (#435)', async ({ page }) => {
+  await seed(page); // clears localStorage, so the flag is unset
+  const transcribe = () => page.evaluate(() => {
+    document.querySelector('#hyperplayer').src = 'https://example.com/media/clip.mp4';
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">X </span></p></section></article>';
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await transcribe();
+  const notice = page.locator('#recents-notice');
+  await expect(notice).toHaveClass(/notice-info/);
+  await expect(notice).toContainText('on this device only');
+  await notice.locator('.recents-notice-dismiss').click();
+  await expect(notice).toHaveCount(0);
+  await transcribe();
+  await expect(notice).toHaveCount(0); // never again
+});
+
+test('edits autosave (debounced) to the active entry and bump its updated stamp (#435)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  const before = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.startsWith('hyperaudio:doc:') && JSON.parse(localStorage.getItem(k)).meta.name === 'beta');
+    return { key, updated: JSON.parse(localStorage.getItem(key)).meta.updated || 0 };
+  });
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'EDITED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(2600); // past the 2s debounce
+  const after = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), before.key);
+  expect(after.hypertranscript).toContain('EDITED');
+  expect(after.meta.name).toBe('beta');           // autosave keeps the name
+  expect(after.meta.updated).toBeGreaterThan(before.updated);
+});
+
 test('a filename containing markup renders as text (#410)', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {

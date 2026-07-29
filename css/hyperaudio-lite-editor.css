@@ -1018,12 +1018,38 @@ label[data-a11y-wired]:focus-visible {
   border-radius: 0.25rem;
   background-color: oklch(var(--b1));
 }
-/* quota / storage problems surface here instead of a blocking alert() */
+/* notices above the Recents list: quota problems (error tone, auto-dismiss)
+   and the one-time autosave disclosure (info tone, sticky until ✕) — both
+   replace what used to be a blocking alert() */
 #recents-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 0 16px 8px;
   padding: 8px 12px;
   border-radius: 0.5rem;
+  font-size: 12px;
+}
+#recents-notice.notice-error {
   background-color: oklch(var(--er) / 0.12);
   color: oklch(var(--er));
-  font-size: 12px;
+}
+#recents-notice.notice-info {
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc) / 0.8);
+}
+#recents-notice .recents-notice-dismiss {
+  margin: 0 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+#recents-notice .recents-notice-dismiss:hover {
+  border: none;
+  background: transparent;
+  opacity: 0.7;
 }
