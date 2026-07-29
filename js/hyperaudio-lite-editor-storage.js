@@ -767,6 +767,21 @@ if (typeof document !== 'undefined') {
       scheduleAutosave();
     }
   });
+
+  // Kebab menu teardown: outside click, Escape, or any scroll (the fixed menu
+  // is anchored to the kebab's on-screen position, which scrolling moves).
+  document.addEventListener('click', (event) => {
+    if (recentsMenuKey === null) return;
+    const t = event.target;
+    if (t && t.closest && (t.closest('#recents-menu') !== null || t.closest('.recents-kebab') !== null)) return;
+    closeRecentsMenu();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeRecentsMenu();
+  });
+  document.addEventListener('scroll', () => {
+    if (recentsMenuKey !== null) closeRecentsMenu();
+  }, true);
 }
 
 // Escape text/keys interpolated into picker markup (#410) — a saved filename
@@ -781,11 +796,13 @@ function escapeStorageMarkup(text) {
 
 const RECENTS_RENAME_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
 const RECENTS_DUPLICATE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+const RECENTS_KEBAB_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
 const RECENTS_DELETE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
 
 function loadLocalStorageOptions(storage = window.localStorage) {
 
   migrateLegacyEntries(storage);
+  closeRecentsMenu(); // the rows it was anchored to are about to be replaced
 
   let filePicker = document.querySelector("#file-picker");
   filePicker.innerHTML = "";
@@ -802,9 +819,7 @@ function loadLocalStorageOptions(storage = window.localStorage) {
     filePicker.insertAdjacentHTML("beforeend",
       `<li class="recents-row"><a class="file-item" data-key="${keyAttr}">${nameHtml}</a>` +
       `<span class="recents-actions">` +
-      `<button type="button" class="recents-rename" data-key="${keyAttr}" aria-label="Rename ${nameHtml}" title="Rename">${RECENTS_RENAME_SVG}</button>` +
-      `<button type="button" class="recents-duplicate" data-key="${keyAttr}" aria-label="Duplicate ${nameHtml}" title="Duplicate">${RECENTS_DUPLICATE_SVG}</button>` +
-      `<button type="button" class="recents-delete" data-key="${keyAttr}" aria-label="Delete ${nameHtml}" title="Delete">${RECENTS_DELETE_SVG}</button>` +
+      `<button type="button" class="recents-kebab" data-key="${keyAttr}" aria-label="Options for ${nameHtml}" aria-haspopup="menu" aria-expanded="false">${RECENTS_KEBAB_SVG}</button>` +
       `</span></li>`);
   });
 
@@ -837,19 +852,9 @@ function setFileSelectListeners() {
     file.addEventListener('mouseover', fileSelectHandleHover);
   });
 
-  document.querySelectorAll('.recents-rename').forEach((btn) => {
-    btn.removeEventListener('click', recentsRenameHandleClick);
-    btn.addEventListener('click', recentsRenameHandleClick);
-  });
-
-  document.querySelectorAll('.recents-duplicate').forEach((btn) => {
-    btn.removeEventListener('click', recentsDuplicateHandleClick);
-    btn.addEventListener('click', recentsDuplicateHandleClick);
-  });
-
-  document.querySelectorAll('.recents-delete').forEach((btn) => {
-    btn.removeEventListener('click', recentsDeleteHandleClick);
-    btn.addEventListener('click', recentsDeleteHandleClick);
+  document.querySelectorAll('.recents-kebab').forEach((btn) => {
+    btn.removeEventListener('click', recentsKebabHandleClick);
+    btn.addEventListener('click', recentsKebabHandleClick);
   });
 }
 
@@ -878,17 +883,80 @@ function findRecentsItem(fileKey) {
     .find((el) => el.getAttribute('data-key') === fileKey) || null;
 }
 
-function recentsRenameHandleClick(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  startRecentsRename(event.currentTarget.getAttribute('data-key'));
+/* ---- Row kebab menu: one shared, fixed-position menu (#436). The list lives
+   in a scroll container, so a dropdown positioned inside it would be clipped
+   at the card edge for rows near the bottom — a fixed menu anchored to the
+   kebab's rect behaves for every row, flipping upward near the viewport
+   bottom. Closed by outside click, Escape, any scroll (the anchor moves), or
+   a list re-render. ---- */
+
+let recentsMenuKey = null; // storage key the open menu acts on, null when closed
+
+function closeRecentsMenu() {
+  const menu = document.getElementById('recents-menu');
+  if (menu !== null) menu.remove();
+  const kebab = document.querySelector('.recents-kebab[aria-expanded="true"]');
+  if (kebab !== null) kebab.setAttribute('aria-expanded', 'false');
+  recentsMenuKey = null;
 }
 
-function recentsDuplicateHandleClick(event) {
+function openRecentsMenu(kebabBtn) {
+  closeRecentsMenu();
+  const fileKey = kebabBtn.getAttribute('data-key');
+  recentsMenuKey = fileKey;
+  kebabBtn.setAttribute('aria-expanded', 'true');
+
+  const menu = document.createElement('div');
+  menu.id = 'recents-menu';
+  menu.setAttribute('role', 'menu');
+  menu.innerHTML =
+    `<button type="button" role="menuitem" class="recents-menu-rename">${RECENTS_RENAME_SVG}Rename</button>` +
+    `<button type="button" role="menuitem" class="recents-menu-duplicate">${RECENTS_DUPLICATE_SVG}Duplicate</button>` +
+    `<button type="button" role="menuitem" class="recents-menu-delete">${RECENTS_DELETE_SVG}Delete</button>`;
+  document.body.appendChild(menu);
+
+  const anchor = kebabBtn.getBoundingClientRect();
+  const size = menu.getBoundingClientRect();
+  menu.style.left = Math.max(8, anchor.right - size.width) + 'px';
+  menu.style.top = (anchor.bottom + 4 + size.height > window.innerHeight
+    ? anchor.top - size.height - 4
+    : anchor.bottom + 4) + 'px';
+
+  menu.querySelector('.recents-menu-rename').addEventListener('click', () => {
+    closeRecentsMenu();
+    startRecentsRename(fileKey);
+  });
+  menu.querySelector('.recents-menu-duplicate').addEventListener('click', () => {
+    closeRecentsMenu();
+    duplicateTranscriptEntry(fileKey);
+    loadLocalStorageOptions();
+  });
+  // two-step delete lives inside the menu: first click arms ("Delete?"), the
+  // second executes; closing the menu by any route disarms it
+  const del = menu.querySelector('.recents-menu-delete');
+  del.addEventListener('click', () => {
+    if (del.dataset.confirming !== 'true') {
+      del.dataset.confirming = 'true';
+      del.classList.add('confirming');
+      del.innerHTML = `${RECENTS_DELETE_SVG}Delete?`;
+      return;
+    }
+    closeRecentsMenu();
+    performRecentsDelete(fileKey);
+  });
+
+  menu.querySelector('.recents-menu-rename').focus();
+}
+
+function recentsKebabHandleClick(event) {
   event.preventDefault();
   event.stopPropagation();
-  duplicateTranscriptEntry(event.currentTarget.getAttribute('data-key'));
-  loadLocalStorageOptions();
+  const btn = event.currentTarget;
+  if (recentsMenuKey === btn.getAttribute('data-key')) {
+    closeRecentsMenu(); // second click on the same kebab toggles it shut
+    return;
+  }
+  openRecentsMenu(btn);
 }
 
 // Swap the row label for a text input; Enter/blur commits, Escape cancels.
@@ -926,28 +994,7 @@ function startRecentsRename(fileKey, storage = window.localStorage) {
   input.addEventListener('click', (e) => e.stopPropagation());
 }
 
-// First click arms the button ("Delete?"), second click within the window
-// deletes; the timeout restores the button without re-rendering the list (a
-// re-render could interrupt a rename in progress on another row).
-function recentsDeleteHandleClick(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  const btn = event.currentTarget;
-
-  if (btn.dataset.confirming !== 'true') {
-    btn.dataset.confirming = 'true';
-    btn.classList.add('confirming');
-    btn.textContent = 'Delete?';
-    btn._resetTimer = setTimeout(() => {
-      btn.dataset.confirming = 'false';
-      btn.classList.remove('confirming');
-      btn.innerHTML = RECENTS_DELETE_SVG;
-    }, 4000);
-    return;
-  }
-
-  clearTimeout(btn._resetTimer);
-  const fileKey = btn.getAttribute('data-key');
+function performRecentsDelete(fileKey) {
   const wasActive = activeDocKey === fileKey;
   const name = entryName(fileKey, readTranscriptEntry(fileKey, window.localStorage));
   deleteTranscriptEntry(fileKey);

@@ -99,7 +99,8 @@ test('rename via the row action edits the name in place; the key is untouched (#
   const keysBefore = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).sort());
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
   await row.hover();
-  await row.locator('.recents-rename').click();
+  await row.locator('.recents-kebab').click();
+  await page.locator('#recents-menu .recents-menu-rename').click();
   const input = page.locator('.recents-rename-input');
   await input.fill('interview notes');
   await input.press('Enter');
@@ -117,7 +118,8 @@ test('escape cancels a rename without changing the name (#434)', async ({ page }
   await seed(page);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
   await row.hover();
-  await row.locator('.recents-rename').click();
+  await row.locator('.recents-kebab').click();
+  await page.locator('#recents-menu .recents-menu-rename').click();
   const input = page.locator('.recents-rename-input');
   await input.fill('should-not-stick');
   await input.press('Escape');
@@ -130,7 +132,8 @@ test('delete is two-step and removes the entry (#434)', async ({ page }) => {
   await seed(page);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
   await row.hover();
-  const del = row.locator('.recents-delete');
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
   await del.click();
   // armed, not deleted
   await expect(del).toHaveText('Delete?');
@@ -149,7 +152,8 @@ test('deleting the loaded entry offers Restore; restoring re-saves the on-screen
   await page.waitForTimeout(300);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
   await row.hover();
-  const del = row.locator('.recents-delete');
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
   await del.click();
   await del.click(); // confirm
   await expect(page.locator('.file-item', { hasText: 'beta' })).toHaveCount(0);
@@ -177,7 +181,8 @@ test('a pending Restore is withdrawn when the screen holds a different document 
   await page.waitForTimeout(300);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
   await row.hover();
-  const del = row.locator('.recents-delete');
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
   await del.click();
   await del.click();
   await expect(page.locator('#recents-notice')).toContainText('no longer being saved');
@@ -218,7 +223,8 @@ test('the row Duplicate action copies an entry with a suffixed name, original un
   await seed(page);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
   await row.hover();
-  await row.locator('.recents-duplicate').click();
+  await row.locator('.recents-kebab').click();
+  await page.locator('#recents-menu .recents-menu-duplicate').click();
   const names = await page.evaluate(() =>
     [...document.querySelectorAll('.file-item')].map((a) => a.textContent));
   expect(names[0]).toBe('beta (2)'); // fresh stamps put the copy on top
@@ -250,7 +256,8 @@ test('a pending Restore suppresses auto-create; dismissing it re-enables (#436)'
   await page.waitForTimeout(300);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
   await row.hover();
-  const del = row.locator('.recents-delete');
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
   await del.click();
   await del.click(); // confirm — Restore offer now pending
   const edit = () => page.evaluate(() => {
