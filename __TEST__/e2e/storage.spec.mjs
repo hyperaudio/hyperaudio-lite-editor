@@ -191,6 +191,30 @@ test('the autosave disclosure shows once ever, is info-toned, and dismisses (#43
   await expect(notice).toHaveCount(0); // never again
 });
 
+test('auto-add never captures the previous document\'s captions/summary/topics (#435)', async ({ page }) => {
+  await seed(page);
+  const saved = await page.evaluate(() => {
+    // the state the engines leave at hyperaudioInit time: the caption track,
+    // summary, and topics still belong to the PREVIOUS document (the intro
+    // demo on a fresh session) — regeneration happens after the event
+    document.getElementById('hyperplayer-vtt').src =
+      'data:text/vtt;charset=utf-8,' + encodeURIComponent('WEBVTT\n\n00:00.000 --> 00:01.000\nSTALE DEMO CUE');
+    document.getElementById('summary').innerHTML = 'stale demo summary';
+    document.getElementById('topics').innerHTML = 'stale, demo, topics';
+    document.querySelector('#hyperplayer').src = 'https://example.com/media/clip.mp4';
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">FRESH </span></p></section></article>';
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    const key = Object.keys(localStorage).find((k) =>
+      k.startsWith('hyperaudio:doc:') && JSON.parse(localStorage.getItem(k)).meta.name === 'clip.mp4');
+    return JSON.parse(localStorage.getItem(key));
+  });
+  expect(saved.captions).toBeUndefined();   // load regenerates from the transcript instead
+  expect(saved.summary).toBe('');
+  expect(saved.topics).toEqual([]);
+  expect(saved.hypertranscript).toContain('FRESH');
+});
+
 test('edits autosave (debounced) to the active entry and bump its updated stamp (#435)', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {

@@ -58,6 +58,14 @@ let activeDocKey = null;
 // debounced autosaves skip re-encoding an unchanged blob (see the save path).
 let savedMediaStamp = null;
 
+// True only while the auto-add save runs (hyperaudioInit). The engines dispatch
+// that event BEFORE regenerating captions, so the caption track — and the
+// summary/topics panels — still hold the PREVIOUS document's content at that
+// moment; capturing them stamped the intro demo's captions into fresh entries.
+// An auto-added entry stores no derived state: captions regenerate from the
+// transcript on load, and the first edit-autosave captures the real ones.
+let suppressDerivedCapture = false;
+
 function isDocKey(key) {
   return typeof key === "string" && key.startsWith(DOC_KEY_PREFIX);
 }
@@ -501,13 +509,18 @@ function saveHyperTranscriptToLocalStorage(
 
   let summary = document.getElementById("summary").innerHTML;
   let topics = document.getElementById("topics").innerHTML.split(", ");
-  // Only store real caption data. At auto-add time (hyperaudioInit) the track
-  // has been reset and not yet regenerated, so its src is empty — storing that
-  // would break the load path; leaving captions undefined makes load fall into
-  // its regenerate branch instead.
+  // Only store real caption data (an empty track src would break the load
+  // path; captions left undefined make load fall into its regenerate branch).
   let captions = document.getElementById(vttId).src;
   if (typeof captions !== 'string' || captions.indexOf('data:') !== 0) {
     captions = undefined;
+  }
+  // At auto-add time the track/summary/topics still belong to the PREVIOUS
+  // document (see suppressDerivedCapture) — store none of it.
+  if (suppressDerivedCapture === true) {
+    captions = undefined;
+    summary = "";
+    topics = [];
   }
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary, topics, captions, meta);
 
@@ -665,7 +678,12 @@ if (typeof document !== 'undefined') {
   // was active before), named after its media.
   window.document.addEventListener('hyperaudioInit', () => {
     activeDocKey = null;
-    saveHyperTranscriptToLocalStorage(mediaDisplayName());
+    suppressDerivedCapture = true;
+    try {
+      saveHyperTranscriptToLocalStorage(mediaDisplayName());
+    } finally {
+      suppressDerivedCapture = false;
+    }
     loadLocalStorageOptions();
     const saveInput = document.querySelector('#save-localstorage-filename');
     if (saveInput !== null && activeDocKey !== null) {
@@ -718,7 +736,7 @@ function loadLocalStorageOptions(storage = window.localStorage) {
     const nameHtml = escapeStorageMarkup(name);
     fileSelect.insertAdjacentHTML("beforeend", `<option value="${keyAttr}">${nameHtml}</option>`);
     filePicker.insertAdjacentHTML("beforeend",
-      `<li class="recents-row"><a class="file-item" title="..." data-key="${keyAttr}">${nameHtml}</a>` +
+      `<li class="recents-row"><a class="file-item" data-key="${keyAttr}">${nameHtml}</a>` +
       `<span class="recents-actions">` +
       `<button type="button" class="recents-rename" data-key="${keyAttr}" aria-label="Rename ${nameHtml}" title="Rename">${RECENTS_RENAME_SVG}</button>` +
       `<button type="button" class="recents-delete" data-key="${keyAttr}" aria-label="Delete ${nameHtml}" title="Delete">${RECENTS_DELETE_SVG}</button>` +
@@ -892,12 +910,25 @@ function loadHyperTranscriptFromLocalStorage(fileKey, storage = window.localStor
   }
 }
 
+// Tooltip preview on hover — only when there is actually something to show.
+// Unconditionally setting it gave entries with no summary/topics a stray
+// tooltip reading just "Topics:".
 function loadSummaryFromLocalStorage(fileKey, target, storage = window.localStorage){
 
   let hypertranscriptstorage = readTranscriptEntry(fileKey, storage);
+  if (hypertranscriptstorage === null) return;
 
-  if (hypertranscriptstorage && hypertranscriptstorage.summary !== undefined) {
-    target.setAttribute("title", hypertranscriptstorage.summary + "\n\nTopics: " + getTopicsString(hypertranscriptstorage.topics));
+  const summary = typeof hypertranscriptstorage.summary === 'string'
+    ? hypertranscriptstorage.summary.trim() : '';
+  const topics = getTopicsString(hypertranscriptstorage.topics);
+  const parts = [];
+  if (summary !== '') parts.push(summary);
+  if (topics !== '') parts.push('Topics: ' + topics);
+
+  if (parts.length > 0) {
+    target.setAttribute("title", parts.join("\n\n"));
+  } else {
+    target.removeAttribute("title");
   }
 }
 
