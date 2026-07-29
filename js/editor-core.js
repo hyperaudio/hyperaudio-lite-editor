@@ -780,6 +780,9 @@
       }
 
       document.querySelector('#sidebar-toggle').setAttribute('aria-pressed', String(sidebarOpen));
+      // lets the CSS align the navbar's leading edge with the transcript card,
+      // whose left gutter differs between the open and collapsed layouts
+      document.body.classList.toggle('sidebar-collapsed', sidebarOpen === false);
 
       if(
         document.pictureInPictureEnabled &&

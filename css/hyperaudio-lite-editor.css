@@ -929,3 +929,20 @@ label[data-a11y-wired]:focus-visible {
   background-color: oklch(var(--b2));
   color: oklch(var(--bc));
 }
+
+/* Align the navbar's left edge with the transcript card: the card sits flush
+   with .main-panel while the sidebar is open (left offset 0) and floats with a
+   16px gutter when collapsed, so the navbar's leading padding follows suit —
+   animated to track the card's 0.5s slide. Desktop two-pane only; the
+   small-screen layout keeps the default navbar padding. The .main-panel
+   prefix beats DaisyUI's single-class .navbar padding (tailwind-min.css
+   loads after this file). */
+@media screen and (min-width: 949px) {
+  .main-panel .navbar {
+    padding-left: 0;
+    transition: padding-left 0.5s ease;
+  }
+  body.sidebar-collapsed .main-panel .navbar {
+    padding-left: 16px;
+  }
+}
