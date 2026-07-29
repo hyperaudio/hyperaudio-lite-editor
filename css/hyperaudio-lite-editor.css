@@ -1053,3 +1053,19 @@ label[data-a11y-wired]:focus-visible {
   background: transparent;
   opacity: 0.7;
 }
+
+/* Line the Recents content up on one 16px inset: the menu's default 8px
+   padding put row pills 8px left of the notice box above them. */
+#file-picker {
+  padding: 0 16px 8px;
+}
+
+/* The active row: daisyUI's menu .active is a near-black pill, which reads as
+   alarming now that auto-add marks the new entry active immediately. A quiet
+   base-200 fill + weight says "current" without shouting. */
+#file-picker .file-item.active,
+#file-picker .file-item.active:hover {
+  background-color: oklch(var(--b2));
+  color: inherit;
+  font-weight: 600;
+}
