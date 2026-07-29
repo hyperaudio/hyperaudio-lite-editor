@@ -17,6 +17,8 @@ const {
   migrateLegacyEntries,
   renameTranscriptEntry,
   deleteTranscriptEntry,
+  duplicateTranscriptEntry,
+  mediaKeyInUse,
   mediaNameFromRef,
 } = require('../../js/hyperaudio-lite-editor-storage.js');
 
@@ -138,6 +140,38 @@ test('mediaNameFromRef: URL basename (decoded), plain filename passthrough, Unti
   assert.equal(mediaNameFromRef('interview.mp4'), 'interview.mp4');          // a local file's real name
   assert.equal(mediaNameFromRef(''), 'Untitled');
   assert.equal(mediaNameFromRef(null), 'Untitled');
+});
+
+test('duplicate: fresh ID and timestamps, suffixed name, shared mediaKey (#436)', () => {
+  const s = fakeStorage({
+    'hyperaudio:doc:one': entry({ meta: { name: 'interview', mediaKey: 'm1', created: 100, updated: 200 } }),
+  });
+  const newKey = duplicateTranscriptEntry('hyperaudio:doc:one', s);
+  assert.ok(newKey !== null && newKey !== 'hyperaudio:doc:one');
+  const copy = JSON.parse(s.getItem(newKey));
+  assert.equal(copy.meta.name, 'interview (2)');
+  assert.equal(copy.meta.mediaKey, 'm1');       // shares the source's media
+  assert.ok(copy.meta.created > 100);           // fresh stamps → sorts to the top
+  assert.equal(copy.meta.updated, copy.meta.created);
+  // the original is untouched
+  const original = JSON.parse(s.getItem('hyperaudio:doc:one'));
+  assert.equal(original.meta.name, 'interview');
+  assert.equal(original.meta.updated, 200);
+  // an unusable source duplicates to nothing
+  s.setItem('broken.hyperaudio', '{not json');
+  assert.equal(duplicateTranscriptEntry('broken.hyperaudio', s), null);
+});
+
+test('delete refcounts shared media: the blob outlives one of two duplicates (#436)', () => {
+  const s = fakeStorage({
+    'hyperaudio:doc:one': entry({ meta: { name: 'a', mediaKey: 'm1' } }),
+    'hyperaudio:doc:two': entry({ meta: { name: 'a (2)', mediaKey: 'm1' } }),
+  });
+  assert.equal(mediaKeyInUse('m1', 'hyperaudio:doc:one', s), true);  // the twin still refs it
+  deleteTranscriptEntry('hyperaudio:doc:one', s);
+  assert.equal(s.getItem('hyperaudio:doc:one'), null);
+  assert.equal(mediaKeyInUse('m1', 'hyperaudio:doc:two', s), false); // last reference
+  assert.equal(mediaKeyInUse('m1', null, s), true);                  // still referenced overall
 });
 
 test('entryName / entryMediaKey fall back sensibly for malformed entries', () => {

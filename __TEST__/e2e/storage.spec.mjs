@@ -99,7 +99,8 @@ test('rename via the row action edits the name in place; the key is untouched (#
   const keysBefore = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).sort());
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
   await row.hover();
-  await row.locator('.recents-rename').click();
+  await row.locator('.recents-kebab').click();
+  await page.locator('#recents-menu .recents-menu-rename').click();
   const input = page.locator('.recents-rename-input');
   await input.fill('interview notes');
   await input.press('Enter');
@@ -117,7 +118,8 @@ test('escape cancels a rename without changing the name (#434)', async ({ page }
   await seed(page);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
   await row.hover();
-  await row.locator('.recents-rename').click();
+  await row.locator('.recents-kebab').click();
+  await page.locator('#recents-menu .recents-menu-rename').click();
   const input = page.locator('.recents-rename-input');
   await input.fill('should-not-stick');
   await input.press('Escape');
@@ -130,7 +132,8 @@ test('delete is two-step and removes the entry (#434)', async ({ page }) => {
   await seed(page);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
   await row.hover();
-  const del = row.locator('.recents-delete');
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
   await del.click();
   // armed, not deleted
   await expect(del).toHaveText('Delete?');
@@ -149,7 +152,8 @@ test('deleting the loaded entry offers Restore; restoring re-saves the on-screen
   await page.waitForTimeout(300);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
   await row.hover();
-  const del = row.locator('.recents-delete');
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
   await del.click();
   await del.click(); // confirm
   await expect(page.locator('.file-item', { hasText: 'beta' })).toHaveCount(0);
@@ -177,7 +181,8 @@ test('a pending Restore is withdrawn when the screen holds a different document 
   await page.waitForTimeout(300);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
   await row.hover();
-  const del = row.locator('.recents-delete');
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
   await del.click();
   await del.click();
   await expect(page.locator('#recents-notice')).toContainText('no longer being saved');
@@ -186,6 +191,91 @@ test('a pending Restore is withdrawn when the screen holds a different document 
     [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'alpha').click();
   });
   await expect(page.locator('#recents-notice')).toHaveCount(0);
+});
+
+test('a very long name truncates with ellipsis instead of pushing the actions off-screen (#436)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:long', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="1">x </span></p></section></article>',
+      video: 'https://example.com/a.mp3', summary: '', topics: [],
+      meta: { name: 'A_really_long_interview_' + 'x'.repeat(80) + '.mp4', updated: 9999 },
+    }));
+    loadLocalStorageOptions();
+  });
+  const r = await page.evaluate(() => {
+    const picker = document.querySelector('#file-picker').getBoundingClientRect();
+    const name = [...document.querySelectorAll('.file-item')]
+      .find((a) => a.textContent.startsWith('A_really_long_interview_'));
+    const actions = name.closest('.recents-row').querySelector('.recents-actions').getBoundingClientRect();
+    return {
+      pickerVisible: picker.width > 0,
+      actionsInside: actions.right <= picker.right + 1,
+      truncated: name.scrollWidth > name.clientWidth,
+    };
+  });
+  expect(r.pickerVisible).toBe(true);
+  expect(r.actionsInside).toBe(true);
+  expect(r.truncated).toBe(true);
+});
+
+test('the row Duplicate action copies an entry with a suffixed name, original untouched (#436)', async ({ page }) => {
+  await seed(page);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await row.hover();
+  await row.locator('.recents-kebab').click();
+  await page.locator('#recents-menu .recents-menu-duplicate').click();
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('.file-item')].map((a) => a.textContent));
+  expect(names[0]).toBe('beta (2)'); // fresh stamps put the copy on top
+  expect(names).toContain('beta');
+  expect(names).toContain('alpha');
+});
+
+test('editing a never-saved document (the demo) auto-creates its Recents entry (#436)', async ({ page }) => {
+  await page.evaluate(() => { localStorage.clear(); loadLocalStorageOptions(); });
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'DEMO-EDIT ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(2600);
+  const saved = await page.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:'));
+    return { count: keys.length, entry: keys.length ? JSON.parse(localStorage.getItem(keys[0])) : null };
+  });
+  expect(saved.count).toBe(1);
+  expect(saved.entry.hypertranscript).toContain('DEMO-EDIT');
+});
+
+test('a pending Restore suppresses auto-create; dismissing it re-enables (#436)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await row.hover();
+  await row.locator('.recents-kebab').click();
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click(); // confirm — Restore offer now pending
+  const edit = () => page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'EDIT-AFTER-DELETE ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await edit();
+  await page.waitForTimeout(2600);
+  // deleted on purpose: the edit must NOT silently recreate the entry
+  expect(await page.evaluate(() =>
+    Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(1);
+  await page.locator('#recents-notice .recents-notice-dismiss').click();
+  await edit();
+  await page.waitForTimeout(2600);
+  // offer declined: the doc is now just an unsaved document — edits re-enter Recents
+  expect(await page.evaluate(() =>
+    Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(2);
 });
 
 test('clicking a row loads it and marks it active; the highlight survives a re-render (#434)', async ({ page }) => {
