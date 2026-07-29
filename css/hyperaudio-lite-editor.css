@@ -961,6 +961,10 @@ label[data-a11y-wired]:focus-visible {
   flex-direction: row;
   align-items: center;
   flex-wrap: nowrap;
+  /* the daisyUI menu wraps with flex-shrink:0 items, so a long name sizes the
+     row to its content and pushes the action icons off-screen — clamp the row
+     to the list and let the name's ellipsis absorb the difference */
+  max-width: 100%;
 }
 #file-picker .recents-row .file-item {
   display: block;

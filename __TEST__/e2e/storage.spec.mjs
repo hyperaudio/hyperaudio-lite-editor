@@ -188,6 +188,30 @@ test('a pending Restore is withdrawn when the screen holds a different document 
   await expect(page.locator('#recents-notice')).toHaveCount(0);
 });
 
+test('a very long name truncates with ellipsis instead of pushing the actions off-screen (#436)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:long', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="1">x </span></p></section></article>',
+      video: 'https://example.com/a.mp3', summary: '', topics: [],
+      meta: { name: 'A_really_long_interview_' + 'x'.repeat(80) + '.mp4', updated: 9999 },
+    }));
+    loadLocalStorageOptions();
+  });
+  const r = await page.evaluate(() => {
+    const picker = document.querySelector('#file-picker').getBoundingClientRect();
+    const row = document.querySelector('.recents-row'); // newest first — the long one
+    const actions = row.querySelector('.recents-actions').getBoundingClientRect();
+    const name = row.querySelector('.file-item');
+    return {
+      actionsInside: actions.right <= picker.right + 1,
+      truncated: name.scrollWidth > name.clientWidth,
+    };
+  });
+  expect(r.actionsInside).toBe(true);
+  expect(r.truncated).toBe(true);
+});
+
 test('the row Duplicate action copies an entry with a suffixed name, original untouched (#436)', async ({ page }) => {
   await seed(page);
   const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
