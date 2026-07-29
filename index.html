@@ -977,50 +977,9 @@ If you are creating an open source application under a license compatible with t
   <import-srt></import-srt>
   <import-vtt></import-vtt>
   
-  <!-- comment out if localstorage not required -->
-
-  <div class="hidden-label-holder">
-  <label for="file-save-dialog">Open Save to Local Storage Dialog</label>
-  </div>
-  <input type="checkbox" id="file-save-dialog" class="modal-toggle" tabindex="-1" aria-hidden="true" />
-  <div class="modal">
-  <div class="modal-box">
-    <div class="flex flex-col gap-4 w-full">
-      <label for="file-save-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
-      <h3 class="font-bold text-lg">Save to Local Storage</h3>
-      <input type="text" id="save-localstorage-filename" name="save-localstorage-filename" placeholder="File name" class="input input-bordered w-full max-w-xs" />
-    </div>
-    <div class="modal-action">
-      <label for="file-save-dialog" class="btn btn-ghost">Cancel</label>
-      <label id="file-save-localstorage" for="file-save-dialog" class="btn btn-primary">Confirm</label>
-    </div>
-  </div>
-  </div>
-
-
-  <div class="hidden-label-holder">
-  <label for="file-load-dialog">Open Load from Local Storage Dialog</label>
-  </div>
-  <input type="checkbox" id="file-load-dialog" class="modal-toggle" tabindex="-1" aria-hidden="true" />
-  <div class="modal">
-  <div class="modal-box">
-    <div class="flex flex-col gap-4 w-full">
-      <label for="file-load-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
-      <h3 class="font-bold text-lg">Load from Local Storage</h3>
-      <select id="load-localstorage-filename" aria-label="Load a saved project" class="select select-bordered w-full max-w-xs">
-      </select>
-    </div>
-    <div class="modal-action">
-      <label for="file-load-dialog" class="btn btn-ghost">Cancel</label>
-      <label id="file-load-localstorage" for="file-load-dialog" class="btn btn-primary">Confirm</label>
-    </div>
-  </div>
-  </div>
- 
-
   <script src="./js/hyperaudio-lite-editor-storage.js?v=0.9.0"></script>
 
-  <script src="js/editor-file-menu.js?v=0.6.12"></script>
+  <script src="js/editor-file-menu.js?v=0.9.0"></script>
 
   <script src="./js/hyperaudio-lite-editor-export.js?v=0.8.7" type="module"> </script>
   <!-- end of localstorage additions -->

@@ -188,6 +188,63 @@ test('a pending Restore is withdrawn when the screen holds a different document 
   await expect(page.locator('#recents-notice')).toHaveCount(0);
 });
 
+test('the row Duplicate action copies an entry with a suffixed name, original untouched (#436)', async ({ page }) => {
+  await seed(page);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await row.hover();
+  await row.locator('.recents-duplicate').click();
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('.file-item')].map((a) => a.textContent));
+  expect(names[0]).toBe('beta (2)'); // fresh stamps put the copy on top
+  expect(names).toContain('beta');
+  expect(names).toContain('alpha');
+});
+
+test('editing a never-saved document (the demo) auto-creates its Recents entry (#436)', async ({ page }) => {
+  await page.evaluate(() => { localStorage.clear(); loadLocalStorageOptions(); });
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'DEMO-EDIT ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(2600);
+  const saved = await page.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:'));
+    return { count: keys.length, entry: keys.length ? JSON.parse(localStorage.getItem(keys[0])) : null };
+  });
+  expect(saved.count).toBe(1);
+  expect(saved.entry.hypertranscript).toContain('DEMO-EDIT');
+});
+
+test('a pending Restore suppresses auto-create; dismissing it re-enables (#436)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await row.hover();
+  const del = row.locator('.recents-delete');
+  await del.click();
+  await del.click(); // confirm — Restore offer now pending
+  const edit = () => page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'EDIT-AFTER-DELETE ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await edit();
+  await page.waitForTimeout(2600);
+  // deleted on purpose: the edit must NOT silently recreate the entry
+  expect(await page.evaluate(() =>
+    Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(1);
+  await page.locator('#recents-notice .recents-notice-dismiss').click();
+  await edit();
+  await page.waitForTimeout(2600);
+  // offer declined: the doc is now just an unsaved document — edits re-enter Recents
+  expect(await page.evaluate(() =>
+    Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(2);
+});
+
 test('clicking a row loads it and marks it active; the highlight survives a re-render (#434)', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {

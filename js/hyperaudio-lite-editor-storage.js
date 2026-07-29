@@ -300,18 +300,6 @@ function renderTranscript(
 
 }
 
-// Prefill for the save dialog: the active entry's name if one is loaded,
-// otherwise the media filename.
-function getLocalStorageSaveFilename(url){
-  if (activeDocKey !== null) {
-    const entry = readTranscriptEntry(activeDocKey, window.localStorage);
-    if (entry !== null) {
-      return entryName(activeDocKey, entry);
-    }
-  }
-  return url.substring(url.lastIndexOf("/") + 1);
-}
-
 function getTopicsString(topics) {
   let topicsString = "";
   if (topics && topics !== "undefined" && Object.keys(topics).length > 0) {
@@ -568,18 +556,63 @@ function renameTranscriptEntry(fileKey, newName, storage = window.localStorage) 
   return true;
 }
 
+// True if any OTHER entry references the same cached media — duplicates share
+// their source's mediaKey, so shared media must survive a single delete.
+function mediaKeyInUse(mediaKey, excludeKey, storage) {
+  if (!mediaKey) return false;
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key === excludeKey) continue;
+    if (!isDocKey(key) && !isLegacyKey(key)) continue;
+    if (entryMediaKey(key, readTranscriptEntry(key, storage)) === mediaKey) return true;
+  }
+  return false;
+}
+
 /*
- * Delete an entry and its cached media. Works for unparseable legacy entries
- * too (their media key is derived from the legacy name).
+ * Delete an entry, and its cached media unless another entry (a duplicate)
+ * still references it. Works for unparseable legacy entries too (their media
+ * key is derived from the legacy name).
  */
 function deleteTranscriptEntry(fileKey, storage = window.localStorage) {
   const entry = readTranscriptEntry(fileKey, storage);
   const mediaKey = entryMediaKey(fileKey, entry);
   storage.removeItem(fileKey);
-  deleteMedia(MEDIA_DATABASE, MEDIA_STORE, mediaKey);
+  if (!mediaKeyInUse(mediaKey, fileKey, storage)) {
+    deleteMedia(MEDIA_DATABASE, MEDIA_STORE, mediaKey);
+  }
   if (activeDocKey === fileKey) {
     activeDocKey = null;
   }
+}
+
+/*
+ * Duplicate an entry under a fresh ID as "name (2)". The copy shares the
+ * original's cached media (deletes are refcounted via mediaKeyInUse) and
+ * stamps fresh timestamps, so it appears at the top of the list.
+ * @return {string|null} the new entry's key, or null if the source is unusable
+ */
+function duplicateTranscriptEntry(fileKey, storage = window.localStorage) {
+  const entry = readTranscriptEntry(fileKey, storage);
+  if (entry === null || typeof entry.hypertranscript !== 'string') return null;
+  const now = Date.now();
+  const newKey = newDocKey();
+  entry.meta = Object.assign({}, entry.meta, {
+    name: uniqueEntryName(entryName(fileKey, entry), storage, newKey),
+    mediaKey: entryMediaKey(fileKey, entry) || undefined,
+    created: now,
+    updated: now,
+  });
+  try {
+    storage.setItem(newKey, JSON.stringify(entry));
+  } catch (error) {
+    console.error('Error duplicating transcript:', error);
+    if (error.name === 'QuotaExceededError') {
+      showStorageNotice('Browser storage is full — delete an entry from Recents to make room.');
+    }
+    return null;
+  }
+  return newKey;
 }
 
 // Non-blocking notice above the Recents list — replaces the old blocking
@@ -689,12 +722,23 @@ function maybeShowAutosaveNotice(storage = window.localStorage) {
 let autosaveTimer = null;
 
 function scheduleAutosave() {
-  if (activeDocKey === null) return; // nothing has landed yet this session
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
-    if (activeDocKey === null) return; // deleted while the timer was pending
-    const entry = readTranscriptEntry(activeDocKey, window.localStorage);
-    saveHyperTranscriptToLocalStorage(entry !== null ? entryName(activeDocKey, entry) : undefined);
+    // A pending Restore means the on-screen doc was just deleted on purpose —
+    // silently recreating it on the next keystroke would fight that; the
+    // Restore button is the explicit path back.
+    if (document.querySelector('#recents-notice[data-has-action="true"]') !== null) return;
+
+    if (activeDocKey === null) {
+      // A never-saved document (the intro demo, or a deleted doc whose Restore
+      // offer was dismissed): the first edit brings it into Recents (#436), so
+      // "everything you touch is in Recents" holds with no manual save.
+      saveHyperTranscriptToLocalStorage(mediaDisplayName());
+      maybeShowAutosaveNotice();
+    } else {
+      const entry = readTranscriptEntry(activeDocKey, window.localStorage);
+      saveHyperTranscriptToLocalStorage(entry !== null ? entryName(activeDocKey, entry) : undefined);
+    }
     loadLocalStorageOptions(); // reflect the new "updated" order
   }, AUTOSAVE_DEBOUNCE_MS);
 }
@@ -712,10 +756,6 @@ if (typeof document !== 'undefined') {
       suppressDerivedCapture = false;
     }
     loadLocalStorageOptions();
-    const saveInput = document.querySelector('#save-localstorage-filename');
-    if (saveInput !== null && activeDocKey !== null) {
-      saveInput.value = entryName(activeDocKey, readTranscriptEntry(activeDocKey, window.localStorage));
-    }
     maybeShowAutosaveNotice();
   }, false);
 
@@ -740,16 +780,14 @@ function escapeStorageMarkup(text) {
 }
 
 const RECENTS_RENAME_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+const RECENTS_DUPLICATE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 const RECENTS_DELETE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
 
 function loadLocalStorageOptions(storage = window.localStorage) {
 
   migrateLegacyEntries(storage);
 
-  let fileSelect = document.querySelector("#load-localstorage-filename");
   let filePicker = document.querySelector("#file-picker");
-
-  fileSelect.innerHTML = '<option value="default">Select file…</option>';
   filePicker.innerHTML = "";
 
   // Entries are referenced by their KEY STRING, never by storage.key(i)
@@ -761,11 +799,11 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   rows.forEach(({ key, name }) => {
     const keyAttr = escapeStorageMarkup(key);
     const nameHtml = escapeStorageMarkup(name);
-    fileSelect.insertAdjacentHTML("beforeend", `<option value="${keyAttr}">${nameHtml}</option>`);
     filePicker.insertAdjacentHTML("beforeend",
       `<li class="recents-row"><a class="file-item" data-key="${keyAttr}">${nameHtml}</a>` +
       `<span class="recents-actions">` +
       `<button type="button" class="recents-rename" data-key="${keyAttr}" aria-label="Rename ${nameHtml}" title="Rename">${RECENTS_RENAME_SVG}</button>` +
+      `<button type="button" class="recents-duplicate" data-key="${keyAttr}" aria-label="Duplicate ${nameHtml}" title="Duplicate">${RECENTS_DUPLICATE_SVG}</button>` +
       `<button type="button" class="recents-delete" data-key="${keyAttr}" aria-label="Delete ${nameHtml}" title="Delete">${RECENTS_DELETE_SVG}</button>` +
       `</span></li>`);
   });
@@ -802,6 +840,11 @@ function setFileSelectListeners() {
   document.querySelectorAll('.recents-rename').forEach((btn) => {
     btn.removeEventListener('click', recentsRenameHandleClick);
     btn.addEventListener('click', recentsRenameHandleClick);
+  });
+
+  document.querySelectorAll('.recents-duplicate').forEach((btn) => {
+    btn.removeEventListener('click', recentsDuplicateHandleClick);
+    btn.addEventListener('click', recentsDuplicateHandleClick);
   });
 
   document.querySelectorAll('.recents-delete').forEach((btn) => {
@@ -841,6 +884,13 @@ function recentsRenameHandleClick(event) {
   startRecentsRename(event.currentTarget.getAttribute('data-key'));
 }
 
+function recentsDuplicateHandleClick(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  duplicateTranscriptEntry(event.currentTarget.getAttribute('data-key'));
+  loadLocalStorageOptions();
+}
+
 // Swap the row label for a text input; Enter/blur commits, Escape cancels.
 // Re-rendering the list restores normal rows in every exit path.
 function startRecentsRename(fileKey, storage = window.localStorage) {
@@ -864,12 +914,6 @@ function startRecentsRename(fileKey, storage = window.localStorage) {
     finished = true;
     if (commit) {
       renameTranscriptEntry(fileKey, input.value, storage);
-      if (activeDocKey === fileKey) {
-        const saveInput = document.querySelector('#save-localstorage-filename');
-        if (saveInput !== null) {
-          saveInput.value = entryName(fileKey, readTranscriptEntry(fileKey, storage));
-        }
-      }
     }
     loadLocalStorageOptions(storage);
   };
@@ -963,8 +1007,6 @@ function loadHyperTranscriptFromLocalStorage(fileKey, storage = window.localStor
     hideRestoreNotice();
     activeDocKey = fileKey;
     renderTranscript(hypertranscriptstorage, entryMediaKey(fileKey, hypertranscriptstorage));
-
-    document.querySelector('#save-localstorage-filename').value = entryName(fileKey, hypertranscriptstorage);
   } else if (hypertranscriptstorage) {
     console.warn(`Saved entry "${fileKey}" is missing transcript/video fields — not loading.`);
   }
@@ -1006,6 +1048,8 @@ if (typeof module !== 'undefined' && module.exports) {
     migrateLegacyEntries,
     renameTranscriptEntry,
     deleteTranscriptEntry,
+    duplicateTranscriptEntry,
+    mediaKeyInUse,
     readTranscriptEntry,
     escapeStorageMarkup,
     mediaNameFromRef,
