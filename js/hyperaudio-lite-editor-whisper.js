@@ -250,7 +250,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     // If the user is in caption mode, switch back to transcript view so the
     // transcribing loader is visible and the result lands in the right place.
-    // #transcript-editor-btn is disabled in transcript mode, so this no-ops.
+    // #transcript-editor-btn's handler no-ops when already in transcript mode.
     document.querySelector('#transcript-editor-btn')?.click();
 
     const size = modelNameSelectionInput.value;

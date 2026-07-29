@@ -867,3 +867,50 @@ label[data-a11y-wired]:focus-visible {
     margin-top: 27px;
   }
 }
+
+/* Transcript/captions view switch: a recessed track with a raised thumb that
+   slides under the active segment, so the current view reads as a position in
+   a switch — distinct from the filled action buttons beside it. Colors come
+   from the daisyUI theme vars (base-200 track, base-100 thumb). */
+#view-switch {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 0.5rem;
+  background-color: oklch(var(--b3));
+  margin-right: 16px;
+}
+#view-switch::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 44px;
+  height: 40px;
+  border-radius: 0.375rem;
+  background-color: oklch(var(--b1));
+  box-shadow: 0 1px 3px oklch(var(--bc) / 0.25);
+  transition: transform 0.15s ease-out;
+}
+#view-switch.captions-active::before {
+  transform: translateX(44px);
+}
+@media (prefers-reduced-motion: reduce) {
+  #view-switch::before { transition: none; }
+}
+#view-switch .btn {
+  position: relative; /* sits above the sliding thumb */
+  width: 44px;
+  height: 40px;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  color: oklch(var(--bc) / 0.4);
+}
+#view-switch .btn:hover {
+  background: transparent;
+  color: oklch(var(--bc) / 0.75);
+}
+#view-switch .btn[aria-pressed="true"] {
+  color: oklch(var(--bc));
+}

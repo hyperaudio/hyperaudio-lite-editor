@@ -71,8 +71,8 @@ class AssemblyAIService extends HTMLElement {
 
   getData() {
     // If in caption mode, switch back to transcript view so the loader shows and
-    // the result lands in the right place (#transcript-editor-btn no-ops when
-    // already in transcript mode).
+    // the result lands in the right place (#transcript-editor-btn's handler
+    // no-ops when already in transcript mode).
     document.querySelector('#transcript-editor-btn')?.click();
     document.querySelector('#hypertranscript').innerHTML =
       '<div class="vertically-centre"><center>Transcribing….</center><br/><img src="' + transcribingSvg + '" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';

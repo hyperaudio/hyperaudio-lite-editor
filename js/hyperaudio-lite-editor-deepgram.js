@@ -125,7 +125,7 @@ class DeepgramService extends HTMLElement {
   getData(event) {
     // If the user is in caption mode, switch back to transcript view so the
     // transcribing loader is visible and the result lands in the right place.
-    // #transcript-editor-btn is disabled in transcript mode, so this no-ops.
+    // #transcript-editor-btn's handler no-ops when already in transcript mode.
     document.querySelector('#transcript-editor-btn')?.click();
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
     if (typeof setTranscriptBusy === 'function') {

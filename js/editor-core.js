@@ -175,25 +175,38 @@
   // edits otherwise persist; localStorage load manages its own cache.
   window.document.addEventListener('hyperaudioInit', () => { captionCache = null; }, false);
 
-  document.querySelector('#caption-editor-btn').addEventListener('click', (e) => {
+  // Segmented view switch (transcript/captions): both segments stay clickable
+  // and the active one is marked by the track's thumb + aria-pressed rather
+  // than disabled.
+  // Clicking the active segment is a no-op — the transcription engines rely on
+  // that when they force transcript view by clicking #transcript-editor-btn.
+  const transcriptViewBtn = document.querySelector('#transcript-editor-btn');
+  const captionViewBtn = document.querySelector('#caption-editor-btn');
+
+  function reflectViewSwitch() {
+    document.querySelector('#view-switch').classList.toggle('captions-active', captionMode === true);
+    captionViewBtn.setAttribute('aria-pressed', String(captionMode === true));
+    transcriptViewBtn.setAttribute('aria-pressed', String(captionMode !== true));
+  }
+
+  captionViewBtn.addEventListener('click', () => {
+    if (captionMode === true) return;
     let holder = document.querySelector('.transcript-holder');
     transcriptCache = holder.cloneNode(true);
     captionMode = true;
     hyperaudioGenerateCaptionsFromTranscript();
-    document.querySelector('#caption-editor-btn').disabled = true;
-    document.querySelector('#transcript-editor-btn').disabled = false;
+    reflectViewSwitch();
   });
 
-  document.querySelector('#transcript-editor-btn').addEventListener('click', (e) => {
+  transcriptViewBtn.addEventListener('click', () => {
+    if (captionMode !== true) return;
     restoreTranscript();
     captionMode = false;
     if (transcriptRequiresInit === true) {
       hyperaudio();
       transcriptRequiresInit = false;
     }
-    
-    document.querySelector('#caption-editor-btn').disabled = false;
-    document.querySelector('#transcript-editor-btn').disabled = true;
+    reflectViewSwitch();
   });
 
 
