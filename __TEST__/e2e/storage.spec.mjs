@@ -278,6 +278,53 @@ test('a pending Restore suppresses auto-create; dismissing it re-enables (#436)'
     Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(2);
 });
 
+test('starring pins an entry into a Starred group; unstarring removes the labels (#440)', async ({ page }) => {
+  await seed(page);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await row.hover();
+  await row.locator('.recents-kebab').click();
+  await expect(page.locator('#recents-menu .recents-menu-star')).toHaveText('Star');
+  await page.locator('#recents-menu .recents-menu-star').click();
+
+  // grouped: Starred heading, beta, Recents heading, alpha — and the panel's
+  // static "Recents" h2 hides while the in-list h2 headings are shown
+  await expect(page.locator('.recents-group-heading h2')).toHaveText(['Starred', 'Recents']);
+  await expect(page.locator('#recents-title')).toBeHidden();
+  const order = await page.evaluate(() =>
+    [...document.querySelectorAll('#file-picker li')].map((li) => li.textContent.trim()));
+  expect(order[0]).toBe('Starred');
+  expect(order[1]).toContain('beta');
+  expect(order[2]).toBe('Recents');
+  expect(order[3]).toContain('alpha');
+
+  // autosave-style re-save must carry the star through the meta rebuild
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'STAR-EDIT ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(2600);
+  const starredAfterSave = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.startsWith('hyperaudio:doc:') && JSON.parse(localStorage.getItem(k)).meta.name === 'beta');
+    return JSON.parse(localStorage.getItem(key)).meta.starred;
+  });
+  expect(starredAfterSave).toBe(true);
+
+  // unstar → flat list again, no labels
+  const starredRow = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await starredRow.hover();
+  await starredRow.locator('.recents-kebab').click();
+  await expect(page.locator('#recents-menu .recents-menu-star')).toHaveText('Unstar');
+  await page.locator('#recents-menu .recents-menu-star').click();
+  await expect(page.locator('.recents-group-heading')).toHaveCount(0);
+  await expect(page.locator('#recents-title')).toBeVisible(); // default look restored
+});
+
 test('clicking a row loads it and marks it active; the highlight survives a re-render (#434)', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {

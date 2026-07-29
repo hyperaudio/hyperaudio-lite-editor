@@ -18,6 +18,7 @@ const {
   renameTranscriptEntry,
   deleteTranscriptEntry,
   duplicateTranscriptEntry,
+  setTranscriptStarred,
   mediaKeyInUse,
   mediaNameFromRef,
 } = require('../../js/hyperaudio-lite-editor-storage.js');
@@ -172,6 +173,25 @@ test('delete refcounts shared media: the blob outlives one of two duplicates (#4
   assert.equal(s.getItem('hyperaudio:doc:one'), null);
   assert.equal(mediaKeyInUse('m1', 'hyperaudio:doc:two', s), false); // last reference
   assert.equal(mediaKeyInUse('m1', null, s), true);                  // still referenced overall
+});
+
+test('star/unstar: one-field toggle that never touches updated; copies start unstarred (#440)', () => {
+  const s = fakeStorage({
+    'hyperaudio:doc:one': entry({ meta: { name: 'a', updated: 42 } }),
+  });
+  assert.equal(setTranscriptStarred('hyperaudio:doc:one', true, s), true);
+  let e = JSON.parse(s.getItem('hyperaudio:doc:one'));
+  assert.equal(e.meta.starred, true);
+  assert.equal(e.meta.updated, 42);                  // starring must not reorder
+  assert.equal(listDocEntries(s)[0].starred, true);  // surfaced to the renderer
+
+  const copyKey = duplicateTranscriptEntry('hyperaudio:doc:one', s);
+  assert.equal(JSON.parse(s.getItem(copyKey)).meta.starred, false);
+
+  assert.equal(setTranscriptStarred('hyperaudio:doc:one', false, s), true);
+  e = JSON.parse(s.getItem('hyperaudio:doc:one'));
+  assert.equal(e.meta.starred, false);
+  assert.equal(setTranscriptStarred('hyperaudio:doc:missing', true, s), false);
 });
 
 test('entryName / entryMediaKey fall back sensibly for malformed entries', () => {
