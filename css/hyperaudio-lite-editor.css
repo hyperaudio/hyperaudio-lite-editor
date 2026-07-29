@@ -1122,9 +1122,9 @@ label[data-a11y-wired]:focus-visible {
   border: none;
   background: transparent;
   margin: 0;
-  padding: 6px 10px;
+  padding: 8px 16px;
   border-radius: 0.375rem;
-  font-size: 13px;
+  font-size: 14px; /* match the FILE dropdown's item size */
   text-align: left;
   color: oklch(var(--bc) / 0.85);
   cursor: pointer;
@@ -1139,4 +1139,22 @@ label[data-a11y-wired]:focus-visible {
 #recents-menu button.confirming:hover {
   color: oklch(var(--er));
   font-weight: 600;
+}
+
+/* Starred/Recents section headings (#440) — same weight as the panel's
+   static "Recents" h2, which hides while these are rendered (storage.js
+   decides; nothing starred = static h2 only, exactly the default look). The
+   picker's own 16px inset aligns them with where the static h2 sits. */
+#file-picker .recents-group-heading {
+  padding: 12px 0 4px;
+  pointer-events: none;
+}
+#file-picker .recents-group-heading h2 {
+  /* daisyUI styles any direct child of a menu li as a menu item — zero that
+     out so the heading sits at the same 16px inset as the static h2 */
+  margin: 0;
+  padding: 0;
+  background: none;
+  font-weight: 700;
+  font-size: 1.05rem;
 }

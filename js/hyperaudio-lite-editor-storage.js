@@ -136,10 +136,29 @@ function listDocEntries(storage) {
       key,
       name: entryName(key, entry),
       updated: meta.updated || meta.created || 0,
+      starred: meta.starred === true,
     });
   }
   rows.sort((a, b) => (b.updated - a.updated) || a.name.localeCompare(b.name));
   return rows;
+}
+
+/*
+ * Star / unstar an entry (#440). Like rename, this deliberately does not
+ * touch `updated` — pinning must not reorder anything by itself.
+ * @return {boolean} whether the change was applied
+ */
+function setTranscriptStarred(fileKey, starred, storage = window.localStorage) {
+  const entry = readTranscriptEntry(fileKey, storage);
+  if (entry === null) return false;
+  entry.meta = Object.assign({}, entry.meta, { starred: starred === true });
+  try {
+    storage.setItem(fileKey, JSON.stringify(entry));
+  } catch (error) {
+    console.error('Error starring transcript:', error);
+    return false;
+  }
+  return true;
 }
 
 // One-time upgrade of legacy name-keyed entries to ID-keyed entries. Runs
@@ -469,6 +488,7 @@ function saveHyperTranscriptToLocalStorage(
     mediaKey: prevMeta.mediaKey || docKey,
     created: prevMeta.created || now,
     updated: now,
+    starred: prevMeta.starred === true, // meta is rebuilt — carry the star through
   };
 
   // if media url begins with blob it means it's locally cached only for the session
@@ -602,6 +622,7 @@ function duplicateTranscriptEntry(fileKey, storage = window.localStorage) {
     mediaKey: entryMediaKey(fileKey, entry) || undefined,
     created: now,
     updated: now,
+    starred: false, // a copy starts unstarred
   });
   try {
     storage.setItem(newKey, JSON.stringify(entry));
@@ -796,7 +817,8 @@ function escapeStorageMarkup(text) {
 
 const RECENTS_RENAME_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
 const RECENTS_DUPLICATE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
-const RECENTS_KEBAB_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>';
+const RECENTS_KEBAB_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
+const RECENTS_STAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
 const RECENTS_DELETE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
 
 function loadLocalStorageOptions(storage = window.localStorage) {
@@ -813,7 +835,7 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   // (prefs on every toggle) — so a positional index resolved at click time
   // could load a different entry than the one listed.
   const rows = listDocEntries(storage);
-  rows.forEach(({ key, name }) => {
+  const renderRow = ({ key, name }) => {
     const keyAttr = escapeStorageMarkup(key);
     const nameHtml = escapeStorageMarkup(name);
     filePicker.insertAdjacentHTML("beforeend",
@@ -821,7 +843,27 @@ function loadLocalStorageOptions(storage = window.localStorage) {
       `<span class="recents-actions">` +
       `<button type="button" class="recents-kebab" data-key="${keyAttr}" aria-label="Options for ${nameHtml}" aria-haspopup="menu" aria-expanded="false">${RECENTS_KEBAB_SVG}</button>` +
       `</span></li>`);
-  });
+  };
+
+  // Starred entries pin above the rest (#440). With nothing starred the panel
+  // keeps its static "Recents" h2 and the list looks as it always has; once
+  // something is starred that h2 hides and the list carries its own h2-level
+  // "Starred" / "Recents" section headings instead (they scroll with the
+  // rows). Ordering within each group is unchanged (last edit).
+  const starredRows = rows.filter((r) => r.starred);
+  const recentRows = rows.filter((r) => !r.starred);
+  const panelTitle = document.getElementById('recents-title');
+  if (panelTitle !== null) {
+    panelTitle.style.display = starredRows.length > 0 ? 'none' : '';
+  }
+  if (starredRows.length > 0) {
+    filePicker.insertAdjacentHTML("beforeend", `<li class="recents-group-heading"><h2>Starred</h2></li>`);
+    starredRows.forEach(renderRow);
+    if (recentRows.length > 0) {
+      filePicker.insertAdjacentHTML("beforeend", `<li class="recents-group-heading"><h2>Recents</h2></li>`);
+    }
+  }
+  recentRows.forEach(renderRow);
 
   setFileSelectListeners();
 
@@ -906,10 +948,14 @@ function openRecentsMenu(kebabBtn) {
   recentsMenuKey = fileKey;
   kebabBtn.setAttribute('aria-expanded', 'true');
 
+  const menuEntry = readTranscriptEntry(fileKey, window.localStorage);
+  const isStarred = !!(menuEntry && menuEntry.meta && menuEntry.meta.starred === true);
+
   const menu = document.createElement('div');
   menu.id = 'recents-menu';
   menu.setAttribute('role', 'menu');
   menu.innerHTML =
+    `<button type="button" role="menuitem" class="recents-menu-star">${RECENTS_STAR_SVG}${isStarred ? 'Unstar' : 'Star'}</button>` +
     `<button type="button" role="menuitem" class="recents-menu-rename">${RECENTS_RENAME_SVG}Rename</button>` +
     `<button type="button" role="menuitem" class="recents-menu-duplicate">${RECENTS_DUPLICATE_SVG}Duplicate</button>` +
     `<button type="button" role="menuitem" class="recents-menu-delete">${RECENTS_DELETE_SVG}Delete</button>`;
@@ -922,6 +968,11 @@ function openRecentsMenu(kebabBtn) {
     ? anchor.top - size.height - 4
     : anchor.bottom + 4) + 'px';
 
+  menu.querySelector('.recents-menu-star').addEventListener('click', () => {
+    closeRecentsMenu();
+    setTranscriptStarred(fileKey, !isStarred);
+    loadLocalStorageOptions();
+  });
   menu.querySelector('.recents-menu-rename').addEventListener('click', () => {
     closeRecentsMenu();
     startRecentsRename(fileKey);
@@ -996,7 +1047,9 @@ function startRecentsRename(fileKey, storage = window.localStorage) {
 
 function performRecentsDelete(fileKey) {
   const wasActive = activeDocKey === fileKey;
-  const name = entryName(fileKey, readTranscriptEntry(fileKey, window.localStorage));
+  const deletedEntry = readTranscriptEntry(fileKey, window.localStorage);
+  const name = entryName(fileKey, deletedEntry);
+  const wasStarred = !!(deletedEntry && deletedEntry.meta && deletedEntry.meta.starred === true);
   deleteTranscriptEntry(fileKey);
   loadLocalStorageOptions();
 
@@ -1006,7 +1059,7 @@ function performRecentsDelete(fileKey) {
     showStorageNotice('Removed from Recents. The transcript is still on screen but no longer being saved.', {
       tone: 'info',
       sticky: true,
-      action: { label: 'Restore', handler: () => restoreDeletedTranscript(name) },
+      action: { label: 'Restore', handler: () => restoreDeletedTranscript(name, wasStarred) },
     });
   }
 }
@@ -1015,11 +1068,14 @@ function performRecentsDelete(fileKey) {
 // fresh entry under its old name. Its media blob was deleted with the entry,
 // so put the media back too — a data: src (loaded from IndexedDB) is written
 // directly; a blob: src re-saves through the normal path (stamp reset).
-function restoreDeletedTranscript(name) {
+function restoreDeletedTranscript(name, wasStarred) {
   activeDocKey = null;
   savedMediaStamp = null;
   saveHyperTranscriptToLocalStorage(name);
   if (activeDocKey !== null) {
+    if (wasStarred === true) {
+      setTranscriptStarred(activeDocKey, true); // the star survives the round trip
+    }
     const player = document.querySelector('#hyperplayer');
     if (player !== null && player.src.indexOf('data:') === 0) {
       const entry = readTranscriptEntry(activeDocKey, window.localStorage);
@@ -1096,6 +1152,7 @@ if (typeof module !== 'undefined' && module.exports) {
     renameTranscriptEntry,
     deleteTranscriptEntry,
     duplicateTranscriptEntry,
+    setTranscriptStarred,
     mediaKeyInUse,
     readTranscriptEntry,
     escapeStorageMarkup,
