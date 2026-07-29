@@ -914,3 +914,18 @@ label[data-a11y-wired]:focus-visible {
 #view-switch .btn[aria-pressed="true"] {
   color: oklch(var(--bc));
 }
+
+/* Soften the navbar's outline buttons to sit in the same family as the view
+   switch: quiet base-300 borders and a tint hover, instead of daisyUI's
+   near-black border + black-fill hover inversion, which read heavier than
+   everything around them. */
+.navbar .btn-outline {
+  border-color: oklch(var(--b3));
+  color: oklch(var(--bc) / 0.75);
+  background-color: oklch(var(--b1));
+}
+.navbar .btn-outline:hover {
+  border-color: oklch(var(--bc) / 0.3);
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc));
+}
