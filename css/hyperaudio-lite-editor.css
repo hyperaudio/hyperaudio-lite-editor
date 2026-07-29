@@ -940,6 +940,13 @@ label[data-a11y-wired]:focus-visible {
 @media screen and (min-width: 949px) {
   .main-panel .navbar {
     padding-left: 0;
+    /* Optically centre the buttons in the full band between the screen top
+       and the transcript card's top (78px): the borderless navbar reads as
+       one space with the 8px floating-card gap below it, so geometric
+       centring in the 70px navbar alone left them sitting 4px high. The
+       margin shifts the whole centred bar; the card is absolutely
+       positioned, so nothing else moves. */
+    margin-top: 4px;
     transition: padding-left 0.5s ease;
   }
   body.sidebar-collapsed .main-panel .navbar {
