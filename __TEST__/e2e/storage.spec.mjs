@@ -141,6 +141,53 @@ test('delete is two-step and removes the entry (#434)', async ({ page }) => {
   expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(1);
 });
 
+test('deleting the loaded entry offers Restore; restoring re-saves the on-screen doc (#434)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await row.hover();
+  const del = row.locator('.recents-delete');
+  await del.click();
+  await del.click(); // confirm
+  await expect(page.locator('.file-item', { hasText: 'beta' })).toHaveCount(0);
+  const notice = page.locator('#recents-notice');
+  await expect(notice).toContainText('no longer being saved');
+  // the transcript is still on screen
+  expect(await page.evaluate(() => document.querySelector('#hypertranscript').textContent)).toContain('BETA');
+  await notice.locator('.recents-notice-action').click();
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator('.file-item', { hasText: 'beta' })).toHaveCount(1);
+  await expect(page.locator('.file-item.active')).toHaveText('beta');
+  const restored = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.startsWith('hyperaudio:doc:') && JSON.parse(localStorage.getItem(k)).meta.name === 'beta');
+    return JSON.parse(localStorage.getItem(key));
+  });
+  expect(restored.hypertranscript).toContain('BETA');
+});
+
+test('a pending Restore is withdrawn when the screen holds a different document (#434)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'beta' }) });
+  await row.hover();
+  const del = row.locator('.recents-delete');
+  await del.click();
+  await del.click();
+  await expect(page.locator('#recents-notice')).toContainText('no longer being saved');
+  // loading another entry invalidates restore-from-screen
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'alpha').click();
+  });
+  await expect(page.locator('#recents-notice')).toHaveCount(0);
+});
+
 test('clicking a row loads it and marks it active; the highlight survives a re-render (#434)', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {

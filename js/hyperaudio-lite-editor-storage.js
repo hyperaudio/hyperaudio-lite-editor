@@ -460,6 +460,14 @@ function saveHyperTranscriptToLocalStorage(
 
   let video = document.getElementById(videoDomId).src;
 
+  // A doc loaded from Recents carries a base64 data: URL as its src (getMedia
+  // sets it directly). Never serialise that payload into the localStorage JSON
+  // — the media already lives in IndexedDB under meta.mediaKey. Store a marker
+  // instead; the load path treats any non-http value the same way (→ getMedia).
+  if (video.indexOf("data:") === 0) {
+    video = "indexeddb:";
+  }
+
   const existing = activeDocKey !== null ? readTranscriptEntry(activeDocKey, storage) : null;
   const docKey = existing !== null ? activeDocKey : newDocKey();
   const prevMeta = (existing !== null && existing.meta) ? existing.meta : {};
@@ -590,6 +598,15 @@ function showStorageNotice(message, opts = {}) {
   el.className = opts.tone === 'info' ? 'notice-info' : 'notice-error';
   el.textContent = '';
   el.appendChild(document.createTextNode(message));
+  el.dataset.hasAction = opts.action ? 'true' : 'false';
+  if (opts.action) {
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'recents-notice-action';
+    action.textContent = opts.action.label;
+    action.addEventListener('click', () => { el.remove(); opts.action.handler(); });
+    el.appendChild(action);
+  }
   const dismiss = document.createElement('button');
   dismiss.type = 'button';
   dismiss.className = 'recents-notice-dismiss';
@@ -601,6 +618,15 @@ function showStorageNotice(message, opts = {}) {
   if (opts.sticky !== true) {
     showStorageNotice._timer = setTimeout(() => { el.remove(); }, 8000);
   }
+}
+
+// A pending Restore offers to re-save the ON-SCREEN document; once the screen
+// holds something else (new transcription, another entry loaded) that offer
+// would save the wrong content under the old name — withdraw it. Only notices
+// carrying an action are removed; the one-time disclosure stays.
+function hideRestoreNotice() {
+  const el = document.getElementById('recents-notice');
+  if (el !== null && el.dataset.hasAction === 'true') el.remove();
 }
 
 /* ----------------------------------------------------------------------------
@@ -677,6 +703,7 @@ if (typeof document !== 'undefined') {
   // A new transcription/import: always a NEW entry (never overwrite whatever
   // was active before), named after its media.
   window.document.addEventListener('hyperaudioInit', () => {
+    hideRestoreNotice();
     activeDocKey = null;
     suppressDerivedCapture = true;
     try {
@@ -876,7 +903,39 @@ function recentsDeleteHandleClick(event) {
   }
 
   clearTimeout(btn._resetTimer);
-  deleteTranscriptEntry(btn.getAttribute('data-key'));
+  const fileKey = btn.getAttribute('data-key');
+  const wasActive = activeDocKey === fileKey;
+  const name = entryName(fileKey, readTranscriptEntry(fileKey, window.localStorage));
+  deleteTranscriptEntry(fileKey);
+  loadLocalStorageOptions();
+
+  // Deleting the LOADED entry leaves the document on screen (the only undo
+  // there is), but autosave stops with it — say so, and offer the undo.
+  if (wasActive) {
+    showStorageNotice('Removed from Recents. The transcript is still on screen but no longer being saved.', {
+      tone: 'info',
+      sticky: true,
+      action: { label: 'Restore', handler: () => restoreDeletedTranscript(name) },
+    });
+  }
+}
+
+// Undo for deleting the loaded entry: re-save the on-screen document as a
+// fresh entry under its old name. Its media blob was deleted with the entry,
+// so put the media back too — a data: src (loaded from IndexedDB) is written
+// directly; a blob: src re-saves through the normal path (stamp reset).
+function restoreDeletedTranscript(name) {
+  activeDocKey = null;
+  savedMediaStamp = null;
+  saveHyperTranscriptToLocalStorage(name);
+  if (activeDocKey !== null) {
+    const player = document.querySelector('#hyperplayer');
+    if (player !== null && player.src.indexOf('data:') === 0) {
+      const entry = readTranscriptEntry(activeDocKey, window.localStorage);
+      const mediaKey = entry && entry.meta && entry.meta.mediaKey;
+      if (mediaKey) saveVideoFromBlobURL(mediaKey, player.src, MEDIA_DATABASE, MEDIA_STORE);
+    }
+  }
   loadLocalStorageOptions();
 }
 
@@ -901,6 +960,7 @@ function loadHyperTranscriptFromLocalStorage(fileKey, storage = window.localStor
       && typeof hypertranscriptstorage.hypertranscript === 'string'
       && typeof hypertranscriptstorage.video === 'string') {
 
+    hideRestoreNotice();
     activeDocKey = fileKey;
     renderTranscript(hypertranscriptstorage, entryMediaKey(fileKey, hypertranscriptstorage));
 

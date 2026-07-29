@@ -1069,3 +1069,26 @@ label[data-a11y-wired]:focus-visible {
   color: inherit;
   font-weight: 600;
 }
+
+/* notice action (e.g. Restore after deleting the loaded entry): a quiet
+   primary-colored text button; when present it takes the right-push role and
+   the ✕ tucks in beside it */
+#recents-notice .recents-notice-action {
+  margin: 0 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: oklch(var(--p));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+#recents-notice .recents-notice-action:hover {
+  border: none;
+  background: transparent;
+  text-decoration: underline;
+}
+#recents-notice .recents-notice-action + .recents-notice-dismiss {
+  margin-left: 4px;
+}
