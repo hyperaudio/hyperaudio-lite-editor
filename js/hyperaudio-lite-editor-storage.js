@@ -5,6 +5,8 @@
  * @param {string} summary - the text of the summary
  * @param {array} topics - an array of topics
  * @param {string} captions - VTT format
+ * @param {object} meta - entry metadata: display name, media key, timestamps,
+ *                        caption-sync flag (see below)
  * @return {void}
  */
 class HyperTranscriptStorage {
@@ -18,9 +20,152 @@ class HyperTranscriptStorage {
   }
 }
 
-// We should move these from global scope
+/*
+ * Storage model (#434)
+ *
+ * Entries are keyed by a STABLE GENERATED ID (`hyperaudio:doc:<id>`), never by
+ * their display name. The name lives in meta.name, so renaming is a one-field
+ * update and two entries may share a display name candidate (the second gets a
+ * " (2)" suffix) without one overwriting the other. Cached local media in
+ * IndexedDB is keyed by meta.mediaKey — the doc key for new entries — so a
+ * rename never has to re-key a (possibly large) media blob.
+ *
+ * meta: {
+ *   name:    display name shown in Recents,
+ *   mediaKey: IndexedDB key of the cached local media (if any),
+ *   created / updated: epoch ms; `updated` drives the list order,
+ *   updateCaptionsFromTranscript: existing caption-sync flag,
+ * }
+ *
+ * LEGACY entries (`<name>.hyperaudio`, where the key IS the name) are migrated
+ * in place the first time the list renders: same JSON, new key, name/mediaKey
+ * carried into meta (media stays under its old key via mediaKey). An entry
+ * that does not parse is left on its legacy key — still listed, still
+ * deletable, and the defensive read path keeps clicks from throwing (#410).
+ */
+
 const fileExtension = ".hyperaudio";
-let lastFilename = null;
+const DOC_KEY_PREFIX = "hyperaudio:doc:";
+const MEDIA_DATABASE = "hyperaudioMedia";
+const MEDIA_STORE = "media";
+
+// The storage key of the entry currently loaded in the editor (null when the
+// document on screen has never been saved). Save updates this entry in place;
+// delete clears it.
+let activeDocKey = null;
+
+// docKey + '|' + blob-URL of the media most recently written to IndexedDB, so
+// debounced autosaves skip re-encoding an unchanged blob (see the save path).
+let savedMediaStamp = null;
+
+// True only while the auto-add save runs (hyperaudioInit). The engines dispatch
+// that event BEFORE regenerating captions, so the caption track — and the
+// summary/topics panels — still hold the PREVIOUS document's content at that
+// moment; capturing them stamped the intro demo's captions into fresh entries.
+// An auto-added entry stores no derived state: captions regenerate from the
+// transcript on load, and the first edit-autosave captures the real ones.
+let suppressDerivedCapture = false;
+
+function isDocKey(key) {
+  return typeof key === "string" && key.startsWith(DOC_KEY_PREFIX);
+}
+
+function isLegacyKey(key) {
+  return typeof key === "string" && !isDocKey(key) && key.indexOf(fileExtension) > 0;
+}
+
+function legacyNameFromKey(key) {
+  return key.substring(0, key.lastIndexOf(fileExtension));
+}
+
+function newDocKey() {
+  return DOC_KEY_PREFIX + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
+// Display name of an entry: meta.name, else (legacy) the name embedded in the
+// key, else a fallback so a malformed entry still renders as a row.
+function entryName(key, entry) {
+  if (entry && entry.meta && typeof entry.meta.name === "string" && entry.meta.name !== "") {
+    return entry.meta.name;
+  }
+  if (isLegacyKey(key)) {
+    return legacyNameFromKey(key);
+  }
+  return "Untitled";
+}
+
+// IndexedDB key of an entry's cached media. Migrated entries carry their
+// legacy name here; unparseable legacy entries fall back to the key's name so
+// deleting one still clears its media.
+function entryMediaKey(key, entry) {
+  if (entry && entry.meta && typeof entry.meta.mediaKey === "string" && entry.meta.mediaKey !== "") {
+    return entry.meta.mediaKey;
+  }
+  return isLegacyKey(key) ? legacyNameFromKey(key) : null;
+}
+
+// A display name not used by any other entry: "name", else "name (2)", "name
+// (3)", ... `excludeKey` lets an entry keep (or re-save under) its own name.
+function uniqueEntryName(desired, storage, excludeKey) {
+  const names = new Set();
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key === excludeKey) continue;
+    if (isDocKey(key) || isLegacyKey(key)) {
+      names.add(entryName(key, readTranscriptEntry(key, storage)));
+    }
+  }
+  if (!names.has(desired)) return desired;
+  let n = 2;
+  while (names.has(`${desired} (${n})`)) n++;
+  return `${desired} (${n})`;
+}
+
+// All saved entries as {key, name, updated}, last-edited first — an entry
+// never edited since creation sorts by its creation date (save stamps both,
+// migration stamps created). Ties, and entries with no date at all, break
+// alphabetically.
+function listDocEntries(storage) {
+  const rows = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (!isDocKey(key) && !isLegacyKey(key)) continue;
+    const entry = readTranscriptEntry(key, storage);
+    const meta = (entry && entry.meta) || {};
+    rows.push({
+      key,
+      name: entryName(key, entry),
+      updated: meta.updated || meta.created || 0,
+    });
+  }
+  rows.sort((a, b) => (b.updated - a.updated) || a.name.localeCompare(b.name));
+  return rows;
+}
+
+// One-time upgrade of legacy name-keyed entries to ID-keyed entries. Runs
+// every list render but is a no-op once nothing legacy-parseable remains.
+function migrateLegacyEntries(storage) {
+  const legacyKeys = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (isLegacyKey(key)) legacyKeys.push(key);
+  }
+  legacyKeys.forEach((key) => {
+    const entry = readTranscriptEntry(key, storage);
+    if (!entry || typeof entry.hypertranscript !== "string") return; // leave it; still listed + deletable
+    const name = legacyNameFromKey(key);
+    // The true creation date was never recorded — stamp migration time as the
+    // proxy so the entry sorts by date (updated || created) from here on.
+    entry.meta = Object.assign({}, entry.meta, { name, mediaKey: name, created: Date.now() });
+    try {
+      storage.setItem(newDocKey(), JSON.stringify(entry));
+      storage.removeItem(key);
+    } catch (e) {
+      // quota — keep the legacy key rather than risk losing the entry
+      console.error("Could not migrate saved transcript:", e);
+    }
+  });
+}
 
 /*
  * Completely remove the existing caption <track> and insert a fresh, empty one.
@@ -57,11 +202,13 @@ function resetCaptionTrack(videoDomId = 'hyperplayer', vttId = 'hyperplayer-vtt'
 
 /*
  * Render the HyperTranscript in the DOM
+ * @param {object} hypertranscriptstorage - the parsed entry
+ * @param {string} mediaKey - IndexedDB key for locally cached media
  * @return {void}
  */
 function renderTranscript(
   hypertranscriptstorage,
-  key,
+  mediaKey,
   hypertranscriptDomId = 'hypertranscript',
   videoDomId = 'hyperplayer',
   vttId = 'hyperplayer-vtt',
@@ -91,15 +238,13 @@ function renderTranscript(
   }
 
   // check to see if file is local
-  if (hypertranscriptstorage['video'].startsWith("http") === true) { 
+  if (hypertranscriptstorage['video'].startsWith("http") === true) {
     document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
   } else {
     //load from indexedDB
-    let databaseName = "hyperaudioMedia";
-    let objectStoreName = "media";
-    getMedia(databaseName, objectStoreName, key);
+    getMedia(MEDIA_DATABASE, MEDIA_STORE, mediaKey);
   }
-  
+
   document.getElementById("summary").innerHTML = hypertranscriptstorage['summary'];
   document.getElementById("topics").innerHTML = getTopicsString(hypertranscriptstorage['topics']);
 
@@ -128,10 +273,8 @@ function renderTranscript(
       updateCaptionsFromTranscript = true;
     }
 
-    //console.log(plainVtt);
-
     captionCache = null;
-    
+
     populateCaptionEditorFromVtt(plainVtt);
   }
 
@@ -147,29 +290,26 @@ function renderTranscript(
 
   const itDownloadEvent = new CustomEvent('hyperaudioTranscriptLoaded');
   document.dispatchEvent(itDownloadEvent);
-  
+
   //maybe better called using hyperaudioInit event?
   if (captionMode !== true) {
     hyperaudio();
   } else {
     transcriptRequiresInit = true;
   }
-  
+
 }
 
+// Prefill for the save dialog: the active entry's name if one is loaded,
+// otherwise the media filename.
 function getLocalStorageSaveFilename(url){
-  let filename = null;
-
-  if (lastFilename === null) {
-    //by default just the media filename
-    filename = url.substring(url.lastIndexOf("/")+1);
-    lastFilename = filename;
-  } else {
-    // if it's been saved before this session, use the last filename
-    filename = lastFilename;
+  if (activeDocKey !== null) {
+    const entry = readTranscriptEntry(activeDocKey, window.localStorage);
+    if (entry !== null) {
+      return entryName(activeDocKey, entry);
+    }
   }
-
-  return filename;
+  return url.substring(url.lastIndexOf("/") + 1);
 }
 
 function getTopicsString(topics) {
@@ -196,7 +336,7 @@ function getMedia(databaseName, objectStoreName, id) {
     getRequest.onerror = function() {
       console.error("Error retrieving media:", getRequest.error);
     }
-    
+
     getRequest.onsuccess = function() {
 
       const base64String = getRequest.result; // Base64 string
@@ -212,8 +352,30 @@ function getMedia(databaseName, objectStoreName, id) {
   }
 }
 
+// Remove an entry's cached media so deleted transcripts don't leave orphaned
+// blobs behind (media is stored as base64 data URLs — the dominant quota
+// consumer). Deleting an absent key is a harmless no-op.
+function deleteMedia(databaseName, objectStoreName, id) {
+  if (typeof indexedDB === "undefined" || !id) return;
+  let openRequest = indexedDB.open(databaseName, 1);
+  openRequest.onupgradeneeded = function() {
+    let db = openRequest.result;
+    if (!db.objectStoreNames.contains(objectStoreName)) {
+      db.createObjectStore(objectStoreName);
+    }
+  }
+  openRequest.onerror = function() {
+    console.error("Error opening the database", openRequest.error);
+  }
+  openRequest.onsuccess = function() {
+    let db = openRequest.result;
+    let transaction = db.transaction(objectStoreName, "readwrite");
+    transaction.objectStore(objectStoreName).delete(id);
+  }
+}
+
 function saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName) {
-  
+
   // Open a connection to IndexedDB
   let openRequest = indexedDB.open(databaseName, 1);
 
@@ -243,7 +405,7 @@ function saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName)
     request.onsuccess = function() {
         console.log("Video saved successfully!");
     }
-  }    
+  }
 }
 
 function initializeDatabase(database, objectStoreName) {
@@ -270,10 +432,13 @@ function initializeDatabase(database, objectStoreName) {
 
 
 /*
- * Save the current HyperTranscript in the local storage
- * @param {string} filename - the name of the transcript file
- * @param {string} hypertranscriptDomId - the id of the hypertranscript dom element
- * @param {string} videoDomId - the id of the video dom element
+ * Save the current HyperTranscript in the local storage.
+ *
+ * Updates the ACTIVE entry in place when one is loaded (the given name then
+ * renames it); otherwise creates a new entry under a fresh ID. Names are
+ * de-duplicated with a " (2)" suffix rather than overwriting (#434).
+ *
+ * @param {string} filename - the display name for the entry
  * @return {void}
  */
 
@@ -293,16 +458,40 @@ function saveHyperTranscriptToLocalStorage(
     hypertranscript = transcriptCache.innerHTML;
   }
 
-
   let video = document.getElementById(videoDomId).src;
+
+  // A doc loaded from Recents carries a base64 data: URL as its src (getMedia
+  // sets it directly). Never serialise that payload into the localStorage JSON
+  // — the media already lives in IndexedDB under meta.mediaKey. Store a marker
+  // instead; the load path treats any non-http value the same way (→ getMedia).
+  if (video.indexOf("data:") === 0) {
+    video = "indexeddb:";
+  }
+
+  const existing = activeDocKey !== null ? readTranscriptEntry(activeDocKey, storage) : null;
+  const docKey = existing !== null ? activeDocKey : newDocKey();
+  const prevMeta = (existing !== null && existing.meta) ? existing.meta : {};
+  const desiredName = (typeof filename === "string" && filename.trim() !== "")
+    ? filename.trim()
+    : (prevMeta.name || "Untitled");
+  const now = Date.now();
+  const meta = {
+    updateCaptionsFromTranscript,
+    name: uniqueEntryName(desiredName, storage, docKey),
+    mediaKey: prevMeta.mediaKey || docKey,
+    created: prevMeta.created || now,
+    updated: now,
+  };
 
   // if media url begins with blob it means it's locally cached only for the session
   // we need to save the media to indexdb so that we can retrieve outside the session
+  // — but only once per document+source: debounced edit autosaves must not
+  // re-encode and re-write a large media blob on every pause in typing.
 
-  if (video.startsWith("blob:") === true) {
-    let objectStoreName = "media";
-    let databaseName = "hyperaudioMedia";
-    initializeDatabase(databaseName, objectStoreName)
+  const mediaStamp = docKey + '|' + video;
+  if (video.startsWith("blob:") === true && savedMediaStamp !== mediaStamp) {
+    savedMediaStamp = mediaStamp;
+    initializeDatabase(MEDIA_DATABASE, MEDIA_STORE)
     .then(() => {
       let blobURL = video;
 
@@ -313,7 +502,7 @@ function saveHyperTranscriptToLocalStorage(
         let blobData = "not defined";
         reader.onloadend = function() {
           blobData = reader.result;
-          saveVideoFromBlobURL(filename, blobData, databaseName, objectStoreName);
+          saveVideoFromBlobURL(meta.mediaKey, blobData, MEDIA_DATABASE, MEDIA_STORE);
         }
         reader.readAsDataURL(videoBlob);
       })
@@ -328,22 +517,216 @@ function saveHyperTranscriptToLocalStorage(
 
   let summary = document.getElementById("summary").innerHTML;
   let topics = document.getElementById("topics").innerHTML.split(", ");
+  // Only store real caption data (an empty track src would break the load
+  // path; captions left undefined make load fall into its regenerate branch).
   let captions = document.getElementById(vttId).src;
-  let meta = {"updateCaptionsFromTranscript": updateCaptionsFromTranscript};
+  if (typeof captions !== 'string' || captions.indexOf('data:') !== 0) {
+    captions = undefined;
+  }
+  // At auto-add time the track/summary/topics still belong to the PREVIOUS
+  // document (see suppressDerivedCapture) — store none of it.
+  if (suppressDerivedCapture === true) {
+    captions = undefined;
+    summary = "";
+    topics = [];
+  }
   let hypertranscriptstorage = new HyperTranscriptStorage(hypertranscript, video, summary, topics, captions, meta);
 
 
   try {
-    storage.setItem(filename + fileExtension, JSON.stringify(hypertranscriptstorage));
+    storage.setItem(docKey, JSON.stringify(hypertranscriptstorage));
+    activeDocKey = docKey;
   } catch (error) {
     if (error.name === 'QuotaExceededError') {
         console.error('Storage quota exceeded. Unable to save transcript:', error.message);
-        // You could add user notification here
-        alert('Local Storage full - please clear some space to save new transcripts');
+        showStorageNotice('Browser storage is full — delete an entry from Recents to make room.');
     } else {
         console.error('Error saving transcript:', error);
     }
   }
+}
+
+/*
+ * Rename an entry (meta.name only — the storage key and any cached media are
+ * untouched). The name is de-duplicated against other entries. `updated` is
+ * deliberately NOT bumped: renaming should not reorder the list.
+ * @return {boolean} whether the rename was applied
+ */
+function renameTranscriptEntry(fileKey, newName, storage = window.localStorage) {
+  const entry = readTranscriptEntry(fileKey, storage);
+  if (entry === null) return false;
+  const name = String(newName).trim();
+  if (name === "") return false;
+  if (name === entryName(fileKey, entry)) return true;
+  entry.meta = Object.assign({}, entry.meta, { name: uniqueEntryName(name, storage, fileKey) });
+  try {
+    storage.setItem(fileKey, JSON.stringify(entry));
+  } catch (error) {
+    console.error('Error renaming transcript:', error);
+    return false;
+  }
+  return true;
+}
+
+/*
+ * Delete an entry and its cached media. Works for unparseable legacy entries
+ * too (their media key is derived from the legacy name).
+ */
+function deleteTranscriptEntry(fileKey, storage = window.localStorage) {
+  const entry = readTranscriptEntry(fileKey, storage);
+  const mediaKey = entryMediaKey(fileKey, entry);
+  storage.removeItem(fileKey);
+  deleteMedia(MEDIA_DATABASE, MEDIA_STORE, mediaKey);
+  if (activeDocKey === fileKey) {
+    activeDocKey = null;
+  }
+}
+
+// Non-blocking notice above the Recents list — replaces the old blocking
+// alert(). Error tone auto-dismisses; opts {tone:'info', sticky:true} gives a
+// neutral note that stays until its ✕ is clicked (the autosave disclosure).
+function showStorageNotice(message, opts = {}) {
+  const picker = document.querySelector('#file-picker');
+  if (picker === null || picker.parentElement === null) return;
+  let el = document.getElementById('recents-notice');
+  if (el === null) {
+    el = document.createElement('div');
+    el.id = 'recents-notice';
+    picker.parentElement.insertBefore(el, picker);
+  }
+  el.setAttribute('role', opts.tone === 'info' ? 'status' : 'alert');
+  el.className = opts.tone === 'info' ? 'notice-info' : 'notice-error';
+  el.textContent = '';
+  el.appendChild(document.createTextNode(message));
+  el.dataset.hasAction = opts.action ? 'true' : 'false';
+  if (opts.action) {
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'recents-notice-action';
+    action.textContent = opts.action.label;
+    action.addEventListener('click', () => { el.remove(); opts.action.handler(); });
+    el.appendChild(action);
+  }
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.className = 'recents-notice-dismiss';
+  dismiss.setAttribute('aria-label', 'Dismiss');
+  dismiss.textContent = '✕';
+  dismiss.addEventListener('click', () => { el.remove(); });
+  el.appendChild(dismiss);
+  clearTimeout(showStorageNotice._timer);
+  if (opts.sticky !== true) {
+    showStorageNotice._timer = setTimeout(() => { el.remove(); }, 8000);
+  }
+}
+
+// A pending Restore offers to re-save the ON-SCREEN document; once the screen
+// holds something else (new transcription, another entry loaded) that offer
+// would save the wrong content under the old name — withdraw it. Only notices
+// carrying an action are removed; the one-time disclosure stays.
+function hideRestoreNotice() {
+  const el = document.getElementById('recents-notice');
+  if (el !== null && el.dataset.hasAction === 'true') el.remove();
+}
+
+/* ----------------------------------------------------------------------------
+ * Autosave (#435): every new transcription or import lands in Recents
+ * automatically, and edits autosave to the active entry.
+ *
+ * hyperaudioInit is the "a new document just landed" moment — all five
+ * transcription engines and the JSON/SRT/VTT import paths dispatch it, and
+ * neither the initial demo transcript nor a Recents load does, so listening
+ * here can never duplicate an existing entry. The entry is named after its
+ * media; edits then autosave debounced to the same entry.
+ * ------------------------------------------------------------------------- */
+
+const AUTOSAVE_NOTICE_FLAG = 'hyperaudioAutosaveNoticeShown';
+const AUTOSAVE_DEBOUNCE_MS = 2000;
+
+// Display name for the media the player holds: an http(s) src wins (fresh
+// remote URL beats a stale stamp — same preference as guessMediaSrc in
+// editor-core), then the stamped mediaRef (a local file's real name, or the
+// original URL for remote/HLS — #426).
+function mediaDisplayName() {
+  const player = document.querySelector('#hyperplayer');
+  if (player === null) return 'Untitled';
+  const ref = (/^https?:/i.test(player.src) ? player.src : player.dataset.mediaRef) || '';
+  return mediaNameFromRef(ref);
+}
+
+// Pure part of the above: URL → decoded basename of its path; a plain string
+// is already a filename; empty → 'Untitled'.
+function mediaNameFromRef(ref) {
+  if (!ref) return 'Untitled';
+  if (/^https?:/i.test(ref)) {
+    try {
+      const path = new URL(ref).pathname;
+      const base = decodeURIComponent(path.substring(path.lastIndexOf('/') + 1));
+      return base !== '' ? base : 'Untitled';
+    } catch (e) {
+      return 'Untitled';
+    }
+  }
+  return ref;
+}
+
+// One-time disclosure the first time something autosaves: storage is local to
+// this browser/device, and Recents is where to manage it. Informational, not
+// a permission gate — shown once ever (flag persists), dismissible.
+function maybeShowAutosaveNotice(storage = window.localStorage) {
+  try {
+    if (storage.getItem(AUTOSAVE_NOTICE_FLAG) !== null) return;
+    storage.setItem(AUTOSAVE_NOTICE_FLAG, String(Date.now()));
+  } catch (e) {
+    return;
+  }
+  showStorageNotice(
+    'Transcripts are saved to Recents automatically — stored in your browser, on this device only.',
+    { tone: 'info', sticky: true }
+  );
+}
+
+let autosaveTimer = null;
+
+function scheduleAutosave() {
+  if (activeDocKey === null) return; // nothing has landed yet this session
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    if (activeDocKey === null) return; // deleted while the timer was pending
+    const entry = readTranscriptEntry(activeDocKey, window.localStorage);
+    saveHyperTranscriptToLocalStorage(entry !== null ? entryName(activeDocKey, entry) : undefined);
+    loadLocalStorageOptions(); // reflect the new "updated" order
+  }, AUTOSAVE_DEBOUNCE_MS);
+}
+
+if (typeof document !== 'undefined') {
+  // A new transcription/import: always a NEW entry (never overwrite whatever
+  // was active before), named after its media.
+  window.document.addEventListener('hyperaudioInit', () => {
+    hideRestoreNotice();
+    activeDocKey = null;
+    suppressDerivedCapture = true;
+    try {
+      saveHyperTranscriptToLocalStorage(mediaDisplayName());
+    } finally {
+      suppressDerivedCapture = false;
+    }
+    loadLocalStorageOptions();
+    const saveInput = document.querySelector('#save-localstorage-filename');
+    if (saveInput !== null && activeDocKey !== null) {
+      saveInput.value = entryName(activeDocKey, readTranscriptEntry(activeDocKey, window.localStorage));
+    }
+    maybeShowAutosaveNotice();
+  }, false);
+
+  // Debounced autosave of edits — transcript (contenteditable) and caption
+  // editor inputs both bubble input events.
+  document.addEventListener('input', (event) => {
+    const target = event.target;
+    if (target && target.closest && target.closest('#hypertranscript, #caption-editor') !== null) {
+      scheduleAutosave();
+    }
+  });
 }
 
 // Escape text/keys interpolated into picker markup (#410) — a saved filename
@@ -356,7 +739,12 @@ function escapeStorageMarkup(text) {
     .replace(/"/g, '&quot;');
 }
 
+const RECENTS_RENAME_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+const RECENTS_DELETE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
+
 function loadLocalStorageOptions(storage = window.localStorage) {
+
+  migrateLegacyEntries(storage);
 
   let fileSelect = document.querySelector("#load-localstorage-filename");
   let filePicker = document.querySelector("#file-picker");
@@ -369,23 +757,36 @@ function loadLocalStorageOptions(storage = window.localStorage) {
   // ANY key is written — and other modules write keys at arbitrary times
   // (prefs on every toggle) — so a positional index resolved at click time
   // could load a different entry than the one listed.
-  for (let i = 0; i < storage.length; i++) {
-    if (storage.key(i).indexOf(fileExtension) > 0) {
-      const key = storage.key(i);
-      const filename = escapeStorageMarkup(key.substring(0, key.lastIndexOf(fileExtension)));
-      const keyAttr = escapeStorageMarkup(key);
-      fileSelect.insertAdjacentHTML("beforeend", `<option value="${keyAttr}">${filename}</option>`);
-      filePicker.insertAdjacentHTML("beforeend", `<li><a class="file-item" title="..." data-key="${keyAttr}">${filename}</a></li>`);
-    }
-  }
+  const rows = listDocEntries(storage);
+  rows.forEach(({ key, name }) => {
+    const keyAttr = escapeStorageMarkup(key);
+    const nameHtml = escapeStorageMarkup(name);
+    fileSelect.insertAdjacentHTML("beforeend", `<option value="${keyAttr}">${nameHtml}</option>`);
+    filePicker.insertAdjacentHTML("beforeend",
+      `<li class="recents-row"><a class="file-item" data-key="${keyAttr}">${nameHtml}</a>` +
+      `<span class="recents-actions">` +
+      `<button type="button" class="recents-rename" data-key="${keyAttr}" aria-label="Rename ${nameHtml}" title="Rename">${RECENTS_RENAME_SVG}</button>` +
+      `<button type="button" class="recents-delete" data-key="${keyAttr}" aria-label="Delete ${nameHtml}" title="Delete">${RECENTS_DELETE_SVG}</button>` +
+      `</span></li>`);
+  });
 
   setFileSelectListeners();
 
-  if (storage.length === 0) {
+  if (rows.length === 0) {
     // opacity 0.75 (not 0.55) so the composited grey still meets the 4.5:1
     // contrast ratio on the white card (#402)
     filePicker.insertAdjacentHTML("beforeend", `<li style="padding:8px 16px; opacity:0.75">No files saved.</li>`);
   }
+
+  markActiveRecentsRow();
+}
+
+// Highlight the row of the entry currently loaded in the editor (survives
+// re-renders, unlike the click-time class toggle alone).
+function markActiveRecentsRow() {
+  document.querySelectorAll('#file-picker .file-item').forEach((el) => {
+    el.classList.toggle('active', el.getAttribute('data-key') === activeDocKey);
+  });
 }
 
 function setFileSelectListeners() {
@@ -397,26 +798,145 @@ function setFileSelectListeners() {
     file.removeEventListener('mouseover', fileSelectHandleHover);
     file.addEventListener('mouseover', fileSelectHandleHover);
   });
+
+  document.querySelectorAll('.recents-rename').forEach((btn) => {
+    btn.removeEventListener('click', recentsRenameHandleClick);
+    btn.addEventListener('click', recentsRenameHandleClick);
+  });
+
+  document.querySelectorAll('.recents-delete').forEach((btn) => {
+    btn.removeEventListener('click', recentsDeleteHandleClick);
+    btn.addEventListener('click', recentsDeleteHandleClick);
+  });
 }
 
 function fileSelectHandleClick(event) {
-  loadHyperTranscriptFromLocalStorage(event.target.getAttribute("data-key"));
+  // a rename input lives inside the row's <a>; its clicks are not loads
+  if (event.target.classList && event.target.classList.contains('recents-rename-input')) {
+    return;
+  }
+  loadHyperTranscriptFromLocalStorage(event.currentTarget.getAttribute("data-key"));
 
-  let files = document.querySelectorAll('.file-item');
-
-  files.forEach(file => {
-    file.classList.remove("active");
-  });
-
-  event.target.classList.add("active");
+  markActiveRecentsRow();
   event.preventDefault();
   return false;
 }
 
 function fileSelectHandleHover(event) {
-  loadSummaryFromLocalStorage(event.target.getAttribute("data-key"), event.target);
+  loadSummaryFromLocalStorage(event.currentTarget.getAttribute("data-key"), event.currentTarget);
   event.preventDefault();
   return false;
+}
+
+/* ---- Recents row actions: rename (inline edit) and delete (two-step) ---- */
+
+function findRecentsItem(fileKey) {
+  return [...document.querySelectorAll('#file-picker .file-item')]
+    .find((el) => el.getAttribute('data-key') === fileKey) || null;
+}
+
+function recentsRenameHandleClick(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  startRecentsRename(event.currentTarget.getAttribute('data-key'));
+}
+
+// Swap the row label for a text input; Enter/blur commits, Escape cancels.
+// Re-rendering the list restores normal rows in every exit path.
+function startRecentsRename(fileKey, storage = window.localStorage) {
+  const item = findRecentsItem(fileKey);
+  if (item === null) return;
+  const currentName = entryName(fileKey, readTranscriptEntry(fileKey, storage));
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentName;
+  input.className = 'recents-rename-input';
+  input.setAttribute('aria-label', 'New name');
+  item.textContent = '';
+  item.appendChild(input);
+  input.focus();
+  input.select();
+
+  let finished = false;
+  const finish = (commit) => {
+    if (finished) return;
+    finished = true;
+    if (commit) {
+      renameTranscriptEntry(fileKey, input.value, storage);
+      if (activeDocKey === fileKey) {
+        const saveInput = document.querySelector('#save-localstorage-filename');
+        if (saveInput !== null) {
+          saveInput.value = entryName(fileKey, readTranscriptEntry(fileKey, storage));
+        }
+      }
+    }
+    loadLocalStorageOptions(storage);
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') finish(true);
+    if (e.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (e) => e.stopPropagation());
+}
+
+// First click arms the button ("Delete?"), second click within the window
+// deletes; the timeout restores the button without re-rendering the list (a
+// re-render could interrupt a rename in progress on another row).
+function recentsDeleteHandleClick(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const btn = event.currentTarget;
+
+  if (btn.dataset.confirming !== 'true') {
+    btn.dataset.confirming = 'true';
+    btn.classList.add('confirming');
+    btn.textContent = 'Delete?';
+    btn._resetTimer = setTimeout(() => {
+      btn.dataset.confirming = 'false';
+      btn.classList.remove('confirming');
+      btn.innerHTML = RECENTS_DELETE_SVG;
+    }, 4000);
+    return;
+  }
+
+  clearTimeout(btn._resetTimer);
+  const fileKey = btn.getAttribute('data-key');
+  const wasActive = activeDocKey === fileKey;
+  const name = entryName(fileKey, readTranscriptEntry(fileKey, window.localStorage));
+  deleteTranscriptEntry(fileKey);
+  loadLocalStorageOptions();
+
+  // Deleting the LOADED entry leaves the document on screen (the only undo
+  // there is), but autosave stops with it — say so, and offer the undo.
+  if (wasActive) {
+    showStorageNotice('Removed from Recents. The transcript is still on screen but no longer being saved.', {
+      tone: 'info',
+      sticky: true,
+      action: { label: 'Restore', handler: () => restoreDeletedTranscript(name) },
+    });
+  }
+}
+
+// Undo for deleting the loaded entry: re-save the on-screen document as a
+// fresh entry under its old name. Its media blob was deleted with the entry,
+// so put the media back too — a data: src (loaded from IndexedDB) is written
+// directly; a blob: src re-saves through the normal path (stamp reset).
+function restoreDeletedTranscript(name) {
+  activeDocKey = null;
+  savedMediaStamp = null;
+  saveHyperTranscriptToLocalStorage(name);
+  if (activeDocKey !== null) {
+    const player = document.querySelector('#hyperplayer');
+    if (player !== null && player.src.indexOf('data:') === 0) {
+      const entry = readTranscriptEntry(activeDocKey, window.localStorage);
+      const mediaKey = entry && entry.meta && entry.meta.mediaKey;
+      if (mediaKey) saveVideoFromBlobURL(mediaKey, player.src, MEDIA_DATABASE, MEDIA_STORE);
+    }
+  }
+  loadLocalStorageOptions();
 }
 
 // Read an entry by its key string. A corrupted value must not throw out of the
@@ -440,20 +960,54 @@ function loadHyperTranscriptFromLocalStorage(fileKey, storage = window.localStor
       && typeof hypertranscriptstorage.hypertranscript === 'string'
       && typeof hypertranscriptstorage.video === 'string') {
 
-    lastFilename = fileKey.substring(0, fileKey.lastIndexOf(fileExtension));
-    renderTranscript(hypertranscriptstorage, lastFilename);
+    hideRestoreNotice();
+    activeDocKey = fileKey;
+    renderTranscript(hypertranscriptstorage, entryMediaKey(fileKey, hypertranscriptstorage));
 
-    document.querySelector('#save-localstorage-filename').value = lastFilename;
+    document.querySelector('#save-localstorage-filename').value = entryName(fileKey, hypertranscriptstorage);
   } else if (hypertranscriptstorage) {
     console.warn(`Saved entry "${fileKey}" is missing transcript/video fields — not loading.`);
   }
 }
 
+// Tooltip preview on hover — only when there is actually something to show.
+// Unconditionally setting it gave entries with no summary/topics a stray
+// tooltip reading just "Topics:".
 function loadSummaryFromLocalStorage(fileKey, target, storage = window.localStorage){
 
   let hypertranscriptstorage = readTranscriptEntry(fileKey, storage);
+  if (hypertranscriptstorage === null) return;
 
-  if (hypertranscriptstorage && hypertranscriptstorage.summary !== undefined) {
-    target.setAttribute("title", hypertranscriptstorage.summary + "\n\nTopics: " + getTopicsString(hypertranscriptstorage.topics));
+  const summary = typeof hypertranscriptstorage.summary === 'string'
+    ? hypertranscriptstorage.summary.trim() : '';
+  const topics = getTopicsString(hypertranscriptstorage.topics);
+  const parts = [];
+  if (summary !== '') parts.push(summary);
+  if (topics !== '') parts.push('Topics: ' + topics);
+
+  if (parts.length > 0) {
+    target.setAttribute("title", parts.join("\n\n"));
+  } else {
+    target.removeAttribute("title");
   }
+}
+
+// Export pure helpers for the unit lane (#434); the file only declares
+// functions at load time, so requiring it in Node is safe (deleteMedia guards
+// on indexedDB being present).
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    isDocKey,
+    isLegacyKey,
+    entryName,
+    entryMediaKey,
+    uniqueEntryName,
+    listDocEntries,
+    migrateLegacyEntries,
+    renameTranscriptEntry,
+    deleteTranscriptEntry,
+    readTranscriptEntry,
+    escapeStorageMarkup,
+    mediaNameFromRef,
+  };
 }
