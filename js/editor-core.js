@@ -175,25 +175,38 @@
   // edits otherwise persist; localStorage load manages its own cache.
   window.document.addEventListener('hyperaudioInit', () => { captionCache = null; }, false);
 
-  document.querySelector('#caption-editor-btn').addEventListener('click', (e) => {
+  // Segmented view switch (transcript/captions): both segments stay clickable
+  // and the active one is marked by the track's thumb + aria-pressed rather
+  // than disabled.
+  // Clicking the active segment is a no-op — the transcription engines rely on
+  // that when they force transcript view by clicking #transcript-editor-btn.
+  const transcriptViewBtn = document.querySelector('#transcript-editor-btn');
+  const captionViewBtn = document.querySelector('#caption-editor-btn');
+
+  function reflectViewSwitch() {
+    document.querySelector('#view-switch').classList.toggle('captions-active', captionMode === true);
+    captionViewBtn.setAttribute('aria-pressed', String(captionMode === true));
+    transcriptViewBtn.setAttribute('aria-pressed', String(captionMode !== true));
+  }
+
+  captionViewBtn.addEventListener('click', () => {
+    if (captionMode === true) return;
     let holder = document.querySelector('.transcript-holder');
     transcriptCache = holder.cloneNode(true);
     captionMode = true;
     hyperaudioGenerateCaptionsFromTranscript();
-    document.querySelector('#caption-editor-btn').disabled = true;
-    document.querySelector('#transcript-editor-btn').disabled = false;
+    reflectViewSwitch();
   });
 
-  document.querySelector('#transcript-editor-btn').addEventListener('click', (e) => {
+  transcriptViewBtn.addEventListener('click', () => {
+    if (captionMode !== true) return;
     restoreTranscript();
     captionMode = false;
     if (transcriptRequiresInit === true) {
       hyperaudio();
       transcriptRequiresInit = false;
     }
-    
-    document.querySelector('#caption-editor-btn').disabled = false;
-    document.querySelector('#transcript-editor-btn').disabled = true;
+    reflectViewSwitch();
   });
 
 
@@ -766,6 +779,11 @@
         sidebarOpen = true;
       }
 
+      document.querySelector('#sidebar-toggle').setAttribute('aria-pressed', String(sidebarOpen));
+      // lets the CSS align the navbar's leading edge with the transcript card,
+      // whose left gutter differs between the open and collapsed layouts
+      document.body.classList.toggle('sidebar-collapsed', sidebarOpen === false);
+
       if(
         document.pictureInPictureEnabled &&
         !videoElement.disablePictureInPicture) {
@@ -780,7 +798,16 @@
         }
       }
     });
-    
+
+    // On small screens the same button opens the Recents drawer instead
+    // (responsive.js intercepts the click), so when the layout returns to
+    // desktop restore aria-pressed to the desktop sidebar state.
+    window.matchMedia('(max-width: 948px)').addEventListener('change', (ev) => {
+      if (!ev.matches) {
+        document.querySelector('#sidebar-toggle').setAttribute('aria-pressed', String(sidebarOpen));
+      }
+    });
+
     let showSpeakers = document.querySelector('#show-speakers');
 
     showSpeakers.addEventListener('change', function(e) {

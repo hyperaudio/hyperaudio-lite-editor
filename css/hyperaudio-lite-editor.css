@@ -867,3 +867,89 @@ label[data-a11y-wired]:focus-visible {
     margin-top: 27px;
   }
 }
+
+/* Transcript/captions view switch: a recessed track with a raised thumb that
+   slides under the active segment, so the current view reads as a position in
+   a switch — distinct from the filled action buttons beside it. Colors come
+   from the daisyUI theme vars (base-200 track, base-100 thumb). */
+#view-switch {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 0.5rem;
+  background-color: oklch(var(--b3));
+  margin-right: 16px;
+}
+#view-switch::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 44px;
+  height: 40px;
+  border-radius: 0.375rem;
+  background-color: oklch(var(--b1));
+  box-shadow: 0 1px 3px oklch(var(--bc) / 0.25);
+  transition: transform 0.15s ease-out;
+}
+#view-switch.captions-active::before {
+  transform: translateX(44px);
+}
+@media (prefers-reduced-motion: reduce) {
+  #view-switch::before { transition: none; }
+}
+#view-switch .btn {
+  position: relative; /* sits above the sliding thumb */
+  width: 44px;
+  height: 40px;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  color: oklch(var(--bc) / 0.4);
+}
+#view-switch .btn:hover {
+  background: transparent;
+  color: oklch(var(--bc) / 0.75);
+}
+#view-switch .btn[aria-pressed="true"] {
+  color: oklch(var(--bc));
+}
+
+/* Soften the navbar's outline buttons to sit in the same family as the view
+   switch: quiet base-300 borders and a tint hover, instead of daisyUI's
+   near-black border + black-fill hover inversion, which read heavier than
+   everything around them. */
+.navbar .btn-outline {
+  border-color: oklch(var(--b3));
+  color: oklch(var(--bc) / 0.75);
+  background-color: oklch(var(--b1));
+}
+.navbar .btn-outline:hover {
+  border-color: oklch(var(--bc) / 0.3);
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc));
+}
+
+/* Align the navbar's left edge with the transcript card: the card sits flush
+   with .main-panel while the sidebar is open (left offset 0) and floats with a
+   16px gutter when collapsed, so the navbar's leading padding follows suit —
+   animated to track the card's 0.5s slide. Desktop two-pane only; the
+   small-screen layout keeps the default navbar padding. The .main-panel
+   prefix beats DaisyUI's single-class .navbar padding (tailwind-min.css
+   loads after this file). */
+@media screen and (min-width: 949px) {
+  .main-panel .navbar {
+    padding-left: 0;
+    /* Optically centre the buttons in the full band between the screen top
+       and the transcript card's top (78px): the borderless navbar reads as
+       one space with the 8px floating-card gap below it, so geometric
+       centring in the 70px navbar alone left them sitting 4px high. The
+       margin shifts the whole centred bar; the card is absolutely
+       positioned, so nothing else moves. */
+    margin-top: 4px;
+    transition: padding-left 0.5s ease;
+  }
+  body.sidebar-collapsed .main-panel .navbar {
+    padding-left: 16px;
+  }
+}
