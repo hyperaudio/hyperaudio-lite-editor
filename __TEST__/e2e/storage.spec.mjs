@@ -75,21 +75,23 @@ test('legacy name-keyed entries migrate to stable ID keys on first list render (
   expect(r.names).toEqual(['alpha', 'beta']);
 });
 
-test('rows order by last-updated, newest first; undated entries follow alphabetically (#434)', async ({ page }) => {
-  await seed(page);
+test('rows order by last edit, falling back to creation date; migrated entries carry a date (#434)', async ({ page }) => {
+  await seed(page); // alpha + beta migrate with created = migration time
   await page.evaluate(() => {
-    const entry = (name, updated) => JSON.stringify({
+    const entry = (name, meta) => JSON.stringify({
       hypertranscript: '<article><section><p><span data-m="0" data-d="1">x </span></p></section></article>',
       video: 'https://example.com/a.mp3', summary: 's', topics: [],
-      meta: updated ? { name, updated } : { name },
+      meta: Object.assign({ name }, meta),
     });
-    localStorage.setItem('hyperaudio:doc:t1', entry('older', 1000));
-    localStorage.setItem('hyperaudio:doc:t2', entry('newest', 3000));
+    const now = Date.now();
+    localStorage.setItem('hyperaudio:doc:t1', entry('edited-recently', { updated: now + 100000 }));
+    localStorage.setItem('hyperaudio:doc:t2', entry('created-recently', { created: now + 50000 })); // never edited
     loadLocalStorageOptions();
   });
   const names = await page.evaluate(() =>
     [...document.querySelectorAll('.file-item')].map((a) => a.textContent));
-  expect(names).toEqual(['newest', 'older', 'alpha', 'beta']);
+  // migrated alpha/beta share a creation stamp → tie broken alphabetically
+  expect(names).toEqual(['edited-recently', 'created-recently', 'alpha', 'beta']);
 });
 
 test('rename via the row action edits the name in place; the key is untouched (#434)', async ({ page }) => {

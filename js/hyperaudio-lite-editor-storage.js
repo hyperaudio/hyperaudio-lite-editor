@@ -109,18 +109,21 @@ function uniqueEntryName(desired, storage, excludeKey) {
   return `${desired} (${n})`;
 }
 
-// All saved entries as {key, name, updated}, newest-updated first; entries
-// with no timestamp (freshly migrated legacy) sort below, alphabetically.
+// All saved entries as {key, name, updated}, last-edited first — an entry
+// never edited since creation sorts by its creation date (save stamps both,
+// migration stamps created). Ties, and entries with no date at all, break
+// alphabetically.
 function listDocEntries(storage) {
   const rows = [];
   for (let i = 0; i < storage.length; i++) {
     const key = storage.key(i);
     if (!isDocKey(key) && !isLegacyKey(key)) continue;
     const entry = readTranscriptEntry(key, storage);
+    const meta = (entry && entry.meta) || {};
     rows.push({
       key,
       name: entryName(key, entry),
-      updated: (entry && entry.meta && entry.meta.updated) || 0,
+      updated: meta.updated || meta.created || 0,
     });
   }
   rows.sort((a, b) => (b.updated - a.updated) || a.name.localeCompare(b.name));
@@ -139,7 +142,9 @@ function migrateLegacyEntries(storage) {
     const entry = readTranscriptEntry(key, storage);
     if (!entry || typeof entry.hypertranscript !== "string") return; // leave it; still listed + deletable
     const name = legacyNameFromKey(key);
-    entry.meta = Object.assign({}, entry.meta, { name, mediaKey: name });
+    // The true creation date was never recorded — stamp migration time as the
+    // proxy so the entry sorts by date (updated || created) from here on.
+    entry.meta = Object.assign({}, entry.meta, { name, mediaKey: name, created: Date.now() });
     try {
       storage.setItem(newDocKey(), JSON.stringify(entry));
       storage.removeItem(key);

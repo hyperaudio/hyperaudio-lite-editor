@@ -56,6 +56,7 @@ test('migration: legacy entry moves to an ID key, name and mediaKey preserved', 
   const migrated = JSON.parse(s.getItem(rows[0].key));
   assert.equal(migrated.meta.name, 'interview');
   assert.equal(migrated.meta.mediaKey, 'interview'); // media stays under its legacy key
+  assert.ok(migrated.meta.created > 0); // stamped so the entry sorts by date from now on
   assert.equal(migrated.hypertranscript.includes('data-m'), true);
 });
 
@@ -86,14 +87,16 @@ test('uniqueEntryName: suffixes instead of colliding, own key excluded', () => {
   assert.equal(uniqueEntryName('interview', s, 'hyperaudio:doc:one'), 'interview');
 });
 
-test('listDocEntries: newest-updated first; entries without timestamps sort last, alphabetically', () => {
+test('listDocEntries: last-edited first, creation date stands in when never edited', () => {
   const s = fakeStorage({
     'hyperaudio:doc:a': entry({ meta: { name: 'older', updated: 1000 } }),
     'hyperaudio:doc:b': entry({ meta: { name: 'newest', updated: 3000 } }),
-    'hyperaudio:doc:c': entry({ meta: { name: 'zeta' } }),
-    'hyperaudio:doc:d': entry({ meta: { name: 'alpha' } }),
+    'hyperaudio:doc:c': entry({ meta: { name: 'created-only', created: 2000 } }), // never edited → creation date
+    'hyperaudio:doc:d': entry({ meta: { name: 'zeta' } }),  // no dates at all →
+    'hyperaudio:doc:e': entry({ meta: { name: 'alpha' } }), // bottom, alphabetical
   });
-  assert.deepEqual(listDocEntries(s).map((r) => r.name), ['newest', 'older', 'alpha', 'zeta']);
+  assert.deepEqual(listDocEntries(s).map((r) => r.name),
+    ['newest', 'created-only', 'older', 'alpha', 'zeta']);
 });
 
 test('rename: one-field update, de-duplicated, key untouched; empty name rejected', () => {
