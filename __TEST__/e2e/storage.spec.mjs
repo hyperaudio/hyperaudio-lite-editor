@@ -200,14 +200,16 @@ test('a very long name truncates with ellipsis instead of pushing the actions of
   });
   const r = await page.evaluate(() => {
     const picker = document.querySelector('#file-picker').getBoundingClientRect();
-    const row = document.querySelector('.recents-row'); // newest first — the long one
-    const actions = row.querySelector('.recents-actions').getBoundingClientRect();
-    const name = row.querySelector('.file-item');
+    const name = [...document.querySelectorAll('.file-item')]
+      .find((a) => a.textContent.startsWith('A_really_long_interview_'));
+    const actions = name.closest('.recents-row').querySelector('.recents-actions').getBoundingClientRect();
     return {
+      pickerVisible: picker.width > 0,
       actionsInside: actions.right <= picker.right + 1,
       truncated: name.scrollWidth > name.clientWidth,
     };
   });
+  expect(r.pickerVisible).toBe(true);
   expect(r.actionsInside).toBe(true);
   expect(r.truncated).toBe(true);
 });
