@@ -779,6 +779,8 @@
         sidebarOpen = true;
       }
 
+      document.querySelector('#sidebar-toggle').setAttribute('aria-pressed', String(sidebarOpen));
+
       if(
         document.pictureInPictureEnabled &&
         !videoElement.disablePictureInPicture) {
@@ -793,7 +795,16 @@
         }
       }
     });
-    
+
+    // On small screens the same button opens the Recents drawer instead
+    // (responsive.js intercepts the click), so when the layout returns to
+    // desktop restore aria-pressed to the desktop sidebar state.
+    window.matchMedia('(max-width: 948px)').addEventListener('change', (ev) => {
+      if (!ev.matches) {
+        document.querySelector('#sidebar-toggle').setAttribute('aria-pressed', String(sidebarOpen));
+      }
+    });
+
     let showSpeakers = document.querySelector('#show-speakers');
 
     showSpeakers.addEventListener('change', function(e) {
