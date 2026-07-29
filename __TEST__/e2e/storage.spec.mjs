@@ -1,8 +1,12 @@
-// Storage picker regression net (#410): saved projects are referenced by KEY
-// STRING, not by storage.key(i) position — positional indices shift whenever
-// any other module writes a key (the transcribe prefs do so on every toggle),
-// which loaded the wrong entry or threw. Also: corrupted entries must not kill
-// the click handler, and filenames must render as text, not markup.
+// Storage picker regression net (#410) + the Recents storage model (#434):
+// saved projects are referenced by KEY STRING, not by storage.key(i) position
+// — positional indices shift whenever any other module writes a key (the
+// transcribe prefs do so on every toggle), which loaded the wrong entry or
+// threw. Corrupted entries must not kill the click handler, and filenames must
+// render as text, not markup. Since #434, entries are keyed by stable ID with
+// the display name in meta (legacy name-keyed entries migrate on first list
+// render), rows can be renamed inline and deleted (two-step), and the list
+// orders by last-updated.
 import { test, expect } from '@playwright/test';
 
 const seed = (page) => page.evaluate(() => {
@@ -57,6 +61,93 @@ test('a corrupted entry does not throw and the picker keeps working (#410)', asy
   await page.waitForTimeout(300);
   expect(errors).toEqual([]);
   expect(await page.evaluate(() => document.querySelector('#hypertranscript').textContent)).toContain('ALPHA');
+});
+
+test('legacy name-keyed entries migrate to stable ID keys on first list render (#434)', async ({ page }) => {
+  await seed(page);
+  const r = await page.evaluate(() => ({
+    legacyKeys: Object.keys(localStorage).filter((k) => k.endsWith('.hyperaudio')),
+    docKeys: Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')),
+    names: [...document.querySelectorAll('.file-item')].map((a) => a.textContent).sort(),
+  }));
+  expect(r.legacyKeys).toEqual([]);
+  expect(r.docKeys.length).toBe(2);
+  expect(r.names).toEqual(['alpha', 'beta']);
+});
+
+test('rows order by last-updated, newest first; undated entries follow alphabetically (#434)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    const entry = (name, updated) => JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="1">x </span></p></section></article>',
+      video: 'https://example.com/a.mp3', summary: 's', topics: [],
+      meta: updated ? { name, updated } : { name },
+    });
+    localStorage.setItem('hyperaudio:doc:t1', entry('older', 1000));
+    localStorage.setItem('hyperaudio:doc:t2', entry('newest', 3000));
+    loadLocalStorageOptions();
+  });
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('.file-item')].map((a) => a.textContent));
+  expect(names).toEqual(['newest', 'older', 'alpha', 'beta']);
+});
+
+test('rename via the row action edits the name in place; the key is untouched (#434)', async ({ page }) => {
+  await seed(page);
+  const keysBefore = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).sort());
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
+  await row.hover();
+  await row.locator('.recents-rename').click();
+  const input = page.locator('.recents-rename-input');
+  await input.fill('interview notes');
+  await input.press('Enter');
+  await expect(page.locator('.file-item', { hasText: 'interview notes' })).toHaveCount(1);
+  const after = await page.evaluate(() => ({
+    keys: Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).sort(),
+    names: Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:'))
+      .map((k) => JSON.parse(localStorage.getItem(k)).meta.name).sort(),
+  }));
+  expect(after.keys).toEqual(keysBefore);
+  expect(after.names).toEqual(['beta', 'interview notes']);
+});
+
+test('escape cancels a rename without changing the name (#434)', async ({ page }) => {
+  await seed(page);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
+  await row.hover();
+  await row.locator('.recents-rename').click();
+  const input = page.locator('.recents-rename-input');
+  await input.fill('should-not-stick');
+  await input.press('Escape');
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('.file-item')].map((a) => a.textContent).sort());
+  expect(names).toEqual(['alpha', 'beta']);
+});
+
+test('delete is two-step and removes the entry (#434)', async ({ page }) => {
+  await seed(page);
+  const row = page.locator('.recents-row', { has: page.locator('.file-item', { hasText: 'alpha' }) });
+  await row.hover();
+  const del = row.locator('.recents-delete');
+  await del.click();
+  // armed, not deleted
+  await expect(del).toHaveText('Delete?');
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(2);
+  await del.click();
+  await expect(page.locator('.file-item', { hasText: 'alpha' })).toHaveCount(0);
+  await expect(page.locator('.file-item', { hasText: 'beta' })).toHaveCount(1);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('hyperaudio:doc:')).length)).toBe(1);
+});
+
+test('clicking a row loads it and marks it active; the highlight survives a re-render (#434)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  await expect(page.locator('.file-item.active')).toHaveText('beta');
+  await page.evaluate(() => loadLocalStorageOptions());
+  await expect(page.locator('.file-item.active')).toHaveText('beta');
 });
 
 test('a filename containing markup renders as text (#410)', async ({ page }) => {
