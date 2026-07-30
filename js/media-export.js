@@ -560,7 +560,8 @@
   const adjustPanel = document.getElementById('export-adjust-panel');
   const speedInput = document.getElementById('export-speed');
   const speedSlider = document.getElementById('export-speed-slider');
-  const lengthInput = document.getElementById('export-length');
+  const lengthMinInput = document.getElementById('export-length-min');
+  const lengthSecInput = document.getElementById('export-length-sec');
   const lengthOrigEl = document.getElementById('export-length-orig');
   const adjustReadout = document.getElementById('export-adjust-readout');
   const retimeRow = document.getElementById('export-retime-row');
@@ -617,31 +618,44 @@
     s = Math.max(0, Math.round(s));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
-  const parseLen = (str) => {
-    const t = String(str).trim();
-    if (t === '') return NaN;
-    if (t.includes(':')) {
-      const [m, s] = t.split(':');
-      const mm = parseInt(m, 10), ss = parseInt(s, 10);
-      return (isNaN(mm) || isNaN(ss)) ? NaN : mm * 60 + ss;
-    }
-    const n = parseFloat(t);
-    return isNaN(n) ? NaN : n;
+  // The target length is entered as SEPARATE minutes/seconds boxes (#441):
+  // the old single m:ss text field read a bare "15" as 15 seconds, so a
+  // 16-minute video typed as "15" computed a 64x rate, slammed into the 4x
+  // cap and rewrote the field to ~4:00 with no explanation. Explicit unit
+  // boxes remove the guessing entirely.
+  const setLengthBoxes = (secondsTotal) => {
+    if (lengthMinInput === null || lengthSecInput === null) return;
+    const s = Math.max(0, Math.round(secondsTotal));
+    lengthMinInput.value = String(Math.floor(s / 60));
+    lengthSecInput.value = String(s % 60);
+  };
+  const readLengthBoxes = () => {
+    if (lengthMinInput === null || lengthSecInput === null) return 0;
+    const m = parseInt(lengthMinInput.value, 10);
+    const s = parseFloat(lengthSecInput.value);
+    // an over-full seconds box (e.g. 90) just rolls over on the reformat
+    return (isNaN(m) ? 0 : Math.max(0, m)) * 60 + (isNaN(s) ? 0 : Math.max(0, s));
   };
 
-  const updateAdjustReadout = () => {
+  // Two fixed lines (white-space:pre-line + reserved min-height in the
+  // markup): the outcome on the first, any warning/cap note on the second —
+  // variable-length single-line text made the modal reflow.
+  const updateAdjustReadout = (capNote = '') => {
     if (adjustReadout === null) return;
     const rate = clampRate(parseFloat(speedInput.value));
     const len = currentContentLength() / rate;
-    const warn = (rate < 0.5 || rate > 2) ? '  ⚠ noticeable quality loss' : '';
-    adjustReadout.textContent = `→ ${fmtLen(len)} at ${+rate.toFixed(2)}×, pitch preserved${warn}`;
+    const warn = (rate < 0.5 || rate > 2) ? '⚠ noticeable quality loss' : '';
+    const second = capNote !== '' ? `⚠ ${capNote}` : warn;
+    adjustReadout.textContent =
+      `→ ${fmtLen(len)} at ${+rate.toFixed(2)}×, pitch preserved` +
+      (second !== '' ? `\n${second}` : '');
   };
   // Speed is the source of truth; mirror it to the slider and derive the length.
   const syncFromSpeed = () => {
     const rate = clampRate(parseFloat(speedInput.value));
     speedInput.value = String(+rate.toFixed(2));
     if (speedSlider !== null) speedSlider.value = String(rate);
-    if (lengthInput !== null) lengthInput.value = fmtLen(currentContentLength() / rate);
+    setLengthBoxes(currentContentLength() / rate);
     updateAdjustReadout();
   };
   const syncFromSlider = () => {
@@ -649,12 +663,31 @@
     syncFromSpeed();
   };
   const syncFromLength = () => {
-    const target = parseLen(lengthInput.value);
+    const target = readLengthBoxes();
     const content = currentContentLength();
+    // When the target can't be met, say WHY in the readout — the old silent
+    // snap to the capped value read as a glitch.
+    let note = '';
     if (target > 0 && content > 0) {
-      speedInput.value = String(+clampRate(content / target).toFixed(2));
+      const raw = content / target;
+      const rate = clampRate(raw);
+      speedInput.value = String(+rate.toFixed(2));
+      if (speedSlider !== null) speedSlider.value = String(rate);
+      if (raw > RATE_MAX) {
+        note = `capped at ${RATE_MAX}× — the shortest is ${fmtLen(content / RATE_MAX)}`;
+      } else if (raw < RATE_MIN) {
+        note = `capped at ${RATE_MIN}× — the longest is ${fmtLen(content / RATE_MIN)}`;
+      }
     }
-    syncFromSpeed();   // reformat length to the (possibly clamped) rate
+    // The boxes hold the USER'S REQUESTED length and are deliberately not
+    // rewritten here — reformatting on every change fought sequential
+    // min→sec entry (the min box's change event fires when focus moves on).
+    // The readout shows the length actually delivered; only an over-full
+    // seconds box (90 → 1:30) is normalised.
+    if (lengthSecInput !== null && parseFloat(lengthSecInput.value) >= 60) {
+      setLengthBoxes(target);
+    }
+    updateAdjustReadout(note);
   };
   const updateAdjustVisibility = () => {
     if (adjustPanel === null || adjustCheck === null || adjustRow === null) return;
@@ -904,7 +937,8 @@
     });
     speedInput.addEventListener('input', () => { syncFromSpeed(); saveExportOpts(); });
     if (speedSlider !== null) speedSlider.addEventListener('input', () => { syncFromSlider(); saveExportOpts(); });
-    lengthInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
+    if (lengthMinInput !== null) lengthMinInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
+    if (lengthSecInput !== null) lengthSecInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
   }
   [burnCheck, retimeCheck, vttCheck, srtCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', saveExportOpts);
