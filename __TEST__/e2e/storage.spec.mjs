@@ -422,6 +422,85 @@ test('edits autosave (debounced) to the active entry and bump its updated stamp 
   expect(after.meta.updated).toBeGreaterThan(before.updated);
 });
 
+test('a Recents load restores the media reference for the interactive export (#426)', async ({ page }) => {
+  await seed(page);
+  // a local-media doc: video is the indexeddb: marker, the blob is cached
+  // under meta.mediaKey, and meta.mediaRef holds the original filename
+  await page.evaluate(() => new Promise((resolve) => {
+    const open = indexedDB.open('hyperaudioMedia', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('media');
+    open.onsuccess = () => {
+      const tx = open.result.transaction('media', 'readwrite');
+      tx.objectStore('media').put('data:audio/mp3;base64,AAAA', 'm-key');
+      tx.oncomplete = () => resolve();
+    };
+  }));
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:localdoc', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="500">LOCAL </span></p></section></article>',
+      video: 'indexeddb:', summary: '', topics: [],
+      meta: { name: 'my doc', mediaKey: 'm-key', mediaRef: 'clip.mp4', updated: 5000 },
+    }));
+    loadLocalStorageOptions();
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'my doc').click();
+  });
+  await page.waitForTimeout(400);
+  const r = await page.evaluate(() => {
+    const modal = document.getElementById('interactive-export-modal');
+    modal.checked = true;
+    modal.dispatchEvent(new Event('change'));
+    return {
+      stamped: document.getElementById('hyperplayer').dataset.mediaRef,
+      dialogValue: document.getElementById('interactive-media-filename').value,
+      playerSrc: document.getElementById('hyperplayer').src,
+    };
+  });
+  expect(r.stamped).toBe('clip.mp4');
+  expect(r.dialogValue).toBe('clip.mp4');
+  expect(r.playerSrc.startsWith('data:')).toBe(true); // the cached media loaded
+
+  // autosave must carry the reference through the meta rebuild
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'LOCAL-EDIT ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(2600);
+  expect(await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('hyperaudio:doc:localdoc')).meta.mediaRef)).toBe('clip.mp4');
+});
+
+test('a pre-mediaRef entry whose name is still the media filename backfills the reference (#426)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:old', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="500">OLD </span></p></section></article>',
+      video: 'indexeddb:', summary: '', topics: [],
+      meta: { name: 'clapper-march-13.mp4', mediaKey: 'nope', updated: 5000 }, // no mediaRef
+    }));
+    loadLocalStorageOptions();
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'clapper-march-13.mp4').click();
+  });
+  await page.waitForTimeout(300);
+  const r = await page.evaluate(() => {
+    const modal = document.getElementById('interactive-export-modal');
+    modal.checked = true;
+    modal.dispatchEvent(new Event('change'));
+    return document.getElementById('interactive-media-filename').value;
+  });
+  expect(r).toBe('clapper-march-13.mp4');
+});
+
+test('an entry predating mediaRef clears the stamp instead of offering stale media (#426)', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    document.getElementById('hyperplayer').dataset.mediaRef = 'stale-previous.mp4';
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'alpha').click();
+  });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').dataset.mediaRef)).toBeUndefined();
+});
+
 test('a filename containing markup renders as text (#410)', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {
