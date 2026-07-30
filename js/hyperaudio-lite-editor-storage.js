@@ -237,11 +237,27 @@ function renderTranscript(
   // file, so a stale cue from the old transcript can't stay painted (#356/#287).
   resetCaptionTrack(videoDomId, vttId);
 
-  // Drop any media reference stamped by a previous local/remote load so the
-  // interactive-transcript export can't offer it for this Recents entry (a remote
-  // http src is read from the player directly; a local one falls back to empty).
+  // Re-stamp the media reference from the entry itself so the interactive-
+  // transcript export can offer it (meta.mediaRef, saved with the doc).
+  // Backfill for entries saved before that field existed: an auto-added
+  // entry's NAME defaults to the media filename, so a name that still looks
+  // like one IS the reference (the next autosave then persists it). A doc
+  // renamed to something without a media extension clears the stamp instead —
+  // offering stale previously-loaded media would be worse than offering none.
   const loadedVideo = document.getElementById(videoDomId);
-  if (loadedVideo) delete loadedVideo.dataset.mediaRef;
+  if (loadedVideo) {
+    const meta = hypertranscriptstorage.meta || {};
+    let storedRef = (typeof meta.mediaRef === 'string') ? meta.mediaRef : '';
+    if (storedRef === '' && typeof meta.name === 'string' &&
+        /\.(mp4|webm|ogv|ogg|mov|m4v|mkv|mp3|m4a|wav|aac|flac|opus)$/i.test(meta.name.trim())) {
+      storedRef = meta.name.trim();
+    }
+    if (storedRef !== '') {
+      loadedVideo.dataset.mediaRef = storedRef;
+    } else {
+      delete loadedVideo.dataset.mediaRef;
+    }
+  }
 
   let hypertranscriptElement = document.getElementById(hypertranscriptDomId);
 
@@ -260,7 +276,14 @@ function renderTranscript(
   if (hypertranscriptstorage['video'].startsWith("http") === true) {
     document.getElementById(videoDomId).src = hypertranscriptstorage['video'];
   } else {
-    //load from indexedDB
+    // load from indexedDB — clearing the previous (e.g. demo, or prior doc's
+    // remote) src FIRST: it would otherwise linger until the blob arrives, or
+    // forever if the cached media is missing, and an http src outranks this
+    // doc's own media reference in guessMediaSrc (the interactive export
+    // would offer the WRONG media).
+    const playerEl = document.getElementById(videoDomId);
+    playerEl.removeAttribute('src');
+    playerEl.load();
     getMedia(MEDIA_DATABASE, MEDIA_STORE, mediaKey);
   }
 
@@ -347,6 +370,13 @@ function getMedia(databaseName, objectStoreName, id) {
     getRequest.onsuccess = function() {
 
       const base64String = getRequest.result; // Base64 string
+
+      // no cached media under this key (deleted, or never saved) — leave the
+      // player alone rather than setting src to the string "undefined"
+      if (base64String === undefined) {
+        console.warn("No cached media found for:", id);
+        return;
+      }
 
       /* The following commented lines should work (but don't) for a more elegant solution */
       /*const binaryString = atob(base64String.split(',')[1]); // Binary data string
@@ -467,6 +497,14 @@ function saveHyperTranscriptToLocalStorage(
 
   let video = document.getElementById(videoDomId).src;
 
+  // The media reference the interactive-transcript export offers for this doc
+  // (#430/#426): a remote src as-is, else the stamped local filename
+  // (dataset.mediaRef). A Recents load re-stamps from the saved value, and an
+  // older entry may predate this field — fall back to the previous save's.
+  const liveMediaRef = /^https?:/i.test(video)
+    ? video
+    : (document.getElementById(videoDomId).dataset.mediaRef || '');
+
   // A doc loaded from Recents carries a base64 data: URL as its src (getMedia
   // sets it directly). Never serialise that payload into the localStorage JSON
   // — the media already lives in IndexedDB under meta.mediaKey. Store a marker
@@ -489,6 +527,7 @@ function saveHyperTranscriptToLocalStorage(
     created: prevMeta.created || now,
     updated: now,
     starred: prevMeta.starred === true, // meta is rebuilt — carry the star through
+    mediaRef: liveMediaRef || prevMeta.mediaRef || undefined, // undefined drops from the JSON
   };
 
   // if media url begins with blob it means it's locally cached only for the session

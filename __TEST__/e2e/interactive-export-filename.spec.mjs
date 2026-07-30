@@ -94,3 +94,28 @@ test('a fresh remote URL wins over a stale stamped local reference', async ({ pa
   });
   expect(await openExportModalValue(page)).toBe('https://example.com/fresh/remote.mp3');
 });
+
+test('the exported page includes the missing-media fallback and the typed reference', async ({ page }) => {
+  await loadLocalMedia(page, 'clip.mp4', 'video/mp4');
+  await openExportModalValue(page);
+  // the template fetch resolves asynchronously after load — retry until the
+  // download is built from the real template
+  let text = '';
+  for (let i = 0; i < 10 && !text.includes('<video'); i++) {
+    const downloadPromise = page.waitForEvent('download');
+    await page.evaluate(() => {
+      const m = document.getElementById('interactive-export-modal');
+      m.checked = true; m.dispatchEvent(new Event('change'));
+    });
+    await page.click('#interactive-export-download');
+    const download = await downloadPromise;
+    text = await (await import('node:fs/promises')).readFile(await download.path(), 'utf8');
+    if (!text.includes('<video')) await page.waitForTimeout(300);
+  }
+  expect(text).toMatch(/<video[^>]*src="clip\.mp4"/);
+  // a page moved away from its media explains itself instead of a dead player
+  expect(text).toContain('media-missing-note');
+  expect(text).toContain('same folder as the media file');
+  // attribution footer links back to the editor
+  expect(text).toMatch(/<a href="https:\/\/hyperaudio\.github\.io\/hyperaudio-lite-editor\/"[^>]*>Made with Hyperaudio<\/a>/);
+});
