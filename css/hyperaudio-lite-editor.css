@@ -1158,3 +1158,16 @@ label[data-a11y-wired]:focus-visible {
   font-weight: 700;
   font-size: 1.05rem;
 }
+
+/* The export adjust panel's number inputs (speed, target minutes/seconds)
+   drop the browser spinner buttons — the slider covers coarse speed changes
+   and the spinners just crowded the small boxes. */
+#export-adjust-panel input[type="number"]::-webkit-outer-spin-button,
+#export-adjust-panel input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#export-adjust-panel input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

@@ -778,12 +778,18 @@ If you are creating an open source application under a license compatible with t
           <input id="export-speed" type="number" min="0.25" max="4" step="0.05" value="1" class="input input-bordered input-sm" style="width:92px" aria-label="Export speed factor" />
           <span class="label-text">×</span>
         </div>
-        <div style="display:flex; gap:10px; align-items:center; margin-top:8px">
-          <span class="label-text" style="min-width:48px">Length</span>
-          <input id="export-length" type="text" inputmode="numeric" placeholder="m:ss" class="input input-bordered input-sm" style="width:92px" aria-label="Export length" />
-          <span id="export-length-orig" class="label-text" style="opacity:0.6"></span>
+        <div style="display:flex; gap:6px; align-items:center; margin-top:8px">
+          <span class="label-text" style="min-width:48px; margin-right:4px">Length</span>
+          <input id="export-length-min" type="number" min="0" step="1" class="input input-bordered input-sm" style="width:64px" aria-label="Export length minutes" />
+          <span class="label-text">min</span>
+          <input id="export-length-sec" type="number" min="0" max="59" step="1" class="input input-bordered input-sm" style="width:64px" aria-label="Export length seconds" />
+          <span class="label-text">sec</span>
+          <span id="export-length-orig" class="label-text" style="opacity:0.6; margin-left:4px"></span>
         </div>
-        <div id="export-adjust-readout" style="font-size:85%; opacity:0.8; margin-top:8px"></div>
+        <!-- min-height reserves two lines: the text length varies (quality
+             warning, rate-cap note), and letting it wrap 1↔2 lines made the
+             modal jump about -->
+        <div id="export-adjust-readout" style="font-size:85%; opacity:0.8; margin-top:8px; min-height:3.6em; white-space:pre-line"></div>
       </div>
       <label id="export-burn-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
         <input type="checkbox" id="export-burn" class="toggle toggle-primary" />
@@ -1011,7 +1017,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/editor-main.js?v=0.8.0"></script>
   <script src="js/find-replace.js?v=0.6.29"></script>
   <script src="js/stream-stretch.js?v=0.8.6"></script>
-  <script src="js/media-export.js?v=0.8.6"></script>
+  <script src="js/media-export.js?v=0.9.1"></script>
   <!-- word-level / karaoke VTT export (#387 part 1) -->
   <script src="js/word-vtt.js?v=0.8.5"></script>
   <!-- end of caption editor additions -->
