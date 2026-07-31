@@ -153,3 +153,37 @@ test('the working copy survives a reload (OPFS restore)', async ({ page }, testI
   await page.evaluate(() => document.querySelector('#project-save-hyperaudio').click());
   expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
 });
+
+test('a legacy Recents load ends the project session: no spurious replace-warning, no franken capture', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === '1');
+
+  // switch to a Recents doc (the legacy world) — its load regenerates captions,
+  // which used to trigger a project capture of the WRONG document's content
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
+      video: 'https://example.com/a.mp3', summary: '', topics: [],
+      meta: { name: 'legacy doc', updated: 5000 },
+    }));
+    loadLocalStorageOptions();
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
+  });
+  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
+
+  // the session ended: boot hint cleared (a reload won't resurrect the project),
+  // and pending captures stopped
+  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === null);
+  await page.waitForTimeout(2000); // outlive the autosave debounce — no late capture may re-set it
+  expect(await page.evaluate(() => localStorage.getItem('hyperaudioWorkPresent'))).toBeNull();
+
+  // re-opening a .hyperaudio must NOT warn about "changes never downloaded" —
+  // the on-screen doc belongs to Recents, not an unsaved project
+  // reset the input as the menu-click path does (#project-open-hyperaudio
+  // clears value before click) — a second identical selection otherwise
+  // doesn't re-fire change
+  await page.evaluate(() => { document.getElementById('project-open-input').value = ''; });
+  await openFixture(page, testInfo, dialogs);
+  expect(dialogs).toEqual([]);
+});

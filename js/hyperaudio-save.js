@@ -1151,6 +1151,24 @@
       onNewTranscript().catch((e) => console.warn('hyperaudio-save: capture failed', e));
     });
 
+    // A legacy Recents load replaces the document OUTSIDE the project system:
+    // it fires hyperaudioTranscriptLoaded but not hyperaudioInit, and never
+    // runs under our apply's suppressCapture. The project session must end —
+    // a capture after the swap would write the Recents doc's content under
+    // the OLD project's identity (a franken working copy, and a spurious
+    // "changes never downloaded" warning on the next open). The boot hint
+    // clears so a reload doesn't resurrect a project the user navigated away
+    // from; work/ itself is left inert and the next session overwrites it.
+    // Interim coexistence rule until #448 (identity generations) / #451
+    // (legacy-storage removal).
+    document.addEventListener('hyperaudioTranscriptLoaded', () => {
+      if (suppressCapture) return; // our own apply() also fires this event
+      clearTimeout(autosaveTimer);
+      session.active = false;
+      session.title = '';
+      try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
+    });
+
     // Provenance: engines report service/model through setTranscriptionInfo.
     const originalSetInfo = window.setTranscriptionInfo;
     if (typeof originalSetInfo === 'function') {
