@@ -422,6 +422,8 @@
     pendingReconcile: null, // media descriptor awaiting reconciliation (§ 7.3)
     hasOriginal: false,
     originalJson: null, // the origin as serialized JSON (in-memory copy; work/ holds it across reloads)
+    title: '',          // project title; the legacy title field is gone (#439), so
+                        // the session carries it across gather/apply (#449 adds UI)
   };
   let suppressCapture = false; // true while apply() replays a loaded project
   let autosaveTimer = null;
@@ -513,13 +515,13 @@
     const html = getEditorHtml();
     const transcript = htmlToJSON(html);
     const versionMeta = document.querySelector('meta[name="version"]');
-    const titleField = document.querySelector('#save-localstorage-filename');
+    const titleField = document.querySelector('#project-title'); // #449's field, when present
     const summaryEl = document.getElementById('summary');
     const topicsEl = document.getElementById('topics');
     const media = currentMediaDescriptor();
     const title = (titleField !== null && titleField.value.trim() !== '')
       ? titleField.value.trim()
-      : (media.filename || 'project');
+      : (session.title || media.filename || 'project');
 
     return {
       generatorVersion: versionMeta !== null ? versionMeta.content : '',
@@ -689,8 +691,9 @@
       const topicsEl = document.getElementById('topics');
       if (summaryEl !== null) summaryEl.textContent = texts !== null ? (texts.summary || '') : '';
       if (topicsEl !== null) topicsEl.textContent = texts !== null ? (texts.topics || []).join(', ') : '';
-      const titleField = document.querySelector('#save-localstorage-filename');
-      if (titleField !== null && texts !== null && texts.title) titleField.value = texts.title;
+      session.title = (texts !== null && texts.title) ? texts.title : '';
+      const titleField = document.querySelector('#project-title');
+      if (titleField !== null) titleField.value = session.title;
 
       const cleaned = transcriptEl.innerHTML.replace(/ class=".*?"/g, '');
       const htmlLink = document.querySelector('#download-html');
@@ -780,6 +783,7 @@
     session.hasOriginal = false;
     session.mediaFileFromUrl = null;
     session.pendingReconcile = null;
+    session.title = '';
     // Provenance is only this project's if the engine reported it moments ago
     // (imports fire hyperaudioInit without any setTranscriptionInfo call —
     // a previous transcription's provenance must not leak into them).
@@ -1076,6 +1080,8 @@
     input.id = 'project-open-input';
     input.accept = FILE_EXTENSION;
     input.style.display = 'none';
+    input.title = ''; // #402: suppress the native "No file chosen" tooltip
+    input.setAttribute('aria-label', 'Open a .hyperaudio project file');
     document.body.appendChild(input);
 
     reconcileInput = document.createElement('input');
@@ -1083,6 +1089,8 @@
     reconcileInput.id = 'project-reconcile-input';
     reconcileInput.accept = 'audio/*,video/*';
     reconcileInput.style.display = 'none';
+    reconcileInput.title = ''; // #402
+    reconcileInput.setAttribute('aria-label', 'Locate the project’s media file');
     document.body.appendChild(reconcileInput);
     reconcileInput.addEventListener('change', () => {
       if (reconcileInput.files.length === 1 && reconcileTarget !== null) {

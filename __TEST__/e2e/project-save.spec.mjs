@@ -91,10 +91,10 @@ test('opening a .hyperaudio lands transcript, redaction, captions, options and t
   const trackSrc = await page.evaluate(() => document.querySelector('#hyperplayer-vtt').src);
   expect(decodeURIComponent(trackSrc.split(',')[1])).toContain('Benvenuti a Hyperaudio');
 
-  // options and texts
+  // options and texts (the title has no UI field until #449 — it lives in the
+  // session and is asserted through the save round-trip in the next test)
   await expect(page.locator('#remove-gaps-enabled')).toBeChecked();
   await expect(page.locator('#remove-gaps-threshold')).toHaveValue('700');
-  await expect(page.locator('#save-localstorage-filename')).toHaveValue('E2E Project');
   await expect(page.locator('#summary')).toHaveText('summary text');
 
   expect(dialogs).toEqual([]); // a conformant file opens without any alert
@@ -144,7 +144,12 @@ test('the working copy survives a reload (OPFS restore)', async ({ page }, testI
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
   await expect(page.locator('#hypertranscript span[data-m="840"]')).toHaveCSS('text-decoration-line', 'line-through');
   await expect(page.locator('#remove-gaps-threshold')).toHaveValue('700');
-  await expect(page.locator('#save-localstorage-filename')).toHaveValue('E2E Project');
   const src = await page.evaluate(() => document.querySelector('#hyperplayer').src);
   expect(src).toMatch(/^blob:/);
+
+  // the project title survived the restore in the session (no UI field until
+  // #449): a save after reload still suggests the title-derived filename
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => document.querySelector('#project-save-hyperaudio').click());
+  expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
 });
