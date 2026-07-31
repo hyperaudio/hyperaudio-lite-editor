@@ -57,6 +57,34 @@
   document.querySelector('#remove-gaps-threshold').addEventListener('input', applyGapSettings);
   document.querySelector('#remove-gaps-buffer').addEventListener('input', applyGapSettings);
 
+  // Read/apply for the project save module (js/hyperaudio-save.js): the gap
+  // settings are module-locals here, and a loaded .hyperaudio project must be
+  // able to restore them. Applying goes through the UI controls so the dialog
+  // stays in sync, then reuses the normal applyGapSettings() path.
+  window.getGapRemovalSettings = function () {
+    return {
+      enabled: removeGapsEnabled,
+      thresholdMs: Math.round(gapThreshold * 1000),
+      bufferMs: Math.round(gapBuffer * 1000),
+    };
+  };
+  window.applyGapRemovalSettings = function (settings) {
+    if (!settings || typeof settings !== 'object') return;
+    const enabledEl = document.querySelector('#remove-gaps-enabled');
+    const thresholdEl = document.querySelector('#remove-gaps-threshold');
+    const bufferEl = document.querySelector('#remove-gaps-buffer');
+    if (typeof settings.enabled === 'boolean' && enabledEl) {
+      enabledEl.checked = settings.enabled;
+    }
+    if (Number.isFinite(settings.thresholdMs) && settings.thresholdMs > 0 && thresholdEl) {
+      thresholdEl.value = String(settings.thresholdMs);
+    }
+    if (Number.isFinite(settings.bufferMs) && settings.bufferMs >= 0 && bufferEl) {
+      bufferEl.value = String(settings.bufferMs);
+    }
+    applyGapSettings();
+  };
+
   function updateRemoveGapsBtnState() {
     const dot = document.querySelector('#remove-gaps-active-dot');
     if (!dot) return;

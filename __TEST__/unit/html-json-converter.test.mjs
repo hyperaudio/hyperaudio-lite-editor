@@ -83,3 +83,18 @@ test('clean text is untouched', () => {
   assert.match(html, /<span data-m="4760" data-d="0" class="speaker">\[Alice\] <\/span>/);
   assert.match(html, /<span data-m="4760" data-d="520">Testing <\/span>/);
 });
+
+test('struck words serialize with line-through and stay escaped (#403)', () => {
+  // The converter used to drop redactions in both directions, silently
+  // resurrecting every cut through a JSON round trip. The strike attribute
+  // must also compose with #406's escaping — both landed on this line.
+  const html = jsonToHTML({
+    words: [
+      { start: 1.0, end: 1.5, text: 'keep' },
+      { start: 1.6, end: 2.0, text: '<cut>', struck: true },
+    ],
+  });
+  assert.match(html, /<span data-m="1600" data-d="400" style="text-decoration: line-through;">&lt;cut&gt; <\/span>/);
+  // the default (unstruck) word carries no style attribute
+  assert.match(html, /<span data-m="1000" data-d="500">keep <\/span>/);
+});
