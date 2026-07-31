@@ -62,7 +62,37 @@
     <div id="hypertranscript" class="hyperaudio-transcript">
 {hypertranscript}
     </div>
+
+    <footer style="max-width:34rem; margin:16px auto 24px; text-align:center; font-size:0.85rem; color:#a2a2a2;">
+      <a href="https://hyperaudio.github.io/hyperaudio-lite-editor/" style="color:inherit; text-decoration:underline;">Made with Hyperaudio</a>
+    </footer>
   </main>
+
+  <script>
+  // If the media can't be found — most often because this page was moved away
+  // from its media file — explain how to fix it instead of showing a dead
+  // player. The media is referenced by RELATIVE path on purpose: the page and
+  // its media travel (and upload) together; an absolute local path would break
+  // the moment either is shared or hosted.
+  (function () {
+    var player = document.getElementById('hyperplayer');
+    if (!player) return;
+    player.addEventListener('error', function () {
+      if (document.getElementById('media-missing-note')) return;
+      var ref = player.getAttribute('src') || 'the media file';
+      var note = document.createElement('div');
+      note.id = 'media-missing-note';
+      note.setAttribute('role', 'alert');
+      note.style.cssText = 'max-width:420px; margin:0 auto 24px; padding:14px 18px; ' +
+        'border:1px solid #e5b5b5; border-radius:10px; background:#fdf3f3; color:#7a2e2e; ' +
+        'font-size:0.95rem; line-height:1.5;';
+      note.textContent = 'Couldn’t load “' + ref + '”. Keep this page in the ' +
+        'same folder as the media file — or, if the media is hosted online, edit this ' +
+        'file’s video src to its full URL.';
+      player.insertAdjacentElement('afterend', note);
+    });
+  })();
+  </script>
 
   <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/hyperaudio-lite.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/hyperaudio-lite-extension.js"></script>

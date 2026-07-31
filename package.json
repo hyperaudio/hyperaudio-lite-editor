@@ -2,6 +2,7 @@
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "autoprefixer": "^10.4.14",
+    "axe-core": "^4.12.1",
     "cssnano": "^6.0.1",
     "daisyui": "^4.4.2",
     "jszip": "^3.10.1",

@@ -1,7 +1,7 @@
 /**
  * hls-source.js
  * (C) The Hyperaudio Project
- * @version 0.6.26 — last changed in release 0.6.26
+ * @version 0.8.10 — last changed in release 0.8.10
  * @license MIT
  *
  * Transcribe from a remote media URL — including HLS VOD (.m3u8) — by resolving
@@ -18,9 +18,12 @@
  * For a plain (non-HLS) media URL we just fetch the bytes (CORS-permitting) and
  * decode them directly.
  *
- * hls.js is loaded lazily from a CDN the first time it is needed, so non-HLS
- * users pay nothing. Loaded as a plain <script> after audio-source.js (it calls
- * the global `decodeToMono16k`).
+ * hls.js and mp4box are vendored under js/vendor/ at pinned versions (#412,
+ * the same posture as mediabunny in #381) and load lazily the first time they
+ * are needed, so non-HLS users pay nothing — and the paths work offline,
+ * self-hosted, and under a CSP with no CDN allowlist. This file itself is
+ * loaded as a plain <script> after audio-source.js (it calls the global
+ * `decodeToMono16k`).
  *
  * Scope (v1): VOD only, sources hls.js can load, fully client-side. Live HLS,
  * DRM, and a server-side proxy for non-CORS hosts are out of scope.
@@ -28,13 +31,15 @@
 
 /* eslint-disable no-undef */
 
-const HLS_CDN_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.mjs';
+// Bare specifier, resolved to the vendored file in js/vendor/ by the import
+// map in index.html (#412) — pinned bytes instead of a floating CDN major.
+const HLS_SRC = 'hls.js';
 let hlsModulePromise = null;
 
 // Lazy-load hls.js (ESM) once, returning the Hls constructor.
 function loadHlsLibrary() {
   if (hlsModulePromise === null) {
-    hlsModulePromise = import(HLS_CDN_URL).then((mod) => mod.default);
+    hlsModulePromise = import(HLS_SRC).then((mod) => mod.default);
   }
   return hlsModulePromise;
 }
@@ -83,8 +88,22 @@ async function classifyMediaUrl(url) {
     }
   }
 
-  if (response === null || !response.ok) {
-    throw new Error(`Could not fetch the media (HTTP ${response ? response.status : 'network / CORS error'}).`);
+  if (response === null) {
+    // fetch() rejected without a status: the host is either unreachable or —
+    // far more often — reachable but missing CORS headers. Disambiguate with a
+    // no-cors HEAD probe, which succeeds (opaquely) whenever the server
+    // responds at all, so a pass here pins the failure on CORS. The distinction
+    // matters because playback and fetching are gated differently: a URL that
+    // plays fine in the <video> element can still be unreadable to fetch(),
+    // which reads as an app bug unless the message says otherwise.
+    const reachable = await fetch(url, { method: 'HEAD', mode: 'no-cors' }).then(() => true, () => false);
+    if (reachable) {
+      throw new Error("This media host doesn't allow web pages to read it (no CORS headers), so it can play but can't be transcribed from a URL. Download it and transcribe the local file, or enable CORS on the host.");
+    }
+    throw new Error('Could not fetch the media (network error — check the URL and your connection).');
+  }
+  if (!response.ok) {
+    throw new Error(`Could not fetch the media (HTTP ${response.status}).`);
   }
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
@@ -131,6 +150,17 @@ function detachHls(videoEl) {
 async function attachMediaPlayback(videoEl, url, isHls) {
   detachHls(videoEl);
 
+  // Clear any previous source before (re)attaching. detachHls only tears down a
+  // prior hls.js instance; a plain-URL source from earlier media leaves
+  // videoEl.src set, and hls.js will not reliably replace an existing src — which
+  // left the PREVIOUS media in the player after transcribing a new remote/HLS URL.
+  // Also record the real, user-facing URL: the HLS path turns videoEl.src into an
+  // opaque blob: MediaSource URL, so the interactive-transcript export needs the
+  // original URL from here to reference the right media.
+  videoEl.removeAttribute('src');
+  videoEl.load();
+  videoEl.dataset.mediaRef = url;
+
   if (isHls === undefined) {
     try { isHls = (await classifyMediaUrl(url)).isHls; }
     catch (e) { isHls = isHlsUrl(url); }
@@ -145,6 +175,12 @@ async function attachMediaPlayback(videoEl, url, isHls) {
   if (Hls && Hls.isSupported()) {
     const hls = new Hls();
     videoEl._hls = hls;
+    // Surface fatal playback errors instead of failing silently — the caller
+    // wraps this in a catch (transcription must not be blocked by a playback
+    // issue), so without this an hls.js error left the player mysteriously blank.
+    hls.on(Hls.Events.ERROR, (evt, data) => {
+      if (data && data.fatal) console.warn('HLS playback error:', data.type, data.details);
+    });
     hls.loadSource(url);
     hls.attachMedia(videoEl);
   } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
@@ -244,6 +280,17 @@ function parseMediaPlaylist(text, baseUrl) {
     if (/^#EXT-X-BYTERANGE:/i.test(line)) {
       const m = line.match(/^#EXT-X-BYTERANGE:(\d+)(?:@(\d+))?/i);
       if (m) pendingRange = { length: +m[1], offset: m[2] !== undefined ? +m[2] : null };
+      continue;
+    }
+
+    // Encrypted streams (#412): this path fetches and concatenates raw segment
+    // bytes and cannot decrypt them — AES-128 VOD used to surface downstream
+    // as a baffling MP4 demux error. Fail fast with a clear message instead.
+    if (/^#EXT-X-KEY:/i.test(line)) {
+      const method = (line.match(/METHOD=([^,\s]+)/i) || [])[1];
+      if (method && method.toUpperCase() !== 'NONE') {
+        throw new Error(`This stream is encrypted (${method}) — encrypted HLS streams are not supported.`);
+      }
       continue;
     }
 
@@ -355,7 +402,9 @@ async function readAudioFromHls(url, onProgress) {
  * decodeAudioData as a best effort.
  * ------------------------------------------------------------------------- */
 
-const MP4BOX_CDN_URL = 'https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js';
+// Vendored (#412) — classic script exposing the MP4Box global, so it is
+// loaded by path rather than through the import map.
+const MP4BOX_SRC = 'js/vendor/mp4box-0.5.2.all.min.js';
 let mp4boxPromise = null;
 
 function loadMp4Box() {
@@ -366,7 +415,7 @@ function loadMp4Box() {
         return;
       }
       const script = document.createElement('script');
-      script.src = MP4BOX_CDN_URL;
+      script.src = MP4BOX_SRC;
       script.onload = () => {
         if (window.MP4Box) resolve(window.MP4Box);
         else reject(new Error('MP4Box did not load.'));
@@ -504,4 +553,14 @@ async function decodeFragmentedMp4ToMono16k(arrayBuffer) {
   for (const part of pcmParts) { monoNative.set(part, off); off += part.length; }
 
   return resampleMonoTo16k(monoNative, nativeRate);
+}
+
+// Export pure helpers for the unit lane (#412); the file only declares
+// functions at load time, so requiring it in Node is safe.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    isHlsUrl,
+    parseMediaPlaylist,
+    classifyMediaUrl
+  };
 }

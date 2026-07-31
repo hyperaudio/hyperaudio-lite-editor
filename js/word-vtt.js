@@ -1,7 +1,7 @@
 /**
  * word-vtt.js
  * (C) The Hyperaudio Project
- * @version 0.8.0 — last changed in release 0.8.0
+ * @version 0.8.5 — last changed in release 0.8.5
  * @license MIT
  *
  * Word-level ("karaoke") WebVTT export (#387, part 1).
@@ -120,6 +120,14 @@
    * @param {string|Element} [options.source='#hypertranscript'] transcript root
    * @returns {string} a WebVTT document (just the header if there are no words)
    */
+  // WebVTT cue text is parsed for tags, so raw word text must be escaped
+  // (#409): "<inaudible>" would read as a malformed tag and swallow the word,
+  // and a bare "&" starts an entity. Serialization-only — buildWordChunks
+  // stays raw for the burn-in renderer, which draws text, not markup.
+  function escapeVttText(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   function generateWordVtt(options) {
     const chunks = buildWordChunks(options);
     let vtt = 'WEBVTT\n';
@@ -127,7 +135,7 @@
       const start = chunk[0].start;
       const end = chunk[chunk.length - 1].end;
       const line = chunk
-        .map((w) => `<${formatTimestamp(w.start)}>${w.text}`)
+        .map((w) => `<${formatTimestamp(w.start)}>${escapeVttText(w.text)}`)
         .join(' ');
       vtt += `\n${formatTimestamp(start)} --> ${formatTimestamp(end)}\n${line}\n`;
     });
@@ -165,6 +173,6 @@
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { generateWordVtt, buildWordChunks, formatTimestamp, readWords, chunkWords };
+    module.exports = { generateWordVtt, buildWordChunks, formatTimestamp, readWords, chunkWords, escapeVttText };
   }
 })();

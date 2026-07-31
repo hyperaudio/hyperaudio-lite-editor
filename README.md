@@ -98,6 +98,10 @@ We score very highly on Google Chrome's Lighthouse audit tool.
 
 Created as a Progressive Web App, you can install it on your desktop or mobile home screen.
 
+### Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to get set up, run the tests, and open a pull request. Because the editor is offered under more than one license (see below), contributors sign a short [Contributor License Agreement](./CLA.md) once, via [CLA Assistant](https://cla-assistant.io/).
+
 ### Licensing
 
 `Hyperaudio Lite Editor`'s source code is provided under a **triple license model**.

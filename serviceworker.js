@@ -11,6 +11,9 @@ self.addEventListener("install", function (e) {
     "./js/vendor/soundtouchjs-0.3.0.js",
     // Vendored zip library — precached so saving .hyperaudio projects works offline.
     "./js/vendor/jszip-3.10.1.min.js",
+    // Vendored HLS / remote-URL dependencies (#412) — likewise.
+    "./js/vendor/hls-1.6.16.js",
+    "./js/vendor/mp4box-0.5.2.all.min.js",
    ]);
   })
  );

@@ -121,17 +121,17 @@ class ImportDeepgramJson extends HTMLElement {
     <div class="hidden-label-holder">
       <label for="file-import-deepgram-json-dialog">Import Deepgram JSON Dialog</label>
     </div>
-    <input type="checkbox" id="file-import-deepgram-json-dialog" class="modal-toggle" />
+    <input type="checkbox" id="file-import-deepgram-json-dialog" class="modal-toggle" tabindex="-1" aria-hidden="true" />
     <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
-        <label for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
         <h3 class="font-bold text-lg">Import Deepgram JSON Dialog</h3>
         <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or use local media file</span>
-        <input id="deepgram-json-file" name="deepgram-json-file" type="file" class="file-input w-full max-w-xs" />
-        <span class="label-text">select local JSON file</span>
-        <input id="deepgram-json" name="deepgram-json" type="file" class="file-input w-full max-w-xs" />
+        <label class="label-text" for="deepgram-json-file">or use local media file</label>
+        <input id="deepgram-json-file" name="deepgram-json-file" type="file" class="file-input w-full max-w-xs" title="" />
+        <label class="label-text" for="deepgram-json">select local JSON file</label>
+        <input id="deepgram-json" name="deepgram-json" type="file" class="file-input w-full max-w-xs" title="" />
       </div>
       <div class="modal-action">
         <label for="file-import-deepgram-json-dialog" class="btn btn-ghost">Cancel</label>
@@ -248,17 +248,17 @@ class ImportSrt extends HTMLElement {
     <div class="hidden-label-holder">
       <label for="file-import-srt-dialog">Import SRT Dialog</label>
     </div>
-    <input type="checkbox" id="file-import-srt-dialog" class="modal-toggle" />
+    <input type="checkbox" id="file-import-srt-dialog" class="modal-toggle" tabindex="-1" aria-hidden="true" />
     <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
-        <label for="file-import-srt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label for="file-import-srt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
         <h3 class="font-bold text-lg">Import SRT Dialog</h3>
         <input id="srt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or use local media file</span>
-        <input id="srt-file" name="srt-file" type="file" class="file-input w-full max-w-xs" />
-        <span class="label-text">select local SRT file</span>
-        <input id="srt" name="srt" type="file" class="file-input w-full max-w-xs" />
+        <label class="label-text" for="srt-file">or use local media file</label>
+        <input id="srt-file" name="srt-file" type="file" class="file-input w-full max-w-xs" title="" />
+        <label class="label-text" for="srt">select local SRT file</label>
+        <input id="srt" name="srt" type="file" class="file-input w-full max-w-xs" title="" />
       </div>
       <div class="modal-action">
         <label for="file-import-srt-dialog" class="btn btn-ghost">Cancel</label>
@@ -372,17 +372,17 @@ class ImportVtt extends HTMLElement {
     <div class="hidden-label-holder">
       <label for="file-import-vtt-dialog">Import VTT Dialog</label>
     </div>
-    <input type="checkbox" id="file-import-vtt-dialog" class="modal-toggle" />
+    <input type="checkbox" id="file-import-vtt-dialog" class="modal-toggle" tabindex="-1" aria-hidden="true" />
     <div class="modal">
     <div class="modal-box">
       <div class="flex flex-col gap-4 w-full">
-        <label for="file-import-vtt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2">✕</label>
+        <label for="file-import-vtt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
         <h3 class="font-bold text-lg">Import VTT Dialog</h3>
         <input id="vtt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or use local media file</span>
-        <input id="vtt-file" name="vtt-file" type="file" class="file-input w-full max-w-xs" />
-        <span class="label-text">select local VTT file</span>
-        <input id="vtt" name="vtt" type="file" class="file-input w-full max-w-xs" />
+        <label class="label-text" for="vtt-file">or use local media file</label>
+        <input id="vtt-file" name="vtt-file" type="file" class="file-input w-full max-w-xs" title="" />
+        <label class="label-text" for="vtt">select local VTT file</label>
+        <input id="vtt" name="vtt" type="file" class="file-input w-full max-w-xs" title="" />
       </div>
       <div class="modal-action">
         <label for="file-import-vtt-dialog" class="btn btn-ghost">Cancel</label>

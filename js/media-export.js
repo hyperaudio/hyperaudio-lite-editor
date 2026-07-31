@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 0.8.0 — last changed in release 0.8.0
+ * @version 0.8.6 — last changed in release 0.8.6
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -185,7 +185,11 @@
       if (p.querySelector('[data-m]') === null) p.remove();
     });
     clone.normalize();
-    return clone.innerHTML;
+    // canonical formatting (one span per line, data-m before data-d) so the
+    // retimed transcript exports as clean as the plain HTML export
+    return typeof window.serializeTranscriptHtml === 'function'
+      ? window.serializeTranscriptHtml(clone)
+      : clone.innerHTML;
   };
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -341,7 +345,13 @@
     if (fmt.kind === 'audio') options.video = { discard: true };
     const conversion = await mb.Conversion.init(options);
     conversion.onProgress = (p) => onProgress(p);
-    await conversion.execute();
+    try {
+      await conversion.execute();
+    } catch (err) {
+      // release the underlying encoder/decoder instances (#407)
+      try { await conversion.cancel(); } catch (_) { /* already torn down */ }
+      throw err;
+    }
     return new Blob([output.target.buffer], { type: fmt.mime });
   };
 
@@ -364,55 +374,14 @@
     return out;
   };
 
-  // Concatenate AudioBuffers (same sample rate) into one.
-  const concatAudioBuffers = (buffers) => {
-    if (buffers.length === 1) return buffers[0];
-    const channels = Math.max(...buffers.map((b) => b.numberOfChannels));
-    const sampleRate = buffers[0].sampleRate;
-    const length = buffers.reduce((sum, b) => sum + b.length, 0);
-    const out = new AudioBuffer({ length, numberOfChannels: channels, sampleRate });
-    let offset = 0;
-    for (const b of buffers) {
-      for (let c = 0; c < channels; c++) {
-        out.copyToChannel(b.getChannelData(Math.min(c, b.numberOfChannels - 1)), c, offset);
-      }
-      offset += b.length;
-    }
-    return out;
-  };
-
   // Pitch-preserved time-stretch (SoundTouch/WSOLA): tempo = rate, so 1.5×
   // yields audio 1/1.5 the length at the original pitch — matching what the
-  // player's preservesPitch playback sounds like.
-  const timeStretchBuffer = async (buffer, rate) => {
-    const st = await loadSoundtouch();
-    const shifter = new st.SoundTouch();
-    shifter.tempo = rate;
-    const source = new st.WebAudioBufferSource(buffer);
-    const filter = new st.SimpleFilter(source, shifter);
-    const FRAMES = 8192;
-    const tmp = new Float32Array(FRAMES * 2); // SoundTouch works in stereo interleaved
-    const chunks = [];
-    let n;
-    while ((n = filter.extract(tmp, FRAMES)) > 0) {
-      chunks.push(tmp.slice(0, n * 2));
-    }
-    let totalFrames = 0;
-    for (const c of chunks) totalFrames += c.length / 2;
-    const channels = Math.min(2, buffer.numberOfChannels);
-    const out = new AudioBuffer({ length: Math.max(1, totalFrames), numberOfChannels: channels, sampleRate: buffer.sampleRate });
-    const L = out.getChannelData(0);
-    const R = channels > 1 ? out.getChannelData(1) : null;
-    let i = 0;
-    for (const c of chunks) {
-      for (let j = 0; j < c.length; j += 2) {
-        L[i] = c[j];
-        if (R) R[i] = c[j + 1];
-        i++;
-      }
-    }
-    return out;
-  };
+  // player's preservesPitch playback sounds like. The incremental pipeline
+  // (#405) lives in stream-stretch.js: push() trimmed buffers as they decode
+  // and stretched blocks are emitted as soon as SoundTouch produces them;
+  // flush() drains the pipeline at the end.
+  const startStreamStretcher = async (rate, emit) =>
+    makeStreamStretcher(await loadSoundtouch(), rate, emit);
 
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
@@ -428,31 +397,32 @@
     output.addAudioTrack(source);
     await output.start();
 
-    const stretch = rate !== 1;
-    const total = keptDuration(sections);
-    let done = 0;
-    const collected = stretch ? [] : null;
-    for (const sec of sections) {
-      for await (const wrapped of sink.buffers(sec.start, sec.end)) {
-        const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
-        if (trimmed !== null) {
-          if (stretch) {
-            collected.push(trimmed);
-          } else {
-            await source.add(trimmed);
+    try {
+      const total = keptDuration(sections);
+      let done = 0;
+      const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => source.add(b)) : null;
+      for (const sec of sections) {
+        for await (const wrapped of sink.buffers(sec.start, sec.end)) {
+          const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
+          if (trimmed !== null) {
+            if (stretcher !== null) {
+              await stretcher.push(trimmed);
+            } else {
+              await source.add(trimmed);
+            }
+            done += trimmed.duration;
+            onProgress(Math.min(0.99, done / total));
           }
-          done += trimmed.duration;
-          onProgress(Math.min(0.99, (done / total) * (stretch ? 0.6 : 1)));
         }
       }
+      if (stretcher !== null) await stretcher.flush();
+      source.close();
+      await output.finalize();
+    } catch (err) {
+      // release the underlying encoder instances (#407)
+      try { await output.cancel(); } catch (_) { /* already torn down */ }
+      throw err;
     }
-    if (stretch) {
-      const stretched = await timeStretchBuffer(concatAudioBuffers(collected), rate);
-      onProgress(0.9);
-      await source.add(stretched);
-    }
-    source.close();
-    await output.finalize();
     return new Blob([output.target.buffer], { type: fmt.mime });
   };
 
@@ -492,55 +462,66 @@
     }
     await output.start();
 
-    const stretch = rate !== 1;
-    const total = keptDuration(sections) * (aTrack ? 2 : 1);
-    let done = 0;
-    let offset = 0;
-    let prevT = -1;
+    try {
+      const total = keptDuration(sections) * (aTrack ? 2 : 1);
+      let done = 0;
+      let offset = 0;
+      let prevT = -1;
 
-    for (const sec of sections) {
-      for await (const sample of vSink.samples(sec.start, sec.end)) {
-        // clamp the first frame (which may start before the section), map onto
-        // the edited timeline (÷ rate when applying the playback speed), and
-        // keep timestamps strictly increasing across section boundaries
-        let t = (offset + Math.max(0, sample.timestamp - sec.start)) / rate;
-        if (t <= prevT) t = prevT + 0.001;
-        prevT = t;
-        const frameDur = Math.max(sample.duration || 1 / 30, 0.001) / rate;
-        sample.draw(ctx2d, 0, 0, width, height);
-        sample.close();
-        if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
-        await vSource.add(t, frameDur);
-        done += frameDur * rate;
-        onProgress(Math.min(0.99, done / total));
-      }
-      offset += sec.end - sec.start;
-    }
-    vSource.close();
-
-    if (aSink !== null) {
-      const collected = stretch ? [] : null;
       for (const sec of sections) {
-        for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
-          const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
-          if (trimmed !== null) {
-            if (stretch) {
-              collected.push(trimmed);
-            } else {
-              await aSource.add(trimmed);
-            }
-            done += trimmed.duration;
+        for await (const sample of vSink.samples(sec.start, sec.end)) {
+          // close the in-flight sample even when draw()/add() throws (#407);
+          // the early close after draw keeps the decoder's frame pool moving
+          let closed = false;
+          try {
+            // clamp the first frame (which may start before the section), map onto
+            // the edited timeline (÷ rate when applying the playback speed), and
+            // keep timestamps strictly increasing across section boundaries
+            let t = (offset + Math.max(0, sample.timestamp - sec.start)) / rate;
+            if (t <= prevT) t = prevT + 0.001;
+            prevT = t;
+            const frameDur = Math.max(sample.duration || 1 / 30, 0.001) / rate;
+            sample.draw(ctx2d, 0, 0, width, height);
+            sample.close();
+            closed = true;
+            if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
+            await vSource.add(t, frameDur);
+            done += frameDur * rate;
             onProgress(Math.min(0.99, done / total));
+          } finally {
+            if (!closed) sample.close();
           }
         }
+        offset += sec.end - sec.start;
       }
-      if (stretch) {
-        await aSource.add(await timeStretchBuffer(concatAudioBuffers(collected), rate));
-      }
-      aSource.close();
-    }
+      vSource.close();
 
-    await output.finalize();
+      if (aSink !== null) {
+        const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => aSource.add(b)) : null;
+        for (const sec of sections) {
+          for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
+            const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
+            if (trimmed !== null) {
+              if (stretcher !== null) {
+                await stretcher.push(trimmed);
+              } else {
+                await aSource.add(trimmed);
+              }
+              done += trimmed.duration;
+              onProgress(Math.min(0.99, done / total));
+            }
+          }
+        }
+        if (stretcher !== null) await stretcher.flush();
+        aSource.close();
+      }
+
+      await output.finalize();
+    } catch (err) {
+      // release the underlying encoder instances (#407)
+      try { await output.cancel(); } catch (_) { /* already torn down */ }
+      throw err;
+    }
     return new Blob([output.target.buffer], { type: fmt.mime });
   };
 
@@ -579,7 +560,8 @@
   const adjustPanel = document.getElementById('export-adjust-panel');
   const speedInput = document.getElementById('export-speed');
   const speedSlider = document.getElementById('export-speed-slider');
-  const lengthInput = document.getElementById('export-length');
+  const lengthMinInput = document.getElementById('export-length-min');
+  const lengthSecInput = document.getElementById('export-length-sec');
   const lengthOrigEl = document.getElementById('export-length-orig');
   const adjustReadout = document.getElementById('export-adjust-readout');
   const retimeRow = document.getElementById('export-retime-row');
@@ -636,31 +618,44 @@
     s = Math.max(0, Math.round(s));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
-  const parseLen = (str) => {
-    const t = String(str).trim();
-    if (t === '') return NaN;
-    if (t.includes(':')) {
-      const [m, s] = t.split(':');
-      const mm = parseInt(m, 10), ss = parseInt(s, 10);
-      return (isNaN(mm) || isNaN(ss)) ? NaN : mm * 60 + ss;
-    }
-    const n = parseFloat(t);
-    return isNaN(n) ? NaN : n;
+  // The target length is entered as SEPARATE minutes/seconds boxes (#441):
+  // the old single m:ss text field read a bare "15" as 15 seconds, so a
+  // 16-minute video typed as "15" computed a 64x rate, slammed into the 4x
+  // cap and rewrote the field to ~4:00 with no explanation. Explicit unit
+  // boxes remove the guessing entirely.
+  const setLengthBoxes = (secondsTotal) => {
+    if (lengthMinInput === null || lengthSecInput === null) return;
+    const s = Math.max(0, Math.round(secondsTotal));
+    lengthMinInput.value = String(Math.floor(s / 60));
+    lengthSecInput.value = String(s % 60);
+  };
+  const readLengthBoxes = () => {
+    if (lengthMinInput === null || lengthSecInput === null) return 0;
+    const m = parseInt(lengthMinInput.value, 10);
+    const s = parseFloat(lengthSecInput.value);
+    // an over-full seconds box (e.g. 90) just rolls over on the reformat
+    return (isNaN(m) ? 0 : Math.max(0, m)) * 60 + (isNaN(s) ? 0 : Math.max(0, s));
   };
 
-  const updateAdjustReadout = () => {
+  // Two fixed lines (white-space:pre-line + reserved min-height in the
+  // markup): the outcome on the first, any warning/cap note on the second —
+  // variable-length single-line text made the modal reflow.
+  const updateAdjustReadout = (capNote = '') => {
     if (adjustReadout === null) return;
     const rate = clampRate(parseFloat(speedInput.value));
     const len = currentContentLength() / rate;
-    const warn = (rate < 0.5 || rate > 2) ? '  ⚠ noticeable quality loss' : '';
-    adjustReadout.textContent = `→ ${fmtLen(len)} at ${+rate.toFixed(2)}×, pitch preserved${warn}`;
+    const warn = (rate < 0.5 || rate > 2) ? '⚠ noticeable quality loss' : '';
+    const second = capNote !== '' ? `⚠ ${capNote}` : warn;
+    adjustReadout.textContent =
+      `→ ${fmtLen(len)} at ${+rate.toFixed(2)}×, pitch preserved` +
+      (second !== '' ? `\n${second}` : '');
   };
   // Speed is the source of truth; mirror it to the slider and derive the length.
   const syncFromSpeed = () => {
     const rate = clampRate(parseFloat(speedInput.value));
     speedInput.value = String(+rate.toFixed(2));
     if (speedSlider !== null) speedSlider.value = String(rate);
-    if (lengthInput !== null) lengthInput.value = fmtLen(currentContentLength() / rate);
+    setLengthBoxes(currentContentLength() / rate);
     updateAdjustReadout();
   };
   const syncFromSlider = () => {
@@ -668,12 +663,31 @@
     syncFromSpeed();
   };
   const syncFromLength = () => {
-    const target = parseLen(lengthInput.value);
+    const target = readLengthBoxes();
     const content = currentContentLength();
+    // When the target can't be met, say WHY in the readout — the old silent
+    // snap to the capped value read as a glitch.
+    let note = '';
     if (target > 0 && content > 0) {
-      speedInput.value = String(+clampRate(content / target).toFixed(2));
+      const raw = content / target;
+      const rate = clampRate(raw);
+      speedInput.value = String(+rate.toFixed(2));
+      if (speedSlider !== null) speedSlider.value = String(rate);
+      if (raw > RATE_MAX) {
+        note = `capped at ${RATE_MAX}× — the shortest is ${fmtLen(content / RATE_MAX)}`;
+      } else if (raw < RATE_MIN) {
+        note = `capped at ${RATE_MIN}× — the longest is ${fmtLen(content / RATE_MIN)}`;
+      }
     }
-    syncFromSpeed();   // reformat length to the (possibly clamped) rate
+    // The boxes hold the USER'S REQUESTED length and are deliberately not
+    // rewritten here — reformatting on every change fought sequential
+    // min→sec entry (the min box's change event fires when focus moves on).
+    // The readout shows the length actually delivered; only an over-full
+    // seconds box (90 → 1:30) is normalised.
+    if (lengthSecInput !== null && parseFloat(lengthSecInput.value) >= 60) {
+      setLengthBoxes(target);
+    }
+    updateAdjustReadout(note);
   };
   const updateAdjustVisibility = () => {
     if (adjustPanel === null || adjustCheck === null || adjustRow === null) return;
@@ -923,7 +937,8 @@
     });
     speedInput.addEventListener('input', () => { syncFromSpeed(); saveExportOpts(); });
     if (speedSlider !== null) speedSlider.addEventListener('input', () => { syncFromSlider(); saveExportOpts(); });
-    lengthInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
+    if (lengthMinInput !== null) lengthMinInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
+    if (lengthSecInput !== null) lengthSecInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
   }
   [burnCheck, retimeCheck, vttCheck, srtCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', saveExportOpts);

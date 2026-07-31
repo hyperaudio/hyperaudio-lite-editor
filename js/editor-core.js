@@ -77,7 +77,7 @@
   window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
   let hyperaudioTemplate = "";
 
-  fetch('hyperaudio-template.html')
+  fetch('hyperaudio-template.html?v=0.9.1') // bump with the template — an unversioned fetch served stale copies from the browser cache
   .then(function(response) {
       // When the page is loaded convert it to text
       return response.text()
@@ -99,17 +99,41 @@
     const iaInput = document.getElementById('interactive-media-filename');
     const iaDownload = document.getElementById('interactive-export-download');
 
-    // Remote media can be linked by its URL as-is; a blob:/data: source (local
-    // upload or Recents) has no usable path, so the field starts empty for the
-    // user to type the local filename.
+    // Best media reference to link in the exported interactive transcript, for the
+    // CURRENT media. A plain remote URL is usable directly from the player src; but
+    // a local upload (blob:) and an HLS source (blob: MediaSource) carry no usable
+    // URL, so those paths stamp the real reference on #hyperplayer.dataset.mediaRef
+    // (the filename for a local file, the original URL for remote/HLS — set by the
+    // local-file capture below and by attachMediaPlayback in hls-source.js). Prefer
+    // the http(s) src when present so a fresh remote URL always wins over a stale
+    // ref; otherwise use the stamped ref.
     const guessMediaSrc = () => {
-      const src = document.querySelector('#hyperplayer') ? document.querySelector('#hyperplayer').src : '';
-      return /^https?:/i.test(src) ? src : '';
+      const player = document.querySelector('#hyperplayer');
+      const src = player ? player.src : '';
+      if (/^https?:/i.test(src)) return src;
+      return (player && player.dataset.mediaRef) || '';
     };
 
+    // Record the real filename of a locally-loaded media file (a blob: URL carries
+    // no name). Read centrally from any media file input; import inputs (JSON/SRT/
+    // VTT) are skipped by the media check.
+    const MEDIA_EXTENSION = /\.(mp4|webm|ogv|ogg|mov|m4v|mkv|mp3|m4a|wav|aac|flac|opus)$/i;
+    document.addEventListener('change', (e) => {
+      const input = e.target;
+      if (!input || input.type !== 'file' || !input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      const isMedia = /^(audio|video)\//i.test(file.type || '') || MEDIA_EXTENSION.test(file.name);
+      if (!isMedia) return;
+      const player = document.querySelector('#hyperplayer');
+      if (player) player.dataset.mediaRef = file.name;
+    }, true);
+
     if (iaModal !== null && iaInput !== null) {
+      // Refresh the field to the current media every time the dialog opens, so a
+      // value left over from a previous clip (or a name typed and abandoned) can
+      // never be exported by mistake — the field always reflects what's loaded now.
       iaModal.addEventListener('change', () => {
-        if (iaModal.checked && iaInput.value.trim() === '') {
+        if (iaModal.checked) {
           iaInput.value = guessMediaSrc();
         }
       });
@@ -123,7 +147,9 @@
         // function replacements so a literal $ in the transcript/filename isn't
         // treated as a replacement pattern
         const html = hyperaudioTemplate
-          .replace('{hypertranscript}', () => getTranscriptData())
+          .replace('{hypertranscript}', () => (typeof serializeTranscriptHtml === 'function'
+            ? serializeTranscriptHtml(document.querySelector('#hypertranscript'))
+            : getTranscriptData()))
           .replace('{sourcemedia}', () => mediaSrc)
           .replace('{sourcevtt}', () => (track !== null ? track.src : ''));
         const blob = new Blob([html], { type: 'text/html' });
@@ -149,25 +175,38 @@
   // edits otherwise persist; localStorage load manages its own cache.
   window.document.addEventListener('hyperaudioInit', () => { captionCache = null; }, false);
 
-  document.querySelector('#caption-editor-btn').addEventListener('click', (e) => {
+  // Segmented view switch (transcript/captions): both segments stay clickable
+  // and the active one is marked by the track's thumb + aria-pressed rather
+  // than disabled.
+  // Clicking the active segment is a no-op — the transcription engines rely on
+  // that when they force transcript view by clicking #transcript-editor-btn.
+  const transcriptViewBtn = document.querySelector('#transcript-editor-btn');
+  const captionViewBtn = document.querySelector('#caption-editor-btn');
+
+  function reflectViewSwitch() {
+    document.querySelector('#view-switch').classList.toggle('captions-active', captionMode === true);
+    captionViewBtn.setAttribute('aria-pressed', String(captionMode === true));
+    transcriptViewBtn.setAttribute('aria-pressed', String(captionMode !== true));
+  }
+
+  captionViewBtn.addEventListener('click', () => {
+    if (captionMode === true) return;
     let holder = document.querySelector('.transcript-holder');
     transcriptCache = holder.cloneNode(true);
     captionMode = true;
     hyperaudioGenerateCaptionsFromTranscript();
-    document.querySelector('#caption-editor-btn').disabled = true;
-    document.querySelector('#transcript-editor-btn').disabled = false;
+    reflectViewSwitch();
   });
 
-  document.querySelector('#transcript-editor-btn').addEventListener('click', (e) => {
+  transcriptViewBtn.addEventListener('click', () => {
+    if (captionMode !== true) return;
     restoreTranscript();
     captionMode = false;
     if (transcriptRequiresInit === true) {
       hyperaudio();
       transcriptRequiresInit = false;
     }
-    
-    document.querySelector('#caption-editor-btn').disabled = false;
-    document.querySelector('#transcript-editor-btn').disabled = true;
+    reflectViewSwitch();
   });
 
 
@@ -180,6 +219,13 @@
   // debounced pass keeps the spans (and the player's word index) correct
   // mid-edit too (#394).
   const WORD_SPLIT_TIMING = true;
+
+  // Skip normalization while an IME composition is in flight — rewriting the
+  // text nodes under an active composition (CJK etc.) breaks it. The skipped
+  // pass simply happens on the next keyup/blur.
+  let imeComposing = false;
+  document.addEventListener('compositionstart', () => { imeComposing = true; });
+  document.addEventListener('compositionend', () => { imeComposing = false; });
 
   // Estimate syllables from contiguous vowel groups (Latin-script heuristic);
   // floored at 1 so every part carries weight.
@@ -215,6 +261,95 @@
     span.replaceWith(frag);
   }
 
+  // --- Caret preservation across normalization -------------------------------
+  // The span repairs rewrite text nodes (textContent =, replaceWith), which
+  // destroys the browser's selection anchor — mid-edit the caret jumped to the
+  // start of the joined/split word. All the passes preserve the transcript's
+  // character CONTENT though, so the caret can be saved as an absolute
+  // character offset and re-resolved onto whatever nodes exist afterwards.
+  // Both endpoints are saved so a non-collapsed SELECTION (e.g. words selected
+  // for striking) survives too, not just a caret.
+  function saveCaretOffset(root) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+    const measure = (container, offset) => {
+      const pre = document.createRange();
+      pre.selectNodeContents(root);
+      pre.setEnd(container, offset);
+      return pre.toString().length;
+    };
+    return {
+      start: measure(range.startContainer, range.startOffset),
+      end: range.collapsed ? null : measure(range.endContainer, range.endOffset),
+    };
+  }
+
+  // Resolve an absolute character offset back to a (text node, offset) pair;
+  // clamps past-the-end to the final position.
+  function resolveCharOffset(root, chars) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    let last = null;
+    let remaining = chars;
+    while ((node = walker.nextNode())) {
+      if (remaining <= node.nodeValue.length) {
+        return { node, offset: remaining };
+      }
+      remaining -= node.nodeValue.length;
+      last = node;
+    }
+    return last ? { node: last, offset: last.nodeValue.length } : null;
+  }
+
+  function restoreCaretOffset(root, saved) {
+    const start = resolveCharOffset(root, saved.start);
+    if (start === null) return;
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    if (saved.end !== null) {
+      const end = resolveCharOffset(root, saved.end);
+      if (end !== null) range.setEnd(end.node, end.offset);
+    } else {
+      range.collapse(true);
+    }
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  // Scrub contenteditable artifacts (#415): WebKit injects inline styles
+  // (font-size etc.) on paste/splits, plus style-only wrapper spans with no
+  // data-m — all of which persisted into exports and confused downstream
+  // consumers. Only two inline styles are FUNCTIONAL on transcript spans:
+  // line-through (the strikeout/cut model) and display on speaker labels (the
+  // Speakers toggle). Preserve those, drop everything else, and unwrap
+  // non-data-m wrapper spans so their text folds back into the flow.
+  function scrubEditingArtifacts(root) {
+    root.querySelectorAll('span[style]').forEach((span) => {
+      const display = span.classList.contains('speaker') ? span.style.display : '';
+      const struck = (span.style.textDecoration || '').includes('line-through');
+      span.removeAttribute('style');
+      if (display) span.style.display = display;
+      if (struck) span.style.textDecoration = 'line-through';
+    });
+    root.querySelectorAll('span:not([data-m])').forEach((span) => {
+      if (span.classList.contains('speaker')) return;
+      span.replaceWith(...span.childNodes);
+    });
+  }
+
+  // Spans containing a bracket belong to the SPEAKER machinery, not word
+  // normalization (#416): "[Maria] The " must survive until sanitise's speaker
+  // pass extracts the label — splitting it first turns "[Maria] " into a plain
+  // word span (starts-with-[ AND ends-with-], which the extraction branch
+  // skips), steals timing from the real word, and throws the caret. A bare "["
+  // (not a complete [..] pair) also guards half-typed names during a pause.
+  function isSpeakerText(span) {
+    return span.textContent.indexOf('[') !== -1 || span.textContent.indexOf(']') !== -1;
+  }
+
   // True when nothing but whitespace text sits between nodes a and b.
   function onlyWhitespaceBetween(a, b) {
     let n = a.nextSibling;
@@ -232,32 +367,40 @@
   // space. Move the post-space fragment to the front of the next word span,
   // reconstituting the word with each span's ORIGINAL data-m/data-d intact.
   function reflowLeakedFragments(root) {
+    let changed = false;
     const spans = Array.from(root.querySelectorAll('span[data-m]'));
     for (let i = 0; i < spans.length; i++) {
       const span = spans[i];
       if (!span.isConnected || span.classList.contains('speaker')) continue;
+      if (isSpeakerText(span)) continue;
       const txt = span.textContent;
       if (!/\S\s+\S/.test(txt) || /\s$/.test(txt)) continue;
       const next = span.nextElementSibling;
       if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) continue;
+      if (isSpeakerText(next)) continue;
       if (!onlyWhitespaceBetween(span, next)) continue;
       const cut = txt.lastIndexOf(' ');
       span.textContent = txt.slice(0, cut).replace(/\s+$/, '') + ' ';
       next.textContent = txt.slice(cut + 1) + next.textContent;
+      changed = true;
     }
+    return changed;
   }
 
   // Merge spans JOINED by deleting the space between two words — the inverse of
   // splitWordSpan (#394): a span with no trailing space, followed by a word
   // span, is glued back into one (start of first, end of last); chains for 3+.
   function mergeJoinedSpans(root) {
+    let changed = false;
     const spans = Array.from(root.querySelectorAll('span[data-m]'));
     for (let i = 0; i < spans.length; i++) {
       const span = spans[i];
       if (!span.isConnected || span.classList.contains('speaker')) continue;
+      if (isSpeakerText(span)) continue;
       while (span.textContent.length > 0 && !/\s$/.test(span.textContent)) {
         const next = span.nextElementSibling;
         if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) break;
+        if (isSpeakerText(next)) break;
         if (!onlyWhitespaceBetween(span, next)) break;
         const m = parseInt(span.getAttribute('data-m'), 10) || 0;
         const nm = parseInt(next.getAttribute('data-m'), 10) || 0;
@@ -265,8 +408,10 @@
         span.setAttribute('data-d', String(Math.max(0, (nm + nd) - m)));
         span.textContent = span.textContent + next.textContent;
         next.remove();
+        changed = true;
       }
     }
+    return changed;
   }
 
   // Run the span repairs on `root` and, if the set of word spans changed
@@ -275,7 +420,7 @@
   // between existing nodes, so it never changes the count. Called from both the
   // blur handler and the debounced sanitise pass.
   function normalizeTranscriptSpans(root) {
-    if (!root) return;
+    if (!root || imeComposing) return;
     // nbsp -> normal space (#339)
     if (root.textContent.indexOf(' ') !== -1) {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -286,19 +431,37 @@
         }
       }
     }
+    // artifact hygiene runs regardless of the timing-repair switch (#415)
+    scrubEditingArtifacts(root);
     if (!WORD_SPLIT_TIMING) return;
+    // The repairs rewrite text nodes, which would throw the caret to the start
+    // of the affected word mid-edit — save it as a character offset first and
+    // re-resolve after, but only when the transcript actually has focus (on
+    // blur there is nothing to preserve) and a rewrite actually happened.
+    const hasFocus = document.activeElement === root;
+    const caret = hasFocus ? saveCaretOffset(root) : null;
     // disjoint conditions, in order: reflow (internal space + no trailing),
     // merge (no internal + no trailing), split (internal space + trailing).
-    const countBefore = root.querySelectorAll('span[data-m]').length;
-    reflowLeakedFragments(root);
-    mergeJoinedSpans(root);
+    const reflowed = reflowLeakedFragments(root);
+    let merged = mergeJoinedSpans(root);
+    let split = false;
     const spans = root.querySelectorAll('span[data-m]');
     for (let i = 0; i < spans.length; i++) {
-      if (/\S\s+\S/.test(spans[i].textContent)) splitWordSpan(spans[i]);
+      if (!isSpeakerText(spans[i]) && /\S\s+\S/.test(spans[i].textContent)) {
+        splitWordSpan(spans[i]);
+        split = true;
+      }
     }
+    if (caret !== null && (reflowed || merged || split)) {
+      restoreCaretOffset(root, caret);
+    }
+    // Re-index whenever merge or split FIRED — not on a span-count comparison:
+    // a merge (−1) plus a split (+1) in the same pass nets zero yet leaves
+    // wordArr holding removed nodes and missing new ones. Reflow keeps the
+    // span elements themselves, so it needs no re-index.
     const inst = window.hyperaudioInstance;
     if (inst && typeof inst.setupTranscriptWords === 'function'
-        && root.querySelectorAll('span[data-m]').length !== countBefore) {
+        && (merged || split)) {
       inst.setupTranscriptWords();
       if (typeof inst.updateTranscriptVisualState === 'function') {
         const player = document.querySelector('#hyperplayer');
@@ -463,9 +626,16 @@
             if (walker.currentNode.textContent.trim().startsWith('[') === false || walker.currentNode.textContent.trim().endsWith(']') === false) {
              
 
-              //look for text in square brackets
-              const regex = / *\[[^\]]*]/g;
+              //look for text in square brackets — extract one label per pass;
+              //any further bracketed labels stay in the text for the next pass
+              //(match() returns an array: coercing it to a string corrupted
+              //"[A] words [B]" into a single "[A], [B]" label)
+              const regex = / *\[[^\]]*]/;
               const found = walker.currentNode.textContent.match(regex);
+
+              // includes('[') + includes(']') admits reversed brackets
+              // ("]foo[") with no complete [..] pair — nothing to extract
+              if (found === null) { continue; }
 
               let startsWithSpeaker = false;
               if (walker.currentNode.textContent.trim().startsWith('[') === true){
@@ -475,7 +645,7 @@
               walker.currentNode.textContent = walker.currentNode.textContent.replace(regex, '');
 
               let span = document.createElement("span");
-              span.textContent = found + ' ';
+              span.textContent = found[0] + ' ';
 
               if (span.textContent.includes('[') && span.textContent.includes(']')) {
                 span.classList.add("speaker");
@@ -513,7 +683,13 @@
           }
         }
 
-        let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
+        // Canonical serialization (transcript-serializer.js): one span per
+        // line, two-space indents, data-m before data-d, runtime noise
+        // dropped. Replaces the old raw-innerHTML + strip-all-classes regex —
+        // which also (wrongly) removed the semantic speaker class.
+        let hypertranscript = typeof serializeTranscriptHtml === 'function'
+          ? serializeTranscriptHtml(rootnode)
+          : rootnode.innerHTML.replace(/ class=".*?"/g, '');
         document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
 
         if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
@@ -603,6 +779,11 @@
         sidebarOpen = true;
       }
 
+      document.querySelector('#sidebar-toggle').setAttribute('aria-pressed', String(sidebarOpen));
+      // lets the CSS align the navbar's leading edge with the transcript card,
+      // whose left gutter differs between the open and collapsed layouts
+      document.body.classList.toggle('sidebar-collapsed', sidebarOpen === false);
+
       if(
         document.pictureInPictureEnabled &&
         !videoElement.disablePictureInPicture) {
@@ -617,7 +798,16 @@
         }
       }
     });
-    
+
+    // On small screens the same button opens the Recents drawer instead
+    // (responsive.js intercepts the click), so when the layout returns to
+    // desktop restore aria-pressed to the desktop sidebar state.
+    window.matchMedia('(max-width: 948px)').addEventListener('change', (ev) => {
+      if (!ev.matches) {
+        document.querySelector('#sidebar-toggle').setAttribute('aria-pressed', String(sidebarOpen));
+      }
+    });
+
     let showSpeakers = document.querySelector('#show-speakers');
 
     showSpeakers.addEventListener('change', function(e) {
@@ -643,9 +833,35 @@
 
   function hyperaudioGenerateCaptionsFromTranscript() {
     let sourceMedia = document.querySelector("#hyperplayer").src;
-    let track = document.querySelector('#hyperplayer-vtt');
+
+    // Tear down the previous media's caption <track> before regenerating. A fresh
+    // transcription reuses the same <video>/<track>; left in 'showing' mode the old
+    // track keeps the PREVIOUS media's cue painted, so the new captions render on
+    // top of the stale line (the "double captions" of #356/#287). The Recents-load
+    // path already resets via resetCaptionTrack (storage.js) — the transcribe /
+    // regenerate path must too. Fall back to the existing track if storage.js is
+    // absent. (Note: this is the from-scratch entry point; the live-edit sanitise
+    // path calls generateCaptionsFromTranscript directly and must NOT reset here,
+    // or every keystroke would swap the track and churn the caption paint.)
+    let track = (typeof resetCaptionTrack === 'function' && resetCaptionTrack())
+      || document.querySelector('#hyperplayer-vtt');
 
     populateCaptionEditor(generateCaptionsFromTranscript(getTranscriptData(), sourceMedia, track));
+
+    // Swapping the <track> element drops the old cue's DATA, but a PAUSED video
+    // won't re-composite its native caption overlay on its own — so the previous
+    // cue's PIXELS stay stranded on screen under the new captions (the remaining
+    // half of #356/#287; the load path avoids it because loading new media forces
+    // a full video relayout, which the transcribe path never triggers). Toggling
+    // the track's display mode forces the overlay to rebuild, flushing the stale
+    // ::cue paint. Only meaningful while the intended mode is 'showing' — mp3/m4a
+    // are deliberately 'hidden' by generateCaptionsFromTranscript, nothing to flush.
+    const player = document.getElementById('hyperplayer');
+    const captionTrack = player && player.textTracks[0];
+    if (captionTrack && captionTrack.mode === 'showing') {
+      captionTrack.mode = 'hidden';
+      captionTrack.mode = 'showing';
+    }
   }
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
