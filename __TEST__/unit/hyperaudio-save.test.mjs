@@ -242,3 +242,103 @@ test('container: unknown entries in the zip are ignored (whitelist-read)', async
   assert.equal(loaded.recovered, false);
   assert.equal(loaded.project.format, 'hyperaudio');
 });
+
+/* ---- format v1.2 parity (#447; spec § 7.1, 7.2.2, 8.1, 10.2, 10.3) ---- */
+
+test('media.path: ".." substring is legal, exact traversal segments are not (§ 10.2)', () => {
+  assert.equal(save.validateMediaPath('media/mix..final.mp3'), true);   // the regression class
+  assert.equal(save.validateMediaPath('media/tone.wav'), true);
+  assert.equal(save.validateMediaPath('media/..'), false);
+  assert.equal(save.validateMediaPath('media/.'), false);
+  assert.equal(save.validateMediaPath('media/'), false);
+  assert.equal(save.validateMediaPath('media/a/b.mp3'), false);
+  assert.equal(save.validateMediaPath('media/a\\b.mp3'), false);
+  assert.equal(save.validateMediaPath('elsewhere/a.mp3'), false);
+});
+
+test('sanitizeMediaFilename mirrors the reader rule (§ 10.2)', () => {
+  assert.equal(save.sanitizeMediaFilename('mix..final.mp3'), 'mix..final.mp3'); // preserved
+  assert.equal(save.sanitizeMediaFilename('a/b\\c.mp3'), 'a_b_c.mp3');
+  assert.equal(save.sanitizeMediaFilename('..'), 'media');
+  assert.equal(save.sanitizeMediaFilename('  '), 'media');
+  assert.equal(save.sanitizeMediaFilename(null), 'media');
+});
+
+test('rewrites preserve unknown envelope fields, top-level and nested (§ 8.1)', () => {
+  const envelope = {
+    format: 'hyperaudio', formatVersion: '1.4',
+    futureBlock: { anything: true },
+    created: '2020-01-01T00:00:00Z',
+    options: { gapRemoval: { enabled: false }, futureOption: 'keep-me', captions: { updateFromTranscript: true, futureCaptionKey: 7 } },
+    texts: { title: 'old', futureText: 'keep-me-too' },
+  };
+  const project = save.buildProjectJson({
+    envelope,
+    generatorVersion: 'x', created: envelope.created, modified: 'now',
+    media: { kind: 'none', path: null, url: null, filename: '', mimeType: '', durationSeconds: 0, sizeBytes: 0 },
+    options: { gapRemoval: { enabled: true, thresholdMs: 500, bufferMs: 100 }, updateCaptionsFromTranscript: false, view: { showSpeakers: true, showTimecodes: false } },
+    texts: { title: 'new', language: '', summary: '', topics: [] },
+    transcript: { words: [] },
+  });
+  assert.equal(project.futureBlock.anything, true);            // unknown top-level survives
+  assert.equal(project.options.futureOption, 'keep-me');       // unknown inside known object survives
+  assert.equal(project.options.captions.futureCaptionKey, 7);  // ...even nested two deep
+  assert.equal(project.texts.futureText, 'keep-me-too');
+  assert.equal(project.texts.title, 'new');                    // owned fields overwritten
+  assert.equal(project.options.captions.updateFromTranscript, false);
+  assert.equal(project.formatVersion, save.FORMAT_VERSION);    // writers write their own version
+  assert.equal(save.FORMAT_VERSION, '1.2');
+  assert.equal(envelope.texts.title, 'old');                   // the input envelope is not mutated
+});
+
+test('media.kind "none": validates and round-trips a media-less container (§ 7.2.2)', async () => {
+  const state = {
+    generatorVersion: 'x', created: 'c', modified: 'm',
+    media: { kind: 'none', path: null, url: null, filename: '', mimeType: '', durationSeconds: 0, sizeBytes: 0 },
+    options: { gapRemoval: { enabled: false, thresholdMs: 500, bufferMs: 100 }, updateCaptionsFromTranscript: true, view: {} },
+    texts: { title: 't', language: '', summary: '', topics: [] },
+    transcript: { words: [{ start: 0, end: 1, text: 'a' }] },
+  };
+  const project = save.buildProjectJson(state);
+  assert.equal(save.validateProjectJson(project).ok, true);
+  const zipped = await save.zipProject({ json: save.serializeProjectJson(project), html: '<article></article>' }, JSZip, 'nodebuffer');
+  const loaded = await save.unzipProject(new Uint8Array(zipped), JSZip);
+  assert.equal(loaded.recovered, false);
+  assert.equal(loaded.project.media.kind, 'none');
+  assert.equal(loaded.mediaData, null);
+  assert.deepEqual(loaded.warnings, []); // "none" is not "missing" — no warning
+});
+
+test('invalid UTF-8 in a text entry is refused, not silently replaced (§ 10.3)', async () => {
+  const zip = new JSZip();
+  zip.file('mimetype', save.CONTAINER_MIMETYPE, { compression: 'STORE' });
+  zip.file('hyperaudio.json', new Uint8Array([0x7b, 0xff, 0xfe, 0x7d])); // {<invalid>}
+  const buf = await zip.generateAsync({ type: 'nodebuffer' });
+  await assert.rejects(save.unzipProject(new Uint8Array(buf), JSZip), (e) => e.code === 'entry-invalid-utf8');
+});
+
+test('a compressed media entry is refused (§ 7.1) — pins JSZip metadata access too', async () => {
+  const state = {
+    generatorVersion: 'x', created: 'c', modified: 'm',
+    media: { kind: 'original', path: 'media/tone.wav', url: null, filename: 'tone.wav', mimeType: 'audio/wav', durationSeconds: 1, sizeBytes: 4 },
+    options: { gapRemoval: { enabled: false, thresholdMs: 500, bufferMs: 100 }, updateCaptionsFromTranscript: true, view: {} },
+    texts: { title: 't', language: '', summary: '', topics: [] },
+    transcript: { words: [{ start: 0, end: 1, text: 'a' }] },
+  };
+  const zip = new JSZip();
+  zip.file('mimetype', save.CONTAINER_MIMETYPE, { compression: 'STORE' });
+  zip.file('hyperaudio.json', save.serializeProjectJson(save.buildProjectJson(state)));
+  zip.file('media/tone.wav', new Uint8Array(4096), { compression: 'DEFLATE' }); // forbidden
+  const buf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  await assert.rejects(save.unzipProject(new Uint8Array(buf), JSZip), (e) => e.code === 'media-compressed');
+});
+
+test('the writer sanitizes hostile media entry names with the shared rule (§ 10.2)', async () => {
+  const zipped = await save.zipProject({
+    json: '{}', html: '<article></article>',
+    media: { name: '../evil.wav', data: new Uint8Array(8) },
+  }, JSZip, 'nodebuffer');
+  const zip = await JSZip.loadAsync(zipped);
+  assert.ok(zip.file('media/.._evil.wav') !== null);  // separator neutralized, ".." substring kept
+  assert.equal(zip.file('media/../evil.wav'), null);
+});

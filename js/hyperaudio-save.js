@@ -3,9 +3,12 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * Implements the .hyperaudio format v1.1 (full spec + worked example: issue #403;
- * 1.1 adds media.kind "link": remote media embedded when CORS allows, saved as
- * a declared URL-only link otherwise, reconciled on open per spec § 7.3).
+ * Implements the .hyperaudio format v1.2 (normative spec:
+ * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
+ * "link" (remote media embedded when CORS allows, declared URL-only link
+ * otherwise, reconciled on open per § 7.3); 1.2 adds media.kind "none",
+ * writer-side envelope preservation (§ 8.1), and pins the media.path segment
+ * rule, byte-measured caps and STORE-only media (§ 7.1, § 10.2, § 10.3).
  * The format in ten lines — a renamed ZIP; a working SAVE, never an export:
  *   mimetype                   first entry, STORE: "application/vnd.hyperaudio+zip"
  *   hyperaudio.json            source of truth: format version + media descriptor
@@ -34,7 +37,7 @@
   'use strict';
 
   const FORMAT_NAME = 'hyperaudio';
-  const FORMAT_VERSION = '1.1'; // 1.1 adds media.kind "link" (spec § 7.2)
+  const FORMAT_VERSION = '1.2'; // 1.2: kind "none", envelope preservation, pinned path/caps (spec § 8)
   const READER_MAJOR = 1;
   const CONTAINER_MIMETYPE = 'application/vnd.hyperaudio+zip';
   const FILE_EXTENSION = '.hyperaudio';
@@ -80,13 +83,27 @@
     return { ok: true, major, minor };
   }
 
-  // media.path MUST be media/<filename>: one segment, no "..", nothing absolute
-  // (spec § 10.2). The zip is only ever read by known names, so this is the one
-  // file-supplied name we accept — and only in this shape.
+  // media.path MUST be media/<filename>: exactly one non-empty segment, no
+  // separators of either convention, and the segment must not be the exact
+  // traversal tokens "." or ".." (spec § 10.2, pinned in 1.2). A ".."
+  // SUBSTRING in a normal filename ("mix..final.mp3") is legal — rejecting it
+  // made conforming containers written elsewhere unreadable.
   function validateMediaPath(path) {
-    return typeof path === 'string'
-      && /^media\/[^/\\]+$/.test(path)
-      && path.indexOf('..') === -1;
+    if (typeof path !== 'string' || path.indexOf(MEDIA_DIR) !== 0) return false;
+    const segment = path.slice(MEDIA_DIR.length);
+    if (segment === '' || /[/\\]/.test(segment)) return false;
+    if (segment === '.' || segment === '..') return false;
+    return true;
+  }
+
+  // Writer-side mirror of the same rule (spec § 10.2): one portable segment.
+  // Used everywhere a filename becomes a media/ entry, an OPFS name, or a
+  // descriptor path — writer and reader MUST share the rule.
+  function sanitizeMediaFilename(name) {
+    let out = String(name === null || name === undefined ? '' : name)
+      .replace(/[/\\]/g, '_').trim();
+    if (out === '' || out === '.' || out === '..') out = 'media';
+    return out;
   }
 
   // Validate a parsed hyperaudio.json before use (spec § 10.4). Returns
@@ -119,6 +136,8 @@
       if (typeof media.url !== 'string' || !/^https?:/i.test(media.url)) {
         fail('media', 'media.kind "link" requires an http(s) url');
       }
+    } else if (media.kind === 'none') {
+      // a text-only project (spec § 7.2.2): nothing further to validate
     } else {
       fail('media-kind', `unknown media.kind "${media && media.kind}"`);
     }
@@ -147,7 +166,16 @@
   // (space: true, struck: false) are already omitted by htmlToJSON; times are
   // seconds throughout (the DOM's data-m/data-d are ms — ms = round(s × 1000)).
   function buildProjectJson(state) {
-    const project = {
+    // Round-trip preservation (spec § 8.1, normative since 1.2): start from
+    // the opened envelope and overwrite only editor-owned fields — including
+    // INSIDE known objects, where unknown keys are merged, not replaced.
+    // Rebuilding from scratch destroyed the very fields readers are told to
+    // ignore-and-tolerate.
+    const base = state.envelope !== null && state.envelope !== undefined
+      ? structuredClone(state.envelope) : {};
+    const baseOptions = (base.options !== null && typeof base.options === 'object') ? base.options : {};
+    const baseTexts = (base.texts !== null && typeof base.texts === 'object') ? base.texts : {};
+    const project = Object.assign(base, {
       format: FORMAT_NAME,
       formatVersion: FORMAT_VERSION,
       generator: {
@@ -157,19 +185,19 @@
       created: state.created,
       modified: state.modified,
       media: state.media,
-      options: {
+      options: Object.assign({}, baseOptions, {
         gapRemoval: state.options.gapRemoval,
-        captions: { updateFromTranscript: state.options.updateCaptionsFromTranscript !== false },
-        view: state.options.view,
-      },
-      texts: {
+        captions: Object.assign({}, baseOptions.captions, { updateFromTranscript: state.options.updateCaptionsFromTranscript !== false }),
+        view: Object.assign({}, baseOptions.view, state.options.view),
+      }),
+      texts: Object.assign({}, baseTexts, {
         title: state.texts.title || '',
         language: state.texts.language || '',
         summary: state.texts.summary || '',
         topics: Array.isArray(state.texts.topics) ? state.texts.topics : [],
-      },
+      }),
       transcript: state.transcript,
-    };
+    });
     if (state.provenance && (state.provenance.engine || state.provenance.model)) {
       project.provenance = Object.assign({}, state.provenance);
       if (state.hasOriginal) {
@@ -199,7 +227,7 @@
     if (files.originalJson) zip.file(ENTRY.original, files.originalJson);
     if (files.captionsVtt) zip.file(ENTRY.captions, files.captionsVtt);
     if (files.media) {
-      zip.file(MEDIA_DIR + files.media.name, files.media.data, { compression: 'STORE', binary: true });
+      zip.file(MEDIA_DIR + sanitizeMediaFilename(files.media.name), files.media.data, { compression: 'STORE', binary: true });
     }
     return zip.generateAsync({
       type: outType || 'uint8array',
@@ -239,11 +267,19 @@
       if (typeof declared === 'number' && declared > TEXT_ENTRY_MAX_BYTES) {
         throw rejection('entry-too-large', `${name} exceeds the ${TEXT_ENTRY_MAX_BYTES} byte cap`);
       }
-      const text = await entry.async('string');
-      if (text.length > TEXT_ENTRY_MAX_BYTES) {
+      const bytes = await entry.async('uint8array');
+      if (bytes.byteLength > TEXT_ENTRY_MAX_BYTES) {
         throw rejection('entry-too-large', `${name} exceeds the ${TEXT_ENTRY_MAX_BYTES} byte cap`);
       }
-      return text;
+      // The cap is UTF-8 BYTES and decoding is fatal (spec § 10.3, 1.2):
+      // text.length counted UTF-16 units, so multibyte text could blow past
+      // the cap, and invalid UTF-8 silently decoded to replacement characters
+      // here while native readers rejected the same file.
+      try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch (e) {
+        throw rejection('entry-invalid-utf8', `${name} is not valid UTF-8`);
+      }
     }
 
     const mimetypeText = await readTextEntry(ENTRY.mimetype);
@@ -300,6 +336,15 @@
       if (mediaEntry === null) {
         warnings.push('declared media entry is missing — media unavailable');
       } else {
+        // spec § 7.1 (1.2): the media entry MUST be STORED — a compressed
+        // media entry defeats § 10.3's size accounting. JSZip only exposes
+        // the method via _data (private); the unit suite pins this so a
+        // JSZip upgrade that moves it fails loudly, and absence of the
+        // field fails open (no false rejections).
+        const comp = mediaEntry._data && mediaEntry._data.compression;
+        if (comp && comp.magic && comp.magic !== '\x00\x00') {
+          throw rejection('media-compressed', 'the media entry is compressed; the format requires STORE');
+        }
         mediaData = await mediaEntry.async('uint8array');
         mediaEntryName = project.media.path.slice(MEDIA_DIR.length);
       }
@@ -315,7 +360,7 @@
   const pure = {
     FORMAT_NAME, FORMAT_VERSION, CONTAINER_MIMETYPE, ENTRY, MEDIA_DIR,
     TEXT_ENTRY_MAX_BYTES,
-    checkFormatVersion, validateMediaPath, validateProjectJson,
+    checkFormatVersion, validateMediaPath, sanitizeMediaFilename, validateProjectJson,
     buildProjectJson, serializeProjectJson,
     zipProject, unzipProject,
   };
@@ -424,6 +469,9 @@
     originalJson: null, // the origin as serialized JSON (in-memory copy; work/ holds it across reloads)
     title: '',          // project title; the legacy title field is gone (#439), so
                         // the session carries it across gather/apply (#449 adds UI)
+    envelope: null,     // the opened project's raw parsed hyperaudio.json —
+                        // rewrites start from it so unknown fields survive
+                        // the round trip (spec § 8.1, normative since 1.2)
   };
   let suppressCapture = false; // true while apply() replays a loaded project
   let autosaveTimer = null;
@@ -461,11 +509,12 @@
       // fetched from this very URL (opportunistic embed, § 7.2): that IS this
       // project's media and the save is self-contained.
       if (session.mediaFile !== null && session.mediaFileFromUrl === src) {
+        const safeName = sanitizeMediaFilename(session.mediaFile.name);
         return {
           kind: 'original',
-          path: MEDIA_DIR + session.mediaFile.name,
+          path: MEDIA_DIR + safeName,
           url: null,
-          filename: session.mediaFile.name,
+          filename: safeName,
           mimeType: session.mediaFile.type || '',
           durationSeconds: duration,
           sizeBytes: session.mediaFile.size,
@@ -474,15 +523,21 @@
       return { kind: 'link', path: null, url: src, filename: '', mimeType: '', durationSeconds: duration, sizeBytes: 0 };
     }
     if (session.mediaFile !== null) {
+      const safeName = sanitizeMediaFilename(session.mediaFile.name);
       return {
         kind: 'original',
-        path: MEDIA_DIR + session.mediaFile.name,
+        path: MEDIA_DIR + safeName,
         url: null,
-        filename: session.mediaFile.name,
+        filename: safeName,
         mimeType: session.mediaFile.type || '',
         durationSeconds: duration,
         sizeBytes: session.mediaFile.size,
       };
+    }
+    if (src === '') {
+      // No media at all (a text-only import): a "none" project (spec § 7.2.2)
+      // — never a fabricated "original" descriptor pointing at nothing.
+      return { kind: 'none', path: null, url: null, filename: '', mimeType: '', durationSeconds: 0, sizeBytes: 0 };
     }
     // Local media playing from a blob:/data: URL that we haven't captured yet
     // (e.g. a legacy Recents load) — resolveMediaFile() materialises it lazily.
@@ -525,6 +580,7 @@
 
     return {
       generatorVersion: versionMeta !== null ? versionMeta.content : '',
+      envelope: session.envelope,
       created: session.created || nowIso(),
       modified: nowIso(),
       media,
@@ -784,6 +840,7 @@
     session.mediaFileFromUrl = null;
     session.pendingReconcile = null;
     session.title = '';
+    session.envelope = null; // a fresh document has no envelope to preserve
     // Provenance is only this project's if the engine reported it moments ago
     // (imports fire hyperaudioInit without any setTranscriptionInfo call —
     // a previous transcription's provenance must not leak into them).
@@ -904,6 +961,8 @@
         'version-major': 'This project was saved by a newer version of the editor and cannot be opened here. Please update the editor.',
         'media-kind': 'This project uses a media formula this editor does not support yet. Please update the editor.',
         'entry-too-large': 'This file contains an oversized entry and was refused for safety.',
+        'entry-invalid-utf8': 'This file contains invalid text encoding and was refused.',
+        'media-compressed': 'This file stores its media compressed, which the format forbids — it was refused for safety.',
         'unreadable': 'This is not a readable .hyperaudio file.',
       };
       alert(messages[e.code] || messages['unreadable']);
@@ -939,6 +998,7 @@
         ? loaded.project.media : null;
       session.hasOriginal = loaded.originalText !== null;
       session.originalJson = loaded.originalText;
+      session.envelope = loaded.recovered ? null : loaded.project;
 
       if (opfsAvailable) {
         await clearWork();
