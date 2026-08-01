@@ -898,6 +898,7 @@
       + '<div id="project-dialog-message" style="line-height:1.6"></div>'
       + '<div class="modal-action">'
       + '<button type="button" id="project-dialog-cancel" class="btn btn-ghost">Cancel</button>'
+      + '<button type="button" id="project-dialog-extra" class="btn btn-primary" style="display:none"></button>'
       + '<button type="button" id="project-dialog-confirm" class="btn btn-primary">OK</button>'
       + '</div></div>';
     document.body.appendChild(dialogEl);
@@ -916,9 +917,12 @@
     });
     const confirmBtn = el.querySelector('#project-dialog-confirm');
     const cancelBtn = el.querySelector('#project-dialog-cancel');
+    const extraBtn = el.querySelector('#project-dialog-extra');
     confirmBtn.textContent = opts.confirmLabel || 'OK';
     cancelBtn.textContent = opts.cancelLabel || 'Cancel';
     cancelBtn.style.display = opts.cancel === false ? 'none' : '';
+    extraBtn.textContent = opts.extraLabel || '';
+    extraBtn.style.display = opts.extraLabel ? '' : 'none';
     // Destructive confirmations (work dies): the confirm goes btn-error red —
     // matching the Recents armed-delete convention — and the SAFE button takes
     // the default focus, so Enter through a half-read dialog cannot destroy.
@@ -929,11 +933,13 @@
         el.classList.remove('modal-open');
         confirmBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
+        extraBtn.removeEventListener('click', onExtra);
         document.removeEventListener('keydown', onKey, true);
         resolve(result);
       };
       const onOk = () => done(true);
       const onCancel = () => done(false);
+      const onExtra = () => done('extra');
       const onKey = (e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
@@ -942,8 +948,11 @@
       };
       confirmBtn.addEventListener('click', onOk);
       cancelBtn.addEventListener('click', onCancel);
+      extraBtn.addEventListener('click', onExtra);
       document.addEventListener('keydown', onKey, true);
-      (opts.danger === true ? cancelBtn : confirmBtn).focus();
+      // default focus: the safe-and-constructive extra (Save…) when present,
+      // else Cancel for destructive dialogs, else the confirm
+      (opts.extraLabel ? extraBtn : (opts.danger === true ? cancelBtn : confirmBtn)).focus();
     });
   }
   const projectAlert = (message) => projectDialog(message, { cancel: false });
@@ -970,14 +979,14 @@
         } catch (e) {
           // CORS or network said no: fall back to a link save (§ 7.2), declared.
           const proceed = await projectConfirm('The remote media cannot be downloaded by the browser (the server does not allow it), so it cannot be embedded in the file.\n\nSave the project with a LINK to the URL instead? The file will contain all your work, but playing it back will need internet access and the URL staying available.', 'Save with link', 'Cancel');
-          if (!proceed) return;
+          if (!proceed) return false;
           saveAsLink = true;
         }
       }
     }
     if (mediaFile === null && !saveAsLink) {
       await projectAlert('No media loaded — there is nothing to save yet.');
-      return;
+      return false;
     }
 
     const lowMem = typeof navigator.deviceMemory === 'number' && navigator.deviceMemory < 4;
@@ -985,7 +994,7 @@
     if (mediaFile !== null && mediaFile.size > warnAt) {
       const mb = Math.round(mediaFile.size / (1024 * 1024));
       if (!(await projectConfirm(`The media file is large (~${mb} MB). Building the .hyperaudio file needs roughly that much memory and may take a while.`, 'Continue', 'Cancel'))) {
-        return;
+        return false;
       }
     }
 
@@ -1025,6 +1034,7 @@
 
     sessionEdited = false;
     await patchAppState({ lastDownloadAt: Date.now() });
+    return true;
   }
 
   async function openFromFile(file) {
@@ -1050,8 +1060,15 @@
     }
 
     if (await isDirty()) {
-      const proceed = await projectConfirmDanger('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.\n\nYou can save it first from FILE → Save Project.', 'Replace project', 'Cancel');
-      if (!proceed) return;
+      const choice = await projectDialog('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.', {
+        confirmLabel: 'Replace project', cancelLabel: 'Cancel', danger: true, extraLabel: 'Save and open',
+      });
+      if (choice === false) return;
+      if (choice === 'extra') {
+        let saved = false;
+        try { saved = await saveToFile(); } catch (e) { saved = false; }
+        if (saved !== true) return; // the save was abandoned — replacing now would lose it
+      }
     }
 
     // A legacy Recents doc may hold a pending debounced autosave — its last
@@ -1328,12 +1345,17 @@
       // unconditionally, ask, and replay the click on confirmation.
       event.preventDefault();
       event.stopPropagation();
-      projectConfirmDanger('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.\n\nYou can save it first from FILE → Save Project.', 'Discard and switch', 'Cancel')
-        .then((proceed) => {
-          if (proceed) {
-            switchApproved = item;
-            item.click();
+      projectDialog('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.', {
+        confirmLabel: 'Discard and switch', cancelLabel: 'Cancel', danger: true, extraLabel: 'Save and switch',
+      }).then(async (choice) => {
+          if (choice === false) return;
+          if (choice === 'extra') {
+            let saved = false;
+            try { saved = await saveToFile(); } catch (e) { saved = false; }
+            if (saved !== true) return; // abandoned save — stay on the project
           }
+          switchApproved = item;
+          item.click();
         });
     }, true);
 

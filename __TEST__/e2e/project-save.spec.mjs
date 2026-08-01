@@ -264,11 +264,13 @@ test('switching to a Recents doc warns when the project has undownloaded changes
   await clickLegacyDoc();
   await awaitModal(page);
   expect(await projectModal(page)).toContain('DISCARD');
-  // destructive confirm: red button, and the SAFE button holds default focus
+  // destructive confirm: red button; default focus on the safe-and-constructive
+  // Save option, so Enter can never destroy work
   expect(await page.evaluate(() => ({
     danger: document.getElementById('project-dialog-confirm').classList.contains('btn-error'),
+    saveLabel: document.getElementById('project-dialog-extra').textContent,
     focused: document.activeElement && document.activeElement.id,
-  }))).toEqual({ danger: true, focused: 'project-dialog-cancel' });
+  }))).toEqual({ danger: true, saveLabel: 'Save and switch', focused: 'project-dialog-extra' });
   await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // blocked before the swap
   await page.click('#project-dialog-cancel');
   expect(await projectModal(page)).toBeNull();
@@ -285,6 +287,32 @@ test('switching to a Recents doc warns when the project has undownloaded changes
   await page.waitForTimeout(300);
   expect(await projectModal(page)).toBeNull();
   expect(dialogs).toEqual([]); // and never a native dialog anywhere
+});
+
+test('"Save and switch" downloads the project, then completes the switch', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'DIRTY ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
+      video: 'https://example.com/a.mp3', summary: '', topics: [],
+      meta: { name: 'legacy doc', updated: 5000 },
+    }));
+    loadLocalStorageOptions();
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
+  });
+  await awaitModal(page);
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#project-dialog-extra');
+  const download = await downloadPromise;                       // the save happened…
+  expect(download.suggestedFilename()).toContain('.hyperaudio');
+  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC'); // …then the switch
+  expect(dialogs).toEqual([]);
 });
 
 test('after Save Project, switching to a Recents doc does not warn', async ({ page }, testInfo) => {
