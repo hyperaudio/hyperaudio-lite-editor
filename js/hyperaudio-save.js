@@ -894,8 +894,9 @@
     dialogEl.className = 'modal';
     dialogEl.setAttribute('role', 'dialog');
     dialogEl.setAttribute('aria-modal', 'true');
-    dialogEl.innerHTML = '<div class="modal-box">'
-      + '<div id="project-dialog-message" style="line-height:1.6"></div>'
+    dialogEl.innerHTML = '<div class="modal-box" style="position:relative">'
+      + '<button type="button" id="project-dialog-close" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</button>'
+      + '<div id="project-dialog-message" style="line-height:1.6; margin-top:8px"></div>'
       + '<div class="modal-action">'
       + '<button type="button" id="project-dialog-cancel" class="btn btn-ghost">Cancel</button>'
       + '<button type="button" id="project-dialog-extra" class="btn btn-primary" style="display:none"></button>'
@@ -923,23 +924,29 @@
     cancelBtn.style.display = opts.cancel === false ? 'none' : '';
     extraBtn.textContent = opts.extraLabel || '';
     extraBtn.style.display = opts.extraLabel ? '' : 'none';
+    // Two-button rule for the destructive triads: the ✕ (and Escape) IS the
+    // cancel, so the explicit Cancel button can be dropped via cancelButton:false.
+    if (opts.cancelButton === false) cancelBtn.style.display = 'none';
     // Destructive confirmations (work dies): the confirm goes btn-error red —
     // matching the Recents armed-delete convention — and the SAFE button takes
     // the default focus, so Enter through a half-read dialog cannot destroy.
     confirmBtn.className = opts.danger === true ? 'btn btn-error' : 'btn btn-primary';
     el.classList.add('modal-open');
     return new Promise((resolve) => {
+      const closeBtn = el.querySelector('#project-dialog-close');
       const done = (result) => {
         el.classList.remove('modal-open');
         confirmBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
         extraBtn.removeEventListener('click', onExtra);
+        closeBtn.removeEventListener('click', onClose);
         document.removeEventListener('keydown', onKey, true);
         resolve(result);
       };
       const onOk = () => done(true);
       const onCancel = () => done(false);
       const onExtra = () => done('extra');
+      const onClose = () => done(opts.cancel === false); // dismissing an OK-alert acknowledges it
       const onKey = (e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
@@ -949,6 +956,7 @@
       confirmBtn.addEventListener('click', onOk);
       cancelBtn.addEventListener('click', onCancel);
       extraBtn.addEventListener('click', onExtra);
+      closeBtn.addEventListener('click', onClose);
       document.addEventListener('keydown', onKey, true);
       // default focus: the safe-and-constructive extra (Save…) when present,
       // else Cancel for destructive dialogs, else the confirm
@@ -1060,8 +1068,8 @@
     }
 
     if (await isDirty()) {
-      const choice = await projectDialog('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.', {
-        confirmLabel: 'Replace project', cancelLabel: 'Cancel', danger: true, extraLabel: 'Save and open',
+      const choice = await projectDialog('The current project has changes not yet saved as a .hyperaudio file. Opening a new project will DISCARD them.', {
+        confirmLabel: 'Discard and open', danger: true, extraLabel: 'Save and open', cancelButton: false,
       });
       if (choice === false) return;
       if (choice === 'extra') {
@@ -1345,8 +1353,8 @@
       // unconditionally, ask, and replay the click on confirmation.
       event.preventDefault();
       event.stopPropagation();
-      projectDialog('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.', {
-        confirmLabel: 'Discard and switch', cancelLabel: 'Cancel', danger: true, extraLabel: 'Save and switch',
+      projectDialog('The current project has changes not yet saved as a .hyperaudio file. Switching to a saved transcript will DISCARD them.', {
+        confirmLabel: 'Discard and switch', danger: true, extraLabel: 'Save and switch', cancelButton: false,
       }).then(async (choice) => {
           if (choice === false) return;
           if (choice === 'extra') {

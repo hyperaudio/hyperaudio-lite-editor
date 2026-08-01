@@ -270,11 +270,12 @@ test('switching to a Recents doc warns when the project has undownloaded changes
     danger: document.getElementById('project-dialog-confirm').classList.contains('btn-error'),
     saveLabel: document.getElementById('project-dialog-extra').textContent,
     focused: document.activeElement && document.activeElement.id,
-  }))).toEqual({ danger: true, saveLabel: 'Save and switch', focused: 'project-dialog-extra' });
+    cancelHidden: document.getElementById('project-dialog-cancel').style.display === 'none',
+  }))).toEqual({ danger: true, saveLabel: 'Save and switch', focused: 'project-dialog-extra', cancelHidden: true });
   await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // blocked before the swap
-  await page.click('#project-dialog-cancel');
+  await page.click('#project-dialog-close'); // the ✕ IS the cancel (two-button rule)
   expect(await projectModal(page)).toBeNull();
-  await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // edit survives Cancel
+  await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // edit survives dismissal
 
   // Confirm path: the click replays and the switch proceeds
   await clickLegacyDoc();
