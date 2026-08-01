@@ -224,3 +224,56 @@ test('an unopenable file is refused BEFORE the replace-confirmation, project unt
   // and the dirty project is untouched
   await expect(page.locator('#hypertranscript')).toContainText('EDITED');
 });
+
+test('switching to a Recents doc warns when the project has undownloaded changes', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs); // registers an accept-all dialog handler
+  // edit → undownloaded changes (the sync flag sets on the input trigger)
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'DIRTY ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
+      video: 'https://example.com/a.mp3', summary: '', topics: [],
+      meta: { name: 'legacy doc', updated: 5000 },
+    }));
+    loadLocalStorageOptions();
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
+  });
+  // the warning fired (and the auto-accept let the switch proceed)
+  expect(dialogs.some((d) => d.includes('DISCARD'))).toBe(true);
+  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
+  // the session ended with the switch: switching again warns no more
+  const count = dialogs.length;
+  await page.evaluate(() => { [...document.querySelectorAll('.file-item')][0].click(); });
+  await page.waitForTimeout(300);
+  expect(dialogs.length).toBe(count);
+});
+
+test('after Save Project, switching to a Recents doc does not warn', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'DIRTY ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // download the project — changes are now saved, the flag resets
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => document.querySelector('#project-save-hyperaudio').click());
+  await downloadPromise;
+  await page.evaluate(() => {
+    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
+      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
+      video: 'https://example.com/a.mp3', summary: '', topics: [],
+      meta: { name: 'legacy doc', updated: 5000 },
+    }));
+    loadLocalStorageOptions();
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
+  });
+  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
+  expect(dialogs.some((d) => d.includes('DISCARD'))).toBe(false);
+});

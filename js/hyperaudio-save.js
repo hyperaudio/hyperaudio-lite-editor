@@ -474,6 +474,11 @@
                         // the round trip (spec § 8.1, normative since 1.2)
   };
   let suppressCapture = false; // true while apply() replays a loaded project
+  // Synchronous "undownloaded changes" flag (#448's markEdited in embryo):
+  // isDirty() is async (OPFS timestamps), but the Recents-switch guard must
+  // decide inside a click handler. Set on every capture trigger and on a new
+  // transcription; cleared on save-download, open, and session end.
+  let sessionEdited = false;
   let autosaveTimer = null;
 
   function nowIso() {
@@ -786,6 +791,7 @@
 
   function scheduleAutosave() {
     if (!opfsAvailable || !session.active || suppressCapture) return;
+    sessionEdited = true;
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(writeWorkSnapshot, 1500);
   }
@@ -841,6 +847,7 @@
     session.pendingReconcile = null;
     session.title = '';
     session.envelope = null; // a fresh document has no envelope to preserve
+    sessionEdited = true;    // a fresh transcription IS undownloaded work
     // Provenance is only this project's if the engine reported it moments ago
     // (imports fire hyperaudioInit without any setTranscriptionInfo call —
     // a previous transcription's provenance must not leak into them).
@@ -943,6 +950,7 @@
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
 
+    sessionEdited = false;
     await patchAppState({ lastDownloadAt: Date.now() });
   }
 
@@ -1003,6 +1011,7 @@
       session.hasOriginal = loaded.originalText !== null;
       session.originalJson = loaded.originalText;
       session.envelope = loaded.recovered ? null : loaded.project;
+      sessionEdited = false; // the opened file IS the downloaded state
 
       if (opfsAvailable) {
         await clearWork();
@@ -1225,11 +1234,28 @@
     // from; work/ itself is left inert and the next session overwrites it.
     // Interim coexistence rule until #448 (identity generations) / #451
     // (legacy-storage removal).
+    // Switching to a Recents doc discards the project session exactly like
+    // Open Project replaces it — so it gets the same warning, cancelable at
+    // capture phase BEFORE the legacy loader swaps the DOM. (Without this,
+    // an edit made after the last save was silently discarded on switch.)
+    document.addEventListener('click', (event) => {
+      if (!session.active || !sessionEdited) return;
+      const target = event.target;
+      if (!target || !target.closest || target.tagName === 'INPUT') return;
+      if (target.closest('.file-item') === null) return;
+      const proceed = confirm('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.\n\nPress Cancel to stay (you can save it from FILE → Save Project first), or OK to discard and switch.');
+      if (!proceed) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, true);
+
     document.addEventListener('hyperaudioTranscriptLoaded', () => {
       if (suppressCapture) return; // our own apply() also fires this event
       clearTimeout(autosaveTimer);
       session.active = false;
       session.title = '';
+      sessionEdited = false;
       try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
     });
 
