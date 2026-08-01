@@ -1200,3 +1200,14 @@ label[data-a11y-wired]:focus-visible {
 #project-save-btn.dirty #project-save-dirty-dot {
   display: block;
 }
+
+/* Second-tab guard banner (#450): this tab edits without the working-copy
+   slot; the owning tab has autosave/crash recovery. */
+#tab-guard-banner {
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border-radius: 0.5rem;
+  font-size: 12px;
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc) / 0.8);
+}

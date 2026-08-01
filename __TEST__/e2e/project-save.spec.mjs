@@ -458,3 +458,43 @@ test('the quit guard arms on unsaved changes and disarms after a save (#449)', a
   await downloadPromise;
   expect(await armed()).toBe(false); // saved: leaving is silent again
 });
+
+test('a second tab is guarded: banner, no slot writes, promotion on owner close (#450)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs); // tab 1 owns the slot
+  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === '1');
+  const ownerSnapshot = await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('work');
+    return (await (await dir.getFileHandle('snapshot.json')).getFile()).text();
+  });
+
+  // tab 2: banner shown, and its transcription must NOT touch the owner's slot
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible();
+  // tab 2 did not boot-restore the owner's project — it shows the demo
+  await expect(page2.locator('#hypertranscript')).not.toContainText('Benvenuti');
+
+  await page2.evaluate(() => {
+    document.querySelector('#hyperplayer').src = 'https://example.com/media/tab2.mp4';
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">TAB-TWO </span></p></section></article>';
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page2.waitForTimeout(2200); // outlive the autosave debounce
+  const afterSnapshot = await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('work');
+    return (await (await dir.getFileHandle('snapshot.json')).getFile()).text();
+  });
+  expect(afterSnapshot).toBe(ownerSnapshot); // untouched by tab 2
+
+  // owner closes → tab 2 is promoted: banner drops
+  await page.close();
+  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await page2.close();
+});

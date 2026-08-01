@@ -66,6 +66,12 @@
   // Synchronous boot hint: OPFS can only be probed async, so the autosave
   // maintains this flag and boot reads it before deciding to restore.
   const WORK_HINT_KEY = 'hyperaudioWorkPresent';
+  // One origin-global working-copy slot → one Web Lock (#450). The owning tab
+  // gets autosave/boot-restore; other tabs keep FULL editing but no slot
+  // (bannered honestly, beforeunload still guards their unsaved work), and
+  // the lock's queue promotes a waiting tab automatically when the owner
+  // closes. Per-project locks arrive with the Phase B work dirs (#452).
+  const WORK_LOCK = 'hyperaudio:work';
 
   /* ==========================================================================
    * 1. FORMAT — build/validate hyperaudio.json (pure)
@@ -445,6 +451,7 @@
   // since the last .hyperaudio download. Download marking is optimistic — the
   // browser gives no completion signal for <a download>.
   async function isDirty() {
+    if (!hasWorkLock) return session.active && sessionEdited;
     if (!session.active) return false;
     const state = await readAppState();
     return (state.lastWorkWriteAt || 0) > (state.lastDownloadAt || 0);
@@ -486,6 +493,10 @@
   let saveInFlight = false;
   let autosaveInFlight = false;
   let autosaveFollowUp = false;
+  // Whether THIS tab owns the working-copy slot (#450). Browsers without Web
+  // Locks (pre-15.4 Safari) assume single-tab ownership — the pre-#450 status
+  // quo, no worse.
+  let hasWorkLock = false;
   let autosaveTimer = null;
 
   function nowIso() {
@@ -781,7 +792,7 @@
    * ======================================================================== */
 
   async function writeWorkSnapshot() {
-    if (!opfsAvailable || !session.active) return;
+    if (!opfsAvailable || !session.active || !hasWorkLock) return;
     // Serialize snapshots (#448): parallel writes could interleave files from
     // different states. An edit landing mid-write schedules ONE follow-up.
     if (autosaveInFlight) { autosaveFollowUp = true; return; }
@@ -827,7 +838,7 @@
   }
 
   async function writeMediaOnce() {
-    if (!opfsAvailable || session.mediaFile === null) return;
+    if (!opfsAvailable || session.mediaFile === null || !hasWorkLock) return;
     try {
       const dir = await getWorkDir(true);
       const mediaDir = await dir.getDirectoryHandle('media', { create: true });
@@ -854,7 +865,7 @@
     };
     session.hasOriginal = true;
     session.originalJson = JSON.stringify(clean, null, 2);
-    if (!opfsAvailable) return;
+    if (!opfsAvailable || !hasWorkLock) return;
     try {
       const dir = await getWorkDir(true);
       await writeFileTo(dir, ENTRY.original, session.originalJson);
@@ -887,7 +898,7 @@
       session.provenance = null;
       session.language = '';
     }
-    if (opfsAvailable) {
+    if (opfsAvailable && hasWorkLock) {
       await clearWork();
       await writeOriginOnce(htmlToJSON(getEditorHtml()));
       await resolveMediaFile();
@@ -1073,7 +1084,7 @@
     // primary source (also covers browsers without OPFS); work/ carries it
     // across reloads.
     let originalJson = session.originalJson;
-    if (originalJson === null && opfsAvailable) {
+    if (originalJson === null && opfsAvailable && hasWorkLock) {
       try {
         originalJson = await readTextFrom(await getWorkDir(false), ENTRY.original);
       } catch (e) { /* no work dir yet */ }
@@ -1120,7 +1131,7 @@
     if (identityGeneration === identityAtStart && editGeneration === editAtGather) {
       sessionEdited = false;
       updateSaveIndicator();
-      await patchAppState({ lastDownloadAt: Date.now() });
+      if (hasWorkLock) await patchAppState({ lastDownloadAt: Date.now() });
     }
     return true;
   }
@@ -1199,7 +1210,7 @@
       identityGeneration += 1; // a different document now owns the session
       updateSaveIndicator();
 
-      if (opfsAvailable) {
+      if (opfsAvailable && hasWorkLock) {
         await clearWork();
         const dir = await getWorkDir(true);
         if (loaded.originalText !== null) await writeFileTo(dir, ENTRY.original, loaded.originalText);
@@ -1523,7 +1534,10 @@
       sessionEdited = false;
       identityGeneration += 1; // the session's document is gone
       updateSaveIndicator();
-      try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
+      // a guarded tab must not clear the OWNER's boot hint
+      if (hasWorkLock) {
+        try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
+      }
     });
 
     // Provenance: engines report service/model through setTranscriptionInfo.
@@ -1571,14 +1585,65 @@
       });
   }
 
-  function boot() {
-    injectUi();
-    wireCapture();
+  function bootAsOwner() {
     let hint = null;
     try { hint = localStorage.getItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
     if (opfsAvailable && hint === '1') {
       restoreFromWork();
     }
+  }
+
+  function showTabGuardBanner() {
+    const picker = document.getElementById('file-picker');
+    if (picker === null || picker.parentElement === null) return;
+    if (document.getElementById('tab-guard-banner') !== null) return;
+    const el = document.createElement('div');
+    el.id = 'tab-guard-banner';
+    el.setAttribute('role', 'status');
+    el.textContent = 'Another tab is already using this editor — autosave and crash recovery are active there. You can still edit and save here.';
+    picker.parentElement.insertBefore(el, picker);
+  }
+
+  function hideTabGuardBanner() {
+    const el = document.getElementById('tab-guard-banner');
+    if (el !== null) el.remove();
+  }
+
+  // Acquire the working-copy slot (#450). First tab wins and boots normally;
+  // a later tab gets the banner, keeps editing without the slot, and QUEUES —
+  // when the owner closes (or crashes; locks release with the tab), the
+  // waiting tab is promoted: banner drops, captures enable from here on. No
+  // boot-restore on promotion — replacing a mid-session document would be
+  // worse than the recovery it offers.
+  function initWorkOwnership() {
+    if (!('locks' in navigator)) {
+      hasWorkLock = true; // no Web Locks (pre-15.4 Safari): the pre-#450 status quo
+      bootAsOwner();
+      return;
+    }
+    navigator.locks.request(WORK_LOCK, { ifAvailable: true }, (lock) => {
+      if (lock === null) return null;
+      hasWorkLock = true;
+      bootAsOwner();
+      return new Promise(() => {}); // hold the slot for the tab's lifetime
+    }).then(() => {
+      if (hasWorkLock) return;
+      showTabGuardBanner();
+      return navigator.locks.request(WORK_LOCK, () => {
+        hasWorkLock = true;
+        hideTabGuardBanner();
+        return new Promise(() => {}); // promoted: hold from here on
+      });
+    }).catch((e) => {
+      console.warn('hyperaudio-save: work lock unavailable, assuming single tab', e);
+      if (!hasWorkLock) { hasWorkLock = true; bootAsOwner(); }
+    });
+  }
+
+  function boot() {
+    injectUi();
+    wireCapture();
+    initWorkOwnership();
   }
 
   // Expose a small public API for other modules / the console.
