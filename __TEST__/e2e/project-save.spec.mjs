@@ -187,3 +187,40 @@ test('a legacy Recents load ends the project session: no spurious replace-warnin
   await openFixture(page, testInfo, dialogs);
   expect(dialogs).toEqual([]);
 });
+
+test('an unopenable file is refused BEFORE the replace-confirmation, project untouched', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  // dirty the project so the replace-warning WOULD apply to a valid open
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'EDITED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(2000); // let the autosave land (dirty = work > download)
+
+  // a non-conforming container: compressed media entry
+  const badPath = testInfo.outputPath('bad.hyperaudio');
+  const JSZipLocal = new JSZip();
+  const buf = await buildFixture();
+  const src = await JSZip.loadAsync(buf);
+  for (const name of Object.keys(src.files)) {
+    if (src.files[name].dir) continue;
+    const data = await src.files[name].async('uint8array');
+    JSZipLocal.file(name, data, name.startsWith('media/')
+      ? { compression: 'DEFLATE' }
+      : { compression: name === 'mimetype' ? 'STORE' : 'DEFLATE' });
+  }
+  fs.writeFileSync(badPath, await JSZipLocal.generateAsync({ type: 'nodebuffer' }));
+
+  await page.evaluate(() => { document.getElementById('project-open-input').value = ''; });
+  await page.setInputFiles('#project-open-input', badPath);
+  await page.waitForTimeout(800);
+
+  // exactly ONE dialog — the refusal; never the replace-confirmation first
+  expect(dialogs.length).toBe(1);
+  expect(dialogs[0]).toContain('media compressed');
+  expect(dialogs[0]).not.toContain('REPLACE');
+  // and the dirty project is untouched
+  await expect(page.locator('#hypertranscript')).toContainText('EDITED');
+});

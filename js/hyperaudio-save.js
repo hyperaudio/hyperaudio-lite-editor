@@ -947,11 +947,10 @@
   }
 
   async function openFromFile(file) {
-    if (await isDirty()) {
-      const proceed = confirm('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.\n\nPress Cancel to go back (you can save it from FILE → Save Project first), or OK to replace it.');
-      if (!proceed) return;
-    }
-
+    // Parse and validate BEFORE the replace-confirmation: asking permission
+    // to replace the current project and THEN refusing the file meant the
+    // user consented to a replacement that never happened (prepare → confirm
+    // → apply, the #448 ordering).
     let loaded;
     try {
       const JSZipImpl = await loadJSZip();
@@ -967,6 +966,11 @@
       };
       alert(messages[e.code] || messages['unreadable']);
       return;
+    }
+
+    if (await isDirty()) {
+      const proceed = confirm('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.\n\nPress Cancel to go back (you can save it from FILE → Save Project first), or OK to replace it.');
+      if (!proceed) return;
     }
 
     let reconcileNow = null; // § 7.3: original-kind container missing its media entry
