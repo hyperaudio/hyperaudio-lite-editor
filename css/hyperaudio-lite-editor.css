@@ -1171,3 +1171,13 @@ label[data-a11y-wired]:focus-visible {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* The project dialog's destructive confirm: tailwind-min.css was built before
+   btn-error appeared in markup, so only fragments of the utility survived the
+   purge (hover fill yes, resting fill no). Style the resting state explicitly
+   from the theme vars, matching what the full build would produce. */
+#project-dialog .btn-error {
+  background-color: oklch(var(--er));
+  border-color: oklch(var(--er));
+  color: oklch(var(--erc));
+}
