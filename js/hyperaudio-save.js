@@ -479,6 +479,13 @@
   // decide inside a click handler. Set on every capture trigger and on a new
   // transcription; cleared on save-download, open, and session end.
   let sessionEdited = false;
+  // Lifecycle guards (#448): generations decide whether an async completion
+  // may still be applied; in-flight flags serialize container/snapshot work.
+  let editGeneration = 0;      // bumps on every edit signal
+  let identityGeneration = 0;  // bumps when a DIFFERENT document commits
+  let saveInFlight = false;
+  let autosaveInFlight = false;
+  let autosaveFollowUp = false;
   let autosaveTimer = null;
 
   function nowIso() {
@@ -775,23 +782,45 @@
 
   async function writeWorkSnapshot() {
     if (!opfsAvailable || !session.active) return;
+    // Serialize snapshots (#448): parallel writes could interleave files from
+    // different states. An edit landing mid-write schedules ONE follow-up.
+    if (autosaveInFlight) { autosaveFollowUp = true; return; }
+    autosaveInFlight = true;
+    const identityAtStart = identityGeneration;
     try {
       const state = gather();
       const dir = await getWorkDir(true);
-      await writeFileTo(dir, ENTRY.json, serializeProjectJson(buildProjectJson(state)));
-      await writeFileTo(dir, ENTRY.html, state.html);
+      // One atomic-enough artifact (#448): json + html + captions in a single
+      // file, so a crash can never leave a mixed-generation multi-file
+      // snapshot. Absent captions are an explicit null — unambiguous. The
+      // origin and media stay as separate immutable files.
       const vtt = getCaptionsVtt();
-      if (vtt !== '') await writeFileTo(dir, ENTRY.captions, vtt);
-      await patchAppState({ lastWorkWriteAt: Date.now() });
-      try { localStorage.setItem(WORK_HINT_KEY, '1'); } catch (e) { /* private mode */ }
+      await writeFileTo(dir, 'snapshot.json', JSON.stringify({
+        json: serializeProjectJson(buildProjectJson(state)),
+        html: state.html,
+        captionsVtt: vtt !== '' ? vtt : null,
+      }));
+      // A completion for a superseded document must not be adopted (#448).
+      if (identityGeneration === identityAtStart) {
+        await patchAppState({ lastWorkWriteAt: Date.now() });
+        try { localStorage.setItem(WORK_HINT_KEY, '1'); } catch (e) { /* private mode */ }
+      }
     } catch (e) {
       console.warn('hyperaudio-save: autosave failed', e);
+    } finally {
+      autosaveInFlight = false;
+      if (autosaveFollowUp) {
+        autosaveFollowUp = false;
+        if (identityGeneration === identityAtStart) writeWorkSnapshot();
+      }
     }
   }
 
   function scheduleAutosave() {
-    if (!opfsAvailable || !session.active || suppressCapture) return;
+    if (!session.active || suppressCapture) return;
     sessionEdited = true;
+    editGeneration += 1;
+    if (!opfsAvailable) return;
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(writeWorkSnapshot, 1500);
   }
@@ -848,6 +877,7 @@
     session.title = '';
     session.envelope = null; // a fresh document has no envelope to preserve
     sessionEdited = true;    // a fresh transcription IS undownloaded work
+    identityGeneration += 1; // new document
     // Provenance is only this project's if the engine reported it moments ago
     // (imports fire hyperaudioInit without any setTranscriptionInfo call —
     // a previous transcription's provenance must not leak into them).
@@ -970,6 +1000,17 @@
     projectDialog(message, { confirmLabel: confirmLabel, cancelLabel: cancelLabel, danger: true });
 
   async function saveToFile() {
+    if (saveInFlight) return false; // one container build at a time (#448)
+    saveInFlight = true;
+    try {
+      return await saveToFileInner();
+    } finally {
+      saveInFlight = false;
+    }
+  }
+
+  async function saveToFileInner() {
+    const identityAtStart = identityGeneration;
     let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
     const remoteSrc = player !== null && /^https?:/i.test(player.src) ? player.src : null;
@@ -1009,6 +1050,7 @@
     session.active = true;
     if (session.created === null) session.created = nowIso();
 
+    const editAtGather = editGeneration;
     const state = gather();
     // The origin travels in every save (spec § 5): the in-memory copy is the
     // primary source (also covers browsers without OPFS); work/ carries it
@@ -1040,8 +1082,13 @@
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
 
-    sessionEdited = false;
-    await patchAppState({ lastDownloadAt: Date.now() });
+    // Mark clean only if this save still belongs to the current document AND
+    // no edit landed while the container was being built (#448) — otherwise
+    // the download is real but the session stays dirty.
+    if (identityGeneration === identityAtStart && editGeneration === editAtGather) {
+      sessionEdited = false;
+      await patchAppState({ lastDownloadAt: Date.now() });
+    }
     return true;
   }
 
@@ -1116,6 +1163,7 @@
       session.originalJson = loaded.originalText;
       session.envelope = loaded.recovered ? null : loaded.project;
       sessionEdited = false; // the opened file IS the downloaded state
+      identityGeneration += 1; // a different document now owns the session
 
       if (opfsAvailable) {
         await clearWork();
@@ -1192,7 +1240,27 @@
   async function restoreFromWork() {
     try {
       const dir = await getWorkDir(false);
-      const jsonText = await readTextFrom(dir, ENTRY.json);
+      // The snapshot is ONE file since #448 (torn multi-file states are
+      // impossible); work dirs written before that carry the per-file layout —
+      // read them as a fallback until they age out.
+      let jsonText = null;
+      let captionsVtt = null;
+      const snapshotText = await readTextFrom(dir, 'snapshot.json');
+      let snapshotHtml = null;
+      if (snapshotText !== null) {
+        try {
+          const snapshot = JSON.parse(snapshotText);
+          jsonText = typeof snapshot.json === 'string' ? snapshot.json : null;
+          snapshotHtml = typeof snapshot.html === 'string' ? snapshot.html : null;
+          captionsVtt = typeof snapshot.captionsVtt === 'string' ? snapshot.captionsVtt : null;
+        } catch (e) {
+          console.warn('hyperaudio-save: unreadable snapshot.json', e);
+        }
+      }
+      if (jsonText === null) {
+        jsonText = await readTextFrom(dir, ENTRY.json); // pre-#448 layout
+        captionsVtt = await readTextFrom(dir, ENTRY.captions);
+      }
       if (jsonText === null) {
         try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* ignore */ }
         return;
@@ -1201,15 +1269,16 @@
       const validation = validateProjectJson(project);
       if (!validation.ok) {
         console.warn('hyperaudio-save: work copy failed validation, leaving demo', validation.errors);
+        try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* ignore */ }
         return;
       }
       const mediaFile = project.media.kind === 'original'
         ? await readMediaFileFromWork(project.media.filename) : null;
-      const captionsVtt = await readTextFrom(dir, ENTRY.captions);
       const originalText = await readTextFrom(dir, ENTRY.original);
 
       apply({ recovered: false, project, captionsVtt, mediaFile });
       session.active = true;
+      identityGeneration += 1; // the restored document owns the session
       session.created = project.created || nowIso();
       session.provenance = project.provenance || null;
       session.language = (project.texts && project.texts.language) || '';
@@ -1218,6 +1287,7 @@
       session.pendingReconcile = project.media.kind === 'link' ? project.media : null;
       session.hasOriginal = originalText !== null;
       session.originalJson = originalText;
+      session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
     } catch (e) {
       console.warn('hyperaudio-save: restore failed, leaving demo', e);
     }
@@ -1373,6 +1443,7 @@
       session.active = false;
       session.title = '';
       sessionEdited = false;
+      identityGeneration += 1; // the session's document is gone
       try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
     });
 
@@ -1393,12 +1464,23 @@
       };
     }
 
-    // Autosave triggers: transcript edits, caption regeneration, option changes.
-    const transcriptEl = document.querySelector('#hypertranscript');
-    if (transcriptEl !== null) {
-      transcriptEl.addEventListener('input', scheduleAutosave);
-      transcriptEl.addEventListener('blur', scheduleAutosave);
-    }
+    // Central edit signal (#448), document-level delegation: the caption-mode
+    // round trip REPLACES #hypertranscript, so direct element listeners died
+    // after one switch and the autosave silently stopped. closest() finds the
+    // current incarnation of each editable region.
+    const EDIT_SCOPE = '#hypertranscript, #caption-editor, #summary, #topics, #project-title';
+    document.addEventListener('input', (event) => {
+      const t = event.target;
+      if (t && t.closest && t.closest(EDIT_SCOPE) !== null) scheduleAutosave();
+    }, true);
+    // blur doesn't bubble; focusout does — end-of-edit capture for the transcript
+    document.addEventListener('focusout', (event) => {
+      const t = event.target;
+      if (t && t.closest && t.closest('#hypertranscript') !== null) scheduleAutosave();
+    });
+    // the strike-through toolbar mutates word styles without emitting input
+    const strikeBtn = document.querySelector('#strikethrough');
+    if (strikeBtn !== null) strikeBtn.addEventListener('click', scheduleAutosave);
     document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', scheduleAutosave);
     ['#remove-gaps-enabled', '#remove-gaps-threshold', '#remove-gaps-buffer', '#show-speakers', '#show-timecodes']
       .forEach((selector) => {

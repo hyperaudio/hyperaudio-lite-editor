@@ -341,3 +341,39 @@ test('after Save Project, switching to a Recents doc does not warn', async ({ pa
   expect(await projectModal(page)).toBeNull(); // switched directly, no warning
   expect(dialogs).toEqual([]);
 });
+
+test('edit tracking survives the caption-mode round trip (#448 delegation)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === '1');
+
+  // the round trip that REPLACES #hypertranscript — direct listeners died here
+  await page.click('#caption-editor-btn');
+  await page.waitForTimeout(400);
+  await page.click('#transcript-editor-btn');
+  await page.waitForTimeout(400);
+
+  const before = await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const f = await (await root.getFileHandle('app-state.json')).getFile();
+    return JSON.parse(await f.text()).lastWorkWriteAt || 0;
+  });
+
+  // an edit on the REPLACED transcript element must still reach the autosave
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'POST-ROUNDTRIP ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.waitForTimeout(2500);
+
+  const after = await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('work');
+    const state = JSON.parse(await (await (await root.getFileHandle('app-state.json')).getFile()).text());
+    const snapshot = JSON.parse(await (await (await dir.getFileHandle('snapshot.json')).getFile()).text());
+    return { at: state.lastWorkWriteAt || 0, html: snapshot.html };
+  });
+  expect(after.at).toBeGreaterThan(before);
+  expect(after.html).toContain('POST-ROUNDTRIP');
+});
