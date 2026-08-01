@@ -879,6 +879,73 @@
     return new File([blob], name, { type: blob.type || '' });
   }
 
+  /* --------------------------------------------------------------------------
+   * Designed dialogs — the app's daisyUI modal instead of native
+   * alert()/confirm(): styled like the rest of the UI, non-blocking, keyboard
+   * accessible (Enter/primary focused, Escape cancels). One shared element;
+   * paragraphs split on blank lines. projectConfirm resolves true/false;
+   * projectAlert resolves when dismissed.
+   * ------------------------------------------------------------------------ */
+  let dialogEl = null;
+  function ensureDialog() {
+    if (dialogEl !== null) return dialogEl;
+    dialogEl = document.createElement('div');
+    dialogEl.id = 'project-dialog';
+    dialogEl.className = 'modal';
+    dialogEl.setAttribute('role', 'dialog');
+    dialogEl.setAttribute('aria-modal', 'true');
+    dialogEl.innerHTML = '<div class="modal-box">'
+      + '<div id="project-dialog-message" style="line-height:1.6"></div>'
+      + '<div class="modal-action">'
+      + '<button type="button" id="project-dialog-cancel" class="btn btn-ghost">Cancel</button>'
+      + '<button type="button" id="project-dialog-confirm" class="btn btn-primary">OK</button>'
+      + '</div></div>';
+    document.body.appendChild(dialogEl);
+    return dialogEl;
+  }
+  function projectDialog(message, opts) {
+    opts = opts || {};
+    const el = ensureDialog();
+    const msg = el.querySelector('#project-dialog-message');
+    msg.textContent = '';
+    String(message).split('\n\n').forEach((para, i) => {
+      const pEl = document.createElement('p');
+      pEl.textContent = para;
+      if (i > 0) pEl.style.marginTop = '12px';
+      msg.appendChild(pEl);
+    });
+    const confirmBtn = el.querySelector('#project-dialog-confirm');
+    const cancelBtn = el.querySelector('#project-dialog-cancel');
+    confirmBtn.textContent = opts.confirmLabel || 'OK';
+    cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+    cancelBtn.style.display = opts.cancel === false ? 'none' : '';
+    el.classList.add('modal-open');
+    return new Promise((resolve) => {
+      const done = (result) => {
+        el.classList.remove('modal-open');
+        confirmBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey, true);
+        resolve(result);
+      };
+      const onOk = () => done(true);
+      const onCancel = () => done(false);
+      const onKey = (e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          done(opts.cancel === false);
+        }
+      };
+      confirmBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey, true);
+      confirmBtn.focus();
+    });
+  }
+  const projectAlert = (message) => projectDialog(message, { cancel: false });
+  const projectConfirm = (message, confirmLabel, cancelLabel) =>
+    projectDialog(message, { confirmLabel: confirmLabel, cancelLabel: cancelLabel });
+
   async function saveToFile() {
     let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
@@ -896,14 +963,14 @@
           await writeMediaOnce(); // the working copy becomes self-contained too
         } catch (e) {
           // CORS or network said no: fall back to a link save (§ 7.2), declared.
-          const proceed = confirm('The remote media cannot be downloaded by the browser (the server does not allow it), so it cannot be embedded in the file.\n\nSave the project with a LINK to the URL instead? The file will contain all your work, but playing it back will need internet access and the URL staying available.');
+          const proceed = await projectConfirm('The remote media cannot be downloaded by the browser (the server does not allow it), so it cannot be embedded in the file.\n\nSave the project with a LINK to the URL instead? The file will contain all your work, but playing it back will need internet access and the URL staying available.', 'Save with link', 'Cancel');
           if (!proceed) return;
           saveAsLink = true;
         }
       }
     }
     if (mediaFile === null && !saveAsLink) {
-      alert('No media loaded — there is nothing to save yet.');
+      await projectAlert('No media loaded — there is nothing to save yet.');
       return;
     }
 
@@ -911,7 +978,7 @@
     const warnAt = lowMem ? LARGE_MEDIA_WARN_BYTES_LOWMEM : LARGE_MEDIA_WARN_BYTES;
     if (mediaFile !== null && mediaFile.size > warnAt) {
       const mb = Math.round(mediaFile.size / (1024 * 1024));
-      if (!confirm(`The media file is large (~${mb} MB). Building the .hyperaudio file needs roughly that much memory and may take a while. Continue?`)) {
+      if (!(await projectConfirm(`The media file is large (~${mb} MB). Building the .hyperaudio file needs roughly that much memory and may take a while.`, 'Continue', 'Cancel'))) {
         return;
       }
     }
@@ -972,12 +1039,12 @@
         'media-compressed': 'This file stores its media compressed, which the format forbids — it was refused for safety.',
         'unreadable': 'This is not a readable .hyperaudio file.',
       };
-      alert(messages[e.code] || messages['unreadable']);
+      await projectAlert(messages[e.code] || messages['unreadable']);
       return;
     }
 
     if (await isDirty()) {
-      const proceed = confirm('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.\n\nPress Cancel to go back (you can save it from FILE → Save Project first), or OK to replace it.');
+      const proceed = await projectConfirm('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.\n\nYou can save it first from FILE → Save Project.', 'Replace project', 'Cancel');
       if (!proceed) return;
     }
 
@@ -988,7 +1055,7 @@
     } else {
       loaded.mediaFile = null;
       if (!loaded.recovered && loaded.project.media.kind === 'link') {
-        alert('Note: this project references its media by URL — it is not self-contained. Playback will use the remote URL.');
+        await projectAlert('Note: this project references its media by URL — it is not self-contained. Playback will use the remote URL.');
       } else if (!loaded.recovered && loaded.project.media.kind === 'original') {
         reconcileNow = loaded.project.media;
       }
@@ -1027,7 +1094,7 @@
     if (loaded.warnings.length > 0) {
       console.warn('hyperaudio-save: opened with warnings:', loaded.warnings);
       if (loaded.recovered) {
-        alert('The project file was not fully conformant; the transcript was recovered from its HTML copy. Saving again will produce a fully conformant file.');
+        await projectAlert('The project file was not fully conformant; the transcript was recovered from its HTML copy. Saving again will produce a fully conformant file.');
       }
     }
 
@@ -1047,24 +1114,23 @@
   let reconcileTarget = null;
   let reconcileInput = null;
 
-  function offerMediaReconciliation(desc) {
+  async function offerMediaReconciliation(desc) {
     const why = desc.url
       ? 'The media URL this project points to cannot be played (offline, moved, or gone).'
       : 'The media file is missing from the project container.';
-    if (!confirm(why + '\n\nThe text is loaded and editable. If you have the media on this computer you can re-attach it now — the next save will make the project self-contained again.\n\nChoose the media file?')) {
-      return;
-    }
+    const proceed = await projectConfirm(why + '\n\nThe text is loaded and editable. If you have the media on this computer you can re-attach it now — the next save will make the project self-contained again.', 'Choose media file', 'Not now');
+    if (!proceed) return;
     reconcileTarget = desc;
     reconcileInput.value = '';
     reconcileInput.click();
   }
 
-  function attachReconciledMedia(file, desc) {
+  async function attachReconciledMedia(file, desc) {
     const doubts = [];
     if (desc.sizeBytes > 0 && desc.sizeBytes !== file.size) doubts.push('its size differs from the saved project');
     if (desc.filename && desc.filename !== file.name) doubts.push('its name differs (project media was "' + desc.filename + '")');
     if (doubts.length > 0
-        && !confirm('This may not be the right file: ' + doubts.join('; ') + '.\n\nAttach it anyway?')) {
+        && !(await projectConfirm('This may not be the right file: ' + doubts.join('; ') + '.', 'Attach anyway', 'Cancel'))) {
       return;
     }
     const player = document.querySelector('#hyperplayer');
@@ -1076,7 +1142,7 @@
       player.addEventListener('loadedmetadata', function check() {
         player.removeEventListener('loadedmetadata', check);
         if (Number.isFinite(player.duration) && Math.abs(player.duration - desc.durationSeconds) > 2) {
-          alert('Warning: the attached media lasts ~' + Math.round(player.duration) + 's but the project was saved with ~' + Math.round(desc.durationSeconds) + 's — it may be the wrong file.');
+          projectAlert('Warning: the attached media lasts ~' + Math.round(player.duration) + 's but the project was saved with ~' + Math.round(desc.durationSeconds) + 's — it may be the wrong file.');
         }
       });
     }
@@ -1175,7 +1241,7 @@
     document.querySelector('#project-save-hyperaudio').addEventListener('click', () => {
       saveToFile().catch((e) => {
         console.error('hyperaudio-save: save failed', e);
-        alert('Saving the project failed: ' + e.message);
+        projectAlert('Saving the project failed: ' + e.message);
       });
     });
     document.querySelector('#project-open-hyperaudio').addEventListener('click', () => {
@@ -1186,7 +1252,7 @@
       if (input.files.length === 1) {
         openFromFile(input.files[0]).catch((e) => {
           console.error('hyperaudio-save: open failed', e);
-          alert('Opening the project failed: ' + e.message);
+          projectAlert('Opening the project failed: ' + e.message);
         });
       }
     });
@@ -1238,16 +1304,25 @@
     // Open Project replaces it — so it gets the same warning, cancelable at
     // capture phase BEFORE the legacy loader swaps the DOM. (Without this,
     // an edit made after the last save was silently discarded on switch.)
+    let switchApproved = null; // the row whose next click was confirmed via the modal
     document.addEventListener('click', (event) => {
       if (!session.active || !sessionEdited) return;
       const target = event.target;
       if (!target || !target.closest || target.tagName === 'INPUT') return;
-      if (target.closest('.file-item') === null) return;
-      const proceed = confirm('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.\n\nPress Cancel to stay (you can save it from FILE → Save Project first), or OK to discard and switch.');
-      if (!proceed) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      const item = target.closest('.file-item');
+      if (item === null) return;
+      if (switchApproved === item) { switchApproved = null; return; } // the replay passes through
+      // The modal is async but the click must be decided NOW — intercept
+      // unconditionally, ask, and replay the click on confirmation.
+      event.preventDefault();
+      event.stopPropagation();
+      projectConfirm('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.\n\nYou can save it first from FILE → Save Project.', 'Discard and switch', 'Cancel')
+        .then((proceed) => {
+          if (proceed) {
+            switchApproved = item;
+            item.click();
+          }
+        });
     }, true);
 
     document.addEventListener('hyperaudioTranscriptLoaded', () => {

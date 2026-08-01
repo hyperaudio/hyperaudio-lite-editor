@@ -62,6 +62,19 @@ async function openFixture(page, testInfo, dialogs) {
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
 }
 
+// The module's designed dialog (replaces native alert/confirm): its visible
+// message text, or null when closed.
+const projectModal = (page) => page.evaluate(() => {
+  const el = document.getElementById('project-dialog');
+  return el !== null && el.classList.contains('modal-open')
+    ? el.querySelector('#project-dialog-message').textContent
+    : null;
+});
+const awaitModal = (page) => page.waitForFunction(() => {
+  const el = document.getElementById('project-dialog');
+  return el !== null && el.classList.contains('modal-open');
+});
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
@@ -215,12 +228,15 @@ test('an unopenable file is refused BEFORE the replace-confirmation, project unt
 
   await page.evaluate(() => { document.getElementById('project-open-input').value = ''; });
   await page.setInputFiles('#project-open-input', badPath);
-  await page.waitForTimeout(800);
+  await awaitModal(page);
 
-  // exactly ONE dialog — the refusal; never the replace-confirmation first
-  expect(dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('media compressed');
-  expect(dialogs[0]).not.toContain('REPLACE');
+  // the refusal — designed modal, no native dialog, never the replace-question
+  expect(dialogs).toEqual([]);
+  const text = await projectModal(page);
+  expect(text).toContain('media compressed');
+  expect(text).not.toContain('REPLACE');
+  await page.click('#project-dialog-confirm');
+  expect(await projectModal(page)).toBeNull();
   // and the dirty project is untouched
   await expect(page.locator('#hypertranscript')).toContainText('EDITED');
 });
@@ -234,7 +250,7 @@ test('switching to a Recents doc warns when the project has undownloaded changes
     span.textContent = 'DIRTY ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await page.evaluate(() => {
+  const clickLegacyDoc = () => page.evaluate(() => {
     localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
       hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
       video: 'https://example.com/a.mp3', summary: '', topics: [],
@@ -243,14 +259,27 @@ test('switching to a Recents doc warns when the project has undownloaded changes
     loadLocalStorageOptions();
     [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
   });
-  // the warning fired (and the auto-accept let the switch proceed)
-  expect(dialogs.some((d) => d.includes('DISCARD'))).toBe(true);
+
+  // Cancel path: the click is intercepted, the modal declined, nothing changes
+  await clickLegacyDoc();
+  await awaitModal(page);
+  expect(await projectModal(page)).toContain('DISCARD');
+  await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // blocked before the swap
+  await page.click('#project-dialog-cancel');
+  expect(await projectModal(page)).toBeNull();
+  await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // edit survives Cancel
+
+  // Confirm path: the click replays and the switch proceeds
+  await clickLegacyDoc();
+  await awaitModal(page);
+  await page.click('#project-dialog-confirm');
   await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
-  // the session ended with the switch: switching again warns no more
-  const count = dialogs.length;
+
+  // the session ended with the switch: switching again shows no modal
   await page.evaluate(() => { [...document.querySelectorAll('.file-item')][0].click(); });
   await page.waitForTimeout(300);
-  expect(dialogs.length).toBe(count);
+  expect(await projectModal(page)).toBeNull();
+  expect(dialogs).toEqual([]); // and never a native dialog anywhere
 });
 
 test('after Save Project, switching to a Recents doc does not warn', async ({ page }, testInfo) => {
@@ -275,5 +304,6 @@ test('after Save Project, switching to a Recents doc does not warn', async ({ pa
     [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
   });
   await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
-  expect(dialogs.some((d) => d.includes('DISCARD'))).toBe(false);
+  expect(await projectModal(page)).toBeNull(); // switched directly, no warning
+  expect(dialogs).toEqual([]);
 });
