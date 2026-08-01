@@ -896,7 +896,7 @@
     dialogEl.setAttribute('aria-modal', 'true');
     dialogEl.innerHTML = '<div class="modal-box" style="position:relative">'
       + '<button type="button" id="project-dialog-close" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</button>'
-      + '<div id="project-dialog-message" style="line-height:1.6; margin-top:8px"></div>'
+      + '<div id="project-dialog-message" style="line-height:1.6; margin-top:22px; padding-right:30px"></div>'
       + '<div class="modal-action">'
       + '<button type="button" id="project-dialog-cancel" class="btn btn-ghost">Cancel</button>'
       + '<button type="button" id="project-dialog-extra" class="btn btn-primary" style="display:none"></button>'
