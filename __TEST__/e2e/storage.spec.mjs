@@ -501,6 +501,35 @@ test('an entry predating mediaRef clears the stamp instead of offering stale med
   expect(await page.evaluate(() => document.getElementById('hyperplayer').dataset.mediaRef)).toBeUndefined();
 });
 
+test('switching docs flushes the pending autosave — the last edits are not dropped', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  // edit beta, then switch to alpha IMMEDIATELY — inside the 2s debounce
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'FLUSH-ME ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'alpha').click();
+  });
+  await page.waitForTimeout(300);
+  // the edit landed in beta's entry despite the debounce not having elapsed
+  const saved = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) =>
+      k.startsWith('hyperaudio:doc:') && JSON.parse(localStorage.getItem(k)).meta.name === 'beta');
+    return JSON.parse(localStorage.getItem(key)).hypertranscript;
+  });
+  expect(saved).toContain('FLUSH-ME');
+  // and switching back shows it
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'beta').click();
+  });
+  await page.waitForTimeout(300);
+  await expect(page.locator('#hypertranscript')).toContainText('FLUSH-ME');
+});
+
 test('a filename containing markup renders as text (#410)', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {

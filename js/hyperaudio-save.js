@@ -1048,6 +1048,12 @@
       if (!proceed) return;
     }
 
+    // A legacy Recents doc may hold a pending debounced autosave — its last
+    // edits must land before this open replaces the document.
+    if (typeof flushRecentsAutosave === 'function') {
+      try { flushRecentsAutosave(); } catch (e) { /* legacy module absent */ }
+    }
+
     let reconcileNow = null; // § 7.3: original-kind container missing its media entry
     if (loaded.mediaData !== null && loaded.mediaEntryName !== null) {
       const mimeType = loaded.project !== null ? (loaded.project.media.mimeType || '') : '';

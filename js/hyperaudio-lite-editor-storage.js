@@ -780,33 +780,51 @@ function maybeShowAutosaveNotice(storage = window.localStorage) {
 }
 
 let autosaveTimer = null;
+let autosavePending = false;
 
 function scheduleAutosave() {
+  autosavePending = true;
   clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(() => {
-    // A pending Restore means the on-screen doc was just deleted on purpose —
-    // silently recreating it on the next keystroke would fight that; the
-    // Restore button is the explicit path back.
-    if (document.querySelector('#recents-notice[data-has-action="true"]') !== null) return;
+  autosaveTimer = setTimeout(runPendingAutosave, AUTOSAVE_DEBOUNCE_MS);
+}
 
-    if (activeDocKey === null) {
-      // A never-saved document (the intro demo, or a deleted doc whose Restore
-      // offer was dismissed): the first edit brings it into Recents (#436), so
-      // "everything you touch is in Recents" holds with no manual save.
-      saveHyperTranscriptToLocalStorage(mediaDisplayName());
-      maybeShowAutosaveNotice();
-    } else {
-      const entry = readTranscriptEntry(activeDocKey, window.localStorage);
-      saveHyperTranscriptToLocalStorage(entry !== null ? entryName(activeDocKey, entry) : undefined);
-    }
-    loadLocalStorageOptions(); // reflect the new "updated" order
-  }, AUTOSAVE_DEBOUNCE_MS);
+function runPendingAutosave() {
+  autosavePending = false;
+  // A pending Restore means the on-screen doc was just deleted on purpose —
+  // silently recreating it on the next keystroke would fight that; the
+  // Restore button is the explicit path back.
+  if (document.querySelector('#recents-notice[data-has-action="true"]') !== null) return;
+
+  if (activeDocKey === null) {
+    // A never-saved document (the intro demo, or a deleted doc whose Restore
+    // offer was dismissed): the first edit brings it into Recents (#436), so
+    // "everything you touch is in Recents" holds with no manual save.
+    saveHyperTranscriptToLocalStorage(mediaDisplayName());
+    maybeShowAutosaveNotice();
+  } else {
+    const entry = readTranscriptEntry(activeDocKey, window.localStorage);
+    saveHyperTranscriptToLocalStorage(entry !== null ? entryName(activeDocKey, entry) : undefined);
+  }
+  loadLocalStorageOptions(); // reflect the new "updated" order
+}
+
+// Run any pending debounced autosave NOW — called before the document is
+// replaced (a Recents switch, a new transcription/import, a .hyperaudio
+// open). Without this, edits made in the last AUTOSAVE_DEBOUNCE_MS before a
+// switch were silently dropped: the timer fired after the swap, against the
+// replacing document. Global on purpose: hyperaudio-save.js calls it before
+// applying an opened project.
+function flushRecentsAutosave() {
+  if (!autosavePending) return;
+  clearTimeout(autosaveTimer);
+  runPendingAutosave();
 }
 
 if (typeof document !== 'undefined') {
   // A new transcription/import: always a NEW entry (never overwrite whatever
   // was active before), named after its media.
   window.document.addEventListener('hyperaudioInit', () => {
+    flushRecentsAutosave(); // the replaced doc's last edits must land first
     hideRestoreNotice();
     activeDocKey = null;
     suppressDerivedCapture = true;
@@ -944,6 +962,7 @@ function fileSelectHandleClick(event) {
   if (event.target.classList && event.target.classList.contains('recents-rename-input')) {
     return;
   }
+  flushRecentsAutosave(); // the outgoing doc's last edits must land first
   loadHyperTranscriptFromLocalStorage(event.currentTarget.getAttribute("data-key"));
 
   markActiveRecentsRow();
