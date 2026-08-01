@@ -919,6 +919,10 @@
     confirmBtn.textContent = opts.confirmLabel || 'OK';
     cancelBtn.textContent = opts.cancelLabel || 'Cancel';
     cancelBtn.style.display = opts.cancel === false ? 'none' : '';
+    // Destructive confirmations (work dies): the confirm goes btn-error red —
+    // matching the Recents armed-delete convention — and the SAFE button takes
+    // the default focus, so Enter through a half-read dialog cannot destroy.
+    confirmBtn.className = opts.danger === true ? 'btn btn-error' : 'btn btn-primary';
     el.classList.add('modal-open');
     return new Promise((resolve) => {
       const done = (result) => {
@@ -939,12 +943,14 @@
       confirmBtn.addEventListener('click', onOk);
       cancelBtn.addEventListener('click', onCancel);
       document.addEventListener('keydown', onKey, true);
-      confirmBtn.focus();
+      (opts.danger === true ? cancelBtn : confirmBtn).focus();
     });
   }
   const projectAlert = (message) => projectDialog(message, { cancel: false });
   const projectConfirm = (message, confirmLabel, cancelLabel) =>
     projectDialog(message, { confirmLabel: confirmLabel, cancelLabel: cancelLabel });
+  const projectConfirmDanger = (message, confirmLabel, cancelLabel) =>
+    projectDialog(message, { confirmLabel: confirmLabel, cancelLabel: cancelLabel, danger: true });
 
   async function saveToFile() {
     let mediaFile = await resolveMediaFile();
@@ -1044,7 +1050,7 @@
     }
 
     if (await isDirty()) {
-      const proceed = await projectConfirm('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.\n\nYou can save it first from FILE → Save Project.', 'Replace project', 'Cancel');
+      const proceed = await projectConfirmDanger('The current project has changes that were never downloaded as a .hyperaudio file. Opening this file will REPLACE it.\n\nYou can save it first from FILE → Save Project.', 'Replace project', 'Cancel');
       if (!proceed) return;
     }
 
@@ -1322,7 +1328,7 @@
       // unconditionally, ask, and replay the click on confirmation.
       event.preventDefault();
       event.stopPropagation();
-      projectConfirm('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.\n\nYou can save it first from FILE → Save Project.', 'Discard and switch', 'Cancel')
+      projectConfirmDanger('The current project has changes that were never downloaded as a .hyperaudio file. Switching to a saved transcript will DISCARD them.\n\nYou can save it first from FILE → Save Project.', 'Discard and switch', 'Cancel')
         .then((proceed) => {
           if (proceed) {
             switchApproved = item;

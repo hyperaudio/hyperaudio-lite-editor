@@ -264,6 +264,11 @@ test('switching to a Recents doc warns when the project has undownloaded changes
   await clickLegacyDoc();
   await awaitModal(page);
   expect(await projectModal(page)).toContain('DISCARD');
+  // destructive confirm: red button, and the SAFE button holds default focus
+  expect(await page.evaluate(() => ({
+    danger: document.getElementById('project-dialog-confirm').classList.contains('btn-error'),
+    focused: document.activeElement && document.activeElement.id,
+  }))).toEqual({ danger: true, focused: 'project-dialog-cancel' });
   await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // blocked before the swap
   await page.click('#project-dialog-cancel');
   expect(await projectModal(page)).toBeNull();
