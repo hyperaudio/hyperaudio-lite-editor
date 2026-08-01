@@ -1029,8 +1029,11 @@
       box = document.createElement('ul');
       box.id = 'project-current';
       box.className = 'menu menu-compact bg-base-100 w-full';
+      // its own class, NOT .file-item: the legacy picker queries and binds by
+      // that class, and the e2e asserts on it — borrowing it made this row a
+      // phantom Recents entry
       box.innerHTML = '<li class="recents-group-heading"><h2>Project</h2></li>'
-        + '<li class="recents-row"><a id="project-current-name" class="file-item active"></a>'
+        + '<li class="recents-row"><a id="project-current-name" class="project-current-item"></a>'
         + '<span class="recents-actions"><button type="button" id="project-current-rename" aria-label="Rename project" title="Rename">' + pencil + '</button></span></li>';
       scroll.insertBefore(box, scroll.firstChild);
       box.querySelector('#project-current-rename').addEventListener('click', startProjectRename);

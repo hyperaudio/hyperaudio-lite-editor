@@ -966,7 +966,7 @@ label[data-a11y-wired]:focus-visible {
      to the list and let the name's ellipsis absorb the difference */
   max-width: 100%;
 }
-:is(#file-picker, #project-current) .recents-row .file-item {
+:is(#file-picker, #project-current) .recents-row :is(.file-item, .project-current-item) {
   display: block;
   flex: 1 1 auto;
   min-width: 0;
@@ -1070,7 +1070,9 @@ label[data-a11y-wired]:focus-visible {
    alarming now that auto-add marks the new entry active immediately. A quiet
    base-200 fill + weight says "current" without shouting. */
 :is(#file-picker, #project-current) .file-item.active,
-:is(#file-picker, #project-current) .file-item.active:hover {
+:is(#file-picker, #project-current) .file-item.active:hover,
+#project-current .project-current-item,
+#project-current .project-current-item:hover {
   background-color: oklch(var(--b2));
   color: inherit;
   font-weight: 600;
