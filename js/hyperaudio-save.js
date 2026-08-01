@@ -880,7 +880,6 @@
     sessionEdited = true;    // a fresh transcription IS undownloaded work
     identityGeneration += 1; // new document
     updateSaveIndicator();
-    updateProjectRow();
     // Provenance is only this project's if the engine reported it moments ago
     // (imports fire hyperaudioInit without any setTranscriptionInfo call —
     // a previous transcription's provenance must not leak into them).
@@ -1009,68 +1008,6 @@
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
-
-  // Current-project row at the top of the Recents panel (#449): shows which
-  // project the editor holds, in the same "current" style as an active
-  // Recents doc, renamable in place (the rename edits the title Save uses).
-  // Rendered into its own container so the legacy picker's re-renders never
-  // wipe it; the whole panel model is revisited in #451.
-  function updateProjectRow() {
-    const scroll = document.getElementById('recents-scroll');
-    if (scroll === null) return;
-    let box = document.getElementById('project-current');
-    if (!session.active) {
-      if (box !== null) box.remove();
-      return;
-    }
-    if (box === null) {
-      const pencil = typeof RECENTS_RENAME_SVG !== 'undefined' ? RECENTS_RENAME_SVG : '✎';
-      box = document.createElement('ul');
-      box.id = 'project-current';
-      box.className = 'menu menu-compact bg-base-100 w-full';
-      // its own class, NOT .file-item: the legacy picker queries and binds by
-      // that class, and the e2e asserts on it — borrowing it made this row a
-      // phantom Recents entry
-      box.innerHTML = '<li class="recents-group-heading"><h2>Project</h2></li>'
-        + '<li class="recents-row"><a id="project-current-name" class="project-current-item"></a>'
-        + '<span class="recents-actions"><button type="button" id="project-current-rename" aria-label="Rename project" title="Rename">' + pencil + '</button></span></li>';
-      scroll.insertBefore(box, scroll.firstChild);
-      box.querySelector('#project-current-rename').addEventListener('click', startProjectRename);
-    }
-    const mediaName = session.mediaFile !== null ? session.mediaFile.name : '';
-    box.querySelector('#project-current-name').textContent = session.title || mediaName || 'Untitled project';
-  }
-
-  function startProjectRename() {
-    const nameEl = document.getElementById('project-current-name');
-    if (nameEl === null || nameEl.querySelector('input') !== null) return;
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = nameEl.textContent;
-    input.className = 'recents-rename-input';
-    input.setAttribute('aria-label', 'Project title');
-    nameEl.textContent = '';
-    nameEl.appendChild(input);
-    input.focus();
-    input.select();
-    let finished = false;
-    const finish = (commit) => {
-      if (finished) return;
-      finished = true;
-      const value = input.value.trim();
-      if (commit && value !== '' && value !== session.title) {
-        session.title = value;
-        scheduleAutosave(); // the title is saved content — the doc is dirty
-      }
-      updateProjectRow();
-    };
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') finish(true);
-      if (e.key === 'Escape') finish(false);
-    });
-    input.addEventListener('blur', () => finish(true));
-    input.addEventListener('click', (e) => e.stopPropagation());
   }
 
   // The navbar Save button's dirty dot mirrors sessionEdited (#449).
@@ -1261,7 +1198,6 @@
       sessionEdited = false; // the opened file IS the downloaded state
       identityGeneration += 1; // a different document now owns the session
       updateSaveIndicator();
-      updateProjectRow();
 
       if (opfsAvailable) {
         await clearWork();
@@ -1386,7 +1322,6 @@
       session.hasOriginal = originalText !== null;
       session.originalJson = originalText;
       session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
-      updateProjectRow();
     } catch (e) {
       console.warn('hyperaudio-save: restore failed, leaving demo', e);
     }
@@ -1561,7 +1496,6 @@
       if (!target || !target.closest || target.tagName === 'INPUT') return;
       const item = target.closest('.file-item');
       if (item === null) return;
-      if (item.closest('#project-current') !== null) return; // our own row, not a switch
       if (switchApproved === item) { switchApproved = null; return; } // the replay passes through
       // The modal is async but the click must be decided NOW — intercept
       // unconditionally, ask, and replay the click on confirmation.
@@ -1589,7 +1523,6 @@
       sessionEdited = false;
       identityGeneration += 1; // the session's document is gone
       updateSaveIndicator();
-      updateProjectRow();
       try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
     });
 

@@ -957,7 +957,7 @@ label[data-a11y-wired]:focus-visible {
 /* Recents rows (#434): name + hover/focus actions (rename, delete). The
    daisyUI menu lays li content out column-wise for submenus — force a row so
    the action buttons sit beside the name, which truncates rather than wraps. */
-:is(#file-picker, #project-current) .recents-row {
+#file-picker .recents-row {
   flex-direction: row;
   align-items: center;
   flex-wrap: nowrap;
@@ -966,7 +966,7 @@ label[data-a11y-wired]:focus-visible {
      to the list and let the name's ellipsis absorb the difference */
   max-width: 100%;
 }
-:is(#file-picker, #project-current) .recents-row :is(.file-item, .project-current-item) {
+#file-picker .recents-row .file-item {
   display: block;
   flex: 1 1 auto;
   min-width: 0;
@@ -974,7 +974,7 @@ label[data-a11y-wired]:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-:is(#file-picker, #project-current) .recents-actions {
+#file-picker .recents-actions {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -989,13 +989,13 @@ label[data-a11y-wired]:focus-visible {
   background: none;
   padding: 0 4px 0 0;
 }
-:is(#file-picker, #project-current) .recents-row:hover .recents-actions,
-:is(#file-picker, #project-current) .recents-row:focus-within .recents-actions {
+#file-picker .recents-row:hover .recents-actions,
+#file-picker .recents-row:focus-within .recents-actions {
   opacity: 1;
 }
 /* neutralise the global button chrome (border + grey fill) for the tiny
    in-row actions; they read as quiet icons until hovered */
-:is(#file-picker, #project-current) .recents-actions button {
+#file-picker .recents-actions button {
   display: inline-flex;
   align-items: center;
   border: none;
@@ -1008,7 +1008,7 @@ label[data-a11y-wired]:focus-visible {
   font-size: 11px;
   line-height: 1;
 }
-:is(#file-picker, #project-current) .recents-actions button:hover {
+#file-picker .recents-actions button:hover {
   border: none;
   background-color: oklch(var(--b2));
   color: oklch(var(--bc));
@@ -1069,10 +1069,8 @@ label[data-a11y-wired]:focus-visible {
 /* The active row: daisyUI's menu .active is a near-black pill, which reads as
    alarming now that auto-add marks the new entry active immediately. A quiet
    base-200 fill + weight says "current" without shouting. */
-:is(#file-picker, #project-current) .file-item.active,
-:is(#file-picker, #project-current) .file-item.active:hover,
-#project-current .project-current-item,
-#project-current .project-current-item:hover {
+#file-picker .file-item.active,
+#file-picker .file-item.active:hover {
   background-color: oklch(var(--b2));
   color: inherit;
   font-weight: 600;
@@ -1147,11 +1145,11 @@ label[data-a11y-wired]:focus-visible {
    static "Recents" h2, which hides while these are rendered (storage.js
    decides; nothing starred = static h2 only, exactly the default look). The
    picker's own 16px inset aligns them with where the static h2 sits. */
-:is(#file-picker, #project-current) .recents-group-heading {
+#file-picker .recents-group-heading {
   padding: 12px 0 4px;
   pointer-events: none;
 }
-:is(#file-picker, #project-current) .recents-group-heading h2 {
+#file-picker .recents-group-heading h2 {
   /* daisyUI styles any direct child of a menu li as a menu item — zero that
      out so the heading sits at the same 16px inset as the static h2 */
   margin: 0;
@@ -1201,8 +1199,4 @@ label[data-a11y-wired]:focus-visible {
 }
 #project-save-btn.dirty #project-save-dirty-dot {
   display: block;
-}
-/* the current-project box shares the picker's inset */
-#project-current {
-  padding: 0 16px;
 }

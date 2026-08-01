@@ -389,8 +389,6 @@ test('Save button: dirty dot appears on edit, click saves and clears it (#449)',
   await openFixture(page, testInfo, dialogs);
   await expect(page.locator('#project-save-btn')).toHaveCount(1);
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
-  // the current-project row carries the opened project's title (#449)
-  await expect(page.locator('#project-current-name')).toHaveText('E2E Project');
 
   await page.evaluate(() => {
     const span = document.querySelector('#hypertranscript span[data-m]');
@@ -405,17 +403,12 @@ test('Save button: dirty dot appears on edit, click saves and clears it (#449)',
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
 });
 
-test('Ctrl/⌘-S saves; editing the title dirties and renames the save (#449)', async ({ page }, testInfo) => {
+test('Ctrl/⌘-S saves with the project title (#449)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
-  // rename via the current-project row (the title UI since #449)
-  await page.click('#project-current-rename');
-  await page.locator('#project-current-name input').fill('Retitled');
-  await page.locator('#project-current-name input').press('Enter');
-  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
   const downloadPromise = page.waitForEvent('download');
   await page.keyboard.press('Control+s');
-  expect((await downloadPromise).suggestedFilename()).toBe('Retitled.hyperaudio');
+  expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
 });
 
 test('the native bridge intercepts the save instead of a download (#449)', async ({ page }, testInfo) => {
