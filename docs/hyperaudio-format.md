@@ -55,6 +55,14 @@ skip) travel **as data** (`struck`, options) on top of the intact original
 media, and are applied at playback and at export time. Only *rendered* export
 products stay out.
 
+> **Privacy consequence — share exports, not project files.** Because the
+> container preserves the work in full, it includes the *complete original
+> media* and every redacted word as recoverable data. A `.hyperaudio` given to
+> someone else discloses exactly what its editor struck out. When redactions
+> or cuts matter, share a *rendered export* (or a flattened new project whose
+> media is the rendered result); treat the project file itself like a source
+> document.
+
 ### 1.2 Format identity
 
 | Property | Value |
