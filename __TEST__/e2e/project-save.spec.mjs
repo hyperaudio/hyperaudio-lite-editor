@@ -80,9 +80,15 @@ test.beforeEach(async ({ page }) => {
   await page.waitForSelector('#hypertranscript [data-m]');
 });
 
-test('menu items and hidden input are injected', async ({ page }) => {
-  await expect(page.locator('#file-dropdown #project-save-hyperaudio')).toHaveText('Save Project (.hyperaudio)');
-  await expect(page.locator('#file-dropdown #project-open-hyperaudio')).toHaveText('Open Project…');
+test('save button, import menu item, and hidden input are injected', async ({ page }) => {
+  // Save lives in the navbar (primary, before the export button), not the menu
+  await expect(page.locator('#project-save-btn')).toHaveCount(1);
+  const order = await page.evaluate(() => {
+    const btn = document.getElementById('project-save-btn');
+    return btn.nextElementSibling && btn.nextElementSibling.id;
+  });
+  expect(order).toBe('export-media-btn');
+  await expect(page.locator('#file-exportimport-submenu #project-open-hyperaudio')).toHaveText('Import Project (.hyperaudio)');
   await expect(page.locator('#project-open-input')).toHaveCount(1);
 });
 
@@ -118,7 +124,7 @@ test('saving downloads a conformant container that round-trips', async ({ page }
   await openFixture(page, testInfo, dialogs);
 
   const downloadPromise = page.waitForEvent('download');
-  await page.evaluate(() => document.querySelector('#project-save-hyperaudio').click());
+  await page.evaluate(() => document.getElementById('project-save-btn').click());
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('E2E Project.hyperaudio');
 
@@ -163,7 +169,7 @@ test('the working copy survives a reload (OPFS restore)', async ({ page }, testI
   // the project title survived the restore in the session (no UI field until
   // #449): a save after reload still suggests the title-derived filename
   const downloadPromise = page.waitForEvent('download');
-  await page.evaluate(() => document.querySelector('#project-save-hyperaudio').click());
+  await page.evaluate(() => document.getElementById('project-save-btn').click());
   expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
 });
 
@@ -326,7 +332,7 @@ test('after Save Project, switching to a Recents doc does not warn', async ({ pa
   });
   // download the project — changes are now saved, the flag resets
   const downloadPromise = page.waitForEvent('download');
-  await page.evaluate(() => document.querySelector('#project-save-hyperaudio').click());
+  await page.evaluate(() => document.getElementById('project-save-btn').click());
   await downloadPromise;
   await page.evaluate(() => {
     localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
@@ -376,4 +382,86 @@ test('edit tracking survives the caption-mode round trip (#448 delegation)', asy
   });
   expect(after.at).toBeGreaterThan(before);
   expect(after.html).toContain('POST-ROUNDTRIP');
+});
+
+test('Save button: dirty dot appears on edit, click saves and clears it (#449)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await expect(page.locator('#project-save-btn')).toHaveCount(1);
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+  // the current-project row carries the opened project's title (#449)
+  await expect(page.locator('#project-current-name')).toHaveText('E2E Project');
+
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'DIRTY ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#project-save-btn');
+  expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+});
+
+test('Ctrl/⌘-S saves; editing the title dirties and renames the save (#449)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  // rename via the current-project row (the title UI since #449)
+  await page.click('#project-current-rename');
+  await page.locator('#project-current-name input').fill('Retitled');
+  await page.locator('#project-current-name input').press('Enter');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+  const downloadPromise = page.waitForEvent('download');
+  await page.keyboard.press('Control+s');
+  expect((await downloadPromise).suggestedFilename()).toBe('Retitled.hyperaudio');
+});
+
+test('the native bridge intercepts the save instead of a download (#449)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await page.evaluate(() => {
+    window.__bridgeSaved = null;
+    window.hyperaudioProjectBridge = {
+      save(blob, name) { window.__bridgeSaved = { size: blob.size, name }; return true; },
+    };
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'BRIDGED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.click('#project-save-btn');
+  await page.waitForFunction(() => window.__bridgeSaved !== null);
+  const saved = await page.evaluate(() => window.__bridgeSaved);
+  expect(saved.name).toBe('E2E Project.hyperaudio');
+  expect(saved.size).toBeGreaterThan(1000);
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/); // bridge save marks clean
+});
+
+test('the quit guard arms on unsaved changes and disarms after a save (#449)', async ({ page }, testInfo) => {
+  // Tests the guard's arming logic via a cancelable synthetic event —
+  // defaultPrevented is precisely what the browser reads to decide whether
+  // to prompt. The prompt itself is platform chrome (and headless Chromium's
+  // dialog plumbing for real closes is unreliable); manual testing covers it.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  const armed = () => page.evaluate(() => {
+    const e = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+
+  expect(await armed()).toBe(false); // freshly opened: clean
+
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'UNSAVED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(await armed()).toBe(true);  // dirty: leaving would prompt
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#project-save-btn');
+  await downloadPromise;
+  expect(await armed()).toBe(false); // saved: leaving is silent again
 });

@@ -820,6 +820,7 @@
     if (!session.active || suppressCapture) return;
     sessionEdited = true;
     editGeneration += 1;
+    updateSaveIndicator();
     if (!opfsAvailable) return;
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(writeWorkSnapshot, 1500);
@@ -878,6 +879,8 @@
     session.envelope = null; // a fresh document has no envelope to preserve
     sessionEdited = true;    // a fresh transcription IS undownloaded work
     identityGeneration += 1; // new document
+    updateSaveIndicator();
+    updateProjectRow();
     // Provenance is only this project's if the engine reported it moments ago
     // (imports fire hyperaudioInit without any setTranscriptionInfo call —
     // a previous transcription's provenance must not leak into them).
@@ -999,6 +1002,80 @@
   const projectConfirmDanger = (message, confirmLabel, cancelLabel) =>
     projectDialog(message, { confirmLabel: confirmLabel, cancelLabel: cancelLabel, danger: true });
 
+  function triggerDownload(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  // Current-project row at the top of the Recents panel (#449): shows which
+  // project the editor holds, in the same "current" style as an active
+  // Recents doc, renamable in place (the rename edits the title Save uses).
+  // Rendered into its own container so the legacy picker's re-renders never
+  // wipe it; the whole panel model is revisited in #451.
+  function updateProjectRow() {
+    const scroll = document.getElementById('recents-scroll');
+    if (scroll === null) return;
+    let box = document.getElementById('project-current');
+    if (!session.active) {
+      if (box !== null) box.remove();
+      return;
+    }
+    if (box === null) {
+      const pencil = typeof RECENTS_RENAME_SVG !== 'undefined' ? RECENTS_RENAME_SVG : '✎';
+      box = document.createElement('ul');
+      box.id = 'project-current';
+      box.className = 'menu menu-compact bg-base-100 w-full';
+      box.innerHTML = '<li class="recents-group-heading"><h2>Project</h2></li>'
+        + '<li class="recents-row"><a id="project-current-name" class="file-item active"></a>'
+        + '<span class="recents-actions"><button type="button" id="project-current-rename" aria-label="Rename project" title="Rename">' + pencil + '</button></span></li>';
+      scroll.insertBefore(box, scroll.firstChild);
+      box.querySelector('#project-current-rename').addEventListener('click', startProjectRename);
+    }
+    const mediaName = session.mediaFile !== null ? session.mediaFile.name : '';
+    box.querySelector('#project-current-name').textContent = session.title || mediaName || 'Untitled project';
+  }
+
+  function startProjectRename() {
+    const nameEl = document.getElementById('project-current-name');
+    if (nameEl === null || nameEl.querySelector('input') !== null) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = nameEl.textContent;
+    input.className = 'recents-rename-input';
+    input.setAttribute('aria-label', 'Project title');
+    nameEl.textContent = '';
+    nameEl.appendChild(input);
+    input.focus();
+    input.select();
+    let finished = false;
+    const finish = (commit) => {
+      if (finished) return;
+      finished = true;
+      const value = input.value.trim();
+      if (commit && value !== '' && value !== session.title) {
+        session.title = value;
+        scheduleAutosave(); // the title is saved content — the doc is dirty
+      }
+      updateProjectRow();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  // The navbar Save button's dirty dot mirrors sessionEdited (#449).
+  function updateSaveIndicator() {
+    const btn = document.getElementById('project-save-btn');
+    if (btn !== null) btn.classList.toggle('dirty', sessionEdited === true);
+  }
+
   async function saveToFile() {
     if (saveInFlight) return false; // one container build at a time (#448)
     saveInFlight = true;
@@ -1075,18 +1152,34 @@
     const safeTitle = (state.texts.title || 'project')
       .replace(/\.hyperaudio$/i, '')
       .replace(/[\\/:*?"<>|]+/g, '-').trim() || 'project';
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = safeTitle + FILE_EXTENSION;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const suggestedName = safeTitle + FILE_EXTENSION;
+
+    // Native bridge hook (#449): an embedding app (a native wrapper with its
+    // own filesystem access) registers window.hyperaudioProjectBridge before
+    // load and receives the finished archive instead of a browser download —
+    // one save path for web and native, no injected UI. Returning false
+    // declines, and the browser download proceeds as the fallback.
+    const bridge = window.hyperaudioProjectBridge;
+    if (bridge && typeof bridge.save === 'function') {
+      let handled = false;
+      try {
+        handled = (await bridge.save(blob, suggestedName)) !== false;
+      } catch (e) {
+        console.warn('hyperaudio-save: bridge save failed, falling back to download', e);
+      }
+      if (!handled) {
+        triggerDownload(blob, suggestedName);
+      }
+    } else {
+      triggerDownload(blob, suggestedName);
+    }
 
     // Mark clean only if this save still belongs to the current document AND
     // no edit landed while the container was being built (#448) — otherwise
     // the download is real but the session stays dirty.
     if (identityGeneration === identityAtStart && editGeneration === editAtGather) {
       sessionEdited = false;
+      updateSaveIndicator();
       await patchAppState({ lastDownloadAt: Date.now() });
     }
     return true;
@@ -1164,6 +1257,8 @@
       session.envelope = loaded.recovered ? null : loaded.project;
       sessionEdited = false; // the opened file IS the downloaded state
       identityGeneration += 1; // a different document now owns the session
+      updateSaveIndicator();
+      updateProjectRow();
 
       if (opfsAvailable) {
         await clearWork();
@@ -1288,6 +1383,7 @@
       session.hasOriginal = originalText !== null;
       session.originalJson = originalText;
       session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
+      updateProjectRow();
     } catch (e) {
       console.warn('hyperaudio-save: restore failed, leaving demo', e);
     }
@@ -1317,9 +1413,59 @@
     if (dropdown === null) return;
     dropdown.insertAdjacentHTML('beforeend',
       '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />'
-      + '<li class="menu-title"><span>Project</span></li>'
-      + '<li><a id="project-save-hyperaudio">Save Project (.hyperaudio)</a></li>'
-      + '<li><a id="project-open-hyperaudio">Open Project…</a></li>');
+      + '');
+    // The navbar Save button covers saving (#449), so the menu carries no
+    // Save item; opening a project lives with the other imports.
+    const importList = document.querySelector('#file-exportimport-submenu ul');
+    if (importList !== null) {
+      importList.insertAdjacentHTML('afterbegin',
+        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>');
+    } else {
+      dropdown.insertAdjacentHTML('beforeend',
+        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>');
+    }
+
+    // Navbar Save button (#449), matching the native app's treatment exactly:
+    // primary (Save leads the lifecycle cluster Save · Export · NEW — outline
+    // belongs to the editing tools), placed before the export button, with a
+    // primary-content dot ringed in primary while unsaved changes exist.
+    const exportBtn = document.getElementById('export-media-btn');
+    const navEnd = exportBtn !== null ? exportBtn.parentElement : document.querySelector('.navbar-end');
+    if (navEnd !== null) {
+      const saveBtn = document.createElement('button');
+      saveBtn.id = 'project-save-btn';
+      saveBtn.type = 'button';
+      saveBtn.className = 'btn btn-square btn-primary relative tooltip';
+      saveBtn.setAttribute('data-tip', 'Save project (⌘S)');
+      saveBtn.setAttribute('aria-label', 'Save project');
+      saveBtn.style.marginRight = '4px';
+      saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-save" aria-hidden="true"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>'
+        + '<span id="project-save-dirty-dot" aria-hidden="true"></span>';
+      saveBtn.addEventListener('click', () => {
+        saveToFile().catch((e) => projectAlert('Saving the project failed: ' + e.message));
+      });
+      if (exportBtn !== null) navEnd.insertBefore(saveBtn, exportBtn);
+      else navEnd.appendChild(saveBtn);
+    }
+
+    // ⌘/Ctrl-S — the universal save gesture; capture phase beats the browser's
+    // own save-page dialog.
+    document.addEventListener('keydown', (event) => {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey
+          && (event.key === 's' || event.key === 'S')) {
+        event.preventDefault();
+        saveToFile().catch((e) => projectAlert('Saving the project failed: ' + e.message));
+      }
+    }, true);
+
+    // The quit guard (#449): warn only when the session holds unsaved work.
+    // The prompt is the browser's own — beforeunload cannot show custom UI.
+    window.addEventListener('beforeunload', (event) => {
+      if (session.active && sessionEdited) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    });
 
     const input = document.createElement('input');
     input.type = 'file';
@@ -1345,12 +1491,6 @@
       }
     });
 
-    document.querySelector('#project-save-hyperaudio').addEventListener('click', () => {
-      saveToFile().catch((e) => {
-        console.error('hyperaudio-save: save failed', e);
-        projectAlert('Saving the project failed: ' + e.message);
-      });
-    });
     document.querySelector('#project-open-hyperaudio').addEventListener('click', () => {
       input.value = '';
       input.click();
@@ -1418,6 +1558,7 @@
       if (!target || !target.closest || target.tagName === 'INPUT') return;
       const item = target.closest('.file-item');
       if (item === null) return;
+      if (item.closest('#project-current') !== null) return; // our own row, not a switch
       if (switchApproved === item) { switchApproved = null; return; } // the replay passes through
       // The modal is async but the click must be decided NOW — intercept
       // unconditionally, ask, and replay the click on confirmation.
@@ -1444,6 +1585,8 @@
       session.title = '';
       sessionEdited = false;
       identityGeneration += 1; // the session's document is gone
+      updateSaveIndicator();
+      updateProjectRow();
       try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
     });
 
