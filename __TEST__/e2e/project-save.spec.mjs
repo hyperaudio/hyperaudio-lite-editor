@@ -173,38 +173,32 @@ test('the working copy survives a reload (OPFS restore)', async ({ page }, testI
   expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
 });
 
-test('a legacy Recents load ends the project session: no spurious replace-warning, no franken capture', async ({ page }, testInfo) => {
+test('dirty open: danger triad styling, and "Save and open" saves then opens (#449)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
-  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === '1');
-
-  // switch to a Recents doc (the legacy world) — its load regenerates captions,
-  // which used to trigger a project capture of the WRONG document's content
   await page.evaluate(() => {
-    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
-      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
-      video: 'https://example.com/a.mp3', summary: '', topics: [],
-      meta: { name: 'legacy doc', updated: 5000 },
-    }));
-    loadLocalStorageOptions();
-    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'DIRTY ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
-
-  // the session ended: boot hint cleared (a reload won't resurrect the project),
-  // and pending captures stopped
-  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === null);
-  await page.waitForTimeout(2000); // outlive the autosave debounce — no late capture may re-set it
-  expect(await page.evaluate(() => localStorage.getItem('hyperaudioWorkPresent'))).toBeNull();
-
-  // re-opening a .hyperaudio must NOT warn about "changes never downloaded" —
-  // the on-screen doc belongs to Recents, not an unsaved project
-  // reset the input as the menu-click path does (#project-open-hyperaudio
-  // clears value before click) — a second identical selection otherwise
-  // doesn't re-fire change
+  // open the fixture again over the dirty project
   await page.evaluate(() => { document.getElementById('project-open-input').value = ''; });
-  await openFixture(page, testInfo, dialogs);
-  expect(dialogs).toEqual([]);
+  const fixturePath = testInfo.outputPath('fixture.hyperaudio');
+  await page.setInputFiles('#project-open-input', fixturePath);
+  await awaitModal(page);
+  expect(await projectModal(page)).toContain('DISCARD');
+  expect(await page.evaluate(() => ({
+    danger: document.getElementById('project-dialog-confirm').classList.contains('btn-error'),
+    saveLabel: document.getElementById('project-dialog-extra').textContent,
+    focused: document.activeElement && document.activeElement.id,
+    cancelHidden: document.getElementById('project-dialog-cancel').style.display === 'none',
+  }))).toEqual({ danger: true, saveLabel: 'Save and open', focused: 'project-dialog-extra', cancelHidden: true });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#project-dialog-extra');
+  expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio'); // saved…
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');          // …then opened
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
 });
 
 test('an unopenable file is refused BEFORE the replace-confirmation, project untouched', async ({ page }, testInfo) => {
@@ -245,107 +239,6 @@ test('an unopenable file is refused BEFORE the replace-confirmation, project unt
   expect(await projectModal(page)).toBeNull();
   // and the dirty project is untouched
   await expect(page.locator('#hypertranscript')).toContainText('EDITED');
-});
-
-test('switching to a Recents doc warns when the project has undownloaded changes', async ({ page }, testInfo) => {
-  const dialogs = [];
-  await openFixture(page, testInfo, dialogs); // registers an accept-all dialog handler
-  // edit → undownloaded changes (the sync flag sets on the input trigger)
-  await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
-    span.textContent = 'DIRTY ';
-    span.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  const clickLegacyDoc = () => page.evaluate(() => {
-    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
-      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
-      video: 'https://example.com/a.mp3', summary: '', topics: [],
-      meta: { name: 'legacy doc', updated: 5000 },
-    }));
-    loadLocalStorageOptions();
-    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
-  });
-
-  // Cancel path: the click is intercepted, the modal declined, nothing changes
-  await clickLegacyDoc();
-  await awaitModal(page);
-  expect(await projectModal(page)).toContain('DISCARD');
-  // destructive confirm: red button; default focus on the safe-and-constructive
-  // Save option, so Enter can never destroy work
-  expect(await page.evaluate(() => ({
-    danger: document.getElementById('project-dialog-confirm').classList.contains('btn-error'),
-    saveLabel: document.getElementById('project-dialog-extra').textContent,
-    focused: document.activeElement && document.activeElement.id,
-    cancelHidden: document.getElementById('project-dialog-cancel').style.display === 'none',
-  }))).toEqual({ danger: true, saveLabel: 'Save and switch', focused: 'project-dialog-extra', cancelHidden: true });
-  await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // blocked before the swap
-  await page.click('#project-dialog-close'); // the ✕ IS the cancel (two-button rule)
-  expect(await projectModal(page)).toBeNull();
-  await expect(page.locator('#hypertranscript')).toContainText('DIRTY'); // edit survives dismissal
-
-  // Confirm path: the click replays and the switch proceeds
-  await clickLegacyDoc();
-  await awaitModal(page);
-  await page.click('#project-dialog-confirm');
-  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
-
-  // the session ended with the switch: switching again shows no modal
-  await page.evaluate(() => { [...document.querySelectorAll('.file-item')][0].click(); });
-  await page.waitForTimeout(300);
-  expect(await projectModal(page)).toBeNull();
-  expect(dialogs).toEqual([]); // and never a native dialog anywhere
-});
-
-test('"Save and switch" downloads the project, then completes the switch', async ({ page }, testInfo) => {
-  const dialogs = [];
-  await openFixture(page, testInfo, dialogs);
-  await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
-    span.textContent = 'DIRTY ';
-    span.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await page.evaluate(() => {
-    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
-      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
-      video: 'https://example.com/a.mp3', summary: '', topics: [],
-      meta: { name: 'legacy doc', updated: 5000 },
-    }));
-    loadLocalStorageOptions();
-    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
-  });
-  await awaitModal(page);
-  const downloadPromise = page.waitForEvent('download');
-  await page.click('#project-dialog-extra');
-  const download = await downloadPromise;                       // the save happened…
-  expect(download.suggestedFilename()).toContain('.hyperaudio');
-  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC'); // …then the switch
-  expect(dialogs).toEqual([]);
-});
-
-test('after Save Project, switching to a Recents doc does not warn', async ({ page }, testInfo) => {
-  const dialogs = [];
-  await openFixture(page, testInfo, dialogs);
-  await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
-    span.textContent = 'DIRTY ';
-    span.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  // download the project — changes are now saved, the flag resets
-  const downloadPromise = page.waitForEvent('download');
-  await page.evaluate(() => document.getElementById('project-save-btn').click());
-  await downloadPromise;
-  await page.evaluate(() => {
-    localStorage.setItem('hyperaudio:doc:e2e', JSON.stringify({
-      hypertranscript: '<article><section><p><span data-m="0" data-d="500">RECENTS-DOC </span></p></section></article>',
-      video: 'https://example.com/a.mp3', summary: '', topics: [],
-      meta: { name: 'legacy doc', updated: 5000 },
-    }));
-    loadLocalStorageOptions();
-    [...document.querySelectorAll('.file-item')].find((a) => a.textContent === 'legacy doc').click();
-  });
-  await expect(page.locator('#hypertranscript')).toContainText('RECENTS-DOC');
-  expect(await projectModal(page)).toBeNull(); // switched directly, no warning
-  expect(dialogs).toEqual([]);
 });
 
 test('edit tracking survives the caption-mode round trip (#448 delegation)', async ({ page }, testInfo) => {

@@ -1012,6 +1012,32 @@
   const projectConfirmDanger = (message, confirmLabel, cancelLabel) =>
     projectDialog(message, { confirmLabel: confirmLabel, cancelLabel: cancelLabel, danger: true });
 
+  /*
+   * Completely remove the existing caption <track> and insert a fresh, empty
+   * one (relocated from the legacy storage module in #451; #356/#287 history:
+   * a reused track kept the PREVIOUS media's cue painted across a swap).
+   */
+  function resetCaptionTrack(videoDomId = 'hyperplayer', vttId = 'hyperplayer-vtt') {
+    const video = document.getElementById(videoDomId);
+    if (video === null) {
+      return null;
+    }
+    const old = document.getElementById(vttId);
+    if (old !== null) {
+      old.remove();
+    }
+    const track = document.createElement('track');
+    track.id = vttId;
+    track.label = 'preview';
+    track.kind = 'subtitles';
+    track.src = '';
+    video.appendChild(track);
+    return track;
+  }
+  // the caption-regenerate path in editor-core reaches this by global name
+  // (typeof-guarded), as it did when the legacy module defined it
+  window.resetCaptionTrack = resetCaptionTrack;
+
   function triggerDownload(blob, name) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1170,11 +1196,6 @@
       }
     }
 
-    // A legacy Recents doc may hold a pending debounced autosave — its last
-    // edits must land before this open replaces the document.
-    if (typeof flushRecentsAutosave === 'function') {
-      try { flushRecentsAutosave(); } catch (e) { /* legacy module absent */ }
-    }
 
     let reconcileNow = null; // § 7.3: original-kind container missing its media entry
     if (loaded.mediaData !== null && loaded.mediaEntryName !== null) {
@@ -1486,60 +1507,6 @@
       onNewTranscript().catch((e) => console.warn('hyperaudio-save: capture failed', e));
     });
 
-    // A legacy Recents load replaces the document OUTSIDE the project system:
-    // it fires hyperaudioTranscriptLoaded but not hyperaudioInit, and never
-    // runs under our apply's suppressCapture. The project session must end —
-    // a capture after the swap would write the Recents doc's content under
-    // the OLD project's identity (a franken working copy, and a spurious
-    // "changes never downloaded" warning on the next open). The boot hint
-    // clears so a reload doesn't resurrect a project the user navigated away
-    // from; work/ itself is left inert and the next session overwrites it.
-    // Interim coexistence rule until #448 (identity generations) / #451
-    // (legacy-storage removal).
-    // Switching to a Recents doc discards the project session exactly like
-    // Open Project replaces it — so it gets the same warning, cancelable at
-    // capture phase BEFORE the legacy loader swaps the DOM. (Without this,
-    // an edit made after the last save was silently discarded on switch.)
-    let switchApproved = null; // the row whose next click was confirmed via the modal
-    document.addEventListener('click', (event) => {
-      if (!session.active || !sessionEdited) return;
-      const target = event.target;
-      if (!target || !target.closest || target.tagName === 'INPUT') return;
-      const item = target.closest('.file-item');
-      if (item === null) return;
-      if (switchApproved === item) { switchApproved = null; return; } // the replay passes through
-      // The modal is async but the click must be decided NOW — intercept
-      // unconditionally, ask, and replay the click on confirmation.
-      event.preventDefault();
-      event.stopPropagation();
-      projectDialog('The current project has changes not yet saved as a .hyperaudio file. Switching to a saved transcript will DISCARD them.', {
-        confirmLabel: 'Discard and switch', danger: true, extraLabel: 'Save and switch', cancelButton: false,
-      }).then(async (choice) => {
-          if (choice === false) return;
-          if (choice === 'extra') {
-            let saved = false;
-            try { saved = await saveToFile(); } catch (e) { saved = false; }
-            if (saved !== true) return; // abandoned save — stay on the project
-          }
-          switchApproved = item;
-          item.click();
-        });
-    }, true);
-
-    document.addEventListener('hyperaudioTranscriptLoaded', () => {
-      if (suppressCapture) return; // our own apply() also fires this event
-      clearTimeout(autosaveTimer);
-      session.active = false;
-      session.title = '';
-      sessionEdited = false;
-      identityGeneration += 1; // the session's document is gone
-      updateSaveIndicator();
-      // a guarded tab must not clear the OWNER's boot hint
-      if (hasWorkLock) {
-        try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
-      }
-    });
-
     // Provenance: engines report service/model through setTranscriptionInfo.
     const originalSetInfo = window.setTranscriptionInfo;
     if (typeof originalSetInfo === 'function') {
@@ -1594,14 +1561,14 @@
   }
 
   function showTabGuardBanner() {
-    const picker = document.getElementById('file-picker');
-    if (picker === null || picker.parentElement === null) return;
+    const anchor = document.getElementById('side-notices');
+    if (anchor === null) return;
     if (document.getElementById('tab-guard-banner') !== null) return;
     const el = document.createElement('div');
     el.id = 'tab-guard-banner';
     el.setAttribute('role', 'status');
     el.textContent = 'Another tab is already using this editor — autosave and crash recovery are active there. You can still edit and save here.';
-    picker.parentElement.insertBefore(el, picker);
+    anchor.appendChild(el);
   }
 
   function hideTabGuardBanner() {
@@ -1644,11 +1611,54 @@
     injectUi();
     wireCapture();
     initWorkOwnership();
+    maybeShowLegacyNotice();
   }
 
   // Expose a small public API for other modules / the console.
+  // One-time courtesy notice (#451): the in-browser Recents storage is gone;
+  // stored transcripts are left untouched in localStorage/IndexedDB and can
+  // be retrieved with the previous release. Shown only when legacy data
+  // actually exists, dismissible once, never again.
+  function maybeShowLegacyNotice() {
+    let hasLegacy = false;
+    try {
+      if (localStorage.getItem('hyperaudioLegacyNoticeDismissed') !== null) return;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.indexOf('hyperaudio:doc:') === 0 || /\.hyperaudio$/.test(key)) { hasLegacy = true; break; }
+      }
+    } catch (e) { return; }
+    if (!hasLegacy) return;
+    const anchor = document.getElementById('side-notices');
+    if (anchor === null) return;
+    const el = document.createElement('div');
+    el.id = 'legacy-storage-notice';
+    el.setAttribute('role', 'status');
+    const text = document.createElement('span');
+    text.textContent = 'Projects are now saved as .hyperaudio files (the Save button). Transcripts from the old in-browser Recents are still on this device — retrieve them with the previous release (v0.9.1). ';
+    const link = document.createElement('a');
+    link.href = 'https://github.com/hyperaudio/hyperaudio-lite-editor/releases/tag/v0.9.1';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Get v0.9.1';
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.textContent = '✕';
+    dismiss.addEventListener('click', () => {
+      el.remove();
+      try { localStorage.setItem('hyperaudioLegacyNoticeDismissed', String(Date.now())); } catch (e) { /* private mode */ }
+    });
+    el.appendChild(text);
+    el.appendChild(link);
+    el.appendChild(dismiss);
+    anchor.appendChild(el);
+  }
+
   window.HyperaudioSave = {
     saveToFile,
+    // export naming and any future UI read the title through here
+    getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
     openFromFile,
     autosaveNow: writeWorkSnapshot,
     isDirty,

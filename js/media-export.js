@@ -530,8 +530,10 @@
   // ---------------------------------------------------------------------------
 
   const exportBaseName = () => {
-    const active = document.querySelector('.file-item.active');
-    const name = active !== null && active.textContent.trim() !== '' ? active.textContent.trim() : 'hyperaudio';
+    // the Recents list is gone (#451); the project session names exports now
+    const title = (window.HyperaudioSave && typeof window.HyperaudioSave.getProjectTitle === 'function')
+      ? window.HyperaudioSave.getProjectTitle() : '';
+    const name = title.trim() !== '' ? title.trim() : 'hyperaudio';
     return name.replace(/\.[a-z0-9]+$/i, '');
   };
 
