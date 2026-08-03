@@ -1050,6 +1050,24 @@
     });
   }
 
+  // Every project birth — transcription, import, opened file, delete-undo
+  // re-home — commits its initial state as saved.json and starts CLEAN: v0
+  // is the material the project was born from (the immutable origin already
+  // preserves the as-transcribed baseline at the format level). The dirty
+  // dot means "edited since the last committed state", never "you haven't
+  // performed a first Save".
+  function commitInitialState(id) {
+    snapshotChain = snapshotChain.then(async () => {
+      try {
+        const state = await writeStateFile(id, SAVED_FILE);
+        await touchLibraryEntry(id, state, { saved: true });
+      } catch (e) {
+        console.warn('hyperaudio-save: committing the new project failed', e);
+      }
+    });
+    return snapshotChain;
+  }
+
   // Land the outgoing project's pending draft in its own directory before the
   // editor DOM changes hands (#456: switching loses nothing — the draft keeps
   // the edits, the dirty state stays honest). Await-ing the chain also lets
@@ -1201,7 +1219,10 @@
     session.pendingReconcile = null;
     session.title = '';
     session.envelope = null; // a fresh document has no envelope to preserve
-    sessionEdited = true;    // a fresh transcription IS undownloaded work
+    // With OPFS the birth is committed below and the project starts CLEAN;
+    // without it nothing persists, so the session stays marked edited and
+    // the quit guard keeps protecting the on-screen work.
+    sessionEdited = session.projectId === null;
     identityGeneration += 1; // new document
     updateSaveIndicator();
     // Provenance is only this project's if the engine reported it moments ago
@@ -1219,7 +1240,8 @@
       await writeOriginOnce(htmlToJSON(getEditorHtml()));
       await resolveMediaFile();
       await writeMediaOnce();
-      await writeDraft(); // a fresh transcription is an unsaved draft
+      await commitInitialState(session.projectId); // v0: as transcribed/imported
+      updateSaveIndicator();
     }
   }
 
@@ -1561,19 +1583,10 @@
     } finally {
       suppressCapture = false;
     }
-    // The opened file IS the saved state: seed saved.json, no draft — the
-    // fresh entry starts clean.
+    // The opened file IS the saved state: commit it, no draft — the fresh
+    // entry starts clean.
     if (opfsAvailable && session.projectId !== null) {
-      const id = session.projectId;
-      snapshotChain = snapshotChain.then(async () => {
-        try {
-          const state = await writeStateFile(id, SAVED_FILE);
-          await touchLibraryEntry(id, state, { saved: true });
-        } catch (e) {
-          console.warn('hyperaudio-save: seeding the opened project failed', e);
-        }
-      });
-      await snapshotChain;
+      await commitInitialState(session.projectId);
     }
 
     if (loaded.warnings.length > 0) {
@@ -1846,7 +1859,10 @@
     await acquireProjectLock(id);
     await writeOriginToProjectDir();
     await writeMediaOnce();
-    await writeDraft(); // re-homed work is an unsaved draft until Saved
+    // a rebirth: the on-screen content IS the new baseline — commit it clean
+    await commitInitialState(id);
+    sessionEdited = false;
+    updateSaveIndicator();
     if (starred === true) await setProjectStarred(id, true);
     return id;
   }
