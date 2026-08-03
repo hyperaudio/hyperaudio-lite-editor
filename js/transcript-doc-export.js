@@ -3,6 +3,8 @@
  * TRANSCRIPT DOCUMENT EXPORTS (#467) — TXT and Markdown
  * ============================================================================
  *
+ * @version 1.1.0 — last changed in release 1.1.0
+ *
  * Rendered document exports of the transcript, added to the FILE →
  * Export / Import submenu. RENDERED means the semantics of the format doc's
  * § 1.1 privacy caveat (share rendered exports, not project files):
