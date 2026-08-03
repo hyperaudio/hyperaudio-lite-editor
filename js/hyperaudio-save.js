@@ -1398,6 +1398,62 @@
     if (btn !== null) btn.classList.toggle('dirty', sessionEdited === true);
   }
 
+  // Flattened project export (#455): build a fresh .hyperaudio around a
+  // RENDERED export — the render becomes the new project's original media
+  // (relative to it nothing is "derived", spec § 1.1), the re-timed
+  // struck-free transcript its transcript. Called by the media-export modal
+  // with the artifacts it already produced; this module contributes what it
+  // owns (texts, provenance, options, the container layers). Deliberate
+  // differences from a Save/Export of the current project:
+  //   - envelope: null — this is a NEW document, not a round-trip of the
+  //     opened one, so no unknown-field preservation applies;
+  //   - hasOriginal: false — the origin transcript no longer matches the
+  //     rendered timeline, so transcript.original.json is not carried over;
+  //   - gapRemoval disabled — the cuts are baked into the media; replaying
+  //     them on the new timeline would cut twice.
+  // parts: { html, captionsVtt, media: {name, data(Blob), mimeType,
+  //          durationSeconds}, title }  →  Promise<Blob>
+  async function buildFlattenedProjectBlob(parts) {
+    const base = gather();
+    const transcript = htmlToJSON(parts.html);
+    const safeName = sanitizeMediaFilename(parts.media.name);
+    const now = nowIso();
+    const state = Object.assign({}, base, {
+      envelope: null,
+      created: now,
+      modified: now,
+      media: {
+        kind: 'original',
+        path: MEDIA_DIR + safeName,
+        url: null,
+        filename: safeName,
+        mimeType: parts.media.mimeType || (parts.media.data && parts.media.data.type) || '',
+        durationSeconds: parts.media.durationSeconds || 0,
+        sizeBytes: parts.media.data.size,
+      },
+      options: Object.assign({}, base.options, {
+        gapRemoval: Object.assign({}, base.options.gapRemoval, { enabled: false }),
+      }),
+      texts: Object.assign({}, base.texts,
+        parts.title ? { title: String(parts.title) } : {}),
+      hasOriginal: false,
+      transcript,
+      html: parts.html,
+    });
+    const project = buildProjectJson(state);
+    const valid = validateProjectJson(project);
+    if (!valid.ok) {
+      throw new Error('The flattened project failed validation: '
+        + valid.errors.map((e) => e.code).join(', '));
+    }
+    return zipProject({
+      json: serializeProjectJson(project),
+      html: parts.html,
+      captionsVtt: parts.captionsVtt || '',
+      media: { name: safeName, data: parts.media.data },
+    }, await loadJSZip(), 'blob');
+  }
+
   // Export Project (.hyperaudio): build the container and download it — the
   // ONLY path that downloads. Saving is the silent OPFS commit (saveProject);
   // export is how a portable copy leaves the browser. asSave marks the two
@@ -2283,6 +2339,7 @@
   window.HyperaudioSave = {
     saveProject,     // silent OPFS commit (⌘S / the navbar button)
     exportProject,   // build + download a portable .hyperaudio
+    buildFlattenedProjectBlob, // #455: fresh container around a rendered export (media-export modal)
     // export naming and any future UI read the title through here
     getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
     // the document exports (#467) read the transcript through here: the same

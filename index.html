@@ -858,6 +858,10 @@ If you are creating an open source application under a license compatible with t
         <input type="checkbox" id="export-srt" class="toggle toggle-primary" />
         <span class="label-text">Download SRT (.srt) captions</span>
       </label>
+      <label id="export-project-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+        <input type="checkbox" id="export-project" class="toggle toggle-primary" />
+        <span class="label-text">Download a new project (.hyperaudio) — edits applied, struck words removed, safe to share</span>
+      </label>
       <progress id="export-progress" class="progress progress-primary w-full" value="0" max="100" style="visibility:hidden; margin-top:14px"></progress>
       <div id="export-status" aria-live="polite" style="font-size:85%; opacity:0.75; min-height:1.3em; margin-top:2px"></div>
       <div class="modal-action">
@@ -1067,7 +1071,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/editor-main.js?v=0.8.0"></script>
   <script src="js/find-replace.js?v=0.6.29"></script>
   <script src="js/stream-stretch.js?v=0.8.6"></script>
-  <script src="js/media-export.js?v=1.0.0"></script>
+  <script src="js/media-export.js?v=1.1.4"></script>
   <!-- word-level / karaoke VTT export (#387 part 1) -->
   <script src="js/word-vtt.js?v=0.8.5"></script>
   <!-- end of caption editor additions -->
