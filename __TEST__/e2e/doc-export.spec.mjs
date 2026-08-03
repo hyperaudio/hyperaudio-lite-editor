@@ -158,3 +158,12 @@ test.describe('copy to clipboard', () => {
     await expect(page.locator('#transcript-copy-btn')).toBeVisible();
   });
 });
+
+test('the copy button hides while a transcription is running (aria-busy)', async ({ page }) => {
+  await expect(page.locator('#transcript-copy-btn')).toBeVisible();
+  // setTranscriptBusy is what every engine calls around its work
+  await page.evaluate(() => setTranscriptBusy(true));
+  await expect(page.locator('#transcript-copy-btn')).toBeHidden();
+  await page.evaluate(() => setTranscriptBusy(false));
+  await expect(page.locator('#transcript-copy-btn')).toBeVisible();
+});

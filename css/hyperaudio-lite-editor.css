@@ -599,6 +599,9 @@ html.ha-restoring #hypertranscript {
   color: oklch(var(--bc) / 0.55);
 }
 #transcript-copy-btn:hover { color: oklch(var(--bc)); }
+/* the loader owns the card while a transcription runs (#hypertranscript
+   carries aria-busy via setTranscriptBusy) — nothing to copy, no button */
+html:has(#hypertranscript[aria-busy="true"]) #transcript-copy-btn { display: none; }
 #transcript-copy-btn[data-copied] { color: oklch(var(--su, var(--p))); }
 /* right-anchor the tooltip bubble so it opens inward, not off the card edge */
 #transcript-copy-btn.tooltip::before {
