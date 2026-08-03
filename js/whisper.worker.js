@@ -1,7 +1,7 @@
 /**
  * whisper.worker.js
  * (C) The Hyperaudio Project
- * @version 0.6.7 — last changed in release 0.6.7
+ * @version 1.0.2 — last changed in release 1.0.2
  * @license MIT
  */
 
@@ -10,6 +10,7 @@ import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers
 const SAMPLE_RATE = 16000;
 const WINDOW_S = 300;   // transcribe in 5-minute windows to bound memory
 const OVERLAP_S = 10;   // each seam is transcribed by both windows
+const MIN_SPEECH_S = 10; // audio at least this long is assumed to contain speech
 
 let cache = { key: null, pipe: null, device: null };
 
@@ -36,15 +37,18 @@ self.addEventListener("message", async (event) => {
 
   try {
     const output = await transcribe(pipe, audio, language);
+    assertNotEmpty(output, audio);
     self.postMessage({ type: "result", output });
   } catch (e) {
     console.error(e);
     // WebGPU can pass pipeline init yet fail at inference time on some GPUs –
-    // rebuild on WASM and retry once before giving up.
+    // including "succeeding" with empty output – rebuild on WASM and retry
+    // once before giving up.
     if (cache.device === "webgpu") {
       try {
         pipe = await getPipeline(model_name, ["wasm"]);
         const output = await transcribe(pipe, audio, language);
+        assertNotEmpty(output, audio);
         self.postMessage({ type: "result", output });
         return;
       } catch (retryError) {
@@ -56,6 +60,17 @@ self.addEventListener("message", async (event) => {
     self.postMessage({ type: "error", stage: "transcribe", message: e?.message || String(e) });
   }
 });
+
+// A broken GPU can "complete" with no output at all (async WebGPU validation
+// errors never reject the run) — treat an empty result on non-trivial audio as
+// a failure rather than rendering a blank transcript as if it were done (#460).
+// Thrown from the main path it engages the WASM retry above; thrown from the
+// retry it surfaces as a transcription error.
+function assertNotEmpty(output, audio) {
+  if (output.chunks.length === 0 && audio.length >= MIN_SPEECH_S * SAMPLE_RATE) {
+    throw new Error("No words were produced — if this media contains speech, transcription failed silently. Reload the page and try again.");
+  }
+}
 
 // Preferred dtype first, then a fallback: the quantized exports of some of the
 // *_timestamped models predate the v4 ONNX runtime and fail session creation

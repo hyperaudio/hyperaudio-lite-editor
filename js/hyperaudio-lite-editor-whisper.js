@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 0.6.26 — last changed in release 0.6.26
+ * @version 1.0.2 — last changed in release 1.0.2
  * @license MIT
  */
 
@@ -65,7 +65,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=0.6.7";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.0.2";
 
   // Firefox runs Whisper on the CPU (its WebGPU is still much slower than
   // its CPU path) – workable for the smaller models, but the larger ones may
