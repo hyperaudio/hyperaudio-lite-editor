@@ -86,6 +86,12 @@ Collapse the video, pop it out picture‑in‑picture, or work on a phone — th
 
 ---
 
+### Upgrading from 0.9.x
+
+Since v1.0.0 your work lives in a **project library** in the browser: edits autosave continuously, the Save button (⌘S) commits the project silently, and **FILE → Export / Import → Export Project (.hyperaudio)** produces a portable file you can back up, share, or open elsewhere. Transcripts from the old in‑browser Recents are untouched and still on your device. To bring one forward: open it in the previous release, [v0.9.1](https://github.com/hyperaudio/hyperaudio-lite-editor/releases/tag/v0.9.1), export it as JSON, then import that JSON here (FILE → Export / Import) and reload your media file — it becomes a project in the library.
+
+---
+
 ### How to Use
 
 Edit in the usual way – add punctuation, create and merge paragraphs etc. Place speaker names in square brackets ie [Maria]. It's recommended that in order to maintain word timings you don't paste large blocks of text. Double-click on words to set the playhead at that point.
