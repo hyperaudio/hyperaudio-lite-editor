@@ -537,8 +537,31 @@
     } else {
       lib = await run();
     }
+    syncProjectsHint(lib);
     notifyLibraryChanged(false);
     return lib;
+  }
+
+  // Synchronous boot hint (#473): OPFS can only be probed async, so the next
+  // page load needs a sync signal that a project will replace the demo —
+  // the inline head script hides the transcript on it before first paint.
+  // Maintained here at the single write choke point; re-synced at boot so a
+  // cleared localStorage heals after one flash.
+  function syncProjectsHint(lib) {
+    try {
+      if (lib.projects.length > 0) {
+        localStorage.setItem('hyperaudioHasProjects', '1');
+      } else {
+        localStorage.removeItem('hyperaudioHasProjects');
+      }
+    } catch (e) { /* private mode */ }
+  }
+
+  // Reveal the transcript hidden by the inline anti-flash script (#473).
+  // Called on EVERY bootLibrary exit — restored, empty library, or failed
+  // restore falling back to the demo.
+  function revealTranscript() {
+    document.documentElement.classList.remove('ha-restoring');
   }
 
   // The panel (hyperaudio-library.js) re-renders on this event; the channel
@@ -1894,6 +1917,7 @@
 
   async function bootLibrary() {
     if (!opfsAvailable) {
+      revealTranscript();
       notifyLibraryChanged(false);
       return;
     }
@@ -1906,6 +1930,7 @@
     try {
       await migrateSingleSlotWork();
       const lib = await readLibrary();
+      syncProjectsHint(lib); // self-heal a cleared/stale hint (#473)
       // Most recently edited first; a corrupt head entry falls through to the
       // next rather than abandoning the boot (the demo stays for none).
       for (const entry of sortLibraryEntries(lib.projects)) {
@@ -1913,6 +1938,8 @@
       }
     } catch (e) {
       console.warn('hyperaudio-save: boot restore failed, leaving demo', e);
+    } finally {
+      revealTranscript(); // never leave the anti-flash hide up (#473)
     }
     notifyLibraryChanged(false);
   }

@@ -578,6 +578,14 @@ dialog::backdrop {
   transform: none;
 }
 
+/* Boot-restore anti-flash (#473): while the inline head script's class is
+   up, the demo transcript is invisible but keeps its layout — the card shows
+   briefly empty instead of showing the wrong transcript. Removed by
+   bootLibrary when the restore lands (every path), or the inline timeout. */
+html.ha-restoring #hypertranscript {
+  visibility: hidden;
+}
+
 /* Copy-transcript button (#467): pinned to the transcript card's top-right
    corner — the toolbar is crowded on mobile — position:fixed because the
    holder itself is the scroll container (same reasoning as the caption

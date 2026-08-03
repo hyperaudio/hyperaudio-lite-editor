@@ -108,7 +108,23 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.1.0">
+   <!-- Boot-restore anti-flash (#473): when the synchronous hint says a
+        project exists, hide the static demo transcript BEFORE first paint —
+        the OPFS restore is async and will replace it. hyperaudio-save.js
+        reveals when the restore lands; the timeout fails safe so a script
+        error can never leave the transcript hidden. Crawlers have clean
+        storage, so their first paint is unchanged. -->
+   <script>
+     try {
+       if (localStorage.getItem('hyperaudioHasProjects') === '1') {
+         document.documentElement.classList.add('ha-restoring');
+         setTimeout(function () {
+           document.documentElement.classList.remove('ha-restoring');
+         }, 4000);
+       }
+     } catch (e) { /* private mode: no hint, no hide */ }
+   </script>
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.1.1">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -1067,7 +1083,7 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=0.7.4"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=1.1.1"></script>
+  <script src="js/hyperaudio-save.js?v=1.1.2"></script>
   <script src="js/hyperaudio-library.js?v=1.0.0"></script>
   <!-- transcript document exports: TXT / Markdown (#467) -->
   <script src="js/transcript-doc-export.js?v=1.1.1"></script>
