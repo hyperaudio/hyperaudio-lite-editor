@@ -14,50 +14,84 @@ const MIN_SPEECH_S = 10; // audio at least this long is assumed to contain speec
 
 let cache = { key: null, pipe: null, device: null };
 
+// The cached pipeline holds the model's (GPU) memory, and keeping it alive
+// makes a follow-up transcription skip model setup. But the common flow is
+// transcribe once, then edit for a long time, with the model squatting on
+// that memory the whole while (#463). Middle ground: dispose it after a
+// couple of idle minutes. The model bytes stay in the browser cache, so a
+// later transcription repeats only session creation and warm-up, not the
+// download.
+const IDLE_RELEASE_MS = 2 * 60 * 1000;
+let idleTimer = null;
+
+function scheduleIdleRelease() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    if (cache.pipe === null) {
+      return;
+    }
+    // detach before the awaited dispose so a request landing mid-dispose
+    // rebuilds a fresh pipeline instead of grabbing a dying one
+    const releasing = cache.pipe;
+    cache = { key: null, pipe: null, device: null };
+    try {
+      await releasing.dispose();
+    } catch (e) {
+      console.warn("Failed to dispose idle pipeline:", e);
+    }
+    console.log("Whisper: model released after idle — next transcription reloads from cache");
+  }, IDLE_RELEASE_MS);
+}
+
 self.addEventListener("message", async (event) => {
   const { type, audio, model_name } = event.data;
 
   if (type !== "INFERENCE_REQUEST") {
     return;
   }
-
-  // a language hint stops multilingual models re-detecting the language per
-  // 30s chunk (which can drift into translating instead of transcribing).
-  // English-only models reject the option, so it only applies to multilingual.
-  const language = (event.data.language && !model_name.includes(".en")) ? event.data.language : null;
-
-  let pipe;
-  try {
-    pipe = await getPipeline(model_name);
-  } catch (e) {
-    console.error(e);
-    self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
-    return;
-  }
+  clearTimeout(idleTimer);
 
   try {
-    const output = await transcribe(pipe, audio, language);
-    assertNotEmpty(output, audio);
-    self.postMessage({ type: "result", output });
-  } catch (e) {
-    console.error(e);
-    // WebGPU can pass pipeline init yet fail at inference time on some GPUs –
-    // including "succeeding" with empty output – rebuild on WASM and retry
-    // once before giving up.
-    if (cache.device === "webgpu") {
-      try {
-        pipe = await getPipeline(model_name, ["wasm"]);
-        const output = await transcribe(pipe, audio, language);
-        assertNotEmpty(output, audio);
-        self.postMessage({ type: "result", output });
-        return;
-      } catch (retryError) {
-        console.error(retryError);
-        self.postMessage({ type: "error", stage: "transcribe", message: retryError?.message || String(retryError) });
-        return;
-      }
+    // a language hint stops multilingual models re-detecting the language per
+    // 30s chunk (which can drift into translating instead of transcribing).
+    // English-only models reject the option, so it only applies to multilingual.
+    const language = (event.data.language && !model_name.includes(".en")) ? event.data.language : null;
+
+    let pipe;
+    try {
+      pipe = await getPipeline(model_name);
+    } catch (e) {
+      console.error(e);
+      self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
+      return;
     }
-    self.postMessage({ type: "error", stage: "transcribe", message: e?.message || String(e) });
+
+    try {
+      const output = await transcribe(pipe, audio, language);
+      assertNotEmpty(output, audio);
+      self.postMessage({ type: "result", output });
+    } catch (e) {
+      console.error(e);
+      // WebGPU can pass pipeline init yet fail at inference time on some GPUs –
+      // including "succeeding" with empty output – rebuild on WASM and retry
+      // once before giving up.
+      if (cache.device === "webgpu") {
+        try {
+          pipe = await getPipeline(model_name, ["wasm"]);
+          const output = await transcribe(pipe, audio, language);
+          assertNotEmpty(output, audio);
+          self.postMessage({ type: "result", output });
+          return;
+        } catch (retryError) {
+          console.error(retryError);
+          self.postMessage({ type: "error", stage: "transcribe", message: retryError?.message || String(retryError) });
+          return;
+        }
+      }
+      self.postMessage({ type: "error", stage: "transcribe", message: e?.message || String(e) });
+    }
+  } finally {
+    scheduleIdleRelease();
   }
 });
 
