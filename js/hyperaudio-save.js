@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.0.0 — last changed in release 1.0.0
+ * @version 1.0.1 — last changed in release 1.0.1
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -2197,50 +2197,14 @@
     injectUi();
     wireCapture();
     bootLibrary();
-    maybeShowLegacyNotice();
   }
+
+  // (The one-time legacy-storage notice from #451 was removed in 1.0.1 —
+  // its wording predated the silent-save model, and the v0.9.1 retrieval
+  // path is documented in the release notes. Old localStorage/IndexedDB
+  // transcripts remain untouched on the device.)
 
   // Expose a small public API for other modules / the console.
-  // One-time courtesy notice (#451): the in-browser Recents storage is gone;
-  // stored transcripts are left untouched in localStorage/IndexedDB and can
-  // be retrieved with the previous release. Shown only when legacy data
-  // actually exists, dismissible once, never again.
-  function maybeShowLegacyNotice() {
-    let hasLegacy = false;
-    try {
-      if (localStorage.getItem('hyperaudioLegacyNoticeDismissed') !== null) return;
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.indexOf('hyperaudio:doc:') === 0 || /\.hyperaudio$/.test(key)) { hasLegacy = true; break; }
-      }
-    } catch (e) { return; }
-    if (!hasLegacy) return;
-    const anchor = document.getElementById('side-notices');
-    if (anchor === null) return;
-    const el = document.createElement('div');
-    el.id = 'legacy-storage-notice';
-    el.setAttribute('role', 'status');
-    const text = document.createElement('span');
-    text.textContent = 'Projects are now saved as .hyperaudio files (the Save button). Transcripts from the old in-browser Recents are still on this device — retrieve them with the previous release (v0.9.1). ';
-    const link = document.createElement('a');
-    link.href = 'https://github.com/hyperaudio/hyperaudio-lite-editor/releases/tag/v0.9.1';
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = 'Get v0.9.1';
-    const dismiss = document.createElement('button');
-    dismiss.type = 'button';
-    dismiss.setAttribute('aria-label', 'Dismiss');
-    dismiss.textContent = '✕';
-    dismiss.addEventListener('click', () => {
-      el.remove();
-      try { localStorage.setItem('hyperaudioLegacyNoticeDismissed', String(Date.now())); } catch (e) { /* private mode */ }
-    });
-    el.appendChild(text);
-    el.appendChild(link);
-    el.appendChild(dismiss);
-    anchor.appendChild(el);
-  }
-
   window.HyperaudioSave = {
     saveProject,     // silent OPFS commit (⌘S / the navbar button)
     exportProject,   // build + download a portable .hyperaudio
