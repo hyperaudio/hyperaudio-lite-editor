@@ -1,7 +1,7 @@
 /**
  * whisper.worker.js
  * (C) The Hyperaudio Project
- * @version 0.6.7 — last changed in release 0.6.7
+ * @version 1.1.2 — last changed in release 1.1.2
  * @license MIT
  */
 
@@ -10,8 +10,38 @@ import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers
 const SAMPLE_RATE = 16000;
 const WINDOW_S = 300;   // transcribe in 5-minute windows to bound memory
 const OVERLAP_S = 10;   // each seam is transcribed by both windows
+const MIN_SPEECH_S = 10; // audio at least this long is assumed to contain speech
 
 let cache = { key: null, pipe: null, device: null };
+
+// The cached pipeline holds the model's (GPU) memory, and keeping it alive
+// makes a follow-up transcription skip model setup. But the common flow is
+// transcribe once, then edit for a long time, with the model squatting on
+// that memory the whole while (#463). Middle ground: dispose it after a
+// couple of idle minutes. The model bytes stay in the browser cache, so a
+// later transcription repeats only session creation and warm-up, not the
+// download.
+const IDLE_RELEASE_MS = 2 * 60 * 1000;
+let idleTimer = null;
+
+function scheduleIdleRelease() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    if (cache.pipe === null) {
+      return;
+    }
+    // detach before the awaited dispose so a request landing mid-dispose
+    // rebuilds a fresh pipeline instead of grabbing a dying one
+    const releasing = cache.pipe;
+    cache = { key: null, pipe: null, device: null };
+    try {
+      await releasing.dispose();
+    } catch (e) {
+      console.warn("Failed to dispose idle pipeline:", e);
+    }
+    console.log("Whisper: model released after idle — next transcription reloads from cache");
+  }, IDLE_RELEASE_MS);
+}
 
 self.addEventListener("message", async (event) => {
   const { type, audio, model_name } = event.data;
@@ -19,43 +49,62 @@ self.addEventListener("message", async (event) => {
   if (type !== "INFERENCE_REQUEST") {
     return;
   }
-
-  // a language hint stops multilingual models re-detecting the language per
-  // 30s chunk (which can drift into translating instead of transcribing).
-  // English-only models reject the option, so it only applies to multilingual.
-  const language = (event.data.language && !model_name.includes(".en")) ? event.data.language : null;
-
-  let pipe;
-  try {
-    pipe = await getPipeline(model_name);
-  } catch (e) {
-    console.error(e);
-    self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
-    return;
-  }
+  clearTimeout(idleTimer);
 
   try {
-    const output = await transcribe(pipe, audio, language);
-    self.postMessage({ type: "result", output });
-  } catch (e) {
-    console.error(e);
-    // WebGPU can pass pipeline init yet fail at inference time on some GPUs –
-    // rebuild on WASM and retry once before giving up.
-    if (cache.device === "webgpu") {
-      try {
-        pipe = await getPipeline(model_name, ["wasm"]);
-        const output = await transcribe(pipe, audio, language);
-        self.postMessage({ type: "result", output });
-        return;
-      } catch (retryError) {
-        console.error(retryError);
-        self.postMessage({ type: "error", stage: "transcribe", message: retryError?.message || String(retryError) });
-        return;
-      }
+    // a language hint stops multilingual models re-detecting the language per
+    // 30s chunk (which can drift into translating instead of transcribing).
+    // English-only models reject the option, so it only applies to multilingual.
+    const language = (event.data.language && !model_name.includes(".en")) ? event.data.language : null;
+
+    let pipe;
+    try {
+      pipe = await getPipeline(model_name);
+    } catch (e) {
+      console.error(e);
+      self.postMessage({ type: "error", stage: "load", message: e?.message || String(e) });
+      return;
     }
-    self.postMessage({ type: "error", stage: "transcribe", message: e?.message || String(e) });
+
+    try {
+      const output = await transcribe(pipe, audio, language);
+      assertNotEmpty(output, audio);
+      self.postMessage({ type: "result", output });
+    } catch (e) {
+      console.error(e);
+      // WebGPU can pass pipeline init yet fail at inference time on some GPUs –
+      // including "succeeding" with empty output – rebuild on WASM and retry
+      // once before giving up.
+      if (cache.device === "webgpu") {
+        try {
+          pipe = await getPipeline(model_name, ["wasm"]);
+          const output = await transcribe(pipe, audio, language);
+          assertNotEmpty(output, audio);
+          self.postMessage({ type: "result", output });
+          return;
+        } catch (retryError) {
+          console.error(retryError);
+          self.postMessage({ type: "error", stage: "transcribe", message: retryError?.message || String(retryError) });
+          return;
+        }
+      }
+      self.postMessage({ type: "error", stage: "transcribe", message: e?.message || String(e) });
+    }
+  } finally {
+    scheduleIdleRelease();
   }
 });
+
+// A broken GPU can "complete" with no output at all (async WebGPU validation
+// errors never reject the run) — treat an empty result on non-trivial audio as
+// a failure rather than rendering a blank transcript as if it were done (#460).
+// Thrown from the main path it engages the WASM retry above; thrown from the
+// retry it surfaces as a transcription error.
+function assertNotEmpty(output, audio) {
+  if (output.chunks.length === 0 && audio.length >= MIN_SPEECH_S * SAMPLE_RATE) {
+    throw new Error("No words were produced — if this media contains speech, transcription failed silently. Reload the page and try again.");
+  }
+}
 
 // Preferred dtype first, then a fallback: the quantized exports of some of the
 // *_timestamped models predate the v4 ONNX runtime and fail session creation
@@ -102,6 +151,19 @@ async function getPipeline(model_name, devices) {
     // prefer WASM there until its implementation matures
     const slowWebGpu = /firefox/i.test(self.navigator?.userAgent || "");
     devices = !slowWebGpu && (await hasGpuAdapter()) ? ["webgpu", "wasm"] : ["wasm"];
+  }
+
+  // large-v3-turbo has no dtype variant that loads on the WASM runtime — both
+  // q4f16 and q4 fail session creation with a graph error (#461) — so a WASM
+  // attempt only downloads a doomed model (twice: once per dtype). Strip WASM
+  // from turbo's device list: with no GPU this refuses before any download,
+  // and it also ends the WASM retry path immediately when a GPU run of turbo
+  // fails mid-session (e.g. device lost after a VRAM exhaustion).
+  if (model_name.includes("large-v3-turbo")) {
+    devices = devices.filter((device) => device !== "wasm");
+    if (devices.length === 0) {
+      throw new Error("The Turbo model needs a GPU, which isn't available right now. Choose a smaller model, or reload the page to retry the GPU.");
+    }
   }
 
   let lastError = null;
