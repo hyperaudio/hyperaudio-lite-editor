@@ -541,3 +541,51 @@ test('two tabs edit two DIFFERENT projects, each owning its own working copy (#4
   expect(state.html[state.current]).toContain('TAB-TWO');
   await page2.close();
 });
+
+test('a fresh transcription starts CLEAN: v0 committed at birth, dirty only on edit', async ({ page }) => {
+  await page.evaluate(() => {
+    document.querySelector('#hyperplayer').src = 'https://example.com/media/fresh.mp4';
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">Fresh </span></p></section></article>';
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await pollPage(page, async () => {
+    const id = window.HyperaudioSave.library.currentId();
+    if (id === null) return false;
+    try {
+      const root = await navigator.storage.getDirectory();
+      const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+      await dir.getFileHandle('saved.json'); // v0 committed at birth
+      return true;
+    } catch (e) { return false; }
+  });
+
+  const state = await readCurrentProject(page);
+  expect(state.saved.html).toContain('Fresh');
+  expect(state.draft).toBeNull();                     // no draft at birth
+  expect(save.isEntryDirty(state.entry)).toBe(false); // clean until edited
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  // the first real edit flips it dirty, as always
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'Edited ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+test('the tab-guard banner is dismissible (per appearance, no persistence)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible();
+
+  await page2.click('#tab-guard-banner button[aria-label="Dismiss"]');
+  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await page2.close();
+});

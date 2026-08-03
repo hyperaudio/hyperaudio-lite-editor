@@ -537,8 +537,31 @@
     } else {
       lib = await run();
     }
+    syncProjectsHint(lib);
     notifyLibraryChanged(false);
     return lib;
+  }
+
+  // Synchronous boot hint (#473): OPFS can only be probed async, so the next
+  // page load needs a sync signal that a project will replace the demo —
+  // the inline head script hides the transcript on it before first paint.
+  // Maintained here at the single write choke point; re-synced at boot so a
+  // cleared localStorage heals after one flash.
+  function syncProjectsHint(lib) {
+    try {
+      if (lib.projects.length > 0) {
+        localStorage.setItem('hyperaudioHasProjects', '1');
+      } else {
+        localStorage.removeItem('hyperaudioHasProjects');
+      }
+    } catch (e) { /* private mode */ }
+  }
+
+  // Reveal the transcript hidden by the inline anti-flash script (#473).
+  // Called on EVERY bootLibrary exit — restored, empty library, or failed
+  // restore falling back to the demo.
+  function revealTranscript() {
+    document.documentElement.classList.remove('ha-restoring');
   }
 
   // The panel (hyperaudio-library.js) re-renders on this event; the channel
@@ -1027,6 +1050,24 @@
     });
   }
 
+  // Every project birth — transcription, import, opened file, delete-undo
+  // re-home — commits its initial state as saved.json and starts CLEAN: v0
+  // is the material the project was born from (the immutable origin already
+  // preserves the as-transcribed baseline at the format level). The dirty
+  // dot means "edited since the last committed state", never "you haven't
+  // performed a first Save".
+  function commitInitialState(id) {
+    snapshotChain = snapshotChain.then(async () => {
+      try {
+        const state = await writeStateFile(id, SAVED_FILE);
+        await touchLibraryEntry(id, state, { saved: true });
+      } catch (e) {
+        console.warn('hyperaudio-save: committing the new project failed', e);
+      }
+    });
+    return snapshotChain;
+  }
+
   // Land the outgoing project's pending draft in its own directory before the
   // editor DOM changes hands (#456: switching loses nothing — the draft keeps
   // the edits, the dirty state stays honest). Await-ing the chain also lets
@@ -1178,7 +1219,10 @@
     session.pendingReconcile = null;
     session.title = '';
     session.envelope = null; // a fresh document has no envelope to preserve
-    sessionEdited = true;    // a fresh transcription IS undownloaded work
+    // With OPFS the birth is committed below and the project starts CLEAN;
+    // without it nothing persists, so the session stays marked edited and
+    // the quit guard keeps protecting the on-screen work.
+    sessionEdited = session.projectId === null;
     identityGeneration += 1; // new document
     updateSaveIndicator();
     // Provenance is only this project's if the engine reported it moments ago
@@ -1196,7 +1240,8 @@
       await writeOriginOnce(htmlToJSON(getEditorHtml()));
       await resolveMediaFile();
       await writeMediaOnce();
-      await writeDraft(); // a fresh transcription is an unsaved draft
+      await commitInitialState(session.projectId); // v0: as transcribed/imported
+      updateSaveIndicator();
     }
   }
 
@@ -1538,19 +1583,10 @@
     } finally {
       suppressCapture = false;
     }
-    // The opened file IS the saved state: seed saved.json, no draft — the
-    // fresh entry starts clean.
+    // The opened file IS the saved state: commit it, no draft — the fresh
+    // entry starts clean.
     if (opfsAvailable && session.projectId !== null) {
-      const id = session.projectId;
-      snapshotChain = snapshotChain.then(async () => {
-        try {
-          const state = await writeStateFile(id, SAVED_FILE);
-          await touchLibraryEntry(id, state, { saved: true });
-        } catch (e) {
-          console.warn('hyperaudio-save: seeding the opened project failed', e);
-        }
-      });
-      await snapshotChain;
+      await commitInitialState(session.projectId);
     }
 
     if (loaded.warnings.length > 0) {
@@ -1823,7 +1859,10 @@
     await acquireProjectLock(id);
     await writeOriginToProjectDir();
     await writeMediaOnce();
-    await writeDraft(); // re-homed work is an unsaved draft until Saved
+    // a rebirth: the on-screen content IS the new baseline — commit it clean
+    await commitInitialState(id);
+    sessionEdited = false;
+    updateSaveIndicator();
     if (starred === true) await setProjectStarred(id, true);
     return id;
   }
@@ -1894,6 +1933,7 @@
 
   async function bootLibrary() {
     if (!opfsAvailable) {
+      revealTranscript();
       notifyLibraryChanged(false);
       return;
     }
@@ -1906,6 +1946,7 @@
     try {
       await migrateSingleSlotWork();
       const lib = await readLibrary();
+      syncProjectsHint(lib); // self-heal a cleared/stale hint (#473)
       // Most recently edited first; a corrupt head entry falls through to the
       // next rather than abandoning the boot (the demo stays for none).
       for (const entry of sortLibraryEntries(lib.projects)) {
@@ -1913,6 +1954,8 @@
       }
     } catch (e) {
       console.warn('hyperaudio-save: boot restore failed, leaving demo', e);
+    } finally {
+      revealTranscript(); // never leave the anti-flash hide up (#473)
     }
     notifyLibraryChanged(false);
   }
@@ -2133,7 +2176,17 @@
     const el = document.createElement('div');
     el.id = 'tab-guard-banner';
     el.setAttribute('role', 'status');
-    el.textContent = 'This project is open in another tab — autosave and crash recovery are active there. You can still edit and save here, or switch to a different project.';
+    const text = document.createElement('span');
+    text.textContent = 'This project is open in another tab — autosave and crash recovery are active there. You can still edit and save here, or switch to a different project.';
+    // Dismissible per appearance: the condition is real, so no persistence —
+    // contesting the same (or another) project later shows it again.
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.textContent = '✕';
+    dismiss.addEventListener('click', () => { el.remove(); });
+    el.appendChild(text);
+    el.appendChild(dismiss);
     anchor.appendChild(el);
   }
 

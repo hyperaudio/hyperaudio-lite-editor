@@ -348,3 +348,43 @@ test('boot restores the most recently EDITED project, not the last opened', asyn
   await expect(page.locator('#hypertranscript')).toContainText('LAST-EDIT');
   await expect(activeRow(page)).toHaveText('Project A');
 });
+
+test('reload never flashes the demo transcript over a saved project (#473)', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await pollPage(page, () => localStorage.getItem('hyperaudioHasProjects') === '1');
+
+  // watch every frame from before the first page script: count frames where
+  // the demo ([Monika]) was VISIBLE; stop once the project content lands
+  await page.addInitScript(() => {
+    window.__demoFlashFrames = 0;
+    const tick = () => {
+      const el = document.querySelector('#hypertranscript');
+      if (el !== null && el.textContent.indexOf('Benvenuti') !== -1) return; // project landed
+      if (el !== null && el.textContent.indexOf('[Monika]') !== -1
+          && getComputedStyle(el).visibility !== 'hidden') {
+        window.__demoFlashFrames += 1;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.reload();
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  expect(await page.evaluate(() => window.__demoFlashFrames)).toBe(0);
+  // the anti-flash hide is down again (reveal ran)
+  expect(await page.evaluate(() =>
+    document.documentElement.classList.contains('ha-restoring'))).toBe(false);
+});
+
+test('the has-projects hint tracks the library (#473)', async ({ page }, testInfo) => {
+  // empty library: boot self-heals the hint away
+  expect(await page.evaluate(() => localStorage.getItem('hyperaudioHasProjects'))).toBeNull();
+  await openProject(page, testInfo, 'Project A');
+  await pollPage(page, () => localStorage.getItem('hyperaudioHasProjects') === '1');
+  // deleting the last project retires the hint — no phantom hide next boot
+  await openKebab(page, 'Project A');
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click();
+  await pollPage(page, () => localStorage.getItem('hyperaudioHasProjects') === null);
+});

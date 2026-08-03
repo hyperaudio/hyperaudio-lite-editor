@@ -578,6 +578,14 @@ dialog::backdrop {
   transform: none;
 }
 
+/* Boot-restore anti-flash (#473): while the inline head script's class is
+   up, the demo transcript is invisible but keeps its layout — the card shows
+   briefly empty instead of showing the wrong transcript. Removed by
+   bootLibrary when the restore lands (every path), or the inline timeout. */
+html.ha-restoring #hypertranscript {
+  visibility: hidden;
+}
+
 /* Copy-transcript button (#467): pinned to the transcript card's top-right
    corner — the toolbar is crowded on mobile — position:fixed because the
    holder itself is the scroll container (same reasoning as the caption
@@ -591,6 +599,9 @@ dialog::backdrop {
   color: oklch(var(--bc) / 0.55);
 }
 #transcript-copy-btn:hover { color: oklch(var(--bc)); }
+/* the loader owns the card while a transcription runs (#hypertranscript
+   carries aria-busy via setTranscriptBusy) — nothing to copy, no button */
+html:has(#hypertranscript[aria-busy="true"]) #transcript-copy-btn { display: none; }
 #transcript-copy-btn[data-copied] { color: oklch(var(--su, var(--p))); }
 /* right-anchor the tooltip bubble so it opens inward, not off the card edge */
 #transcript-copy-btn.tooltip::before {
@@ -1313,10 +1324,29 @@ label[data-a11y-wired]:focus-visible {
 /* Second-tab guard banner (#450): this tab edits without the working-copy
    slot; the owning tab has autosave/crash recovery. */
 #tab-guard-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin: 0 16px 8px;
   padding: 8px 12px;
   border-radius: 0.5rem;
   font-size: 12px;
   background-color: oklch(var(--b2));
   color: oklch(var(--bc) / 0.8);
+}
+/* the ✕, styled like the panel notices' dismiss */
+#tab-guard-banner button {
+  margin: 0 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+#tab-guard-banner button:hover {
+  border: none;
+  background: transparent;
+  opacity: 0.7;
 }
