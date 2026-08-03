@@ -1,7 +1,7 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 0.7.0 — last changed in release 0.7.0
+ * @version 1.0.2 — last changed in release 1.0.2
  * @license MIT
  */
 
@@ -18,6 +18,7 @@ const BLANK = 8192;
 const STATE_DIM = 640;       // decoder predict-net state width
 const MAX_SYMBOLS = 10;      // max tokens emitted on a single frame
 const FRAME_SEC = 0.08;      // 8x subsampling * 10ms hop
+const MIN_SPEECH_S = 10;     // audio at least this long is assumed to contain speech
 
 const HF = "https://huggingface.co";
 const MODELS = {
@@ -47,6 +48,12 @@ self.addEventListener("message", async (event) => {
       sessionsForceGpu = forceGpu;
     }
     const output = await transcribe(sessions, event.data.audio);
+    // A broken GPU can "complete" with no output at all (async WebGPU
+    // validation errors never reject run()) — report that as a failure
+    // rather than rendering a blank transcript as if it were done (#460).
+    if (output.words.length === 0 && event.data.audio.length >= MIN_SPEECH_S * SAMPLE_RATE) {
+      throw new Error("No words were produced — if this media contains speech, transcription failed silently. Reload the page and try again.");
+    }
     self.postMessage({ type: "result", output });
   } catch (e) {
     console.error(e);
@@ -64,13 +71,18 @@ async function releaseSessions(s) {
 
 // navigator.gpu existing does not mean a usable GPU exists (headless and
 // GPU-less machines expose the API but yield no adapter), so it must be
-// ruled out before attempting a WebGPU session, not after failing.
+// ruled out before attempting a WebGPU session, not after failing. The
+// adapter must also expose "shader-f16": the WebGPU path runs the fp16
+// encoder, and on an adapter without f16 support (seen on Linux with WebGPU
+// force-enabled over Vulkan) its pipelines fail compilation — asynchronously,
+// so run() still resolves and the encoder emits garbage (#459).
 async function hasGpuAdapter() {
   try {
     if (!self.navigator?.gpu) {
       return false;
     }
-    return (await self.navigator.gpu.requestAdapter()) !== null;
+    const adapter = await self.navigator.gpu.requestAdapter();
+    return adapter !== null && adapter.features.has("shader-f16");
   } catch (e) {
     return false;
   }
@@ -272,12 +284,22 @@ async function loadSessions(forceGpu) {
 
 // Push a short silent clip through the encoder so WebGPU shader compilation
 // (and any inference-time failure) happens now, under "Preparing model…".
+// WebGPU raises validation errors asynchronously — run() resolves even when
+// every pipeline failed to compile — so the warm-up runs inside an error
+// scope and throws on a captured error, which sends loadSessions down the
+// int8/WASM fallback instead of "succeeding" into a blank transcript (#459).
 async function warmUp(encoder) {
+  const device = ort.env.webgpu?.device;
+  device?.pushErrorScope("validation");
   const len = 100;
   await encoder.run({
     audio_signal: new ort.Tensor("float32", new Float32Array(128 * len), [1, 128, len]),
     length: new ort.Tensor("int64", BigInt64Array.from([BigInt(len)]), [1]),
   });
+  const gpuError = device ? await device.popErrorScope() : null;
+  if (gpuError) {
+    throw new Error(`WebGPU validation failed during warm-up: ${gpuError.message}`);
+  }
 }
 
 async function transcribe(s, audio) {
