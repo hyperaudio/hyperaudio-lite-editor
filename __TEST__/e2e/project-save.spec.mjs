@@ -117,8 +117,9 @@ test('save button, import menu item, and hidden input are injected', async ({ pa
     return btn.nextElementSibling && btn.nextElementSibling.id;
   });
   expect(order).toBe('export-media-btn');
-  await expect(page.locator('#file-exportimport-submenu #project-open-hyperaudio')).toHaveText('Import Project (.hyperaudio)');
-  await expect(page.locator('#file-exportimport-submenu #project-export-hyperaudio')).toHaveText('Export Project (.hyperaudio)');
+  // labels carry no verb: the submenu category (Import/Export) does (#470)
+  await expect(page.locator('#file-import-submenu #project-open-hyperaudio')).toHaveText('Project (.hyperaudio)');
+  await expect(page.locator('#file-export-submenu #project-export-hyperaudio')).toHaveText('Project (.hyperaudio)');
   await expect(page.locator('#project-open-input')).toHaveCount(1);
 });
 

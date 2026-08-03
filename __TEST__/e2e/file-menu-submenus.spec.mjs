@@ -13,33 +13,43 @@ test.beforeEach(async ({ page }) => {
 test('long lists are grouped into collapsed submenus with every action still reachable (#428)', async ({ page }) => {
   const state = await page.evaluate(() => {
     const dl = document.getElementById('file-download-submenu');
-    const ei = document.getElementById('file-exportimport-submenu');
+    const im = document.getElementById('file-import-submenu');
+    const ex = document.getElementById('file-export-submenu');
     const ids = ['download-vtt', 'download-vtt-words', 'download-srt', 'download-html', 'download-hypertranscript'];
     const forTargets = ['export-modal', 'interactive-export-modal', 'file-import-deepgram-json-dialog', 'file-import-srt-dialog', 'file-import-vtt-dialog'];
     const custom = ['export-json', 'export-ionosphere', 'import-json'];
     return {
       hasDownloadSubmenu: !!dl,
-      hasExportImportSubmenu: !!ei,
+      hasImportSubmenu: !!im,
+      hasExportSubmenu: !!ex,
       downloadStartsCollapsed: dl ? !dl.open : null,
-      exportImportStartsCollapsed: ei ? !ei.open : null,
+      importStartsCollapsed: im ? !im.open : null,
+      exportStartsCollapsed: ex ? !ex.open : null,
       idsPresent: ids.filter((id) => document.getElementById(id) === null),
       labelsPresent: forTargets.filter((t) => document.querySelector(`label[for="${t}"]`) === null),
       customPresent: custom.filter((tag) => document.querySelector(`#file-dropdown ${tag}`) === null),
-      // the download/export items now live UNDER the submenus, not at top level
+      // the download/export/import items live UNDER their submenus (#470:
+      // Import and Export are separate top-level categories)
       downloadItemsNested: !!document.querySelector('#file-download-submenu #download-vtt'),
-      exportItemsNested: !!document.querySelector('#file-exportimport-submenu export-json'),
+      exportItemsNested: !!document.querySelector('#file-export-submenu export-json'),
+      importItemsNested: !!document.querySelector('#file-import-submenu import-json'),
+      importBeforeExport: !!(im && ex && (im.compareDocumentPosition(ex) & Node.DOCUMENT_POSITION_FOLLOWING)),
     };
   });
 
   expect(state.hasDownloadSubmenu).toBe(true);
-  expect(state.hasExportImportSubmenu).toBe(true);
+  expect(state.hasImportSubmenu).toBe(true);
+  expect(state.hasExportSubmenu).toBe(true);
   expect(state.downloadStartsCollapsed).toBe(true);   // collapsed → the menu is short
-  expect(state.exportImportStartsCollapsed).toBe(true);
+  expect(state.importStartsCollapsed).toBe(true);
+  expect(state.exportStartsCollapsed).toBe(true);
   expect(state.idsPresent).toEqual([]);               // no download action lost
   expect(state.labelsPresent).toEqual([]);            // no modal/import target lost
   expect(state.customPresent).toEqual([]);            // custom-element exports/imports kept
   expect(state.downloadItemsNested).toBe(true);
   expect(state.exportItemsNested).toBe(true);
+  expect(state.importItemsNested).toBe(true);
+  expect(state.importBeforeExport).toBe(true);        // inputs above outputs (#470)
 });
 
 test('a submenu expands on click and its nested actions still fire (#428)', async ({ page }) => {

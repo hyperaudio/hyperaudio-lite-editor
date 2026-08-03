@@ -1943,18 +1943,25 @@
       '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />'
       + '');
     // The navbar Save button covers saving (#449, a silent OPFS commit since
-    // #456), so the menu carries no Save item; opening a project lives with
-    // the other imports, and Export Project is the explicit way to take a
-    // portable .hyperaudio out of the browser — the only save-ish download.
-    const importList = document.querySelector('#file-exportimport-submenu ul');
+    // #456), so the menu carries no Save item. The project items lead their
+    // top-level submenus (#470: Import and Export are separate categories);
+    // Export Project is the explicit way to take a portable .hyperaudio out
+    // of the browser — the only save-ish download.
+    const importList = document.querySelector('#file-import-submenu ul');
     if (importList !== null) {
       importList.insertAdjacentHTML('afterbegin',
-        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>'
-        + '<li><a id="project-export-hyperaudio">Export Project (.hyperaudio)</a></li>');
+        '<li><a id="project-open-hyperaudio">Project (.hyperaudio)</a></li>');
     } else {
       dropdown.insertAdjacentHTML('beforeend',
-        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>'
-        + '<li><a id="project-export-hyperaudio">Export Project (.hyperaudio)</a></li>');
+        '<li><a id="project-open-hyperaudio">Project (.hyperaudio)</a></li>');
+    }
+    const exportList = document.querySelector('#file-export-submenu ul');
+    if (exportList !== null) {
+      exportList.insertAdjacentHTML('afterbegin',
+        '<li><a id="project-export-hyperaudio">Project (.hyperaudio)</a></li>');
+    } else {
+      dropdown.insertAdjacentHTML('beforeend',
+        '<li><a id="project-export-hyperaudio">Project (.hyperaudio)</a></li>');
     }
     document.querySelector('#project-export-hyperaudio').addEventListener('click', () => {
       exportProject().catch((e) => projectAlert('Exporting the project failed: ' + e.message));

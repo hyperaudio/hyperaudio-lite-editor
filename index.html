@@ -50,7 +50,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=0.8.6"></script>
   <script src="js/word-alignment.js"></script>
   <script src="js/html-json-converter.js?v=1.0.0"></script>
-  <script src="js/transcript-to-ionosphere.js?v=0.6.18"></script>
+  <script src="js/transcript-to-ionosphere.js?v=1.1.1"></script>
   <script src="js/paragraph-timecodes.js?v=0.6.20"></script>
 
   <!-- Meta Tags required for
@@ -421,6 +421,33 @@ If you are creating an open source application under a license compatible with t
                    <details>) so the File menu stays short; ids/targets unchanged so
                    all wiring (download links, modal toggles, custom elements) still
                    works. Mirrors the Glider native File menu (#428). -->
+              <!-- Import is its own top-level category (#470): inputs sit
+                   above outputs, mirroring Upload & Transcribe / Add
+                   Transcript leading the menu. The former "Export / Import"
+                   submenu split in two; ids/targets of the items unchanged so
+                   all wiring still works. Project items (.hyperaudio) and the
+                   transcript document exports are injected at the top of
+                   their submenus by hyperaudio-save.js / transcript-doc-export.js. -->
+              <li>
+                <details id="file-import-submenu">
+                  <summary>Import</summary>
+                  <ul>
+                    <li><import-json></import-json></li>
+                    <li><label for="file-import-deepgram-json-dialog">Deepgram JSON</label></li>
+                    <li><label for="file-import-srt-dialog">SRT</label></li>
+                    <li><label for="file-import-vtt-dialog">VTT</label></li>
+                  </ul>
+                </details>
+              </li>
+              <li>
+                <details id="file-export-submenu">
+                  <summary>Export</summary>
+                  <ul>
+                    <li><export-json></export-json></li>
+                    <li><export-ionosphere></export-ionosphere></li>
+                  </ul>
+                </details>
+              </li>
               <li>
                 <details id="file-download-submenu">
                   <summary>Download as</summary>
@@ -431,19 +458,6 @@ If you are creating an open source application under a license compatible with t
                     <li><a id="download-html" href="" download="hypertranscript.html">HTML</a></li>
                     <li><label id="download-hypertranscript" for="interactive-export-modal">Interactive Transcript</label></li>
                     <li><label for="export-modal">Media (WAV / MP3 / MP4…)</label></li>
-                  </ul>
-                </details>
-              </li>
-              <li>
-                <details id="file-exportimport-submenu">
-                  <summary>Export / Import</summary>
-                  <ul>
-                    <li><export-json></export-json></li>
-                    <li><export-ionosphere></export-ionosphere></li>
-                    <li><import-json></import-json></li>
-                    <li><label for="file-import-deepgram-json-dialog">Import Deepgram JSON</label></li>
-                    <li><label for="file-import-srt-dialog">Import SRT</label></li>
-                    <li><label for="file-import-vtt-dialog">Import VTT</label></li>
                   </ul>
                 </details>
               </li>
@@ -1007,7 +1021,7 @@ If you are creating an open source application under a license compatible with t
 
   <script src="js/editor-file-menu.js?v=1.0.0"></script>
 
-  <script src="./js/hyperaudio-lite-editor-export.js?v=0.8.7" type="module"> </script>
+  <script src="./js/hyperaudio-lite-editor-export.js?v=1.1.1" type="module"> </script>
   <!-- end of localstorage additions -->
 
   <!-- caption editor additions -->
@@ -1053,10 +1067,10 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=0.7.4"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=1.1.0"></script>
+  <script src="js/hyperaudio-save.js?v=1.1.2"></script>
   <script src="js/hyperaudio-library.js?v=1.0.0"></script>
   <!-- transcript document exports: TXT / Markdown (#467) -->
-  <script src="js/transcript-doc-export.js?v=1.1.0"></script>
+  <script src="js/transcript-doc-export.js?v=1.1.2"></script>
 
 
   <script src="js/editor-svg.js?v=0.6.12"></script>
