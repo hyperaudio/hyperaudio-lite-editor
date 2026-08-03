@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.1.3 — last changed in release 1.1.3
+ * @version 1.1.4 — last changed in release 1.1.4
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -43,7 +43,7 @@
   'use strict';
 
   const FORMAT_NAME = 'hyperaudio';
-  const FORMAT_VERSION = '1.2'; // 1.2: kind "none", envelope preservation, pinned path/caps (spec § 8)
+  const FORMAT_VERSION = '1.3'; // 1.3: optional provenance.seconds/device (spec § 3.5); 1.2: kind "none", envelope preservation, pinned path/caps (spec § 8)
   const READER_MAJOR = 1;
   const CONTAINER_MIMETYPE = 'application/vnd.hyperaudio+zip';
   const FILE_EXTENSION = '.hyperaudio';
@@ -847,11 +847,11 @@
 
   // The info modal's Transcription section is project-bound (#456): rebuilt
   // here from the loaded project's STORED provenance whenever a project takes
-  // the editor (apply below, import reset in onNewTranscript). A live engine
-  // run still overwrites it with its richer rows (device, time taken) via
-  // editor-core's setTranscriptionInfo — those extras aren't persisted, so a
-  // reload shows this stored subset. DOM-built: provenance is file data,
-  // never innerHTML (spec § 10.5).
+  // the editor (apply below, import reset in onNewTranscript). Since format
+  // 1.3 the stored provenance carries the engine report's seconds/device too
+  // (#457), so a reload shows the same rows as a live run — minus rows the
+  // engine never reported. DOM-built: provenance is file data, never
+  // innerHTML (spec § 10.5).
   function renderTranscriptionInfo(provenance, language) {
     const container = document.getElementById('transcription-info');
     if (container === null) return;
@@ -859,6 +859,13 @@
     if (provenance && provenance.engine) rows.push(['Service', String(provenance.engine)]);
     if (provenance && provenance.model) rows.push(['Model', String(provenance.model)]);
     if (language) rows.push(['Language', String(language)]);
+    if (provenance && provenance.device) rows.push(['Processing', String(provenance.device)]);
+    if (provenance && typeof provenance.seconds === 'number' && Number.isFinite(provenance.seconds)) {
+      // same shape as editor-core's live setTranscriptionInfo formatting
+      const minutes = Math.floor(provenance.seconds / 60);
+      const seconds = Math.round(provenance.seconds % 60);
+      rows.push(['Time taken', minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`]);
+    }
     if (provenance && provenance.transcribedAt) {
       const at = new Date(provenance.transcribedAt);
       if (!Number.isNaN(at.getTime())) rows.push(['Transcribed', at.toLocaleString()]);
@@ -2134,6 +2141,14 @@
             model: info && info.model ? String(info.model) : '',
             transcribedAt: nowIso(),
           };
+          // Optional fields (spec § 3.5, format 1.3) — persisted so the info
+          // modal's Time taken / Processing rows survive a reload (#457).
+          if (info && typeof info.seconds === 'number' && Number.isFinite(info.seconds)) {
+            session.provenance.seconds = Math.round(info.seconds * 10) / 10;
+          }
+          if (info && info.device) {
+            session.provenance.device = String(info.device);
+          }
           session.provenanceAt = Date.now();
           session.language = info && info.language ? String(info.language) : session.language;
         } catch (e) { /* provenance is best-effort */ }

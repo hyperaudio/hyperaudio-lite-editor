@@ -71,7 +71,7 @@ products stay out.
 | MIME type | `application/vnd.hyperaudio+zip` |
 | Container | ZIP (standard PKZIP) |
 | Text encoding | UTF-8, always |
-| Current version | `1.1` |
+| Current version | `1.3` |
 
 ---
 
@@ -215,6 +215,8 @@ user; they may be an empty string / empty array.
   "engine": "deepgram",
   "model": "nova-3",
   "transcribedAt": "2026-07-10T08:55:00Z",
+  "seconds": 42.7,
+  "device": "GPU (WebGPU)",
   "originalTranscript": "transcript.original.json"
 }
 ```
@@ -224,6 +226,8 @@ user; they may be an empty string / empty array.
 | `engine` | string | Engine that produced the transcription (`deepgram`, `whisper`, `parakeet-local`, …). |
 | `model` | string | Model used, if known. |
 | `transcribedAt` | string | ISO 8601 UTC of the original transcription. |
+| `seconds` | number | Optional (1.3): wall-clock duration of the transcription run, in seconds. |
+| `device` | string | Optional (1.3): what performed the inference, as reported by the engine (e.g. `"GPU (WebGPU)"`, `"CPU"`). Meaningful for local engines; absent for cloud services. |
 | `originalTranscript` | string | Path of the file holding the original machine transcription (§ 5), if kept. |
 
 Records who/what produced the original transcription. Zero cost today,
@@ -524,7 +528,8 @@ Version history: **1.0** initial; **1.1** adds `media.kind: "link"`
 (§ 7.2.1); **1.2** adds `media.kind: "none"` (§ 7.2.2), makes writer-side
 preservation of unknown fields normative (§ 8.1), requires STORE for media
 entries on read (§ 7.1), and pins the `media.path` segment rule and the
-byte-measured size caps (§ 10.2, § 10.3).
+byte-measured size caps (§ 10.2, § 10.3); **1.3** adds the optional
+`provenance.seconds` and `provenance.device` fields (§ 3.5).
 
 Documented exception: unknown `media.kind` → the project is not normally
 loadable even within the same major; the behaviours of § 7.3 apply.

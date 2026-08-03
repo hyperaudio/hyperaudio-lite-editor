@@ -83,6 +83,16 @@ test('buildProjectJson: provenance omitted when unknown', () => {
   assert.equal(project.provenance, undefined);
 });
 
+test('buildProjectJson: provenance seconds/device persist when captured (§ 3.5, 1.3 / #457)', () => {
+  const state = sampleState();
+  state.provenance = { ...state.provenance, seconds: 42.7, device: 'GPU (WebGPU)' };
+  const project = save.buildProjectJson(state);
+  assert.equal(project.provenance.seconds, 42.7);
+  assert.equal(project.provenance.device, 'GPU (WebGPU)');
+  // still valid against the project validator
+  assert.deepEqual(save.validateProjectJson(project), { ok: true, errors: [] });
+});
+
 test('validateProjectJson: accepts a conformant project', () => {
   const result = save.validateProjectJson(save.buildProjectJson(sampleState()));
   assert.deepEqual(result, { ok: true, errors: [] });
@@ -287,7 +297,7 @@ test('rewrites preserve unknown envelope fields, top-level and nested (§ 8.1)',
   assert.equal(project.texts.title, 'new');                    // owned fields overwritten
   assert.equal(project.options.captions.updateFromTranscript, false);
   assert.equal(project.formatVersion, save.FORMAT_VERSION);    // writers write their own version
-  assert.equal(save.FORMAT_VERSION, '1.2');
+  assert.equal(save.FORMAT_VERSION, '1.3');
   assert.equal(envelope.texts.title, 'old');                   // the input envelope is not mutated
 });
 
