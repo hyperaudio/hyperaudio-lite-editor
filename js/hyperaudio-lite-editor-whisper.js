@@ -67,6 +67,34 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
   const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.0.2";
 
+  // Turbo is WebGPU-only (#461): neither of its quantised variants loads on
+  // the WASM runtime, so without a usable GPU the worker refuses it. Grey the
+  // option out up front rather than let users pick a model that can't run.
+  // Mirrors the worker's device choice, where Firefox prefers WASM over its
+  // slower WebGPU.
+  (async () => {
+    let gpuUsable = false;
+    try {
+      gpuUsable = !/firefox/i.test(navigator.userAgent)
+        && navigator.gpu !== undefined
+        && (await navigator.gpu.requestAdapter()) !== null;
+    } catch (e) {
+      // treat as no GPU
+    }
+    if (!gpuUsable && modelNameSelectionInput !== null) {
+      const turboOption = modelNameSelectionInput.querySelector('option[value="turbo"]');
+      if (turboOption !== null) {
+        turboOption.disabled = true;
+        turboOption.textContent = "Whisper (Large v3 Turbo) – needs a GPU (unavailable in this browser)";
+      }
+      // a persisted preference may already have restored turbo — drop back to
+      // the default model rather than submit with a disabled option selected
+      if (modelNameSelectionInput.value === "turbo") {
+        modelNameSelectionInput.value = "base";
+      }
+    }
+  })();
+
   // Firefox runs Whisper on the CPU (its WebGPU is still much slower than
   // its CPU path) – workable for the smaller models, but the larger ones may
   // be slow or fail. Say so up front rather than letting users find out.
@@ -253,7 +281,14 @@ function loadWhisperClient(modal, workerBaseUrl) {
     // #transcript-editor-btn's handler no-ops when already in transcript mode.
     document.querySelector('#transcript-editor-btn')?.click();
 
-    const size = modelNameSelectionInput.value;
+    let size = modelNameSelectionInput.value;
+    // a persisted "turbo" preference can be restored after the GPU probe above
+    // disabled the option (the probe is async, the restore races it) — fall
+    // back to the default model instead of submitting one the worker refuses
+    if (modelNameSelectionInput.selectedOptions[0]?.disabled) {
+      size = "base";
+      modelNameSelectionInput.value = "base";
+    }
     const language = languageSelectionInput !== null ? languageSelectionInput.value : "";
     // English gets the slightly more accurate English-only variants; any
     // other language (or auto-detect) needs the multilingual ones. Turbo
