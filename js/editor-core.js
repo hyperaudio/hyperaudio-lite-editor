@@ -77,7 +77,7 @@
   window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
   let hyperaudioTemplate = "";
 
-  fetch('hyperaudio-template.html?v=0.9.1') // bump with the template — an unversioned fetch served stale copies from the browser cache
+  fetch('hyperaudio-template.html?v=1.1.1') // bump with the template — an unversioned fetch served stale copies from the browser cache
   .then(function(response) {
       // When the page is loaded convert it to text
       return response.text()
