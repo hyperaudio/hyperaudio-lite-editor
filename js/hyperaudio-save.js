@@ -2210,6 +2210,10 @@
     exportProject,   // build + download a portable .hyperaudio
     // export naming and any future UI read the title through here
     getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
+    // the document exports (#467) read the transcript through here: the same
+    // speaker-preserving, caption-mode-aware gather the save path uses
+    getTranscriptJson: () => htmlToJSON(getEditorHtml()),
+    loadJSZip, // shared vendored-zip loader (the .docx export packages with it)
     openFromFile,
     autosaveNow: writeDraft,
     isDirty,
