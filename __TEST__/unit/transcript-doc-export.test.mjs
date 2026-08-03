@@ -121,3 +121,19 @@ test('docx: empty transcript still yields a valid document with one empty paragr
   const xml = doc.docxDocumentXml({ words: [], paragraphs: [] });
   assert.match(xml, /<w:body><w:p\/><\/w:body>/);
 });
+
+/* ---------- Clipboard HTML ---------- */
+
+test('clipboard html: conservative <p>/<b> markup, redaction and escaping shared', () => {
+  const out = doc.renderClipboardHtml(sampleTranscript());
+  assert.equal(out,
+    '<p><b>Maria:</b> Benvenuti a Hyperaudio</p>\n<p><b>Luca:</b> Grazie</p>');
+});
+
+test('clipboard html: word text is HTML-escaped, no injected markup', () => {
+  const out = doc.renderClipboardHtml({
+    words: [{ start: 0, end: 1, text: '<img src=x>' }],
+    paragraphs: [{ speaker: 'A&B', start: 0, end: 2 }],
+  });
+  assert.equal(out, '<p><b>A&amp;B:</b> &lt;img src=x&gt;</p>');
+});

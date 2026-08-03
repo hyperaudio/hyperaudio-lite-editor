@@ -578,6 +578,43 @@ dialog::backdrop {
   transform: none;
 }
 
+/* Copy-transcript button (#467): pinned to the transcript card's top-right
+   corner — the toolbar is crowded on mobile — position:fixed because the
+   holder itself is the scroll container (same reasoning as the caption
+   editor's Regenerate float). Offsets mirror .transcript-holder's edges;
+   hidden in caption mode by the view-switch wiring. */
+#transcript-copy-btn {
+  position: fixed;
+  top: 88px;              /* holder top (78px) + 10px inset */
+  right: 28px;            /* holder right (16px) + 12px inset */
+  z-index: 20;            /* above content, below the drawer (45) and navbar (60) */
+  color: oklch(var(--bc) / 0.55);
+}
+#transcript-copy-btn:hover { color: oklch(var(--bc)); }
+#transcript-copy-btn[data-copied] { color: oklch(var(--su, var(--p))); }
+/* right-anchor the tooltip bubble so it opens inward, not off the card edge */
+#transcript-copy-btn.tooltip::before {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+@media screen and (max-width: 948px) {
+  #transcript-copy-btn {
+    top: calc(var(--nav-h) + var(--player-h) + 10px);
+    right: 12px;
+    transition: top 0.25s ease; /* follows the video collapse like the holder */
+  }
+}
+/* screen-reader-only live region for the copy announcement */
+#transcript-copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Search: highlight only the matched substring. searchPhrase wraps the match in
    <mark class="search-mark"> and also tags the word .search-match — neutralise
    the vendored whole-word background so just the mark shows, tinted with a much

@@ -76,6 +76,20 @@
   }
 
   /* ==========================================================================
+   * Clipboard HTML (#467): the rich flavour for the copy button. Deliberately
+   * conservative markup — plain <p> and <b> only — because paste targets
+   * apply their own defaults, and minimal markup pastes cleanly everywhere.
+   * ======================================================================== */
+
+  function renderClipboardHtml(transcript) {
+    return paragraphsWithWords(transcript)
+      .map((p) => '<p>'
+        + (p.speaker ? '<b>' + escapeXml(p.speaker) + ':</b> ' : '')
+        + escapeXml(joinWords(p.words)) + '</p>')
+      .join('\n');
+  }
+
+  /* ==========================================================================
    * DOCX (#467): a .docx is a zip of XML parts — the vendored JSZip builds
    * it, no new dependency. Three parts make a minimal valid package:
    * [Content_Types].xml, _rels/.rels, and word/document.xml with one w:p per
@@ -137,7 +151,7 @@
 
   const pure = {
     paragraphsWithWords, joinWords, escapeMd, renderTxt, renderMarkdown,
-    escapeXml, docxDocumentXml, buildDocx,
+    escapeXml, docxDocumentXml, buildDocx, renderClipboardHtml,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = pure;
@@ -210,9 +224,99 @@
     });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
+  /* ==========================================================================
+   * Copy-transcript button (#467): pinned to the transcript card's top-right
+   * corner (the top toolbar is crowded on mobile and lower resolutions).
+   *
+   * Contract: ALWAYS copies the WHOLE rendered transcript, selection or not.
+   * A selection-sensitive button is a trap (contenteditable selections
+   * survive focus loss), and selection copying already has an owner — native
+   * ⌘C, which must stay verbatim because it doubles as an editing operation.
+   * ⌘C = editing copy, verbatim; this button = publishing copy, rendered
+   * clean (struck words dropped, speaker prefixes).
+   *
+   * Both clipboard flavours ride one ClipboardItem — text/plain (the TXT
+   * rendering) and text/html — so Docs/Word/Notion paste formatted while
+   * terminals and plain editors get clean text; ⇧⌘V forces plain anywhere.
+   * The strings are built synchronously in the click gesture (Safari-safe).
+   * ======================================================================== */
+
+  const COPY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+  const CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  let copyResetTimer = null;
+
+  async function copyTranscript(btn, statusEl) {
+    const transcript = currentTranscript();
+    const plain = renderTxt(transcript);
+    const html = renderClipboardHtml(transcript);
+    try {
+      if (navigator.clipboard && typeof ClipboardItem !== 'undefined'
+          && typeof navigator.clipboard.write === 'function') {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' }),
+        })]);
+      } else if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(plain); // older engines: plain only
+      } else {
+        return;
+      }
+    } catch (e) {
+      console.warn('transcript-doc-export: clipboard write failed', e);
+      return;
+    }
+    // clipboard writes are invisible — flip to a checkmark and announce
+    btn.dataset.copied = '1';
+    btn.innerHTML = CHECK_SVG;
+    statusEl.textContent = '';
+    statusEl.textContent = 'Transcript copied to clipboard.';
+    clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      delete btn.dataset.copied;
+      btn.innerHTML = COPY_SVG;
+    }, 1500);
+  }
+
+  function bootCopyButton() {
+    const statusEl = document.createElement('div');
+    statusEl.id = 'transcript-copy-status';
+    statusEl.setAttribute('role', 'status');
+    statusEl.setAttribute('aria-live', 'polite');
+    document.body.appendChild(statusEl);
+
+    const btn = document.createElement('button');
+    btn.id = 'transcript-copy-btn';
+    btn.type = 'button';
+    btn.className = 'btn btn-square btn-ghost btn-sm tooltip';
+    btn.setAttribute('data-tip', 'Copy transcript');
+    btn.setAttribute('aria-label', 'Copy transcript');
+    btn.innerHTML = COPY_SVG;
+    btn.addEventListener('click', () => { copyTranscript(btn, statusEl); });
+    document.body.appendChild(btn);
+
+    // The caption editor owns that corner in caption mode (its Regenerate
+    // button floats there), and "copy transcript" is a transcript-mode act —
+    // hide/show with the view switch. The engines force transcript view by
+    // clicking #transcript-editor-btn, so this covers programmatic switches.
+    const captionBtn = document.getElementById('caption-editor-btn');
+    const transcriptBtn = document.getElementById('transcript-editor-btn');
+    if (captionBtn !== null) {
+      captionBtn.addEventListener('click', () => { btn.style.display = 'none'; });
+    }
+    if (transcriptBtn !== null) {
+      transcriptBtn.addEventListener('click', () => { btn.style.display = ''; });
+    }
+  }
+
+  function bootAll() {
     boot();
+    bootCopyButton();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootAll);
+  } else {
+    bootAll();
   }
 })();

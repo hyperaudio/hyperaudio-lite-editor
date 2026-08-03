@@ -104,3 +104,54 @@ test('exports follow edits: a new word appears, a newly struck word disappears',
   const out = await exportVia(page, 'export-transcript-txt', testInfo, 'edited.txt');
   expect(out.text).toBe('Maria: Willkommen a\n');
 });
+
+test.describe('copy to clipboard', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  test('the button copies BOTH flavours, whole transcript, redaction dropped', async ({ page }) => {
+    await page.click('#transcript-copy-btn');
+    // feedback: checkmark state + polite announcement
+    await expect(page.locator('#transcript-copy-btn[data-copied]')).toBeVisible();
+    await expect(page.locator('#transcript-copy-status')).toHaveText('Transcript copied to clipboard.');
+
+    const flavours = await page.evaluate(async () => {
+      const items = await navigator.clipboard.read();
+      const out = {};
+      for (const item of items) {
+        for (const type of item.types) {
+          out[type] = await (await item.getType(type)).text();
+        }
+      }
+      return out;
+    });
+    expect(flavours['text/plain']).toBe('Maria: Benvenuti a\n');            // the TXT rendering
+    expect(flavours['text/html']).toContain('<b>Maria:</b> Benvenuti a');   // the rich rendering
+    expect(flavours['text/html']).not.toContain('ehm');                     // redaction holds in both
+
+    // the checkmark reverts to the copy glyph
+    await expect(page.locator('#transcript-copy-btn:not([data-copied])')).toBeVisible({ timeout: 3000 });
+  });
+
+  test('a live selection does not narrow the copy (whole-transcript contract)', async ({ page }) => {
+    await page.evaluate(() => {
+      const word = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+      const range = document.createRange();
+      range.selectNodeContents(word);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    await page.click('#transcript-copy-btn');
+    await expect(page.locator('#transcript-copy-btn[data-copied]')).toBeVisible();
+    const plain = await page.evaluate(() => navigator.clipboard.readText());
+    expect(plain).toBe('Maria: Benvenuti a\n'); // everything, not the selected word
+  });
+
+  test('the button yields the corner to caption mode and returns', async ({ page }) => {
+    await expect(page.locator('#transcript-copy-btn')).toBeVisible();
+    await page.click('#caption-editor-btn');
+    await expect(page.locator('#transcript-copy-btn')).toBeHidden();
+    await page.click('#transcript-editor-btn');
+    await expect(page.locator('#transcript-copy-btn')).toBeVisible();
+  });
+});
