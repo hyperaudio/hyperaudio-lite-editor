@@ -2176,7 +2176,17 @@
     const el = document.createElement('div');
     el.id = 'tab-guard-banner';
     el.setAttribute('role', 'status');
-    el.textContent = 'This project is open in another tab — autosave and crash recovery are active there. You can still edit and save here, or switch to a different project.';
+    const text = document.createElement('span');
+    text.textContent = 'This project is open in another tab — autosave and crash recovery are active there. You can still edit and save here, or switch to a different project.';
+    // Dismissible per appearance: the condition is real, so no persistence —
+    // contesting the same (or another) project later shows it again.
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.textContent = '✕';
+    dismiss.addEventListener('click', () => { el.remove(); });
+    el.appendChild(text);
+    el.appendChild(dismiss);
     anchor.appendChild(el);
   }
 

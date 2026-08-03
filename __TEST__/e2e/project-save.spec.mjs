@@ -574,3 +574,18 @@ test('a fresh transcription starts CLEAN: v0 committed at birth, dirty only on e
   });
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
 });
+
+test('the tab-guard banner is dismissible (per appearance, no persistence)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible();
+
+  await page2.click('#tab-guard-banner button[aria-label="Dismiss"]');
+  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await page2.close();
+});
