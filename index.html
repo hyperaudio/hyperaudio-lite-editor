@@ -49,7 +49,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-whisper.js?v=0.6.26"></script>
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=0.8.6"></script>
   <script src="js/word-alignment.js"></script>
-  <script src="js/html-json-converter.js?v=0.8.5"></script>
+  <script src="js/html-json-converter.js?v=0.10.0"></script>
   <script src="js/transcript-to-ionosphere.js?v=0.6.18"></script>
   <script src="js/paragraph-timecodes.js?v=0.6.20"></script>
 
@@ -108,7 +108,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.9.1">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.10.0">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -371,13 +371,7 @@ If you are creating an open source application under a license compatible with t
         </div>
 
         <div id="recents-pane" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
-          <div id="recents-card">
-            <h2 id="recents-title">Recents</h2>
-            <div id="recents-scroll">
-              <ul id="file-picker" class="menu menu-compact bg-base-100 w-full">
-              </ul>
-            </div>
-          </div>
+          <div id="side-notices"></div>
         </div>
         <div style="position: absolute; bottom: 16px; ">
         </div>
@@ -983,9 +977,8 @@ If you are creating an open source application under a license compatible with t
   <import-srt></import-srt>
   <import-vtt></import-vtt>
   
-  <script src="./js/hyperaudio-lite-editor-storage.js?v=0.9.1"></script>
 
-  <script src="js/editor-file-menu.js?v=0.9.0"></script>
+  <script src="js/editor-file-menu.js?v=0.10.0"></script>
 
   <script src="./js/hyperaudio-lite-editor-export.js?v=0.8.7" type="module"> </script>
   <!-- end of localstorage additions -->
@@ -1017,7 +1010,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/editor-main.js?v=0.8.0"></script>
   <script src="js/find-replace.js?v=0.6.29"></script>
   <script src="js/stream-stretch.js?v=0.8.6"></script>
-  <script src="js/media-export.js?v=0.9.1"></script>
+  <script src="js/media-export.js?v=0.10.0"></script>
   <!-- word-level / karaoke VTT export (#387 part 1) -->
   <script src="js/word-vtt.js?v=0.8.5"></script>
   <!-- end of caption editor additions -->
@@ -1031,6 +1024,9 @@ If you are creating an open source application under a license compatible with t
   <!-- service worker script for PWA -->
   <script src="js/editor-service-worker.js?v=0.6.12"></script>
   <script type="module" src="js/editor-audio-cut.js?v=0.7.4"></script>
+
+  <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
+  <script src="js/hyperaudio-save.js?v=0.10.0"></script>
 
 
   <script src="js/editor-svg.js?v=0.6.12"></script>

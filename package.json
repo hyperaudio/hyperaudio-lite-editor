@@ -5,6 +5,7 @@
     "axe-core": "^4.12.1",
     "cssnano": "^6.0.1",
     "daisyui": "^4.4.2",
+    "jszip": "^3.10.1",
     "postcss": "^8.4.24",
     "tailwindcss": "^3.3.2"
   },

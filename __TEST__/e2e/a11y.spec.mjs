@@ -42,13 +42,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForSelector('#hypertranscript [data-m]');
 });
 
-test('default view (with Recents content) has no #402-class violations', async ({ page }) => {
-  // populate the Recents list both ways storage.js renders it
-  await page.evaluate(() => {
-    const fp = document.getElementById('file-picker');
-    fp.insertAdjacentHTML('beforeend', `<li><a class="file-item" title="t" data-index=0>my-project</a></li>`);
-    fp.insertAdjacentHTML('beforeend', `<li style="padding:8px 16px; opacity:0.75">No files saved.</li>`);
-  });
+test('default view has no #402-class violations', async ({ page }) => {
   expect(await runAxe(page)).toEqual([]);
 });
 
