@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.0.0 — last changed in release 1.0.0
+ * @version 1.1.4 — last changed in release 1.1.4
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -572,6 +572,8 @@
   const vttCheck = document.getElementById('export-vtt');
   const srtRow = document.getElementById('export-srt-row');
   const srtCheck = document.getElementById('export-srt');
+  const projectRow = document.getElementById('export-project-row');
+  const projectCheck = document.getElementById('export-project');
   const burnRow = document.getElementById('export-burn-row');
   const burnCheck = document.getElementById('export-burn');
   const progressBar = document.getElementById('export-progress');
@@ -715,6 +717,13 @@
     retimeRow.style.display = show;
     if (vttRow !== null) vttRow.style.display = show;
     if (srtRow !== null) srtRow.style.display = show;
+    // the flattened project (#455) needs a transcript to flatten, and the
+    // container writer to be loaded
+    if (projectRow !== null) {
+      projectRow.style.display =
+        (show === 'flex' && window.HyperaudioSave
+          && typeof window.HyperaudioSave.buildFlattenedProjectBlob === 'function') ? 'flex' : 'none';
+    }
   };
 
   const hasTranscript = () => {
@@ -748,6 +757,7 @@
         retime: retimeCheck.checked,
         vtt: vttCheck !== null && vttCheck.checked,
         srt: srtCheck !== null && srtCheck.checked,
+        project: projectCheck !== null && projectCheck.checked,
       }));
     } catch (e) { /* storage unavailable (private mode / quota) — non-fatal */ }
   };
@@ -781,6 +791,7 @@
     retimeCheck.checked = opts.retime === true;
     if (vttCheck !== null) vttCheck.checked = opts.vtt === true;
     if (srtCheck !== null) srtCheck.checked = opts.srt === true;
+    if (projectCheck !== null) projectCheck.checked = opts.project === true;
 
     // speed / length: offer it whenever there's media; restore the toggle and
     // the last speed, defaulting to the player's current rate so a playback
@@ -853,6 +864,8 @@
       const wantRetime = retimeCheck.checked && retimeRow.style.display !== 'none';
       const wantVtt = vttCheck !== null && vttCheck.checked && vttRow.style.display !== 'none';
       const wantSrt = srtCheck !== null && srtCheck.checked && srtRow.style.display !== 'none';
+      const wantProject = projectCheck !== null && projectCheck.checked
+        && projectRow !== null && projectRow.style.display !== 'none';
       // user-chosen export name (verbatim, so the media file and the transcript's
       // <video src> always agree); light sanitise for filename safety
       const rawName = nameInput !== null ? nameInput.value.trim() : '';
@@ -908,7 +921,33 @@
         }
       }
 
-      // 3. hand the browser each file, spaced out so Safari doesn't drop all but
+      // 3. flattened project container (#455): a fresh .hyperaudio in which the
+      // render IS the original media, with the re-timed struck-free transcript
+      // and matching captions. Cuts are genuinely absent from the media and
+      // struck words unrecoverable — the safe-to-share artifact the format
+      // doc's § 1.1 caveat points to.
+      if (wantProject) {
+        setStatus('Building project container…');
+        const projHtml = buildRetimedTranscriptHtml(sections, rate);
+        if (projHtml !== null) {
+          const projSubs = genRetimedCaptions(sections, rate);
+          const projDur = keptDuration(sections) / rate; // Infinity when metadata never loaded
+          const projBlob = await window.HyperaudioSave.buildFlattenedProjectBlob({
+            html: projHtml,
+            captionsVtt: projSubs && projSubs.vtt ? projSubs.vtt : '',
+            media: {
+              name: mediaName,
+              data: blob,
+              mimeType: fmt.mime,
+              durationSeconds: Number.isFinite(projDur) ? Math.round(projDur * 1000) / 1000 : 0,
+            },
+            title: baseName,
+          });
+          outputs.push({ blob: projBlob, name: `${baseName}.hyperaudio` });
+        }
+      }
+
+      // 4. hand the browser each file, spaced out so Safari doesn't drop all but
       // the last of a multi-file download
       for (let i = 0; i < outputs.length; i++) {
         downloadBlob(outputs[i].blob, outputs[i].name);
@@ -942,7 +981,7 @@
     if (lengthMinInput !== null) lengthMinInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
     if (lengthSecInput !== null) lengthSecInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
   }
-  [burnCheck, retimeCheck, vttCheck, srtCheck].forEach((el) => {
+  [burnCheck, retimeCheck, vttCheck, srtCheck, projectCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', saveExportOpts);
   });
   startBtn.addEventListener('click', runExport);
