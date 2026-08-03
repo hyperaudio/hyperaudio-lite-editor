@@ -108,7 +108,7 @@ If you are creating an open source application under a license compatible with t
     }
     
   </style>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.10.0">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=0.10.10">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -356,7 +356,9 @@ If you are creating an open source application under a license compatible with t
             <button id="audio-only-btn" type="button" class="btn btn-square btn-outline btn-sm tooltip" data-tip="Audio only" aria-label="Toggle audio only" aria-pressed="false" onclick="toggleAudioOnly(this)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
             </button>
-            <label for="show-speakers" style="display:flex; align-items:center; gap:6px; margin-left:4px; cursor:pointer; white-space:nowrap;">
+            <!-- margin-left:auto right-aligns the toggle pair in the space the
+                 info button freed when it moved into the kebab menu (#456) -->
+            <label for="show-speakers" style="display:flex; align-items:center; gap:6px; margin-left:auto; cursor:pointer; white-space:nowrap;">
               Speakers
               <input type="checkbox" id="show-speakers" name="show-speakers" checked="checked" class="toggle toggle-primary"/>
             </label>
@@ -364,14 +366,23 @@ If you are creating an open source application under a license compatible with t
               Timecodes
               <input type="checkbox" id="show-timecodes" name="show-timecodes" class="toggle toggle-primary"/>
             </label>
-            <label id="info-btn" for="info-modal" class="btn btn-square btn-ghost btn-sm tooltip" data-tip="Transcription info" aria-label="Transcription info" style="margin-left:auto;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="16" y2="12"></line><line x1="12" x2="12.01" y1="8" y2="8"></line></svg>
-            </label>
+            <!-- The Transcription-info button moved into each project row's
+                 kebab menu (#456): info belongs to a particular project. -->
           </div>
         </div>
 
         <div id="recents-pane" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
           <div id="side-notices"></div>
+          <!-- Project library (#456): rows over the OPFS index, rendered by
+               js/hyperaudio-library.js. The recents-* ids survive from the
+               pre-#451 Recents so its CSS and the mobile drawer apply as-is. -->
+          <div id="recents-card">
+            <h2 id="recents-title">Recents</h2>
+            <div id="recents-scroll">
+              <ul id="file-picker" class="menu menu-compact bg-base-100 w-full">
+              </ul>
+            </div>
+          </div>
         </div>
         <div style="position: absolute; bottom: 16px; ">
         </div>
@@ -442,15 +453,31 @@ If you are creating an open source application under a license compatible with t
           <div class="modal">
             <div class="modal-box relative">
               <label for="info-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
-              <h3 class="text-lg font-bold">Transcription</h3>
-              <div id="transcription-info" class="py-4">
-                <p>Nothing transcribed yet – details of the service, model and processing time will appear here.</p>
+              <!-- Project info (#456): the name leads; uniform section labels
+                   over plain rows follow. Media rows are set when the kebab's
+                   Info opens the modal; #transcription-info is rebuilt per
+                   project by hyperaudio-save; #summary/#topics are the LIVE
+                   elements gather() reads — ids must not change. -->
+              <h3 id="project-info-name" class="text-lg font-bold"></h3>
+              <div class="info-section">
+                <h4 class="info-section-label">Media</h4>
+                <div id="project-info-media" class="info-rows"></div>
               </div>
-              <h3 class="text-lg font-bold">Summary</h3>
-              <p id="summary" class="py-4"></p>
-              <h3 class="text-lg font-bold">Topics</h3>
-              <p id="topics" class="py-4"></p>
-              <p id="app-version" style="margin-top:8px; font-size:75%; opacity:0.55; text-align:right"></p>
+              <div class="info-section">
+                <h4 class="info-section-label">Transcription</h4>
+                <div id="transcription-info" class="info-rows">
+                  <p>Nothing transcribed yet – details of the service, model and processing time will appear here.</p>
+                </div>
+              </div>
+              <div class="info-section">
+                <h4 class="info-section-label">Summary</h4>
+                <p id="summary"></p>
+              </div>
+              <div class="info-section">
+                <h4 class="info-section-label">Topics</h4>
+                <p id="topics"></p>
+              </div>
+              <p id="app-version" style="margin-top:14px; font-size:75%; opacity:0.55; text-align:right"></p>
             </div>
           </div>
         </div>
@@ -1026,7 +1053,8 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=0.7.4"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=0.10.0"></script>
+  <script src="js/hyperaudio-save.js?v=0.10.2"></script>
+  <script src="js/hyperaudio-library.js?v=0.10.11"></script>
 
 
   <script src="js/editor-svg.js?v=0.6.12"></script>

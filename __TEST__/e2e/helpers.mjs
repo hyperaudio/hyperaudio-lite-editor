@@ -95,3 +95,16 @@ export const ISSUE_371_WORDS = [
   [30560, 80], [30800, 400], [31200, 80], [31360, 80], [31520, 80], [31680, 80], [31920, 80],
   [32160, 80], [32400, 80], [32640, 80], [32800, 80], [33120, 720],
 ];
+
+// Await an ASYNC in-page condition by polling page.evaluate (which properly
+// awaits async functions). page.waitForFunction must NOT be given an async
+// predicate: it treats the returned pending Promise as truthy and resolves
+// immediately — a whole class of #456 test races traced back to that.
+export async function pollPage(page, fn, arg, { timeout = 10000, interval = 100 } = {}) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    if (await page.evaluate(fn, arg)) return;
+    if (Date.now() > deadline) throw new Error('pollPage: condition not met within ' + timeout + 'ms');
+    await page.waitForTimeout(interval);
+  }
+}

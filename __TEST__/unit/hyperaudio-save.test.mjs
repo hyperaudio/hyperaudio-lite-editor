@@ -342,3 +342,49 @@ test('the writer sanitizes hostile media entry names with the shared rule (§ 10
   assert.ok(zip.file('media/.._evil.wav') !== null);  // separator neutralized, ".." substring kept
   assert.equal(zip.file('media/../evil.wav'), null);
 });
+
+/* ---- Library index rules (#456) — pure layer of the project library ---- */
+
+test('library entries sort by last edit, created date the fallback (#456)', () => {
+  const sorted = save.sortLibraryEntries([
+    { id: 'a', modifiedAt: 100 },
+    { id: 'b', modifiedAt: 300 },
+    { id: 'c', createdAt: 200 },       // never written: created decides
+    { id: 'd', modifiedAt: 0, createdAt: 400 }, // modifiedAt 0 falls back too
+  ]);
+  assert.deepEqual(sorted.map((e) => e.id), ['d', 'b', 'c', 'a']);
+});
+
+test('sortLibraryEntries does not mutate its input', () => {
+  const entries = [{ id: 'a', modifiedAt: 1 }, { id: 'b', modifiedAt: 2 }];
+  save.sortLibraryEntries(entries);
+  assert.deepEqual(entries.map((e) => e.id), ['a', 'b']);
+});
+
+test('per-project dirty: a draft newer than the last manual Save (#456)', () => {
+  assert.equal(save.isEntryDirty({ lastDraftAt: 2, lastSavedAt: 1 }), true);
+  assert.equal(save.isEntryDirty({ lastDraftAt: 1, lastSavedAt: 1 }), false);
+  assert.equal(save.isEntryDirty({ lastDraftAt: 0, lastSavedAt: 2 }), false); // freshly saved
+  assert.equal(save.isEntryDirty({ lastDraftAt: 5 }), true); // never saved (fresh transcription)
+  assert.equal(save.isEntryDirty({}), false);                // nothing written yet
+});
+
+test('project ids are unique and safe as OPFS directory names (#456)', () => {
+  const ids = new Set();
+  for (let i = 0; i < 100; i++) ids.add(save.newProjectId());
+  assert.equal(ids.size, 100);
+  for (const id of ids) assert.match(id, /^[A-Za-z0-9-]+$/);
+});
+
+test('gather-side class sanitizer keeps the speaker class, strips pollution (#456)', () => {
+  const html = '<p><span data-m="320" data-d="0" class="speaker">[Maria] </span>'
+    + '<span data-m="320" data-d="520" class="active read">Benvenuti </span>'
+    + '<span data-m="1100" data-d="400" class="read speaker-adjacent">a </span></p>';
+  const out = save.sanitizeTranscriptClasses(html);
+  assert.ok(out.includes('class="speaker"'));           // semantic class survives…
+  assert.ok(!out.includes('active'));                   // …playback classes go
+  assert.ok(!out.includes('speaker-adjacent'));         // substring must not fake a match
+  // a polluted speaker span ("speaker read") collapses to exactly class="speaker"
+  const mixed = save.sanitizeTranscriptClasses('<span data-m="0" class="speaker read">[A] </span>');
+  assert.equal(mixed, '<span data-m="0" class="speaker">[A] </span>');
+});

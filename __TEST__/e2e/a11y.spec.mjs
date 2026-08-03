@@ -79,11 +79,11 @@ test('transcribe modal (Local and Cloud tabs) has no #402-class violations', asy
 
 test('modal label-buttons are keyboard-operable; toggles are out of the tab order', async ({ page }) => {
   const r = await page.evaluate(() => {
-    const infoBtn = document.getElementById('info-btn');
-    const toggle = document.getElementById('info-modal');
+    const gapsBtn = document.getElementById('remove-gaps-btn');
+    const toggle = document.getElementById('remove-gaps-modal');
     return {
-      btnTabbable: infoBtn.tabIndex === 0,
-      btnWired: infoBtn.dataset.a11yWired === '1',
+      btnTabbable: gapsBtn.tabIndex === 0,
+      btnWired: gapsBtn.dataset.a11yWired === '1',
       toggleHidden: toggle.getAttribute('aria-hidden') === 'true',
       toggleUntabbable: toggle.tabIndex === -1,
     };
@@ -91,8 +91,9 @@ test('modal label-buttons are keyboard-operable; toggles are out of the tab orde
   expect(r).toEqual({ btnTabbable: true, btnWired: true, toggleHidden: true, toggleUntabbable: true });
 
   // Enter on the focused label-button opens the modal (was impossible before —
-  // labels aren't natively keyboard-activatable)
-  await page.focus('#info-btn');
+  // labels aren't natively keyboard-activatable). The info button, the
+  // previous example here, moved into the project kebab menu (#456).
+  await page.focus('#remove-gaps-btn');
   await page.keyboard.press('Enter');
-  expect(await page.evaluate(() => document.getElementById('info-modal').checked)).toBe(true);
+  expect(await page.evaluate(() => document.getElementById('remove-gaps-modal').checked)).toBe(true);
 });
