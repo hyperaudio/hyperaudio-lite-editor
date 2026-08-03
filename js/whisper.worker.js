@@ -119,6 +119,19 @@ async function getPipeline(model_name, devices) {
     devices = !slowWebGpu && (await hasGpuAdapter()) ? ["webgpu", "wasm"] : ["wasm"];
   }
 
+  // large-v3-turbo has no dtype variant that loads on the WASM runtime — both
+  // q4f16 and q4 fail session creation with a graph error (#461) — so a WASM
+  // attempt only downloads a doomed model (twice: once per dtype). Strip WASM
+  // from turbo's device list: with no GPU this refuses before any download,
+  // and it also ends the WASM retry path immediately when a GPU run of turbo
+  // fails mid-session (e.g. device lost after a VRAM exhaustion).
+  if (model_name.includes("large-v3-turbo")) {
+    devices = devices.filter((device) => device !== "wasm");
+    if (devices.length === 0) {
+      throw new Error("The Turbo model needs a GPU, which isn't available right now. Choose a smaller model, or reload the page to retry the GPU.");
+    }
+  }
+
   let lastError = null;
   for (const device of devices) {
     for (const dtype of pickDtypes(model_name, device)) {
