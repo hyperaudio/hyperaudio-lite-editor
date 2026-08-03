@@ -199,14 +199,14 @@
     // after hyperaudio-save.js, so its DOMContentLoaded wiring (and menu
     // injection) has already run.
     const markup =
-      '<li><a id="export-transcript-txt">Export Transcript (.txt)</a></li>'
-      + '<li><a id="export-transcript-md">Export Transcript (.md)</a></li>'
-      + '<li><a id="export-transcript-docx">Export Transcript (.docx)</a></li>';
+      '<li><a id="export-transcript-txt">Transcript (.txt)</a></li>'
+      + '<li><a id="export-transcript-md">Transcript (.md)</a></li>'
+      + '<li><a id="export-transcript-docx">Transcript (.docx)</a></li>';
     const projectExport = document.getElementById('project-export-hyperaudio');
     if (projectExport !== null && projectExport.closest('li') !== null) {
       projectExport.closest('li').insertAdjacentHTML('afterend', markup);
     } else {
-      const submenu = document.querySelector('#file-exportimport-submenu ul');
+      const submenu = document.querySelector('#file-export-submenu ul');
       if (submenu === null) return;
       submenu.insertAdjacentHTML('afterbegin', markup);
     }

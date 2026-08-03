@@ -60,13 +60,16 @@ test.beforeEach(async ({ page }, testInfo) => {
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
 });
 
-test('the menu carries both items directly under Export Project', async ({ page }) => {
+test('the transcript exports sit directly under Export Project in the Export submenu (#470)', async ({ page }) => {
   const order = await page.evaluate(() =>
-    [...document.querySelectorAll('#file-exportimport-submenu ul a')].map((a) => a.id).slice(0, 5));
+    [...document.querySelectorAll('#file-export-submenu ul a')].map((a) => a.id).slice(0, 4));
   expect(order).toEqual([
-    'project-open-hyperaudio', 'project-export-hyperaudio',
+    'project-export-hyperaudio',
     'export-transcript-txt', 'export-transcript-md', 'export-transcript-docx',
   ]);
+  const importOrder = await page.evaluate(() =>
+    [...document.querySelectorAll('#file-import-submenu ul a')].map((a) => a.id).slice(0, 1));
+  expect(importOrder).toEqual(['project-open-hyperaudio']);
 });
 
 test('TXT export: speaker prefix, redacted word dropped, title-derived filename', async ({ page }, testInfo) => {

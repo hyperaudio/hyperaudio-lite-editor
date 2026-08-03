@@ -245,7 +245,7 @@
     }
 
     connectedCallback() {
-      this.innerHTML = '<a>Export ionosphere (AT Protocol) JSON</a>';
+      this.innerHTML = '<a>Ionosphere (AT Protocol) JSON</a>';
       this.addEventListener('click', this.exportIonosphere);
     }
   }
