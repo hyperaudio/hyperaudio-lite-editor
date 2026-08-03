@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.0.2 — last changed in release 1.0.2
+ * @version 1.1.2 — last changed in release 1.1.2
  * @license MIT
  */
 
@@ -65,7 +65,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.0.2";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.1.2";
 
   // Turbo is WebGPU-only (#461): neither of its quantised variants loads on
   // the WASM runtime, so without a usable GPU the worker refuses it. Grey the
