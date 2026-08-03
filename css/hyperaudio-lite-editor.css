@@ -578,14 +578,6 @@ dialog::backdrop {
   transform: none;
 }
 
-/* Info button sits at the right edge of the side panel, so right-anchor its
-   tooltip bubble so it opens inward instead of being clipped by the panel. */
-#info-btn.tooltip::before {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
 /* Search: highlight only the matched substring. searchPhrase wraps the match in
    <mark class="search-mark"> and also tags the word .search-match — neutralise
    the vendored whole-word background so just the mark shows, tinted with a much
@@ -678,6 +670,31 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
    UI polish (#375)
    ========================================================================= */
 
+/* Recents: the heading lives INSIDE the white card (so the card top can align
+   with the transcript card when the video is collapsed), and the card matches
+   the video/transcript corner treatment. */
+#recents-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 12px;
+  background: #ffffff;
+  border-radius: 0.5rem;
+}
+#recents-title {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 12px 16px 4px;
+  margin: 0;
+}
+#recents-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 0 0 0.5rem 0.5rem;
+}
 
 /* The caption editor's floating Regenerate button is injected as
    fixed top-20 right-8 with no z-index, so positioned content (the caption
@@ -703,7 +720,11 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
   }
   #player-controls {
     transition: margin-top 0.5s ease;
-  }}
+  }
+  #recents-card {
+    transition: margin-top 0.5s ease;
+  }
+}
 
 /* Player controls row (formerly inline styles in index.html, moved here so
    state rules below can override without !important). */
@@ -833,7 +854,11 @@ label[data-a11y-wired]:focus-visible {
 @media screen and (min-width: 949px) {
   body.video-collapsed #player-controls {
     margin-top: 11px;
-  }}
+  }
+  body.video-collapsed #recents-card {
+    margin-top: 27px;
+  }
+}
 
 /* Transcript/captions view switch: a recessed track with a raised thumb that
    slides under the active segment, so the current view reads as a position in
@@ -921,11 +946,290 @@ label[data-a11y-wired]:focus-visible {
   }
 }
 
+/* Recents rows (#434): name + hover/focus actions (rename, delete). The
+   daisyUI menu lays li content out column-wise for submenus — force a row so
+   the action buttons sit beside the name, which truncates rather than wraps. */
+#file-picker .recents-row {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  /* the daisyUI menu wraps with flex-shrink:0 items, so a long name sizes the
+     row to its content and pushes the action icons off-screen — clamp the row
+     to the list and let the name's ellipsis absorb the difference */
+  max-width: 100%;
+}
+/* breathing room between consecutive rows (headings carry their own) */
+#file-picker .recents-row + .recents-row {
+  margin-top: 4px;
+}
+#file-picker .recents-row .file-item {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The actions stretch to the row's full height so the kebab's hover pill
+   matches the name pill beside it, with a small gap between the two (#456
+   visual pass) — a shorter, flush square read as a mismatched afterthought. */
+#file-picker .recents-actions {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 2px;
+  margin-left: 4px;
+  opacity: 0;
+}
+/* daisyUI styles every direct child of a menu li as a menu item — strip that
+   from the actions span so hovering the kebab shows ONE affordance (the
+   button's own), not a pill around a pill */
+#file-picker .recents-actions,
+#file-picker .recents-actions:hover,
+#file-picker .recents-actions:active {
+  background: none;
+  padding: 0;
+}
+#file-picker .recents-row:hover .recents-actions,
+#file-picker .recents-row:focus-within .recents-actions {
+  opacity: 1;
+}
+/* Hovering anywhere in the row — the kebab included — lights the name pill
+   too, so the row reads as one unit while its actions are in use. Same fill
+   as daisyUI's own menu-item hover; held while the row's menu is open; the
+   active row keeps its stronger state. */
+#file-picker .recents-row:hover .file-item:not(.active),
+#file-picker .recents-row:focus-within .file-item:not(.active),
+#file-picker .recents-row:has(.recents-kebab[aria-expanded="true"]) .file-item:not(.active) {
+  background-color: oklch(var(--bc) / 0.1);
+}
+/* neutralise the global button chrome (border + grey fill) for the tiny
+   in-row actions; they read as quiet icons until hovered. Radius matches the
+   row pill (--rounded-btn, like daisyUI's menu items) since they now share a
+   height. */
+#file-picker .recents-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* an explicit square at the menu-row height (0.5rem padding + 1.25rem line
+     = 2.25rem): matches the app's btn-square icon-button language and centres
+     the glyph optically. NOT aspect-ratio:1 — that resolves width after flex
+     sizing, so the actions span sized to the bare icon and the square
+     overflowed the row off the card edge. */
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--rounded-btn, 0.5rem);
+  color: oklch(var(--bc) / 0.55);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+#file-picker .recents-actions button:hover {
+  border: none;
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc));
+}
+.recents-rename-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 6px;
+  font-size: inherit;
+  font-family: inherit;
+  border: 1px solid oklch(var(--p));
+  border-radius: 0.25rem;
+  background-color: oklch(var(--b1));
+}
+/* notices above the Recents list: quota problems (error tone, auto-dismiss)
+   and the one-time autosave disclosure (info tone, sticky until ✕) — both
+   replace what used to be a blocking alert() */
+#recents-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border-radius: 0.5rem;
+  font-size: 12px;
+}
+#recents-notice.notice-error {
+  background-color: oklch(var(--er) / 0.12);
+  color: oklch(var(--er));
+}
+#recents-notice.notice-info {
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc) / 0.8);
+}
+#recents-notice .recents-notice-dismiss {
+  margin: 0 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+#recents-notice .recents-notice-dismiss:hover {
+  border: none;
+  background: transparent;
+  opacity: 0.7;
+}
 
+/* Line the Recents content up on one 16px inset: the menu's default 8px
+   padding put row pills 8px left of the notice box above them. */
+#file-picker {
+  padding: 0 16px 8px;
+}
 
+/* The active row: daisyUI's menu .active is a near-black pill, which reads as
+   alarming now that auto-add marks the new entry active immediately. A quiet
+   base-200 fill + weight says "current" without shouting. */
+#file-picker .file-item.active,
+#file-picker .file-item.active:hover {
+  background-color: oklch(var(--b2));
+  color: inherit;
+  font-weight: 600;
+}
 
+/* notice action (e.g. Restore after deleting the loaded entry): a quiet
+   primary-colored text button; when present it takes the right-push role and
+   the ✕ tucks in beside it */
+#recents-notice .recents-notice-action {
+  margin: 0 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: oklch(var(--p));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+#recents-notice .recents-notice-action:hover {
+  border: none;
+  background: transparent;
+  text-decoration: underline;
+}
+#recents-notice .recents-notice-action + .recents-notice-dismiss {
+  margin-left: 4px;
+}
 
+/* Row kebab menu (#436): one shared, fixed-position menu so it never clips
+   against the Recents scroll container. */
+#file-picker .recents-row:has(.recents-kebab[aria-expanded="true"]) .recents-actions {
+  opacity: 1; /* keep the anchor visible while its menu is open */
+}
+/* Info modal (#456): one consistent layout — the project name is the only
+   large heading; every section sits under the same small muted label, and
+   all data rows share one size. The label:value rows match the shape
+   editor-core's setTranscriptionInfo writes, so live engine reports and the
+   stored per-project rebuild render identically. */
+#info-modal + .modal #project-info-name {
+  padding-right: 32px; /* clear of the ✕ */
+  overflow-wrap: anywhere;
+}
+#info-modal + .modal .info-section { margin-top: 14px; }
+#info-modal + .modal .info-section-label {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: oklch(var(--bc) / 0.55);
+}
+#info-modal + .modal .info-rows p,
+#info-modal + .modal #summary,
+#info-modal + .modal #topics {
+  margin: 2px 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
 
+/* Row hover popout (#456): full name + stored summary/topics, floated to the
+   RIGHT of the panel so it never covers the row or its kebab. Fixed to escape
+   the scroll clip; pointer-transparent — purely informational. */
+#recents-popout {
+  position: fixed;
+  z-index: 50;
+  max-width: 300px;
+  padding: 10px 14px;
+  border-radius: 0.5rem;
+  background-color: oklch(var(--b1));
+  box-shadow: 0 4px 16px oklch(var(--bc) / 0.15), 0 0 0 1px oklch(var(--bc) / 0.06);
+  pointer-events: none;
+  font-size: 13px;
+  line-height: 1.45;
+}
+#recents-popout p { margin: 0; }
+#recents-popout p + p { margin-top: 6px; }
+#recents-popout .recents-popout-name {
+  font-weight: 600;
+  overflow-wrap: anywhere; /* full filenames without spaces must wrap, not clip */
+}
+#recents-popout .recents-popout-topics {
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+#recents-menu {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px;
+  border-radius: 0.5rem;
+  background-color: oklch(var(--b1));
+  box-shadow: 0 4px 16px oklch(var(--bc) / 0.15), 0 0 0 1px oklch(var(--bc) / 0.06);
+}
+#recents-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 0.375rem;
+  font-size: 14px; /* match the FILE dropdown's item size */
+  text-align: left;
+  color: oklch(var(--bc) / 0.85);
+  cursor: pointer;
+}
+#recents-menu button:hover,
+#recents-menu button:focus-visible {
+  border: none;
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc));
+}
+#recents-menu button.confirming,
+#recents-menu button.confirming:hover {
+  color: oklch(var(--er));
+  font-weight: 600;
+}
+
+/* Starred/Recents section headings (#440, kept for #456) — same weight as
+   the panel's static "Recents" h2, which hides while these are rendered
+   (nothing starred = static h2 only, exactly the default look). The picker's
+   own 16px inset aligns them with where the static h2 sits. */
+#file-picker .recents-group-heading {
+  padding: 12px 0 4px;
+  pointer-events: none;
+}
+#file-picker .recents-group-heading h2 {
+  /* daisyUI styles any direct child of a menu li as a menu item — zero that
+     out so the heading sits at the same 16px inset as the static h2 */
+  margin: 0;
+  padding: 0;
+  background: none;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
 
 /* The export adjust panel's number inputs (speed, target minutes/seconds)
    drop the browser spinner buttons — the slider covers coarse speed changes

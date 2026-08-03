@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
-import { ladderWav } from './helpers.mjs';
+import { ladderWav, pollPage } from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const save = require('../../js/hyperaudio-save.js');
@@ -75,6 +75,35 @@ const awaitModal = (page) => page.waitForFunction(() => {
   return el !== null && el.classList.contains('modal-open');
 });
 
+// The library index (#456) replaced the localStorage boot hint: "the working
+// copy landed" now means the current project has an entry in library.json.
+const awaitLibraryEntry = (page) => pollPage(page, async () => {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const text = await (await (await root.getFileHandle('library.json')).getFile()).text();
+    return JSON.parse(text).projects.length > 0
+      && window.HyperaudioSave.library.currentId() !== null;
+  } catch (e) {
+    return false;
+  }
+});
+
+// The current project's index entry and per-project working state — the
+// draft (unsaved edits) when one exists, else the saved state (#456).
+const readCurrentProject = (page) => page.evaluate(async () => {
+  const id = window.HyperaudioSave.library.currentId();
+  const root = await navigator.storage.getDirectory();
+  const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
+  const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+  const readState = async (name) => {
+    try { return JSON.parse(await (await (await dir.getFileHandle(name)).getFile()).text()); }
+    catch (e) { return null; }
+  };
+  const draft = await readState('draft.json');
+  const saved = await readState('saved.json');
+  return { id, entry: lib.projects.find((p) => p.id === id), snapshot: draft || saved, draft, saved };
+});
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
@@ -89,6 +118,7 @@ test('save button, import menu item, and hidden input are injected', async ({ pa
   });
   expect(order).toBe('export-media-btn');
   await expect(page.locator('#file-exportimport-submenu #project-open-hyperaudio')).toHaveText('Import Project (.hyperaudio)');
+  await expect(page.locator('#file-exportimport-submenu #project-export-hyperaudio')).toHaveText('Export Project (.hyperaudio)');
   await expect(page.locator('#project-open-input')).toHaveCount(1);
 });
 
@@ -119,12 +149,12 @@ test('opening a .hyperaudio lands transcript, redaction, captions, options and t
   expect(dialogs).toEqual([]); // a conformant file opens without any alert
 });
 
-test('saving downloads a conformant container that round-trips', async ({ page }, testInfo) => {
+test('Export Project downloads a conformant container that round-trips (#456)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
 
   const downloadPromise = page.waitForEvent('download');
-  await page.evaluate(() => document.getElementById('project-save-btn').click());
+  await page.evaluate(() => document.getElementById('project-export-hyperaudio').click());
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('E2E Project.hyperaudio');
 
@@ -143,6 +173,10 @@ test('saving downloads a conformant container that round-trips', async ({ page }
   expect(loaded.mediaData.length).toBeGreaterThan(1000);
   // the redaction survived the full editor round-trip
   expect(loaded.project.transcript.words.some((w) => w.text === 'ehm' && w.struck === true)).toBe(true);
+  // the speaker survived it too — as a paragraph name, never as a fake word
+  // (the gather-side class strip used to demote "[Maria]" to a word, #456)
+  expect(loaded.project.transcript.paragraphs[0].speaker).toBe('Maria');
+  expect(loaded.project.transcript.words.some((w) => w.text.includes('[Maria]'))).toBe(false);
   // the origin travelled along, untouched and struck-free
   expect(JSON.parse(loaded.originalText).words[0].text).toBe('benvenuti');
   expect(loaded.captionsVtt).toContain('Benvenuti a Hyperaudio');
@@ -153,8 +187,8 @@ test('the working copy survives a reload (OPFS restore)', async ({ page }, testI
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
 
-  // the open seeds OPFS and sets the synchronous boot hint
-  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === '1');
+  // the open seeds a project dir and its library entry (#456)
+  await awaitLibraryEntry(page);
 
   await page.reload();
   await page.waitForSelector('#hypertranscript [data-m]');
@@ -162,51 +196,80 @@ test('the working copy survives a reload (OPFS restore)', async ({ page }, testI
   // the restored project replaces the static demo transcript
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
   await expect(page.locator('#hypertranscript span[data-m="840"]')).toHaveCSS('text-decoration-line', 'line-through');
+  // the speaker label restores WITH its class (styling + Speakers toggle)
+  await expect(page.locator('#hypertranscript .speaker')).toHaveText('[Maria] ');
   await expect(page.locator('#remove-gaps-threshold')).toHaveValue('700');
   const src = await page.evaluate(() => document.querySelector('#hyperplayer').src);
   expect(src).toMatch(/^blob:/);
 
   // the project title survived the restore in the session (no UI field until
-  // #449): a save after reload still suggests the title-derived filename
+  // #449): an export after reload still suggests the title-derived filename
   const downloadPromise = page.waitForEvent('download');
-  await page.evaluate(() => document.getElementById('project-save-btn').click());
+  await page.evaluate(() => document.getElementById('project-export-hyperaudio').click());
   expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
 });
 
-test('dirty open: danger triad styling, and "Save and open" saves then opens (#449)', async ({ page }, testInfo) => {
+test('opening while dirty asks nothing: the pending edit flushes to its own project (#456)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const first = await readCurrentProject(page);
   await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
     span.textContent = 'DIRTY ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  // open the fixture again over the dirty project
+  // re-open the fixture over the dirty project — the discard dialog is gone:
+  // the outgoing project keeps its edits in its own directory and the open
+  // simply makes a second library entry
   await page.evaluate(() => { document.getElementById('project-open-input').value = ''; });
   const fixturePath = testInfo.outputPath('fixture.hyperaudio');
   await page.setInputFiles('#project-open-input', fixturePath);
-  await awaitModal(page);
-  expect(await projectModal(page)).toContain('DISCARD');
-  expect(await page.evaluate(() => ({
-    danger: document.getElementById('project-dialog-confirm').classList.contains('btn-error'),
-    saveLabel: document.getElementById('project-dialog-extra').textContent,
-    focused: document.activeElement && document.activeElement.id,
-    cancelHidden: document.getElementById('project-dialog-cancel').style.display === 'none',
-  }))).toEqual({ danger: true, saveLabel: 'Save and open', focused: 'project-dialog-extra', cancelHidden: true });
+  await expect(page.locator('#hypertranscript')).not.toContainText('DIRTY');
+  expect(await projectModal(page)).toBeNull(); // switching asks nothing
+  expect(dialogs).toEqual([]);
 
-  const downloadPromise = page.waitForEvent('download');
-  await page.click('#project-dialog-extra');
-  expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio'); // saved…
-  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');          // …then opened
-  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+  await pollPage(page, async (firstId) => {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
+      if (lib.projects.length !== 2) return false;
+      const work = await root.getDirectoryHandle('work');
+      // the outgoing project's pending edit flushed to ITS OWN DRAFT…
+      await (await work.getDirectoryHandle(firstId)).getFileHandle('draft.json');
+      // …and the opened project seeded its saved state
+      const current = window.HyperaudioSave.library.currentId();
+      await (await work.getDirectoryHandle(current)).getFileHandle('saved.json');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }, first.id);
+  const state = await page.evaluate(async (firstId) => {
+    const root = await navigator.storage.getDirectory();
+    const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
+    const work = await root.getDirectoryHandle('work');
+    const dir = await work.getDirectoryHandle(firstId);
+    const draft = JSON.parse(await (await (await dir.getFileHandle('draft.json')).getFile()).text());
+    return {
+      count: lib.projects.length,
+      current: window.HyperaudioSave.library.currentId(),
+      firstHtml: draft.html,
+      firstEntry: lib.projects.find((p) => p.id === firstId),
+    };
+  }, first.id);
+  expect(state.count).toBe(2);              // re-opening made a second entry
+  expect(state.current).not.toBe(first.id); // …which now owns the editor
+  expect(state.firstHtml).toContain('DIRTY'); // nothing was lost
+  expect(save.isEntryDirty(state.firstEntry)).toBe(true); // and it stays honestly dirty
 });
 
-test('an unopenable file is refused BEFORE the replace-confirmation, project untouched', async ({ page }, testInfo) => {
+test('an unopenable file is refused with the designed modal, project untouched', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
-  // dirty the project so the replace-warning WOULD apply to a valid open
+  // dirty the project so an accidental switch/replace would be observable
   await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
     span.textContent = 'EDITED ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -244,7 +307,7 @@ test('an unopenable file is refused BEFORE the replace-confirmation, project unt
 test('edit tracking survives the caption-mode round trip (#448 delegation)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
-  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === '1');
+  await awaitLibraryEntry(page);
 
   // the round trip that REPLACES #hypertranscript — direct listeners died here
   await page.click('#caption-editor-btn');
@@ -252,56 +315,62 @@ test('edit tracking survives the caption-mode round trip (#448 delegation)', asy
   await page.click('#transcript-editor-btn');
   await page.waitForTimeout(400);
 
-  const before = await page.evaluate(async () => {
-    const root = await navigator.storage.getDirectory();
-    const f = await (await root.getFileHandle('app-state.json')).getFile();
-    return JSON.parse(await f.text()).lastWorkWriteAt || 0;
-  });
+  const before = (await readCurrentProject(page)).entry.lastDraftAt || 0;
 
   // an edit on the REPLACED transcript element must still reach the autosave
   await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
     span.textContent = 'POST-ROUNDTRIP ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await page.waitForTimeout(2500);
 
-  const after = await page.evaluate(async () => {
-    const root = await navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle('work');
-    const state = JSON.parse(await (await (await root.getFileHandle('app-state.json')).getFile()).text());
-    const snapshot = JSON.parse(await (await (await dir.getFileHandle('snapshot.json')).getFile()).text());
-    return { at: state.lastWorkWriteAt || 0, html: snapshot.html };
-  });
-  expect(after.at).toBeGreaterThan(before);
-  expect(after.html).toContain('POST-ROUNDTRIP');
+  const after = await readCurrentProject(page);
+  expect(after.entry.lastDraftAt).toBeGreaterThan(before);
+  expect(after.draft.html).toContain('POST-ROUNDTRIP');
 });
 
-test('Save button: dirty dot appears on edit, click saves and clears it (#449)', async ({ page }, testInfo) => {
+test('Save is a SILENT OPFS commit: dot clears, saved.json lands, the draft retires (#456)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
   await expect(page.locator('#project-save-btn')).toHaveCount(1);
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
 
   await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
-    span.textContent = 'DIRTY ';
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'COMMITTED ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
 
-  const downloadPromise = page.waitForEvent('download');
+  // no download listener here on purpose: a Save must not download anything
+  let downloaded = false;
+  page.on('download', () => { downloaded = true; });
   await page.click('#project-save-btn');
-  expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  const state = await readCurrentProject(page);
+  expect(state.saved.html).toContain('COMMITTED'); // the commit holds the edit
+  expect(state.draft).toBeNull();                  // the draft died with the save
+  expect(save.isEntryDirty(state.entry)).toBe(false);
+  expect(downloaded).toBe(false);
+  expect(dialogs).toEqual([]);
 });
 
-test('Ctrl/⌘-S saves with the project title (#449)', async ({ page }, testInfo) => {
+test('Ctrl/⌘-S is the same silent save (#449/#456)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
-  const downloadPromise = page.waitForEvent('download');
+  await awaitLibraryEntry(page);
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'KEYBOARD ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
   await page.keyboard.press('Control+s');
-  expect((await downloadPromise).suggestedFilename()).toBe('E2E Project.hyperaudio');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+  expect((await readCurrentProject(page)).saved.html).toContain('KEYBOARD');
 });
 
 test('the native bridge intercepts the save instead of a download (#449)', async ({ page }, testInfo) => {
@@ -312,7 +381,7 @@ test('the native bridge intercepts the save instead of a download (#449)', async
     window.hyperaudioProjectBridge = {
       save(blob, name) { window.__bridgeSaved = { size: blob.size, name }; return true; },
     };
-    const span = document.querySelector('#hypertranscript span[data-m]');
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
     span.textContent = 'BRIDGED ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -324,70 +393,150 @@ test('the native bridge intercepts the save instead of a download (#449)', async
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/); // bridge save marks clean
 });
 
-test('the quit guard arms on unsaved changes and disarms after a save (#449)', async ({ page }, testInfo) => {
-  // Tests the guard's arming logic via a cancelable synthetic event —
-  // defaultPrevented is precisely what the browser reads to decide whether
-  // to prompt. The prompt itself is platform chrome (and headless Chromium's
-  // dialog plumbing for real closes is unreliable); manual testing covers it.
+test('closing loses nothing: unsaved edits ride the draft across a reload, still dirty (#456)', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
   const armed = () => page.evaluate(() => {
     const e = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(e);
     return e.defaultPrevented;
   });
 
-  expect(await armed()).toBe(false); // freshly opened: clean
-
   await page.evaluate(() => {
-    const span = document.querySelector('#hypertranscript span[data-m]');
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
     span.textContent = 'UNSAVED ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  expect(await armed()).toBe(true);  // dirty: leaving would prompt
+  // dirty, but the draft persists — so the quit guard must NOT nag (#456:
+  // it arms only for a deleted-but-on-screen document with no home)
+  expect(await armed()).toBe(false);
 
-  const downloadPromise = page.waitForEvent('download');
+  // let the draft land, then reload: the edit survives WITH its dirty state
+  await pollPage(page, async () => {
+    const id = window.HyperaudioSave.library.currentId();
+    try {
+      const root = await navigator.storage.getDirectory();
+      const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+      const text = await (await (await dir.getFileHandle('draft.json')).getFile()).text();
+      return text.indexOf('UNSAVED') !== -1;
+    } catch (e) { return false; }
+  });
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect(page.locator('#hypertranscript')).toContainText('UNSAVED');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+
+  // a Save commits it: clean across the NEXT reload too, from saved.json
   await page.click('#project-save-btn');
-  await downloadPromise;
-  expect(await armed()).toBe(false); // saved: leaving is silent again
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect(page.locator('#hypertranscript')).toContainText('UNSAVED');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
 });
 
-test('a second tab is guarded: banner, no slot writes, promotion on owner close (#450)', async ({ page, context }, testInfo) => {
+test('a second tab on the SAME project is guarded: banner, no writes, promotion on owner close (#450/#456)', async ({ page, context }, testInfo) => {
   const dialogs = [];
-  await openFixture(page, testInfo, dialogs); // tab 1 owns the slot
-  await page.waitForFunction(() => localStorage.getItem('hyperaudioWorkPresent') === '1');
-  const ownerSnapshot = await page.evaluate(async () => {
+  await openFixture(page, testInfo, dialogs); // tab 1 owns the project
+  await awaitLibraryEntry(page);
+  const owner = await readCurrentProject(page);
+  // the guarded tab's edits must never write the owner's directory: no
+  // draft.json may appear there, and saved.json must stay byte-identical
+  const readOwnerState = () => page.evaluate(async (id) => {
     const root = await navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle('work');
-    return (await (await dir.getFileHandle('snapshot.json')).getFile()).text();
-  });
+    const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+    const saved = await (await (await dir.getFileHandle('saved.json')).getFile()).text();
+    let hasDraft = true;
+    try { await dir.getFileHandle('draft.json'); } catch (e) { hasDraft = false; }
+    return { saved, hasDraft };
+  }, owner.id);
+  const ownerState = await readOwnerState();
+  expect(ownerState.hasDraft).toBe(false);
 
-  // tab 2: banner shown, and its transcription must NOT touch the owner's slot
+  // tab 2 boots onto the same most-recent project: on screen and editable,
+  // but bannered — its edits must NOT reach the owner's working copy
   const page2 = await context.newPage();
   await page2.goto('/index.html');
   await page2.waitForSelector('#hypertranscript [data-m]');
   await expect(page2.locator('#tab-guard-banner')).toBeVisible();
-  // tab 2 did not boot-restore the owner's project — it shows the demo
-  await expect(page2.locator('#hypertranscript')).not.toContainText('Benvenuti');
+  await expect(page2.locator('#hypertranscript')).toContainText('Benvenuti');
 
+  await page2.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'TAB-TWO ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page2.waitForTimeout(2200); // outlive the autosave debounce
+  const untouched = await readOwnerState();
+  expect(untouched.hasDraft).toBe(false); // tab 2's edit never reached the working copy
+  expect(untouched.saved).toBe(ownerState.saved);
+
+  // owner closes → tab 2 is promoted: banner drops, its autosave now lands
+  await page.close();
+  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await page2.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await pollPage(page2, async (id) => {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+      const text = await (await (await dir.getFileHandle('draft.json')).getFile()).text();
+      return text.indexOf('TAB-TWO') !== -1;
+    } catch (e) { return false; }
+  }, owner.id);
+  await page2.close();
+});
+
+test('two tabs edit two DIFFERENT projects, each owning its own working copy (#456)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs); // tab 1: project one
+  await awaitLibraryEntry(page);
+  const owner = await readCurrentProject(page);
+
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible(); // same project at boot
+
+  // a new transcription in tab 2 becomes its OWN project: banner drops
   await page2.evaluate(() => {
     document.querySelector('#hyperplayer').src = 'https://example.com/media/tab2.mp4';
     document.querySelector('#hypertranscript').innerHTML =
       '<article><section><p><span data-m="0" data-d="500">TAB-TWO </span></p></section></article>';
     document.dispatchEvent(new CustomEvent('hyperaudioInit'));
-    const span = document.querySelector('#hypertranscript span[data-m]');
+  });
+  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await page2.waitForFunction((ownerId) => {
+    const id = window.HyperaudioSave.library.currentId();
+    return id !== null && id !== ownerId;
+  }, owner.id);
+
+  // both tabs write their own directories; the shared index lists both
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'TAB-ONE ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await page2.waitForTimeout(2200); // outlive the autosave debounce
-  const afterSnapshot = await page.evaluate(async () => {
+  await page.waitForTimeout(2200);
+  const state = await page2.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle('work');
-    return (await (await dir.getFileHandle('snapshot.json')).getFile()).text();
+    const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
+    const work = await root.getDirectoryHandle('work');
+    const html = {};
+    for (const p of lib.projects) {
+      const dir = await work.getDirectoryHandle(p.id);
+      let text = null;
+      try { text = await (await (await dir.getFileHandle('draft.json')).getFile()).text(); }
+      catch (e) { text = await (await (await dir.getFileHandle('saved.json')).getFile()).text(); }
+      html[p.id] = JSON.parse(text).html;
+    }
+    return { count: lib.projects.length, current: window.HyperaudioSave.library.currentId(), html };
   });
-  expect(afterSnapshot).toBe(ownerSnapshot); // untouched by tab 2
-
-  // owner closes → tab 2 is promoted: banner drops
-  await page.close();
-  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  expect(state.count).toBe(2);
+  expect(state.html[owner.id]).toContain('TAB-ONE');
+  expect(state.html[state.current]).toContain('TAB-TWO');
   await page2.close();
 });

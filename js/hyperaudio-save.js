@@ -25,9 +25,13 @@
  * Five internal layers; only the BRIDGE touches the editor's DOM:
  *   1. FORMAT     build/validate hyperaudio.json          (pure — node-testable)
  *   2. CONTAINER  zip/unzip via JSZip, whitelist-read     (pure — node-testable)
- *   3. OPFS       work/ = the exploded container, autosave, dirty state
+ *   3. OPFS       the project library (#456): work/<projectId>/ per project
+ *                 (saved.json committed by Save, draft.json autosave scratch,
+ *                 origin, media), library.json index, per-project Web Locks.
+ *                 Save is a SILENT OPFS commit; Export is the only download.
  *   4. BRIDGE     gather() editor state / apply() a loaded project
- *   5. UI         menu items in #file-dropdown, hidden file input, boot restore
+ *   5. UI         menu items in #file-dropdown, hidden file input, Save button,
+ *                 boot restore of the most recently edited project
  *
  * The FORMAT and CONTAINER layers are exported for node --test and are the
  * pieces a native app would reuse.
@@ -62,16 +66,37 @@
   const LARGE_MEDIA_WARN_BYTES_LOWMEM = 200 * 1024 * 1024;
 
   const WORK_DIR = 'work';
+  // The project library (#456): every project lives in work/<projectId>/ and
+  // library.json at the OPFS root is the index the side panel lists — {id,
+  // name, starred, createdAt, modifiedAt, lastDraftAt, lastSavedAt, media
+  // meta, summary, topics}. The index replaced the localStorage boot hint:
+  // boot reads it and restores the most recently edited project.
+  //
+  // Each project dir holds TWO states, mirroring Glider's document model:
+  //   saved.json  — the state the user last committed with Save (⌘S). Save is
+  //                 a silent OPFS write, never a download; a future format
+  //                 revision records each manual save as a version.
+  //   draft.json  — the autosave scratch (Glider's RecoveryStore analog):
+  //                 written debounced on edit so switching projects, crashes
+  //                 and closes lose nothing, while the project honestly stays
+  //                 DIRTY until a real Save. Deleted by Save.
+  // transcript.original.json and media/ sit beside them, shared by both.
+  // Taking a .hyperaudio OUT of the browser is a separate explicit Export —
+  // the only path that downloads.
+  const SAVED_FILE = 'saved.json';
+  const DRAFT_FILE = 'draft.json';
+  const LIBRARY_FILE = 'library.json';
+  // Index writes are read-modify-write on one JSON file, so they serialize
+  // under one origin-global Web Lock; each project's working copy has its own
+  // per-project lock (#450's slot made per-project): the owning tab gets
+  // autosave, another tab on the SAME project keeps full editing but no slot
+  // (bannered honestly), and the lock's queue promotes it when the owner
+  // closes or switches away. Two tabs on different projects both own theirs.
+  const LIBRARY_LOCK = 'hyperaudio:library';
+  const PROJECT_LOCK_PREFIX = 'hyperaudio:project:';
+  // Pre-#456 single-slot layout (work/snapshot.json + root app-state.json):
+  // never released — migrated into a project dir once, for dev working copies.
   const APP_STATE_FILE = 'app-state.json';
-  // Synchronous boot hint: OPFS can only be probed async, so the autosave
-  // maintains this flag and boot reads it before deciding to restore.
-  const WORK_HINT_KEY = 'hyperaudioWorkPresent';
-  // One origin-global working-copy slot → one Web Lock (#450). The owning tab
-  // gets autosave/boot-restore; other tabs keep FULL editing but no slot
-  // (bannered honestly, beforeunload still guards their unsaved work), and
-  // the lock's queue promotes a waiting tab automatically when the owner
-  // closes. Per-project locks arrive with the Phase B work dirs (#452).
-  const WORK_LOCK = 'hyperaudio:work';
 
   /* ==========================================================================
    * 1. FORMAT — build/validate hyperaudio.json (pure)
@@ -87,6 +112,18 @@
     const minor = parseInt(m[2], 10);
     if (major > READER_MAJOR) return { ok: false, code: 'version-major', major, minor };
     return { ok: true, major, minor };
+  }
+
+  // Strip class pollution from transcript markup (playback highlighting,
+  // contenteditable artifacts) while KEEPING the semantic "speaker" class —
+  // htmlToJSON identifies speaker labels by it (span[data-m]:not(.speaker)),
+  // so the blanket class strip the editor's getTranscriptData() applies
+  // demoted every speaker to a plain word on each save/autosave round trip:
+  // paragraphs lost their speaker names and restored labels lost their
+  // styling and the Speakers toggle.
+  function sanitizeTranscriptClasses(html) {
+    return String(html).replace(/ class="([^"]*)"/g, (match, classes) =>
+      (/(?:^|\s)speaker(?:\s|$)/.test(classes) ? ' class="speaker"' : ''));
   }
 
   // media.path MUST be media/<filename>: exactly one non-empty segment, no
@@ -215,6 +252,35 @@
 
   function serializeProjectJson(project) {
     return JSON.stringify(project, null, 2);
+  }
+
+  /* --------------------------------------------------------------------------
+   * Library index rules (#456) — pure, node-testable.
+   * ------------------------------------------------------------------------ */
+
+  // Panel order: last edited first, created date the fallback for entries
+  // that have never been written to.
+  function sortLibraryEntries(entries) {
+    return entries.slice().sort((a, b) =>
+      (b.modifiedAt || b.createdAt || 0) - (a.modifiedAt || a.createdAt || 0));
+  }
+
+  // The deterministic per-project "dirty" rule (#456, Glider-matched): a
+  // draft has been written since the last manual Save. A never-saved project
+  // (fresh transcription) is dirty; an opened .hyperaudio starts clean (the
+  // file IS the saved state).
+  function isEntryDirty(entry) {
+    return (entry.lastDraftAt || 0) > (entry.lastSavedAt || 0);
+  }
+
+  // Identity is OPFS-native (#456): a generated id names the work/<id>/ dir
+  // and the per-project lock — none of the file↔workdir matching hazards;
+  // opening the same .hyperaudio twice simply makes two entries.
+  function newProjectId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return 'p-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   }
 
   /* ==========================================================================
@@ -367,7 +433,9 @@
     FORMAT_NAME, FORMAT_VERSION, CONTAINER_MIMETYPE, ENTRY, MEDIA_DIR,
     TEXT_ENTRY_MAX_BYTES,
     checkFormatVersion, validateMediaPath, sanitizeMediaFilename, validateProjectJson,
+    sanitizeTranscriptClasses,
     buildProjectJson, serializeProjectJson,
+    sortLibraryEntries, isEntryDirty, newProjectId,
     zipProject, unzipProject,
   };
   if (typeof module !== 'undefined' && module.exports) {
@@ -385,9 +453,14 @@
     && typeof FileSystemFileHandle !== 'undefined'
     && FileSystemFileHandle.prototype.createWritable);
 
-  async function getWorkDir(create) {
+  async function getWorkRoot(create) {
     const root = await navigator.storage.getDirectory();
     return root.getDirectoryHandle(WORK_DIR, { create: !!create });
+  }
+
+  async function getProjectDir(id, create) {
+    const work = await getWorkRoot(create);
+    return work.getDirectoryHandle(id, { create: !!create });
   }
 
   async function writeFileTo(dir, name, data) {
@@ -407,9 +480,9 @@
     }
   }
 
-  async function readMediaFileFromWork(filename) {
+  async function readMediaFileFromProject(id, filename) {
     try {
-      const dir = await getWorkDir(false);
+      const dir = await getProjectDir(id, false);
       const mediaDir = await dir.getDirectoryHandle('media');
       const handle = await mediaDir.getFileHandle(filename);
       return await handle.getFile();
@@ -418,43 +491,77 @@
     }
   }
 
-  async function clearWork() {
+  async function deleteProjectDir(id) {
     try {
-      const root = await navigator.storage.getDirectory();
-      await root.removeEntry(WORK_DIR, { recursive: true });
-    } catch (e) { /* nothing to clear */ }
-    try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
+      const work = await getWorkRoot(false);
+      await work.removeEntry(id, { recursive: true });
+    } catch (e) { /* nothing to delete */ }
   }
 
-  async function readAppState() {
+  /* --------------------------------------------------------------------------
+   * The library index — library.json at the OPFS root. Reads are lock-free
+   * (a torn read is impossible: createWritable swaps atomically on close);
+   * writes are read-modify-write and serialize under the origin-global
+   * LIBRARY_LOCK so two tabs editing different projects can't lose each
+   * other's index updates. Every change notifies this tab's panel directly
+   * and other tabs over a BroadcastChannel.
+   * ------------------------------------------------------------------------ */
+
+  async function readLibrary() {
     try {
       const root = await navigator.storage.getDirectory();
-      const text = await readTextFrom(root, APP_STATE_FILE);
-      return text !== null ? JSON.parse(text) : {};
+      const text = await readTextFrom(root, LIBRARY_FILE);
+      const lib = text !== null ? JSON.parse(text) : null;
+      if (lib === null || typeof lib !== 'object' || !Array.isArray(lib.projects)) {
+        return { projects: [] };
+      }
+      return lib;
     } catch (e) {
-      return {};
+      return { projects: [] };
     }
   }
 
-  async function patchAppState(patch) {
-    try {
+  async function updateLibrary(mutate) {
+    const run = async () => {
+      const lib = await readLibrary();
+      mutate(lib);
       const root = await navigator.storage.getDirectory();
-      const state = Object.assign(await readAppState(), patch);
-      await writeFileTo(root, APP_STATE_FILE, JSON.stringify(state));
-      return state;
-    } catch (e) {
-      return null;
+      await writeFileTo(root, LIBRARY_FILE, JSON.stringify(lib));
+      return lib;
+    };
+    let lib;
+    if ('locks' in navigator) {
+      lib = await navigator.locks.request(LIBRARY_LOCK, run);
+    } else {
+      lib = await run();
     }
+    notifyLibraryChanged(false);
+    return lib;
   }
 
-  // The deterministic "dirty" rule (discussion doc § 13): work has been written
-  // since the last .hyperaudio download. Download marking is optimistic — the
-  // browser gives no completion signal for <a download>.
+  // The panel (hyperaudio-library.js) re-renders on this event; the channel
+  // keeps a second tab's panel honest when this one writes the index.
+  const libraryChannel = typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel('hyperaudio:library') : null;
+  function notifyLibraryChanged(fromRemote) {
+    document.dispatchEvent(new CustomEvent('hyperaudioLibraryChanged'));
+    if (fromRemote !== true && libraryChannel !== null) {
+      libraryChannel.postMessage('changed');
+    }
+  }
+  if (libraryChannel !== null) {
+    libraryChannel.onmessage = () => notifyLibraryChanged(true);
+  }
+
+  // Per-project dirty (#456): the current project's index entry decides; a
+  // tab without the project's lock falls back to its own session flag (its
+  // edits never reach the working copy, so the index can't speak for it).
   async function isDirty() {
-    if (!hasWorkLock) return session.active && sessionEdited;
     if (!session.active) return false;
-    const state = await readAppState();
-    return (state.lastWorkWriteAt || 0) > (state.lastDownloadAt || 0);
+    if (!opfsAvailable || session.projectId === null || !hasProjectLock) return sessionEdited;
+    const lib = await readLibrary();
+    const entry = lib.projects.find((p) => p.id === session.projectId);
+    return entry !== undefined ? isEntryDirty(entry) : sessionEdited;
   }
 
   /* ==========================================================================
@@ -462,9 +569,11 @@
    * ======================================================================== */
 
   // Everything the module knows about the open project. Hydrated on new
-  // transcript (hyperaudioInit), on open, and on boot restore.
+  // transcript (hyperaudioInit), on open, on boot restore, and on a library
+  // switch (#456).
   const session = {
     active: false,
+    projectId: null,    // work/<projectId>/ this session writes to (#456); null = nowhere (demo, or deleted-but-on-screen)
     created: null,
     provenance: null,   // {engine, model, transcribedAt}
     provenanceAt: 0,    // when the engine reported it (staleness guard)
@@ -491,24 +600,37 @@
   let editGeneration = 0;      // bumps on every edit signal
   let identityGeneration = 0;  // bumps when a DIFFERENT document commits
   let saveInFlight = false;
-  let autosaveInFlight = false;
-  let autosaveFollowUp = false;
-  // Whether THIS tab owns the working-copy slot (#450). Browsers without Web
-  // Locks (pre-15.4 Safari) assume single-tab ownership — the pre-#450 status
-  // quo, no worse.
-  let hasWorkLock = false;
+  // Snapshot writes serialize on a promise chain (#448: parallel writes could
+  // interleave files from different states); calls landing while one is
+  // running or queued coalesce into ONE queued follow-up, which re-gathers —
+  // so the last write always holds the latest state.
+  let snapshotChain = Promise.resolve();
+  let snapshotQueued = false;
+  let autosavePending = false; // an edit is debouncing toward a snapshot write
+  // Whether THIS tab owns the CURRENT project's working copy (#450 made
+  // per-project by #456). Browsers without Web Locks (pre-15.4 Safari) assume
+  // single-tab ownership — the pre-#450 status quo, no worse.
+  let hasProjectLock = false;
+  let projectLockRelease = null; // resolving this releases the held lock
+  let projectLockQueue = null;   // AbortController for the queued promotion request
   let autosaveTimer = null;
 
   function nowIso() {
     return new Date().toISOString();
   }
 
+  // The transcript's markup for the writer. Reads the live element directly
+  // (NOT getTranscriptData(), whose blanket class strip destroys the speaker
+  // class); in caption mode the transcript element only exists inside
+  // editor-core's transcriptCache clone — read it from there.
   function getEditorHtml() {
-    if (typeof getTranscriptData === 'function') {
-      return getTranscriptData();
-    }
     const el = document.querySelector('#hypertranscript');
-    return el !== null ? el.innerHTML.replace(/ class=".*?"/g, '') : '';
+    if (el !== null) return sanitizeTranscriptClasses(el.innerHTML);
+    if (typeof transcriptCache !== 'undefined' && transcriptCache !== null) {
+      const cached = transcriptCache.querySelector('#hypertranscript');
+      if (cached !== null) return sanitizeTranscriptClasses(cached.innerHTML);
+    }
+    return typeof getTranscriptData === 'function' ? getTranscriptData() : '';
   }
 
   function getCaptionsVtt() {
@@ -698,6 +820,41 @@
     return article;
   }
 
+  // The info modal's Transcription section is project-bound (#456): rebuilt
+  // here from the loaded project's STORED provenance whenever a project takes
+  // the editor (apply below, import reset in onNewTranscript). A live engine
+  // run still overwrites it with its richer rows (device, time taken) via
+  // editor-core's setTranscriptionInfo — those extras aren't persisted, so a
+  // reload shows this stored subset. DOM-built: provenance is file data,
+  // never innerHTML (spec § 10.5).
+  function renderTranscriptionInfo(provenance, language) {
+    const container = document.getElementById('transcription-info');
+    if (container === null) return;
+    const rows = [];
+    if (provenance && provenance.engine) rows.push(['Service', String(provenance.engine)]);
+    if (provenance && provenance.model) rows.push(['Model', String(provenance.model)]);
+    if (language) rows.push(['Language', String(language)]);
+    if (provenance && provenance.transcribedAt) {
+      const at = new Date(provenance.transcribedAt);
+      if (!Number.isNaN(at.getTime())) rows.push(['Transcribed', at.toLocaleString()]);
+    }
+    container.textContent = '';
+    if (rows.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = 'No transcription details recorded for this project.';
+      container.appendChild(p);
+      return;
+    }
+    rows.forEach(([label, value]) => {
+      const p = document.createElement('p');
+      const strong = document.createElement('strong');
+      strong.textContent = label + ':';
+      p.appendChild(strong);
+      p.appendChild(document.createTextNode(' ' + value));
+      container.appendChild(p);
+    });
+  }
+
   // Replay a loaded project into the editor. Mirrors what the legacy
   // renderTranscript() does for Recents, but builds the DOM safely from JSON.
   function apply(loaded) {
@@ -773,6 +930,8 @@
       session.title = (texts !== null && texts.title) ? texts.title : '';
       const titleField = document.querySelector('#project-title');
       if (titleField !== null) titleField.value = session.title;
+      renderTranscriptionInfo(loaded.recovered ? null : loaded.project.provenance,
+        texts !== null ? (texts.language || '') : '');
 
       const cleaned = transcriptEl.innerHTML.replace(/ class=".*?"/g, '');
       const htmlLink = document.querySelector('#download-html');
@@ -791,39 +950,151 @@
    * Project lifecycle: new project capture, autosave, save/open
    * ======================================================================== */
 
-  async function writeWorkSnapshot() {
-    if (!opfsAvailable || !session.active || !hasWorkLock) return;
-    // Serialize snapshots (#448): parallel writes could interleave files from
-    // different states. An edit landing mid-write schedules ONE follow-up.
-    if (autosaveInFlight) { autosaveFollowUp = true; return; }
-    autosaveInFlight = true;
-    const identityAtStart = identityGeneration;
+  // Gather the live document and write it as ONE state file (draft.json or
+  // saved.json). One atomic-enough artifact (#448): json + html + captions in
+  // a single file, so a crash can never leave a mixed-generation multi-file
+  // state. Absent captions are an explicit null — unambiguous. The origin and
+  // media stay as separate immutable files. gather() and the projectId
+  // capture are synchronous, so the write is of ONE document to ITS OWN
+  // directory even if a switch lands mid-write.
+  async function writeStateFile(projectId, filename) {
+    const state = gather();
+    const dir = await getProjectDir(projectId, true);
+    const vtt = getCaptionsVtt();
+    await writeFileTo(dir, filename, JSON.stringify({
+      json: serializeProjectJson(buildProjectJson(state)),
+      html: state.html,
+      captionsVtt: vtt !== '' ? vtt : null,
+    }));
+    return state;
+  }
+
+  async function writeDraftNow() {
+    if (!opfsAvailable || !session.active || !hasProjectLock || session.projectId === null) return;
+    autosavePending = false;
+    const projectId = session.projectId;
     try {
-      const state = gather();
-      const dir = await getWorkDir(true);
-      // One atomic-enough artifact (#448): json + html + captions in a single
-      // file, so a crash can never leave a mixed-generation multi-file
-      // snapshot. Absent captions are an explicit null — unambiguous. The
-      // origin and media stay as separate immutable files.
-      const vtt = getCaptionsVtt();
-      await writeFileTo(dir, 'snapshot.json', JSON.stringify({
-        json: serializeProjectJson(buildProjectJson(state)),
-        html: state.html,
-        captionsVtt: vtt !== '' ? vtt : null,
-      }));
-      // A completion for a superseded document must not be adopted (#448).
-      if (identityGeneration === identityAtStart) {
-        await patchAppState({ lastWorkWriteAt: Date.now() });
-        try { localStorage.setItem(WORK_HINT_KEY, '1'); } catch (e) { /* private mode */ }
-      }
+      const state = await writeStateFile(projectId, DRAFT_FILE);
+      await touchLibraryEntry(projectId, state, { draft: true });
     } catch (e) {
-      console.warn('hyperaudio-save: autosave failed', e);
-    } finally {
-      autosaveInFlight = false;
-      if (autosaveFollowUp) {
-        autosaveFollowUp = false;
-        if (identityGeneration === identityAtStart) writeWorkSnapshot();
+      console.warn('hyperaudio-save: draft autosave failed', e);
+    }
+  }
+
+  function writeDraft() {
+    if (snapshotQueued) return snapshotChain;
+    snapshotQueued = true;
+    snapshotChain = snapshotChain.then(() => {
+      snapshotQueued = false;
+      return writeDraftNow();
+    });
+    return snapshotChain;
+  }
+
+  // Every state write refreshes the project's index entry — name (the title
+  // Save uses), order timestamp, the dirty timestamps, media meta and the
+  // hover-preview texts, so the panel renders from the index alone.
+  async function touchLibraryEntry(id, state, stamps) {
+    const now = Date.now();
+    await updateLibrary((lib) => {
+      let entry = lib.projects.find((p) => p.id === id);
+      if (entry === undefined) {
+        entry = {
+          id,
+          starred: false,
+          createdAt: Date.parse(state.created) || now,
+          lastDraftAt: 0,
+          lastSavedAt: 0,
+        };
+        lib.projects.push(entry);
       }
+      entry.name = state.texts.title;
+      entry.modifiedAt = now;
+      if (stamps && stamps.draft === true) entry.lastDraftAt = now;
+      if (stamps && stamps.saved === true) {
+        entry.lastSavedAt = now;
+        entry.lastDraftAt = 0; // the draft died with the save
+      }
+      entry.media = {
+        kind: state.media.kind,
+        filename: state.media.filename || '',
+        durationSeconds: state.media.durationSeconds || 0,
+      };
+      entry.summary = state.texts.summary || '';
+      entry.topics = state.texts.topics || [];
+    });
+  }
+
+  // Land the outgoing project's pending draft in its own directory before the
+  // editor DOM changes hands (#456: switching loses nothing — the draft keeps
+  // the edits, the dirty state stays honest). Await-ing the chain also lets
+  // an in-flight write finish — its state was gathered before the call, so it
+  // is still the outgoing document's.
+  async function flushPendingDraft() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    if (autosavePending) {
+      await writeDraft();
+    } else {
+      await snapshotChain;
+    }
+  }
+
+  // Manual Save (⌘S / the navbar button), Glider-matched: commit the live
+  // document to saved.json SILENTLY — never a download — and retire the
+  // draft. A future format revision records each manual save as a version.
+  // In the native wrapper the bridge receives the built container instead
+  // (#449: one save path for web and native); without OPFS the explicit
+  // export download is the only durable copy, so Save falls back to it.
+  async function saveProject() {
+    if (saveInFlight) return false;
+    saveInFlight = true;
+    try {
+      const bridge = window.hyperaudioProjectBridge;
+      if (bridge && typeof bridge.save === 'function') {
+        return await exportProject({ asSave: true }); // the bridge intercepts the built container
+      }
+      if (!opfsAvailable) {
+        return await exportProject({ asSave: true }); // no OPFS: the download IS the save
+      }
+      if (!session.active || session.projectId === null) {
+        await projectAlert('There is no project to save yet — transcribe or import something first.');
+        return false;
+      }
+      const identityAtStart = identityGeneration;
+      const editAtGather = editGeneration;
+      clearTimeout(autosaveTimer);
+      autosaveTimer = null;
+      autosavePending = false;
+      const projectId = session.projectId;
+      // ride the state-write chain so a draft write can't interleave and
+      // resurrect the draft after the save deletes it
+      let ok = false;
+      snapshotChain = snapshotChain.then(async () => {
+        try {
+          const state = await writeStateFile(projectId, SAVED_FILE);
+          const dir = await getProjectDir(projectId, false);
+          await dir.removeEntry(DRAFT_FILE).catch(() => {});
+          await touchLibraryEntry(projectId, state, { saved: true });
+          ok = true;
+        } catch (e) {
+          console.warn('hyperaudio-save: save failed', e);
+        }
+      });
+      await snapshotChain;
+      if (!ok) {
+        await projectAlert('Saving the project failed. Your work is still in the editor and the autosaved draft.');
+        return false;
+      }
+      // Mark clean only if this save still belongs to the current document
+      // AND no edit landed while it was being written (#448).
+      if (identityGeneration === identityAtStart && editGeneration === editAtGather) {
+        sessionEdited = false;
+        updateSaveIndicator();
+      }
+      return true;
+    } finally {
+      saveInFlight = false;
     }
   }
 
@@ -833,14 +1104,15 @@
     editGeneration += 1;
     updateSaveIndicator();
     if (!opfsAvailable) return;
+    autosavePending = true;
     clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(writeWorkSnapshot, 1500);
+    autosaveTimer = setTimeout(writeDraft, 1500);
   }
 
   async function writeMediaOnce() {
-    if (!opfsAvailable || session.mediaFile === null || !hasWorkLock) return;
+    if (!opfsAvailable || session.mediaFile === null || !hasProjectLock || session.projectId === null) return;
     try {
-      const dir = await getWorkDir(true);
+      const dir = await getProjectDir(session.projectId, true);
       const mediaDir = await dir.getDirectoryHandle('media', { create: true });
       // one media per project: drop any previous file first
       for await (const name of mediaDir.keys()) {
@@ -849,6 +1121,19 @@
       await writeFileTo(mediaDir, session.mediaFile.name, session.mediaFile);
     } catch (e) {
       console.warn('hyperaudio-save: media write failed', e);
+    }
+  }
+
+  // The current session's origin as held in memory, written to the project
+  // dir — used when a project is born and when a deleted-but-on-screen
+  // document is restored as a new entry (#456).
+  async function writeOriginToProjectDir() {
+    if (!opfsAvailable || !hasProjectLock || session.projectId === null || session.originalJson === null) return;
+    try {
+      const dir = await getProjectDir(session.projectId, true);
+      await writeFileTo(dir, ENTRY.original, session.originalJson);
+    } catch (e) {
+      console.warn('hyperaudio-save: origin write failed', e);
     }
   }
 
@@ -865,23 +1150,26 @@
     };
     session.hasOriginal = true;
     session.originalJson = JSON.stringify(clean, null, 2);
-    if (!opfsAvailable || !hasWorkLock) return;
-    try {
-      const dir = await getWorkDir(true);
-      await writeFileTo(dir, ENTRY.original, session.originalJson);
-    } catch (e) {
-      console.warn('hyperaudio-save: origin write failed', e);
-    }
+    await writeOriginToProjectDir();
   }
 
   // A NEW project begins whenever a transcription or import lands a fresh
-  // transcript (they all fire hyperaudioInit; legacy Recents loads call
-  // hyperaudio() directly and do NOT, so they never overwrite the origin).
+  // transcript (they all fire hyperaudioInit). It gets its own id, directory
+  // and lock (#456) — the previous project stays in the library untouched.
+  // No flush of the outgoing project here: by the time hyperaudioInit fires
+  // the editor DOM already holds the NEW transcript, so a late gather would
+  // write the wrong document into the old directory. Any autosave already
+  // in flight gathered before the swap and lands correctly.
   async function onNewTranscript() {
     if (suppressCapture) return;
     const transcriptEl = document.querySelector('#hypertranscript');
     if (transcriptEl === null || transcriptEl.querySelector('span[data-m]') === null) return;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    autosavePending = false;
+    releaseProjectLock();
     session.active = true;
+    session.projectId = opfsAvailable ? newProjectId() : null;
     session.created = nowIso();
     session.hasOriginal = false;
     session.mediaFileFromUrl = null;
@@ -897,13 +1185,16 @@
     if (Date.now() - session.provenanceAt > 120000) {
       session.provenance = null;
       session.language = '';
+      // an import with no engine run: the modal must not keep showing a
+      // previous project's transcription details
+      renderTranscriptionInfo(null, '');
     }
-    if (opfsAvailable && hasWorkLock) {
-      await clearWork();
+    if (opfsAvailable && session.projectId !== null) {
+      await acquireProjectLock(session.projectId); // fresh id: always granted
       await writeOriginOnce(htmlToJSON(getEditorHtml()));
       await resolveMediaFile();
       await writeMediaOnce();
-      await writeWorkSnapshot();
+      await writeDraft(); // a fresh transcription is an unsaved draft
     }
   }
 
@@ -1053,17 +1344,24 @@
     if (btn !== null) btn.classList.toggle('dirty', sessionEdited === true);
   }
 
-  async function saveToFile() {
-    if (saveInFlight) return false; // one container build at a time (#448)
-    saveInFlight = true;
+  // Export Project (.hyperaudio): build the container and download it — the
+  // ONLY path that downloads. Saving is the silent OPFS commit (saveProject);
+  // export is how a portable copy leaves the browser. asSave marks the two
+  // fallback contexts where the container IS the save (native bridge, no
+  // OPFS) so success clears the dirty state there — a plain export never
+  // touches it.
+  let exportInFlight = false;
+  async function exportProject(opts) {
+    if (exportInFlight) return false; // one container build at a time (#448)
+    exportInFlight = true;
     try {
-      return await saveToFileInner();
+      return await exportProjectInner(!!(opts && opts.asSave));
     } finally {
-      saveInFlight = false;
+      exportInFlight = false;
     }
   }
 
-  async function saveToFileInner() {
+  async function exportProjectInner(asSave) {
     const identityAtStart = identityGeneration;
     let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
@@ -1110,10 +1408,10 @@
     // primary source (also covers browsers without OPFS); work/ carries it
     // across reloads.
     let originalJson = session.originalJson;
-    if (originalJson === null && opfsAvailable && hasWorkLock) {
+    if (originalJson === null && opfsAvailable && session.projectId !== null) {
       try {
-        originalJson = await readTextFrom(await getWorkDir(false), ENTRY.original);
-      } catch (e) { /* no work dir yet */ }
+        originalJson = await readTextFrom(await getProjectDir(session.projectId, false), ENTRY.original);
+      } catch (e) { /* no project dir yet */ }
     }
     state.hasOriginal = originalJson !== null;
 
@@ -1154,10 +1452,12 @@
     // Mark clean only if this save still belongs to the current document AND
     // no edit landed while the container was being built (#448) — otherwise
     // the download is real but the session stays dirty.
-    if (identityGeneration === identityAtStart && editGeneration === editAtGather) {
+    // Only the save-fallback contexts mark clean (and only if this container
+    // still belongs to the current document and no edit landed while it was
+    // built, #448) — a plain export is a copy, not a save.
+    if (asSave && identityGeneration === identityAtStart && editGeneration === editAtGather) {
       sessionEdited = false;
       updateSaveIndicator();
-      if (hasWorkLock) await patchAppState({ lastDownloadAt: Date.now() });
     }
     return true;
   }
@@ -1184,18 +1484,10 @@
       return;
     }
 
-    if (await isDirty()) {
-      const choice = await projectDialog('The current project has changes not yet saved as a .hyperaudio file. Opening a new project will DISCARD them.', {
-        confirmLabel: 'Discard and open', danger: true, extraLabel: 'Save and open', cancelButton: false,
-      });
-      if (choice === false) return;
-      if (choice === 'extra') {
-        let saved = false;
-        try { saved = await saveToFile(); } catch (e) { saved = false; }
-        if (saved !== true) return; // the save was abandoned — replacing now would lose it
-      }
-    }
-
+    // No discard dialog (#456): the outgoing project's pending draft flushes
+    // to its own directory and stays in the library — opening loses nothing.
+    // The dialog existed only because there was one work slot.
+    await flushPendingDraft();
 
     let reconcileNow = null; // § 7.3: original-kind container missing its media entry
     if (loaded.mediaData !== null && loaded.mediaEntryName !== null) {
@@ -1214,9 +1506,13 @@
     try {
       apply(loaded);
 
-      // Hydrate the session from the loaded project and seed work/ so the
-      // autosave continues from here.
+      // Hydrate the session and seed a NEW project directory so the autosave
+      // continues from here. Every open makes a fresh library entry (#456) —
+      // identity is OPFS-native, so re-opening the same file twice simply
+      // creates a second entry.
+      releaseProjectLock();
       session.active = true;
+      session.projectId = opfsAvailable ? newProjectId() : null;
       session.created = (!loaded.recovered && loaded.project.created) || nowIso();
       session.provenance = (!loaded.recovered && loaded.project.provenance) || null;
       session.language = (!loaded.recovered && loaded.project.texts && loaded.project.texts.language) || '';
@@ -1231,16 +1527,29 @@
       identityGeneration += 1; // a different document now owns the session
       updateSaveIndicator();
 
-      if (opfsAvailable && hasWorkLock) {
-        await clearWork();
-        const dir = await getWorkDir(true);
+      if (opfsAvailable && session.projectId !== null) {
+        await acquireProjectLock(session.projectId); // fresh id: always granted
+        const dir = await getProjectDir(session.projectId, true);
         if (loaded.originalText !== null) await writeFileTo(dir, ENTRY.original, loaded.originalText);
         await writeMediaOnce();
       }
     } finally {
       suppressCapture = false;
     }
-    await writeWorkSnapshot();
+    // The opened file IS the saved state: seed saved.json, no draft — the
+    // fresh entry starts clean.
+    if (opfsAvailable && session.projectId !== null) {
+      const id = session.projectId;
+      snapshotChain = snapshotChain.then(async () => {
+        try {
+          const state = await writeStateFile(id, SAVED_FILE);
+          await touchLibraryEntry(id, state, { saved: true });
+        } catch (e) {
+          console.warn('hyperaudio-save: seeding the opened project failed', e);
+        }
+      });
+      await snapshotChain;
+    }
 
     if (loaded.warnings.length > 0) {
       console.warn('hyperaudio-save: opened with warnings:', loaded.warnings);
@@ -1301,62 +1610,309 @@
     scheduleAutosave();
   }
 
-  // Boot restore: the synchronous localStorage hint decides whether to probe
-  // OPFS at all; the static demo transcript in index.html is simply replaced.
-  async function restoreFromWork() {
+  /* ==========================================================================
+   * Project switching, boot restore and the library operations (#456)
+   * ======================================================================== */
+
+  // Read a project's working state from its directory — the DRAFT when one
+  // exists (the edits made since the last Save), else the saved state.
+  // Returns {project, captionsVtt, mediaFile, originalText, fromDraft} or
+  // null when both are missing/unreadable/invalid (the caller leaves the
+  // editor untouched).
+  async function readProjectFiles(id) {
     try {
-      const dir = await getWorkDir(false);
-      // The snapshot is ONE file since #448 (torn multi-file states are
-      // impossible); work dirs written before that carry the per-file layout —
-      // read them as a fallback until they age out.
+      const dir = await getProjectDir(id, false);
+      let fromDraft = true;
+      let stateText = await readTextFrom(dir, DRAFT_FILE);
+      if (stateText === null) {
+        fromDraft = false;
+        stateText = await readTextFrom(dir, SAVED_FILE);
+      }
+      if (stateText === null) return null;
       let jsonText = null;
       let captionsVtt = null;
-      const snapshotText = await readTextFrom(dir, 'snapshot.json');
-      let snapshotHtml = null;
-      if (snapshotText !== null) {
-        try {
-          const snapshot = JSON.parse(snapshotText);
-          jsonText = typeof snapshot.json === 'string' ? snapshot.json : null;
-          snapshotHtml = typeof snapshot.html === 'string' ? snapshot.html : null;
-          captionsVtt = typeof snapshot.captionsVtt === 'string' ? snapshot.captionsVtt : null;
-        } catch (e) {
-          console.warn('hyperaudio-save: unreadable snapshot.json', e);
-        }
+      try {
+        const snapshot = JSON.parse(stateText);
+        jsonText = typeof snapshot.json === 'string' ? snapshot.json : null;
+        captionsVtt = typeof snapshot.captionsVtt === 'string' ? snapshot.captionsVtt : null;
+      } catch (e) {
+        console.warn('hyperaudio-save: unreadable project state file', e);
+        return null;
       }
-      if (jsonText === null) {
-        jsonText = await readTextFrom(dir, ENTRY.json); // pre-#448 layout
-        captionsVtt = await readTextFrom(dir, ENTRY.captions);
-      }
-      if (jsonText === null) {
-        try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* ignore */ }
-        return;
-      }
+      if (jsonText === null) return null;
       const project = JSON.parse(jsonText);
       const validation = validateProjectJson(project);
       if (!validation.ok) {
-        console.warn('hyperaudio-save: work copy failed validation, leaving demo', validation.errors);
-        try { localStorage.removeItem(WORK_HINT_KEY); } catch (e) { /* ignore */ }
-        return;
+        console.warn('hyperaudio-save: working copy failed validation', validation.errors);
+        return null;
       }
       const mediaFile = project.media.kind === 'original'
-        ? await readMediaFileFromWork(project.media.filename) : null;
+        ? await readMediaFileFromProject(id, project.media.filename) : null;
       const originalText = await readTextFrom(dir, ENTRY.original);
-
-      apply({ recovered: false, project, captionsVtt, mediaFile });
-      session.active = true;
-      identityGeneration += 1; // the restored document owns the session
-      session.created = project.created || nowIso();
-      session.provenance = project.provenance || null;
-      session.language = (project.texts && project.texts.language) || '';
-      session.mediaFile = mediaFile;
-      session.mediaFileFromUrl = null;
-      session.pendingReconcile = project.media.kind === 'link' ? project.media : null;
-      session.hasOriginal = originalText !== null;
-      session.originalJson = originalText;
-      session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
+      return { project, captionsVtt, mediaFile, originalText, fromDraft };
     } catch (e) {
-      console.warn('hyperaudio-save: restore failed, leaving demo', e);
+      return null; // directory gone or OPFS refused
     }
+  }
+
+  // Replay project files into the editor and hydrate the session — shared by
+  // boot restore and panel switches. prepare → apply ordering (#448): callers
+  // read the files BEFORE tearing anything down.
+  function applyProjectFiles(id, files) {
+    const project = files.project;
+    apply({ recovered: false, project, captionsVtt: files.captionsVtt, mediaFile: files.mediaFile });
+    session.active = true;
+    session.projectId = id;
+    identityGeneration += 1; // a different document owns the session now
+    session.created = project.created || nowIso();
+    session.provenance = project.provenance || null;
+    session.language = (project.texts && project.texts.language) || '';
+    session.mediaFile = files.mediaFile;
+    session.mediaFileFromUrl = null;
+    session.pendingReconcile = project.media.kind === 'link' ? project.media : null;
+    session.hasOriginal = files.originalText !== null;
+    session.originalJson = files.originalText;
+    session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
+  }
+
+  // Switching asks nothing and loses nothing (#456): flush the outgoing
+  // project's pending draft to its own directory, hand the editor to the
+  // incoming one (draft first — its unsaved edits come back, still dirty),
+  // move the per-project lock. Returns false (editor untouched) when the
+  // target can't be read.
+  async function switchToProject(id) {
+    if (!opfsAvailable) return false;
+    if (id === session.projectId) return true;
+    const files = await readProjectFiles(id);
+    if (files === null) return false;
+    await flushPendingDraft();
+    releaseProjectLock();
+    suppressCapture = true;
+    try {
+      applyProjectFiles(id, files);
+    } finally {
+      suppressCapture = false;
+    }
+    await acquireProjectLock(id);
+    const lib = await readLibrary();
+    const entry = lib.projects.find((p) => p.id === id);
+    sessionEdited = entry !== undefined ? isEntryDirty(entry) : files.fromDraft;
+    updateSaveIndicator();
+    notifyLibraryChanged(false); // active-row highlight moves
+    return true;
+  }
+
+  /* ---- Library operations the panel calls (#456) ---- */
+
+  // Rewrite texts.title inside a stored state file (draft or saved) so a
+  // later switch reads the new name back rather than resurrecting the old.
+  async function rewriteStateTitle(dir, filename, name) {
+    const text = await readTextFrom(dir, filename);
+    if (text === null) return;
+    const snapshot = JSON.parse(text);
+    const project = JSON.parse(snapshot.json);
+    project.texts = Object.assign({}, project.texts, { title: name });
+    snapshot.json = serializeProjectJson(project);
+    await writeFileTo(dir, filename, JSON.stringify(snapshot));
+  }
+
+  // Rename IS the project title Save uses, so it lands everywhere the title
+  // lives: the index entry, both stored state files, and — for the current
+  // project — the live session.
+  async function renameProject(id, newName) {
+    const name = String(newName === null || newName === undefined ? '' : newName).trim();
+    if (name === '') return;
+    try {
+      const dir = await getProjectDir(id, false);
+      await rewriteStateTitle(dir, DRAFT_FILE, name);
+      await rewriteStateTitle(dir, SAVED_FILE, name);
+    } catch (e) {
+      console.warn('hyperaudio-save: rename state rewrite failed', e);
+    }
+    if (id === session.projectId) {
+      session.title = name;
+      const titleField = document.querySelector('#project-title');
+      if (titleField !== null) titleField.value = name;
+    }
+    await updateLibrary((lib) => {
+      const entry = lib.projects.find((p) => p.id === id);
+      if (entry !== undefined) entry.name = name;
+    });
+  }
+
+  async function setProjectStarred(id, starred) {
+    await updateLibrary((lib) => {
+      const entry = lib.projects.find((p) => p.id === id);
+      if (entry !== undefined) entry.starred = starred === true;
+    });
+  }
+
+  // Duplicate: a new id sharing nothing — both state files, origin and media
+  // are copied byte-for-byte. The copy is never the current project and
+  // mirrors the source's dirty state (same draft/saved stamps).
+  async function duplicateProject(id) {
+    const srcLib = await readLibrary();
+    const srcEntry = srcLib.projects.find((p) => p.id === id);
+    if (srcEntry === undefined) return null;
+    const newId = newProjectId();
+    const copyName = (srcEntry.name || 'project') + ' copy';
+    try {
+      const src = await getProjectDir(id, false);
+      const dst = await getProjectDir(newId, true);
+      for (const name of [DRAFT_FILE, SAVED_FILE, ENTRY.original]) {
+        const text = await readTextFrom(src, name);
+        if (text !== null) await writeFileTo(dst, name, text);
+      }
+      try {
+        const srcMedia = await src.getDirectoryHandle('media');
+        const dstMedia = await dst.getDirectoryHandle('media', { create: true });
+        for await (const [name, handle] of srcMedia.entries()) {
+          if (handle.kind === 'file') await writeFileTo(dstMedia, name, await handle.getFile());
+        }
+      } catch (e) { /* no media dir */ }
+      // the copy carries its own title so a later switch doesn't resurrect the old one
+      await rewriteStateTitle(dst, DRAFT_FILE, copyName);
+      await rewriteStateTitle(dst, SAVED_FILE, copyName);
+    } catch (e) {
+      console.warn('hyperaudio-save: duplicate failed', e);
+      await deleteProjectDir(newId);
+      return null;
+    }
+    const now = Date.now();
+    await updateLibrary((lib) => {
+      lib.projects.push(Object.assign({}, srcEntry, {
+        id: newId,
+        name: copyName,
+        starred: false,
+        createdAt: now,
+        modifiedAt: now,
+      }));
+    });
+    return newId;
+  }
+
+  // Delete removes the directory and the index entry. Deleting the CURRENT
+  // project leaves the document on screen (the only undo there is) but
+  // nothing owns it anymore — autosave stops until the panel's Restore
+  // re-homes it as a new entry.
+  async function deleteProject(id) {
+    const wasCurrent = id === session.projectId;
+    if (wasCurrent) {
+      clearTimeout(autosaveTimer);
+      autosaveTimer = null;
+      autosavePending = false;
+      await snapshotChain; // let an in-flight write finish before the dir goes
+      releaseProjectLock();
+      session.projectId = null;
+    }
+    await deleteProjectDir(id);
+    await updateLibrary((lib) => {
+      lib.projects = lib.projects.filter((p) => p.id !== id);
+    });
+    return wasCurrent;
+  }
+
+  // Undo for deleting the current project: re-home the on-screen document —
+  // still fully held by the session — under a fresh id.
+  async function restoreCurrentAsNewProject(starred) {
+    if (!opfsAvailable || !session.active || session.projectId !== null) return null;
+    session.projectId = newProjectId();
+    const id = session.projectId;
+    await acquireProjectLock(id);
+    await writeOriginToProjectDir();
+    await writeMediaOnce();
+    await writeDraft(); // re-homed work is an unsaved draft until Saved
+    if (starred === true) await setProjectStarred(id, true);
+    return id;
+  }
+
+  /* ---- Boot (#456): migrate any pre-#456 single-slot working copy, then
+     restore the most recently edited project — the index IS the boot hint.
+     The single-slot layout (work/snapshot.json + root app-state.json) never
+     shipped in a release, so this migration only preserves dev working
+     copies; pre-#448 multi-file layouts are older still and are left alone. */
+
+  async function migrateSingleSlotWork() {
+    try {
+      const work = await getWorkRoot(false);
+      const snapshotText = await readTextFrom(work, 'snapshot.json');
+      if (snapshotText === null) return;
+      const snapshot = JSON.parse(snapshotText);
+      const project = JSON.parse(snapshot.json);
+      const id = newProjectId();
+      const dir = await getProjectDir(id, true);
+      // the old slot was autosave state that had (maybe) never been taken out
+      // of the browser — land it as a DRAFT, dirty until a real Save
+      await writeFileTo(dir, DRAFT_FILE, snapshotText);
+      const originalText = await readTextFrom(work, ENTRY.original);
+      if (originalText !== null) await writeFileTo(dir, ENTRY.original, originalText);
+      try {
+        const srcMedia = await work.getDirectoryHandle('media');
+        const dstMedia = await dir.getDirectoryHandle('media', { create: true });
+        for await (const [name, handle] of srcMedia.entries()) {
+          if (handle.kind === 'file') await writeFileTo(dstMedia, name, await handle.getFile());
+        }
+      } catch (e) { /* no media */ }
+      let appState = {};
+      try {
+        const root = await navigator.storage.getDirectory();
+        const text = await readTextFrom(root, APP_STATE_FILE);
+        if (text !== null) appState = JSON.parse(text);
+      } catch (e) { /* defaults below */ }
+      const now = Date.now();
+      await updateLibrary((lib) => {
+        lib.projects.push({
+          id,
+          name: (project.texts && project.texts.title) || 'project',
+          starred: false,
+          createdAt: Date.parse(project.created) || now,
+          modifiedAt: appState.lastWorkWriteAt || now,
+          lastDraftAt: appState.lastWorkWriteAt || now,
+          lastSavedAt: 0,
+          media: {
+            kind: project.media.kind,
+            filename: project.media.filename || '',
+            durationSeconds: project.media.durationSeconds || 0,
+          },
+          summary: (project.texts && project.texts.summary) || '',
+          topics: (project.texts && project.texts.topics) || [],
+        });
+      });
+      // the old slot is spent — remove it so this runs exactly once
+      await work.removeEntry('snapshot.json').catch(() => {});
+      await work.removeEntry(ENTRY.original).catch(() => {});
+      await work.removeEntry('media', { recursive: true }).catch(() => {});
+      try {
+        const root = await navigator.storage.getDirectory();
+        await root.removeEntry(APP_STATE_FILE).catch(() => {});
+      } catch (e) { /* fine */ }
+      try { localStorage.removeItem('hyperaudioWorkPresent'); } catch (e) { /* retired hint */ }
+    } catch (e) { /* no single-slot layout (the usual case) */ }
+  }
+
+  async function bootLibrary() {
+    if (!opfsAvailable) {
+      notifyLibraryChanged(false);
+      return;
+    }
+    // The library is the only home of unexported work now — ask the browser
+    // not to evict it under storage pressure. Best-effort; a denial changes
+    // nothing about how we behave.
+    try {
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+    } catch (e) { /* best-effort */ }
+    try {
+      await migrateSingleSlotWork();
+      const lib = await readLibrary();
+      // Most recently edited first; a corrupt head entry falls through to the
+      // next rather than abandoning the boot (the demo stays for none).
+      for (const entry of sortLibraryEntries(lib.projects)) {
+        if (await switchToProject(entry.id)) break;
+      }
+    } catch (e) {
+      console.warn('hyperaudio-save: boot restore failed, leaving demo', e);
+    }
+    notifyLibraryChanged(false);
   }
 
   /* ==========================================================================
@@ -1384,16 +1940,23 @@
     dropdown.insertAdjacentHTML('beforeend',
       '<hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />'
       + '');
-    // The navbar Save button covers saving (#449), so the menu carries no
-    // Save item; opening a project lives with the other imports.
+    // The navbar Save button covers saving (#449, a silent OPFS commit since
+    // #456), so the menu carries no Save item; opening a project lives with
+    // the other imports, and Export Project is the explicit way to take a
+    // portable .hyperaudio out of the browser — the only save-ish download.
     const importList = document.querySelector('#file-exportimport-submenu ul');
     if (importList !== null) {
       importList.insertAdjacentHTML('afterbegin',
-        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>');
+        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>'
+        + '<li><a id="project-export-hyperaudio">Export Project (.hyperaudio)</a></li>');
     } else {
       dropdown.insertAdjacentHTML('beforeend',
-        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>');
+        '<li><a id="project-open-hyperaudio">Import Project (.hyperaudio)</a></li>'
+        + '<li><a id="project-export-hyperaudio">Export Project (.hyperaudio)</a></li>');
     }
+    document.querySelector('#project-export-hyperaudio').addEventListener('click', () => {
+      exportProject().catch((e) => projectAlert('Exporting the project failed: ' + e.message));
+    });
 
     // Navbar Save button (#449), matching the native app's treatment exactly:
     // primary (Save leads the lifecycle cluster Save · Export · NEW — outline
@@ -1412,7 +1975,7 @@
       saveBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-save" aria-hidden="true"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>'
         + '<span id="project-save-dirty-dot" aria-hidden="true"></span>';
       saveBtn.addEventListener('click', () => {
-        saveToFile().catch((e) => projectAlert('Saving the project failed: ' + e.message));
+        saveProject().catch((e) => projectAlert('Saving the project failed: ' + e.message));
       });
       if (exportBtn !== null) navEnd.insertBefore(saveBtn, exportBtn);
       else navEnd.appendChild(saveBtn);
@@ -1424,14 +1987,16 @@
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey
           && (event.key === 's' || event.key === 'S')) {
         event.preventDefault();
-        saveToFile().catch((e) => projectAlert('Saving the project failed: ' + e.message));
+        saveProject().catch((e) => projectAlert('Saving the project failed: ' + e.message));
       }
     }, true);
 
-    // The quit guard (#449): warn only when the session holds unsaved work.
-    // The prompt is the browser's own — beforeunload cannot show custom UI.
+    // The quit guard (#449), narrowed by #456: the per-project draft survives
+    // closes and reloads, so leaving with unsaved changes loses NOTHING and
+    // warning would be a lie. The one true loss case left is a document whose
+    // library entry was deleted and lives only on screen — guard that.
     window.addEventListener('beforeunload', (event) => {
-      if (session.active && sessionEdited) {
+      if (session.active && sessionEdited && (session.projectId === null || !opfsAvailable)) {
         event.preventDefault();
         event.returnValue = '';
       }
@@ -1552,14 +2117,6 @@
       });
   }
 
-  function bootAsOwner() {
-    let hint = null;
-    try { hint = localStorage.getItem(WORK_HINT_KEY); } catch (e) { /* private mode */ }
-    if (opfsAvailable && hint === '1') {
-      restoreFromWork();
-    }
-  }
-
   function showTabGuardBanner() {
     const anchor = document.getElementById('side-notices');
     if (anchor === null) return;
@@ -1567,7 +2124,7 @@
     const el = document.createElement('div');
     el.id = 'tab-guard-banner';
     el.setAttribute('role', 'status');
-    el.textContent = 'Another tab is already using this editor — autosave and crash recovery are active there. You can still edit and save here.';
+    el.textContent = 'This project is open in another tab — autosave and crash recovery are active there. You can still edit and save here, or switch to a different project.';
     anchor.appendChild(el);
   }
 
@@ -1576,41 +2133,68 @@
     if (el !== null) el.remove();
   }
 
-  // Acquire the working-copy slot (#450). First tab wins and boots normally;
-  // a later tab gets the banner, keeps editing without the slot, and QUEUES —
-  // when the owner closes (or crashes; locks release with the tab), the
-  // waiting tab is promoted: banner drops, captures enable from here on. No
-  // boot-restore on promotion — replacing a mid-session document would be
-  // worse than the recovery it offers.
-  function initWorkOwnership() {
-    if (!('locks' in navigator)) {
-      hasWorkLock = true; // no Web Locks (pre-15.4 Safari): the pre-#450 status quo
-      bootAsOwner();
-      return;
+  // Release the current project's working-copy lock (switching away, new
+  // project, delete). Also abandons a queued promotion request — this tab is
+  // no longer interested in that project.
+  function releaseProjectLock() {
+    if (projectLockQueue !== null) {
+      projectLockQueue.abort();
+      projectLockQueue = null;
     }
-    navigator.locks.request(WORK_LOCK, { ifAvailable: true }, (lock) => {
-      if (lock === null) return null;
-      hasWorkLock = true;
-      bootAsOwner();
-      return new Promise(() => {}); // hold the slot for the tab's lifetime
-    }).then(() => {
-      if (hasWorkLock) return;
-      showTabGuardBanner();
-      return navigator.locks.request(WORK_LOCK, () => {
-        hasWorkLock = true;
-        hideTabGuardBanner();
-        return new Promise(() => {}); // promoted: hold from here on
+    if (projectLockRelease !== null) {
+      projectLockRelease();
+      projectLockRelease = null;
+    }
+    hasProjectLock = false;
+    hideTabGuardBanner();
+  }
+
+  // Acquire a project's working-copy lock (#450, per-project since #456).
+  // First tab wins; a tab finding the project locked shows the banner, keeps
+  // FULL editing without the slot, and QUEUES — when the owner closes,
+  // crashes or switches away, the waiting tab is promoted: banner drops,
+  // captures enable from here on. No re-read on promotion — replacing a
+  // mid-session document would be worse than the recovery it offers.
+  function acquireProjectLock(id) {
+    if (!('locks' in navigator)) {
+      hasProjectLock = true; // no Web Locks (pre-15.4 Safari): single-tab assumption
+      return Promise.resolve(true);
+    }
+    const lockName = PROJECT_LOCK_PREFIX + id;
+    return new Promise((resolve) => {
+      navigator.locks.request(lockName, { ifAvailable: true }, (lock) => {
+        if (lock === null) {
+          resolve(false);
+          return null;
+        }
+        hasProjectLock = true;
+        resolve(true);
+        return new Promise((release) => { projectLockRelease = release; });
+      }).catch((e) => {
+        console.warn('hyperaudio-save: project lock unavailable, assuming single tab', e);
+        if (projectLockQueue !== null) { projectLockQueue.abort(); projectLockQueue = null; }
+        hasProjectLock = true;
+        resolve(true);
       });
-    }).catch((e) => {
-      console.warn('hyperaudio-save: work lock unavailable, assuming single tab', e);
-      if (!hasWorkLock) { hasWorkLock = true; bootAsOwner(); }
+    }).then((granted) => {
+      if (granted) return true;
+      showTabGuardBanner();
+      projectLockQueue = new AbortController();
+      navigator.locks.request(lockName, { signal: projectLockQueue.signal }, () => {
+        projectLockQueue = null;
+        if (session.projectId !== id) return null; // switched away as the grant raced the abort
+        hasProjectLock = true;
+        hideTabGuardBanner();
+        return new Promise((release) => { projectLockRelease = release; });
+      }).catch(() => { /* aborted: switched away before promotion */ });
+      return false;
     });
   }
 
   function boot() {
     injectUi();
     wireCapture();
-    initWorkOwnership();
+    bootLibrary();
     maybeShowLegacyNotice();
   }
 
@@ -1656,13 +2240,29 @@
   }
 
   window.HyperaudioSave = {
-    saveToFile,
+    saveProject,     // silent OPFS commit (⌘S / the navbar button)
+    exportProject,   // build + download a portable .hyperaudio
     // export naming and any future UI read the title through here
     getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
     openFromFile,
-    autosaveNow: writeWorkSnapshot,
+    autosaveNow: writeDraft,
     isDirty,
     opfsAvailable,
+    // The project library (#456) — everything the side panel
+    // (hyperaudio-library.js) needs; re-renders ride the
+    // 'hyperaudioLibraryChanged' document event.
+    library: {
+      list: async () => sortLibraryEntries((await readLibrary()).projects),
+      currentId: () => session.projectId,
+      ownsCurrent: () => hasProjectLock,
+      isEntryDirty,
+      open: switchToProject,
+      rename: renameProject,
+      setStarred: setProjectStarred,
+      duplicate: duplicateProject,
+      remove: deleteProject,
+      restoreDeleted: restoreCurrentAsNewProject,
+    },
   };
 
   if (document.readyState === 'loading') {
