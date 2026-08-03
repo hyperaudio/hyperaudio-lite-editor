@@ -3,6 +3,8 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
+ * @version 1.0.0 — last changed in release 1.0.0
+ *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
  * hyperaudio-save.js maintains (HyperaudioSave.library), identity is the
