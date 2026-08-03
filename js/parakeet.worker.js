@@ -33,10 +33,36 @@ const CACHE_NAME = "parakeet-models-v1";
 let sessions = null;        // { mel, encoder, decoder, vocab, device }
 let sessionsForceGpu = null; // the forceGpu flag the current sessions were built with
 
+// The sessions hold the (GPU) model memory — ~1.2 GB for the fp16 encoder —
+// and keeping them alive makes a follow-up transcription skip model setup.
+// But the common flow is transcribe once, then edit for a long time, and the
+// model squats on that memory the whole while (#463). Middle ground: free the
+// sessions after a couple of idle minutes. The model bytes stay in Cache
+// Storage, so a later transcription repeats only session creation and shader
+// warm-up, not the download.
+const IDLE_RELEASE_MS = 2 * 60 * 1000;
+let idleTimer = null;
+
+function scheduleIdleRelease() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    if (sessions === null) {
+      return;
+    }
+    // detach before the awaited release so a request landing mid-release
+    // rebuilds fresh sessions instead of grabbing dying ones
+    const releasing = sessions;
+    sessions = null;
+    await releaseSessions(releasing);
+    console.log("Parakeet: model sessions released after idle — next transcription reloads from cache");
+  }, IDLE_RELEASE_MS);
+}
+
 self.addEventListener("message", async (event) => {
   if (event.data?.type !== "INFERENCE_REQUEST") {
     return;
   }
+  clearTimeout(idleTimer);
   const forceGpu = event.data.forceGpu === true;
   try {
     // Rebuild if the GPU opt-in changed since the sessions were created, so the
@@ -59,6 +85,8 @@ self.addEventListener("message", async (event) => {
     console.error(e);
     const stage = sessions === null ? "load" : "transcribe";
     self.postMessage({ type: "error", stage, message: e?.message || String(e) });
+  } finally {
+    scheduleIdleRelease();
   }
 });
 
