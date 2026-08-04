@@ -971,17 +971,26 @@
         player.src = loaded.project.media.url;
       }
 
-      // Captions: fresh track (#356 stale-cue teardown), then the saved VTT.
-      const track = resetCaptionTrack();
+      // Captions through the one door: fresh track AND a paint flush (#356/#287).
+      // Opening a project — Recents included — reuses the paused <video>, so the
+      // previous document's cue pixels linger without the flush. This path had
+      // the teardown but not the flush, which is how the bug came back on the
+      // Recents route after the transcribe route was fixed.
+      const captionsSrc = loaded.captionsVtt
+        ? 'data:text/vtt,' + encodeURIComponent(loaded.captionsVtt)
+        : '';
+      const track = applyCaptionTrack(captionsSrc, {
+        kind: loaded.captionsVtt ? 'captions' : 'subtitles',
+        // no VTT: leave the fresh track disabled exactly as before and let the
+        // regenerate event below build the captions (it flushes too)
+        mode: loaded.captionsVtt ? 'showing' : 'disabled',
+      });
       const options = loaded.recovered ? null : loaded.project.options;
       if (typeof updateCaptionsFromTranscript !== 'undefined') {
         updateCaptionsFromTranscript = options && options.captions
           ? options.captions.updateFromTranscript !== false : true;
       }
       if (loaded.captionsVtt && track !== null) {
-        track.src = 'data:text/vtt,' + encodeURIComponent(loaded.captionsVtt);
-        track.kind = 'captions';
-        if (player.textTracks[0] !== undefined) player.textTracks[0].mode = 'showing';
         const vttLink = document.querySelector('#download-vtt');
         if (vttLink !== null) vttLink.setAttribute('href', 'data:text/vtt,' + encodeURIComponent(loaded.captionsVtt));
         if (typeof populateCaptionEditorFromVtt === 'function') {
@@ -1446,9 +1455,61 @@
     video.appendChild(track);
     return track;
   }
-  // the caption-regenerate path in editor-core reaches this by global name
-  // (typeof-guarded), as it did when the legacy module defined it
+  // Part 2 of #356/#287, and the half that keeps getting lost. Replacing the
+  // <track> drops the old cue DATA, but a PAUSED video does not re-composite its
+  // native caption overlay, so the previous cue's PIXELS stay stranded on screen
+  // — under the new captions, which is the "two sets of captions" report.
+  //
+  // Resetting the track and setting mode = 'showing' once is NOT enough: that is
+  // exactly what the transcribe path already did when #356/#287 was still live,
+  // and fcc323c had to add this explicit toggle on top of it. Only a deliberate
+  // hidden -> showing transition, after the new src is in place, rebuilds the
+  // overlay. Nothing to flush when the intended mode is 'hidden' (mp3/m4a).
+  function flushCaptionPaint(videoDomId = 'hyperplayer') {
+    const video = document.getElementById(videoDomId);
+    const textTrack = video !== null && video.textTracks !== undefined
+      ? video.textTracks[0] : undefined;
+    if (textTrack === undefined) return;
+    if (textTrack.mode === 'showing') {
+      textTrack.mode = 'hidden';
+      textTrack.mode = 'showing';
+    }
+  }
+
+  // THE one door for a caption swap that comes with a NEW document (#356/#287):
+  // project open, Recents switch, SRT/VTT import, transcribe/regenerate. It does
+  // both halves — fresh <track> element, then the paint flush — so no caller has
+  // to remember either, which is how this bug kept coming back one path at a
+  // time. Every new caption writer should call this rather than assigning
+  // #hyperplayer-vtt.src directly.
+  //
+  // NOT for the live-edit sanitise path: that re-runs on every keystroke and must
+  // neither swap the element nor churn the caption paint.
+  function applyCaptionTrack(vttSrc, opts) {
+    const settings = opts || {};
+    const track = resetCaptionTrack();
+    if (track === null) return null;
+    if (typeof vttSrc === 'string' && vttSrc !== '') track.src = vttSrc;
+    if (settings.kind !== undefined) track.kind = settings.kind;
+    if (settings.label !== undefined) track.label = settings.label;
+    if (settings.srcLang !== undefined) track.srcLang = settings.srcLang;
+    // A fresh <track> element starts 'disabled', so the intended mode has to be
+    // set explicitly or the captions simply never appear.
+    const video = document.getElementById('hyperplayer');
+    const textTrack = video !== null && video.textTracks !== undefined
+      ? video.textTracks[0] : undefined;
+    if (textTrack !== undefined) {
+      textTrack.mode = settings.mode !== undefined ? settings.mode : 'showing';
+    }
+    flushCaptionPaint();
+    return track;
+  }
+
+  // the caption-regenerate path in editor-core reaches these by global name
+  // (typeof-guarded), as it did when the legacy module defined resetCaptionTrack
   window.resetCaptionTrack = resetCaptionTrack;
+  window.flushCaptionPaint = flushCaptionPaint;
+  window.applyCaptionTrack = applyCaptionTrack;
 
   function triggerDownload(blob, name) {
     const url = URL.createObjectURL(blob);

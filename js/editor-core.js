@@ -854,16 +854,19 @@
     // Swapping the <track> element drops the old cue's DATA, but a PAUSED video
     // won't re-composite its native caption overlay on its own — so the previous
     // cue's PIXELS stay stranded on screen under the new captions (the remaining
-    // half of #356/#287; the load path avoids it because loading new media forces
-    // a full video relayout, which the transcribe path never triggers). Toggling
-    // the track's display mode forces the overlay to rebuild, flushing the stale
-    // ::cue paint. Only meaningful while the intended mode is 'showing' — mp3/m4a
-    // are deliberately 'hidden' by generateCaptionsFromTranscript, nothing to flush.
-    const player = document.getElementById('hyperplayer');
-    const captionTrack = player && player.textTracks[0];
-    if (captionTrack && captionTrack.mode === 'showing') {
-      captionTrack.mode = 'hidden';
-      captionTrack.mode = 'showing';
+    // half of #356/#287). flushCaptionPaint (hyperaudio-save.js) owns that
+    // toggle now, so every caption path shares one implementation rather than
+    // each route growing its own — the reason this bug kept returning. Inline
+    // fallback kept for when that module is absent.
+    if (typeof flushCaptionPaint === 'function') {
+      flushCaptionPaint();
+    } else {
+      const player = document.getElementById('hyperplayer');
+      const captionTrack = player && player.textTracks[0];
+      if (captionTrack && captionTrack.mode === 'showing') {
+        captionTrack.mode = 'hidden';
+        captionTrack.mode = 'showing';
+      }
     }
   }
 
