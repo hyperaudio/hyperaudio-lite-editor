@@ -411,6 +411,23 @@ If you are creating an open source application under a license compatible with t
             <svg id="sidebar-close-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-close"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m16 15-3-3 3-3"></path></svg>
             <svg id="sidebar-open-icon" style="display: none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sidebar-open"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
           </button>
+          <!-- Transcript/captions view switch: a recessed track whose raised thumb
+               slides under the active segment (styles in hyperaudio-lite-editor.css).
+               The active view is marked by the thumb and aria-pressed, never by
+               disabled — disabled reads as "unavailable", not "current view".
+               editor-core.js keeps the state in sync. In the LEFT cluster with the
+               other view/editing controls (#423): what-am-I-looking-at on the left,
+               document-lifecycle actions on the right — the grouping the Glider
+               top bar reached independently (hyperaudio/glider#156). ids are a
+               programmatic contract (engines click #transcript-editor-btn). -->
+          <div id="view-switch" role="group" aria-label="Editor view">
+            <button id="transcript-editor-btn" class="btn btn-square tooltip" data-tip="Transcript view" aria-label="Transcript view" aria-pressed="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+            </button>
+            <button id="caption-editor-btn" class="btn btn-square tooltip" data-tip="Captions view" aria-label="Captions view" aria-pressed="false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
+            </button>
+          </div>
           <button id="strikethrough" class="btn btn-square btn-outline tooltip" data-tip="Strikethrough" style="margin-right:4px" aria-label="Strike through text">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-strikethrough"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg>
           </button>
@@ -538,19 +555,6 @@ If you are creating an open source application under a license compatible with t
           <!--<label for="captions-modal" class="btn btn-outline gap-2" style="margin-right:4px">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
           </label>-->
-          <!-- Transcript/captions view switch: a recessed track whose raised thumb
-               slides under the active segment (styles in hyperaudio-lite-editor.css).
-               The active view is marked by the thumb and aria-pressed, never by
-               disabled — disabled reads as "unavailable", not "current view".
-               editor-core.js keeps the state in sync. -->
-          <div id="view-switch" role="group" aria-label="Editor view">
-            <button id="transcript-editor-btn" class="btn btn-square tooltip" data-tip="Transcript view" aria-label="Transcript view" aria-pressed="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-            </button>
-            <button id="caption-editor-btn" class="btn btn-square tooltip" data-tip="Captions view" aria-label="Captions view" aria-pressed="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
-            </button>
-          </div>
           <input type="checkbox" id="captions-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
           <div class="modal" style="content-visibility: hidden;">
             <div class="modal-box relative">
