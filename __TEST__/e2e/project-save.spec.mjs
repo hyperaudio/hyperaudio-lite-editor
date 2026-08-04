@@ -658,3 +658,70 @@ test('the saved transcript.html carries no markup but word spans (#486)', async 
   const words = JSON.parse((await readCurrentProject(page)).saved.json).transcript.words;
   expect(words.some((w) => w.text === 'HIGHLIGHTED')).toBe(true);
 });
+
+// #488: opening a project must not lose words. htmlToJSON derives a paragraph's
+// end from its last word's END, so a zero-duration final word sits exactly on
+// that boundary — the old half-open filter (start >= pStart && start < pEnd)
+// excluded it, it never reached the DOM, and the next save wrote the transcript
+// without it. Fixture puts a zero-duration word at the end of each paragraph,
+// plus a word before the first paragraph starts.
+async function buildZeroDurationFixture() {
+  const state = {
+    generatorVersion: 'e2e',
+    created: '2026-08-04T09:00:00Z',
+    modified: '2026-08-04T09:30:00Z',
+    media: {
+      kind: 'original', path: 'media/tone.wav', url: null, filename: 'tone.wav',
+      mimeType: 'audio/wav', durationSeconds: 2, sizeBytes: 0,
+    },
+    options: {
+      gapRemoval: { enabled: false, thresholdMs: 700, bufferMs: 150 },
+      updateCaptionsFromTranscript: false,
+      view: { showSpeakers: true, showTimecodes: false },
+    },
+    texts: { title: 'Zero duration', language: 'it', summary: '', topics: [] },
+    provenance: null,
+    hasOriginal: false,
+    transcript: {
+      words: [
+        { start: 0.10, end: 0.20, text: 'PRE' },      // before the first paragraph
+        { start: 0.32, end: 0.50, text: 'UNO' },
+        { start: 0.50, end: 0.70, text: 'ZEROA' },    // ends where it starts…
+        { start: 0.70, end: 0.70, text: 'BOUNDARYA' }, // …on paragraph 1's end
+        { start: 0.90, end: 1.10, text: 'TRE' },
+        { start: 1.10, end: 1.10, text: 'BOUNDARYB' }, // on paragraph 2's end
+      ],
+      paragraphs: [
+        { speaker: 'Maria', start: 0.32, end: 0.70 },
+        { speaker: 'Luca', start: 0.90, end: 1.10 },
+      ],
+    },
+  };
+  return save.zipProject({
+    json: save.serializeProjectJson(save.buildProjectJson(state)),
+    html: '<article><section><p><span data-m="320" data-d="180">UNO </span></p></section></article>',
+    originalJson: null,
+    captionsVtt: null,
+    media: { name: 'tone.wav', data: ladderWav(2) },
+  }, JSZip, 'nodebuffer');
+}
+
+test('opening keeps words sitting exactly on a paragraph boundary (#488)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  page.on('dialog', (dialog) => { dialogs.push(dialog.message()); dialog.accept(); });
+  const fixturePath = testInfo.outputPath('zero-duration.hyperaudio');
+  fs.writeFileSync(fixturePath, await buildZeroDurationFixture());
+  await page.setInputFiles('#project-open-input', fixturePath);
+  await expect(page.locator('#hypertranscript')).toContainText('UNO');
+
+  const words = await page.evaluate(() =>
+    [...document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)')]
+      .map((s) => s.textContent.trim()));
+
+  // every word survives the JSON -> DOM projection, in order
+  expect(words).toEqual(['PRE', 'UNO', 'ZEROA', 'BOUNDARYA', 'TRE', 'BOUNDARYB']);
+  // and each lands in exactly one paragraph — no duplication from the new rule
+  expect(words.length).toBe(new Set(words).size);
+  expect(await page.locator('#hypertranscript p').count()).toBe(2);
+  expect(dialogs).toEqual([]);
+});

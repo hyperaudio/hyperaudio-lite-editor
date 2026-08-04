@@ -825,9 +825,33 @@
     const section = document.createElement('section');
     article.appendChild(section);
 
-    paragraphs.forEach((paragraph) => {
+    // Assign EVERY word to exactly one paragraph (#488). The half-open range
+    // filter this replaces (start >= pStart && start < pEnd) deleted words
+    // silently: htmlToJSON derives a paragraph's end from its LAST word's end,
+    // so a zero-duration final word (end == start == pEnd) failed its own
+    // paragraph's range and never reached the DOM — and the next save then
+    // wrote the transcript without it. Diarizer paragraph times that don't
+    // exactly bracket word times stranded words the same way.
+    //
+    // Same rule jsonToHTML already applies (js/html-json-converter.js, #408):
+    // a word belongs to the last paragraph that has started by the word's start
+    // time; words before the first paragraph go to the first.
+    const assignedWords = paragraphs.map(() => []);
+    words.forEach((word) => {
+      let idx = 0;
+      let bestStart = -Infinity;
+      paragraphs.forEach((paragraph, i) => {
+        if (word.start >= paragraph.start && paragraph.start >= bestStart) {
+          idx = i;
+          bestStart = paragraph.start;
+        }
+      });
+      assignedWords[idx].push(word);
+    });
+
+    paragraphs.forEach((paragraph, paragraphIndex) => {
       const p = document.createElement('p');
-      const paragraphWords = words.filter((w) => w.start >= paragraph.start && w.start < paragraph.end);
+      const paragraphWords = assignedWords[paragraphIndex];
       if (paragraph.speaker) {
         const speaker = document.createElement('span');
         speaker.className = 'speaker';
