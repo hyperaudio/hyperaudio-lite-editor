@@ -1,7 +1,7 @@
 /**
  * transcript-serializer.js
  * (C) The Hyperaudio Project
- * @version 0.8.5 — last changed in release 0.8.5
+ * @version 1.1.8 — last changed in release 1.1.8
  * @license MIT
  *
  * Canonical transcript serialization for the HTML and interactive-transcript
@@ -49,17 +49,30 @@
   function serializeParagraph(p, indent) {
     const inner = indent + '  ';
     const lines = [indent + '<p>'];
-    p.childNodes.forEach((node) => {
-      if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'SPAN' && node.hasAttribute('data-m')) {
-        lines.push(inner + spanLine(node));
-      } else if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== '') {
-        // stray text between spans — keep it (escaped) rather than lose words
-        lines.push(inner + escapeText(node.nodeValue.trim()) + ' ');
-      } else if (node.nodeType === Node.ELEMENT_NODE && node.textContent.trim() !== '') {
-        // unexpected wrapper (e.g. residual mark/span): flatten to its text
-        lines.push(inner + escapeText(node.textContent.trim()) + ' ');
-      }
-    });
+    const emit = (nodes) => {
+      nodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'SPAN' && node.hasAttribute('data-m')) {
+          lines.push(inner + spanLine(node));
+        } else if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== '') {
+          // stray text between spans — keep it (escaped) rather than lose words
+          lines.push(inner + escapeText(node.nodeValue.trim()) + ' ');
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          // An unexpected wrapper. When it ENCLOSES timed spans, descend into it:
+          // contenteditable produces these (⌘B over a selection wraps the spans
+          // in <b>; paste-injected markup does the same, cf. #487), and
+          // flattening them to text would strip data-m/data-d from real words —
+          // and, since the writer derives the project JSON from this output,
+          // delete those words outright. Only a wrapper holding no timed span of
+          // its own is flattened to its text (a residual search <mark>, #486).
+          if (node.querySelector('span[data-m]') !== null) {
+            emit([...node.childNodes]);
+          } else if (node.textContent.trim() !== '') {
+            lines.push(inner + escapeText(node.textContent.trim()) + ' ');
+          }
+        }
+      });
+    };
+    emit([...p.childNodes]);
     lines.push(indent + '</p>');
     return lines;
   }
@@ -75,17 +88,19 @@
     if (root.querySelector('span[data-m]') === null) {
       return root.innerHTML || '';
     }
-    const paragraphs = root.querySelectorAll('p');
     const lines = ['<article>', '  <section>'];
-    if (paragraphs.length > 0) {
-      paragraphs.forEach((p) => {
-        if (p.querySelector('span[data-m]') === null) return; // skip empty/UI paragraphs
-        lines.push(...serializeParagraph(p, '    '));
-      });
-    } else {
-      // no <p> structure — treat every timed span as one paragraph's content
-      const pseudo = { childNodes: root.querySelectorAll('span[data-m]') };
-      lines.push(...serializeParagraph(pseudo, '    '));
+    root.querySelectorAll('p').forEach((p) => {
+      if (p.querySelector('span[data-m]') === null) return; // skip empty/UI paragraphs
+      lines.push(...serializeParagraph(p, '    '));
+    });
+    // Timed spans belonging to no <p> at all: the whole transcript when it has
+    // no paragraph structure, and otherwise words that editing parked as a
+    // direct child of <section> (or inside a non-<p> wrapper there). Iterating
+    // only <p> elements dropped those words from the output entirely.
+    const orphans = [...root.querySelectorAll('span[data-m]')]
+      .filter((span) => span.closest('p') === null);
+    if (orphans.length > 0) {
+      lines.push(...serializeParagraph({ childNodes: orphans }, '    '));
     }
     lines.push('  </section>', '</article>');
     return lines.join('\n');

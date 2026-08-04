@@ -621,3 +621,40 @@ test('the tab-guard banner is dismissible (per appearance, no persistence)', asy
   await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
   await page2.close();
 });
+
+// #486: the writer used to ship the live DOM's editing noise into
+// transcript.html. Searching wraps matches in <mark class="search-mark"> inside
+// the word spans, and a save taken while that highlight was up persisted the
+// marks — § 4 defines the entry as one <span> per word. The saved HTML must
+// contain word spans and nothing else, whatever the DOM currently holds.
+test('the saved transcript.html carries no markup but word spans (#486)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  // dirty the document, then raise a search highlight over it
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'HIGHLIGHTED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // per-character typing: the vendored search runs on keyup, so fill() alone
+  // sets the value without ever triggering it
+  await page.locator('#search-box').pressSequentially('HIGH');
+  await expect(page.locator('#hypertranscript mark.search-mark')).not.toHaveCount(0);
+
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  const html = (await readCurrentProject(page)).saved.html;
+  expect(html).toContain('HIGHLIGHTED');   // the word survives, as text
+  expect(html).not.toContain('<mark');     // the highlight does not
+
+  // nothing but <article>/<section>/<p>/<span> in the persisted markup
+  const tags = [...html.matchAll(/<([a-zA-Z][^\s/>]*)/g)].map((m) => m[1].toLowerCase());
+  expect([...new Set(tags)].sort()).toEqual(['article', 'p', 'section', 'span']);
+
+  // and the JSON — the source of truth — is unaffected by the highlight
+  const words = JSON.parse((await readCurrentProject(page)).saved.json).transcript.words;
+  expect(words.some((w) => w.text === 'HIGHLIGHTED')).toBe(true);
+});

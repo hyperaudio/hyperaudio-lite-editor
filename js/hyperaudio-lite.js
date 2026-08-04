@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
-/*! Version 2.6.2 */
+/*! Version 2.6.4 */
 
 'use strict';
 
@@ -478,7 +478,7 @@ class HyperaudioLite {
         const popover = document.getElementById('popover');
 
         if (selection.toString().length > 0) {
-          this.selectionText = selection.toString().replaceAll("'", "`");
+          this.selectionText = selection.toString();
           const range = selection.getRangeAt(0);
           const rect = range.getBoundingClientRect();
 
@@ -772,6 +772,10 @@ class HyperaudioLite {
       const indices = this.updateTranscriptVisualState(this.currentTime, true);
       if (indices.currentWordIndex > 0 && this.autoscroll) {
         this.scrollToParagraph(indices.currentParentElementIndex, indices.currentWordIndex);
+      }
+      if (!this.myPlayer.paused) {
+        this.clearTimer();
+        this.checkStatus();
       }
     })();
   }
