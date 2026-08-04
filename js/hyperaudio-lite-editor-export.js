@@ -228,7 +228,9 @@ class ImportSrt extends HTMLElement {
       const blob = new Blob([vttData], { type: "text/vtt" });
       // Generate a URL for the Blob
       const vttUrl = URL.createObjectURL(blob);
-      document.querySelector('#hyperplayer-vtt').src = vttUrl;
+      // Through the caption door (#356/#287): assigning .src on the reused track
+      // leaves the previous document's cue pixels painted on the paused video.
+      applyCaptionTrack(vttUrl, { mode: 'showing' });
 
       // Preserve original format
       updateCaptionsFromTranscript = false;
@@ -352,7 +354,8 @@ class ImportVtt extends HTMLElement {
       const blob = new Blob([vttData], { type: "text/vtt" });
       // Generate a URL for the Blob
       const vttUrl = URL.createObjectURL(blob);
-      document.querySelector('#hyperplayer-vtt').src = vttUrl;
+      // Through the caption door (#356/#287) — see the SRT import above.
+      applyCaptionTrack(vttUrl, { mode: 'showing' });
 
       // Preserve original format
       updateCaptionsFromTranscript = false;

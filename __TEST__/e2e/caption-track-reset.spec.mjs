@@ -67,3 +67,66 @@ test('regenerating captions resets the <track>, so a prior cue cannot linger (#3
   // that the toggle path doesn't leave captions disabled.
   expect(result.finalMode).toBe('showing');
 });
+
+// The reason #356/#287 kept returning: each fix was attached to ONE path, so the
+// next caption writer reintroduced it. The paint flush (hidden→showing) now lives
+// in a single place — flushCaptionPaint in hyperaudio-save.js — and these tests
+// assert that every path which swaps captions for a NEW document performs it.
+//
+// The stale line is native ::cue paint, invisible to the DOM, which is why the
+// earlier tests passed while the bug was live on other routes. Instead of looking
+// for pixels, record every TextTrack.mode assignment: the flush has a distinctive
+// hidden→showing signature, so a path that skips it is detectable.
+const recordModeAssignments = (page) => page.evaluate(() => {
+  const video = document.getElementById('hyperplayer');
+  const proto = Object.getPrototypeOf(video.textTracks[0]);
+  const desc = Object.getOwnPropertyDescriptor(proto, 'mode');
+  window.__modes = [];
+  Object.defineProperty(proto, 'mode', {
+    configurable: true,
+    get() { return desc.get.call(this); },
+    set(value) { window.__modes.push(value); desc.set.call(this, value); },
+  });
+});
+
+const flushed = (page) => page.evaluate(() => {
+  // a hidden immediately followed by a showing = the overlay rebuild
+  const m = window.__modes || [];
+  return m.some((mode, i) => mode === 'hidden' && m[i + 1] === 'showing');
+});
+
+test('the SRT import flushes stale caption paint (#356/#287)', async ({ page }) => {
+  await page.waitForFunction(() => {
+    const tt = document.getElementById('hyperplayer').textTracks[0];
+    return tt && tt.cues && tt.cues.length > 0;   // the intro's cues are loaded
+  }, null, { timeout: 15000 });
+  await recordModeAssignments(page);
+
+  await page.evaluate(() => {
+    document.getElementById('hyperplayer').src = 'data:video/mp4;base64,';
+    const srt = '1\n00:00:00,320 --> 00:00:02,000\nIMPORTED caption line\n';
+    const dt = new DataTransfer();
+    dt.items.add(new File([srt], 'probe.srt', { type: 'application/x-subrip' }));
+    const input = document.getElementById('srt');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('file-import-srt').click();
+  });
+  await expect(page.locator('#hypertranscript')).toContainText('IMPORTED');
+
+  expect(await flushed(page)).toBe(true);
+  // and the track was rebuilt, not reused
+  expect(await page.locator('#hyperplayer track').count()).toBe(1);
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').textTracks.length)).toBe(1);
+});
+
+test('the regenerate path still flushes, via the shared helper (#356/#287)', async ({ page }) => {
+  await recordModeAssignments(page);
+  await page.evaluate(() => {
+    document.getElementById('hyperplayer').src = 'data:video/mp4;base64,';
+    document.getElementById('hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">Charlie </span></p></section></article>';
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  expect(await flushed(page)).toBe(true);
+});
