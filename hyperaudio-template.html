@@ -13,6 +13,123 @@
       background: #f7f7f8;
       color: #1a1a1a;
     }
+    /* ------------------------------------------------------------------
+       Select-to-copy. The library owns behaviour — it positions #popover,
+       toggles its display, writes #clipboard-text and opens the dialog —
+       so everything here is presentation only (position/display on
+       #popover are the library's contract and must survive).
+
+       What the reader copies is a quotation plus a link that replays the
+       exact moment it was spoken, so the confirmation is built as a
+       citation card rather than a toast: the captured words are set in the
+       transcript's own Palatino because they are speech, not a string, and
+       the single accent goes to the timecode chip — the one thing that
+       makes a Hyperaudio quote unlike any other copied text.
+       ------------------------------------------------------------------ */
+    #popover {
+      position: absolute;
+      display: none;
+      z-index: 10;
+      padding: 6px 11px;
+      border: 1px solid #e6e6e6;
+      border-radius: 9px;
+      background-color: #fff;
+      box-shadow: 0 6px 20px rgba(20, 14, 60, 0.14);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+    }
+    #popover a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      color: #1a1a1a;
+      cursor: pointer;
+    }
+    #popover a:hover { color: #4a00ff; }
+
+    #clipboard-dialog {
+      width: min(34rem, calc(100vw - 32px));
+      padding: 22px 24px 18px;
+      border: 1px solid #e6e6e6;
+      border-radius: 14px;
+      background: #fff;
+      color: #1a1a1a;
+      box-shadow: 0 18px 48px rgba(20, 14, 60, 0.18);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    #clipboard-dialog::backdrop {
+      background: rgba(24, 20, 45, 0.32);
+      backdrop-filter: blur(2px);
+    }
+    #clipboard-dialog [hidden] { display: none; }
+    .cb-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 13px;
+    }
+    #clipboard-heading {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: #8b8b93;
+    }
+    /* the signature: in/out points parsed from the copied link's media
+       fragment — the only colour on the card */
+    .cb-range {
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #f1ecff;
+      color: #4a00ff;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .cb-quote { margin: 0; }
+    .cb-quote p {
+      margin: 0;
+      max-height: 40vh;
+      overflow-y: auto;
+      padding: 16px 18px;
+      border-radius: 10px;
+      background: #f7f6ff;
+      font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      font-size: 1.06rem;
+      line-height: 1.65;
+    }
+    .cb-link {
+      margin: 12px 0 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px;
+      color: #8b8b93;
+    }
+    .cb-actions { margin-top: 16px; text-align: right; }
+    #clipboard-confirm {
+      padding: 8px 18px;
+      border: 1px solid #e6e6e6;
+      border-radius: 8px;
+      background: #fff;
+      color: #1a1a1a;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #clipboard-confirm:hover { border-color: #4a00ff; color: #4a00ff; }
+    #clipboard-confirm:focus-visible { outline: 2px solid #4a00ff; outline-offset: 2px; }
+    @media (prefers-reduced-motion: no-preference) {
+      #clipboard-dialog[open] { animation: cb-rise 160ms ease-out; }
+      @keyframes cb-rise {
+        from { opacity: 0; transform: translateY(6px); }
+      }
+    }
     /* Constrain everything to a comfortable reading column and centre it. */
     .ht-wrap {
       max-width: 40rem;
@@ -62,6 +179,26 @@
 {hypertranscript}
     </div>
 
+    <!-- Select-to-copy: hyperaudio-lite's OWN copy feature, which it
+         activates only when this markup is present (it feature-detects the
+         #popover element). The ids are the library's contract — popover,
+         popover-btn, clipboard-dialog, clipboard-text, clipboard-confirm.
+         This replaces the old share-this sharer, whose confirmation was an
+         alert() assembled as an inline onclick string. -->
+    <div id="popover"><a id="popover-btn">Copy to clipboard <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="-130 -110 600 600"><path d="m161,152.9h190c0.1,0 0.1,0 0.2,0 10.8,0 19.6-7.1 19.6-16 0-1.5-14.1-82.7-14.1-82.7-1.3-7.9-9.6-13.8-19.4-13.8l-61.7,.1v-13.5c0-8.8-8.8-16-19.6-16-10.8,0-19.6,7.1-19.6,16v13.6l-61.8,.1c-9.8,0-18,5.9-19.4,13.8l-13.7,80.3c-1.2,14.3 13.5,18.1 19.5,18.1z" fill="currentcolor"/><path d="m427.5,78.9h-26.8c0,0 9.3,53.5 9.3,58 0,30.4-26.4,55.2-58.8,55.2h-190.2c-19.6,0.4-63.3-14.7-58.1-63.9l8.4-49.2h-26.8c-10.8,0-19.6,8.8-19.6,19.6v382.9c0,10.8 8.8,19.6 19.6,19.6h343c10.8,0 19.6-8.8 19.6-19.6v-383c0-10.8-8.8-19.6-19.6-19.6zm-76.5,320.1h-190c-10.8,0-19.6-8.8-19.6-19.6 0-10.8 8.8-19.6 19.6-19.6h190c10.8,0 19.6,8.8 19.6,19.6 0,10.8-8.7,19.6-19.6,19.6zm0-110.3h-190c-10.8,0-19.6-8.8-19.6-19.6 0-10.8 8.8-19.6 19.6-19.6h190c10.8,0 19.6,8.8 19.6,19.6 0,10.8-8.7,19.6-19.6,19.6z" fill="currentcolor"/></svg></a></div>
+
+    <dialog id="clipboard-dialog" aria-labelledby="clipboard-heading">
+      <div class="cb-head">
+        <h2 id="clipboard-heading">Copied to clipboard</h2>
+        <span id="clipboard-range" class="cb-range" hidden></span>
+      </div>
+      <blockquote class="cb-quote"><p id="clipboard-text"></p></blockquote>
+      <p id="clipboard-link" class="cb-link" hidden></p>
+      <div class="cb-actions">
+        <button id="clipboard-confirm">Done</button>
+      </div>
+    </dialog>
+
     <footer style="max-width:34rem; margin:16px auto 24px; text-align:center; font-size:0.85rem; color:#a2a2a2;">
       <a href="https://hyperaudio.github.io/hyperaudio-lite-editor/" style="color:inherit; text-decoration:underline;">Made with Hyperaudio</a>
     </footer>
@@ -98,11 +235,6 @@
   <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/share-this.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/share-this-clipboard.js"></script>
   <script>
-  ShareThis({
-      sharers: [ ShareThisViaClipboard ],
-      selector: "article"
-  }).init();
-
   // minimizedMode is still experimental - it aims to show the current words in the title, which can be seen on the browser tab.
   let minimizedMode = false;
   let autoScroll = true;
@@ -111,6 +243,44 @@
   let playOnClick = true;
 
   new HyperaudioLite("hypertranscript", "hyperplayer", minimizedMode, autoScroll, doubleClick, webMonetization, playOnClick);
+
+  // The library writes "<selection> <url>" as one blob into #clipboard-text
+  // and opens the dialog. Split that into the two things it actually is —
+  // the quotation and the link back to the moment — and read the in/out
+  // points out of the link's media fragment. Registered after the library's
+  // own listener, so the text is already in place when this runs; anything
+  // it doesn't recognise is left exactly as the library wrote it.
+  (function () {
+    const btn = document.getElementById('popover-btn');
+    const textEl = document.getElementById('clipboard-text');
+    const linkEl = document.getElementById('clipboard-link');
+    const rangeEl = document.getElementById('clipboard-range');
+    if (btn === null || textEl === null) return;
+
+    const clock = (seconds) => {
+      const t = Math.max(0, Math.round(seconds));
+      const pad = (n) => String(n).padStart(2, '0');
+      const h = Math.floor(t / 3600);
+      return (h > 0 ? h + ':' + pad(Math.floor((t % 3600) / 60)) : Math.floor((t % 3600) / 60))
+        + ':' + pad(t % 60);
+    };
+
+    btn.addEventListener('click', () => {
+      linkEl.hidden = true;
+      rangeEl.hidden = true;
+      const raw = textEl.textContent;
+      const link = raw.match(/\s(https?:\/\/\S+)$/);
+      if (link === null) return;
+      textEl.textContent = raw.slice(0, link.index).trim();
+      linkEl.textContent = link[1];
+      linkEl.hidden = false;
+      const fragment = link[1].match(/=([\d.]+),([\d.]+)/);
+      if (fragment !== null) {
+        rangeEl.textContent = clock(parseFloat(fragment[1])) + ' → ' + clock(parseFloat(fragment[2]));
+        rangeEl.hidden = false;
+      }
+    });
+  })();
 
   </script>
 </body>
