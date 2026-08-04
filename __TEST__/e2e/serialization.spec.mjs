@@ -76,3 +76,42 @@ test('strikethrough survives serialization; word text is escaped', async ({ page
   expect(html).toMatch(/&lt;inaudible&gt; /);
   expect(html).not.toMatch(/<inaudible>/);
 });
+
+// Serialization must never cost a word its timing. The save path derives the
+// project JSON from this output (hyperaudio-save.js gather()), so a span whose
+// data-m is dropped here is not merely un-timed — it disappears from the JSON,
+// and reopen rebuilds the transcript without it. Two shapes contenteditable
+// produces that used to be flattened to plain text: a wrapper AROUND word spans
+// (⌘B over a selection, or paste-injected markup, #487), and words parked
+// outside any <p>.
+test('word timings survive wrappers and stray placement (#486 review)', async ({ page }) => {
+  const cases = await page.evaluate(() => {
+    const build = (inner) => {
+      const d = document.createElement('div');
+      d.innerHTML = '<article><section>' + inner + '</section></article>';
+      return d;
+    };
+    const roundTrip = (root) => {
+      const before = htmlToJSON(root.innerHTML).words.map((w) => `${w.text}@${w.start}`);
+      const after = htmlToJSON(window.serializeTranscriptHtml(root)).words.map((w) => `${w.text}@${w.start}`);
+      return { before, after };
+    };
+    return {
+      // <b> wrapping two of the four words
+      wrapper: roundTrip(build('<p><span data-m="0" data-d="100">one </span>'
+        + '<b><span data-m="100" data-d="100">two </span><span data-m="200" data-d="100">three </span></b>'
+        + '<span data-m="300" data-d="100">four </span></p>')),
+      // a word left as a direct child of <section>, alongside a real <p>
+      orphan: roundTrip(build('<p><span data-m="0" data-d="100">alpha </span></p>'
+        + '<span data-m="100" data-d="100">orphan </span>')),
+      // no paragraph structure at all (the pre-existing fallback)
+      noParagraphs: roundTrip(build('<span data-m="0" data-d="100">solo </span>'
+        + '<span data-m="100" data-d="100">words </span>')),
+    };
+  });
+
+  expect(cases.wrapper.after).toEqual(cases.wrapper.before);
+  expect(cases.wrapper.after).toHaveLength(4);
+  expect(cases.orphan.after).toEqual(cases.orphan.before);
+  expect(cases.noParagraphs.after).toEqual(cases.noParagraphs.before);
+});

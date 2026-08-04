@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.1.5 — last changed in release 1.1.5
+ * @version 1.1.8 — last changed in release 1.1.8
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -650,16 +650,44 @@
     return new Date().toISOString();
   }
 
+  // Canonical serialization of a transcript root for the writer (#486). Raw
+  // innerHTML shipped whatever the live DOM had accumulated straight into
+  // transcript.html — search's <mark class="search-mark">, elements a paste
+  // injected (#487), WebKit inline styles — but § 4 of the format defines that
+  // entry as one <span> per word. serializeTranscriptHtml rebuilds each span
+  // from textContent, keeping the two functional bits of state (speaker class,
+  // strikethrough), so foreign markup is flattened to its text rather than
+  // persisted.
+  //
+  // The word set is preserved, which matters because gather() derives the
+  // project JSON from this same string: the serializer descends into wrappers
+  // that enclose timed spans and keeps spans belonging to no <p>, so no word
+  // loses its data-m/data-d (and with it its place in the JSON) on the way out.
+  //
+  // No class strip on the canonical path: the serializer emits class="speaker"
+  // and nothing else, while running the strip's regex over the whole string
+  // could delete a literal class="…" appearing inside a word's own text. The
+  // innerHTML fallback — loader markup mid transcription, no timed spans yet —
+  // still sanitizes exactly as it did before.
+  function canonicalTranscriptHtml(root) {
+    const hasWords = typeof root.querySelector === 'function'
+      && root.querySelector('span[data-m]') !== null;
+    if (hasWords && typeof serializeTranscriptHtml === 'function') {
+      return serializeTranscriptHtml(root);
+    }
+    return sanitizeTranscriptClasses(root.innerHTML);
+  }
+
   // The transcript's markup for the writer. Reads the live element directly
   // (NOT getTranscriptData(), whose blanket class strip destroys the speaker
   // class); in caption mode the transcript element only exists inside
   // editor-core's transcriptCache clone — read it from there.
   function getEditorHtml() {
     const el = document.querySelector('#hypertranscript');
-    if (el !== null) return sanitizeTranscriptClasses(el.innerHTML);
+    if (el !== null) return canonicalTranscriptHtml(el);
     if (typeof transcriptCache !== 'undefined' && transcriptCache !== null) {
       const cached = transcriptCache.querySelector('#hypertranscript');
-      if (cached !== null) return sanitizeTranscriptClasses(cached.innerHTML);
+      if (cached !== null) return canonicalTranscriptHtml(cached);
     }
     return typeof getTranscriptData === 'function' ? getTranscriptData() : '';
   }
