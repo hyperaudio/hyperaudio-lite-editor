@@ -1,7 +1,7 @@
 /**
  * word-vtt.js
  * (C) The Hyperaudio Project
- * @version 0.8.5 — last changed in release 0.8.5
+ * @version 1.1.6 — last changed in release 1.1.6
  * @license MIT
  *
  * Word-level ("karaoke") WebVTT export (#387, part 1).
@@ -134,8 +134,12 @@
     chunks.forEach((chunk) => {
       const start = chunk[0].start;
       const end = chunk[chunk.length - 1].end;
+      // Each word sits in <c>…</c>: a cue holding only leaf text nodes gives
+      // ::cue(:past)/::cue(:future) nothing to match (W3C bug 16875), so bare
+      // words can't be karaoke-highlighted with native cue styling (#437).
+      // The inter-word spaces stay as plain text nodes — they need no styling.
       const line = chunk
-        .map((w) => `<${formatTimestamp(w.start)}>${escapeVttText(w.text)}`)
+        .map((w) => `<${formatTimestamp(w.start)}><c>${escapeVttText(w.text)}</c>`)
         .join(' ');
       vtt += `\n${formatTimestamp(start)} --> ${formatTimestamp(end)}\n${line}\n`;
     });

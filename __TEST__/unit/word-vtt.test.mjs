@@ -67,8 +67,9 @@ test('generateWordVtt: header, cue timing, inline per-word timestamps', () => {
   ]);
   const vtt = generateWordVtt({ source: root, maxWords: 5, maxGap: 0.8 });
   assert.match(vtt, /^WEBVTT\n/);
-  assert.match(vtt, /\n00:00:01\.200 --> 00:00:01\.850\n<00:00:01\.200>So <00:00:01\.550>if\n/);
-  assert.match(vtt, /\n00:00:09\.000 --> 00:00:09\.400\n<00:00:09\.000>Yeah\.\n/);
+  // each word wrapped in <c> so ::cue(:past/:future) has an element to match (#437)
+  assert.match(vtt, /\n00:00:01\.200 --> 00:00:01\.850\n<00:00:01\.200><c>So<\/c> <00:00:01\.550><c>if<\/c>\n/);
+  assert.match(vtt, /\n00:00:09\.000 --> 00:00:09\.400\n<00:00:09\.000><c>Yeah\.<\/c>\n/);
 });
 
 test('generateWordVtt: no words yields just the header', () => {
@@ -82,9 +83,9 @@ test('generateWordVtt: cue text is escaped so <tags> and & survive parsing (#409
   ]);
   const vtt = generateWordVtt({ source: root });
   // words become entities, not markup…
-  assert.match(vtt, /<00:00:01\.000>&lt;inaudible&gt; <00:00:01\.400>AT&amp;T\n/);
-  // …while the timestamp tags themselves stay raw
-  assert.match(vtt, /<00:00:01\.000>/);
+  assert.match(vtt, /<00:00:01\.000><c>&lt;inaudible&gt;<\/c> <00:00:01\.400><c>AT&amp;T<\/c>\n/);
+  // …while the timestamp and <c> tags themselves stay raw
+  assert.match(vtt, /<00:00:01\.000><c>/);
   assert.doesNotMatch(vtt, /<inaudible>/);
 });
 
