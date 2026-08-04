@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.1.4 — last changed in release 1.1.4
+ * @version 1.1.5 — last changed in release 1.1.5
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -620,6 +620,12 @@
   // decide inside a click handler. Set on every capture trigger and on a new
   // transcription; cleared on save-download, open, and session end.
   let sessionEdited = false;
+  // True while onNewTranscript is birthing a project. The engines dispatch
+  // hyperaudioGenerateCaptionsFromTranscript right after hyperaudioInit as
+  // part of a transcription landing; counting that pass as an edit left the
+  // Save button dirty after every transcription even though the birth commit
+  // (which gathers AFTER the captions are generated) matches the screen.
+  let birthInProgress = false;
   // Lifecycle guards (#448): generations decide whether an async completion
   // may still be applied; in-flight flags serialize container/snapshot work.
   let editGeneration = 0;      // bumps on every edit signal
@@ -1214,6 +1220,11 @@
     if (suppressCapture) return;
     const transcriptEl = document.querySelector('#hypertranscript');
     if (transcriptEl === null || transcriptEl.querySelector('span[data-m]') === null) return;
+    // Raised synchronously inside the hyperaudioInit dispatch — i.e. BEFORE
+    // the engine's follow-up caption event fires — and lowered once the birth
+    // commit completes. User edits during the window still mark dirty through
+    // the input/click listeners; only the app's own caption pass is exempt.
+    birthInProgress = true;
     clearTimeout(autosaveTimer);
     autosaveTimer = null;
     autosavePending = false;
@@ -1242,13 +1253,17 @@
       // previous project's transcription details
       renderTranscriptionInfo(null, '');
     }
-    if (opfsAvailable && session.projectId !== null) {
-      await acquireProjectLock(session.projectId); // fresh id: always granted
-      await writeOriginOnce(htmlToJSON(getEditorHtml()));
-      await resolveMediaFile();
-      await writeMediaOnce();
-      await commitInitialState(session.projectId); // v0: as transcribed/imported
-      updateSaveIndicator();
+    try {
+      if (opfsAvailable && session.projectId !== null) {
+        await acquireProjectLock(session.projectId); // fresh id: always granted
+        await writeOriginOnce(htmlToJSON(getEditorHtml()));
+        await resolveMediaFile();
+        await writeMediaOnce();
+        await commitInitialState(session.projectId); // v0: as transcribed/imported
+        updateSaveIndicator();
+      }
+    } finally {
+      birthInProgress = false;
     }
   }
 
@@ -2221,15 +2236,29 @@
       const t = event.target;
       if (t && t.closest && t.closest(EDIT_SCOPE) !== null) scheduleAutosave();
     }, true);
-    // blur doesn't bubble; focusout does — end-of-edit capture for the transcript
+    // blur doesn't bubble; focusout does — end-of-edit capture for the
+    // transcript. Only when an edit is actually pending: the transcript is a
+    // contenteditable that takes focus on any click into it (and Chrome
+    // restores that focus after an app switch), so an unconditional
+    // focusout-marks-dirty turned mere focus traffic — click a word, click
+    // away; leave the window, come back, click anything — into a phantom
+    // dirty dot. Every real edit fires `input` first, which sets
+    // autosavePending; this listener only hastens that flush.
     document.addEventListener('focusout', (event) => {
       const t = event.target;
-      if (t && t.closest && t.closest('#hypertranscript') !== null) scheduleAutosave();
+      if (t && t.closest && t.closest('#hypertranscript') !== null && autosavePending) {
+        scheduleAutosave();
+      }
     });
     // the strike-through toolbar mutates word styles without emitting input
     const strikeBtn = document.querySelector('#strikethrough');
     if (strikeBtn !== null) strikeBtn.addEventListener('click', scheduleAutosave);
-    document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', scheduleAutosave);
+    document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', () => {
+      // the engine-driven caption pass during project birth is part of the
+      // committed v0, not an edit — see birthInProgress
+      if (birthInProgress) return;
+      scheduleAutosave();
+    });
     ['#remove-gaps-enabled', '#remove-gaps-threshold', '#remove-gaps-buffer', '#show-speakers', '#show-timecodes']
       .forEach((selector) => {
         const el = document.querySelector(selector);
