@@ -2236,10 +2236,19 @@
       const t = event.target;
       if (t && t.closest && t.closest(EDIT_SCOPE) !== null) scheduleAutosave();
     }, true);
-    // blur doesn't bubble; focusout does — end-of-edit capture for the transcript
+    // blur doesn't bubble; focusout does — end-of-edit capture for the
+    // transcript. Only when an edit is actually pending: the transcript is a
+    // contenteditable that takes focus on any click into it (and Chrome
+    // restores that focus after an app switch), so an unconditional
+    // focusout-marks-dirty turned mere focus traffic — click a word, click
+    // away; leave the window, come back, click anything — into a phantom
+    // dirty dot. Every real edit fires `input` first, which sets
+    // autosavePending; this listener only hastens that flush.
     document.addEventListener('focusout', (event) => {
       const t = event.target;
-      if (t && t.closest && t.closest('#hypertranscript') !== null) scheduleAutosave();
+      if (t && t.closest && t.closest('#hypertranscript') !== null && autosavePending) {
+        scheduleAutosave();
+      }
     });
     // the strike-through toolbar mutates word styles without emitting input
     const strikeBtn = document.querySelector('#strikethrough');

@@ -347,6 +347,15 @@ test('a fresh transcription births CLEAN: the engine caption pass is not an edit
   await page.waitForTimeout(2000); // and it stays clean once the birth settles
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
 
+  // focus traffic is not an edit: focus into the transcript and away again —
+  // the same sequence an app switch replays on window refocus — stays clean
+  await page.evaluate(() => {
+    document.getElementById('hypertranscript').focus();
+    document.getElementById('project-save-btn').focus();
+  });
+  await page.waitForTimeout(300);
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
   // a LATER caption regeneration (user-driven) is a real edit again
   await page.evaluate(() => {
     document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
