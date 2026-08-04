@@ -474,7 +474,10 @@
   function hyperaudio() {
     // Leave a small gap below the navbar when autoscrolling the active paragraph
     // (passed natively as scrollOffset to the 2.5.x options-object constructor).
-    const SCROLL_TOP_GAP = 24;
+    // Clears the corner buttons' band (#480) while staying under the
+    // inter-line gap: at 36 the previous line's bottom few pixels peeked into
+    // the viewport top as a sliced sliver when autoscroll parked a paragraph.
+    const SCROLL_TOP_GAP = 30;
 
     // hyperaudio() runs on every transcript (re)load — tear down the previous
     // instance so its player/document listeners don't accumulate (2.6.0 API).

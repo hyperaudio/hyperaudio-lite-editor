@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.0.0 — last changed in release 1.0.0
+ * @version 1.1.6 — last changed in release 1.1.6
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -141,6 +141,14 @@
       topics.textContent = 'Topics: ' + entry.topics.join(', ');
       popoutEl.appendChild(topics);
     }
+    // glance info gained a duration line when kebab-Info went away (#480):
+    // the popout is now the only at-a-distance view of a background project
+    if (entry.media && entry.media.durationSeconds > 0) {
+      const duration = document.createElement('p');
+      duration.className = 'recents-popout-topics';
+      duration.textContent = 'Duration: ' + formatDuration(entry.media.durationSeconds);
+      popoutEl.appendChild(duration);
+    }
     document.body.appendChild(popoutEl);
     const paneRect = pane.getBoundingClientRect();
     const rowRect = rowEl.getBoundingClientRect();
@@ -177,11 +185,14 @@
     const menu = document.createElement('div');
     menu.id = 'recents-menu';
     menu.setAttribute('role', 'menu');
+    // Pure file actions (#480): Info moved to the transcript card's ⓘ — the
+    // other items act on the project as an object, Info inspects the content.
+    // The separator fences the destructive action off from the rest.
     menu.innerHTML =
-      `<button type="button" role="menuitem" class="recents-menu-info">${INFO_SVG}Info</button>` +
       `<button type="button" role="menuitem" class="recents-menu-star">${STAR_SVG}${isStarred ? 'Unstar' : 'Star'}</button>` +
       `<button type="button" role="menuitem" class="recents-menu-rename">${RENAME_SVG}Rename</button>` +
       `<button type="button" role="menuitem" class="recents-menu-duplicate">${DUPLICATE_SVG}Duplicate</button>` +
+      '<hr class="recents-menu-sep" aria-hidden="true" />' +
       `<button type="button" role="menuitem" class="recents-menu-delete">${DELETE_SVG}Delete</button>`;
     document.body.appendChild(menu);
 
@@ -192,44 +203,6 @@
       ? anchor.top - size.height - 4
       : anchor.bottom + 4) + 'px';
 
-    // Info is project-bound: make the project current (a dialog-free switch,
-    // a no-op if it already is), then open the info modal — apply() has
-    // populated it from the project's stored provenance/summary/topics.
-    menu.querySelector('.recents-menu-info').addEventListener('click', async () => {
-      closeMenu();
-      await lib().open(entry.id);
-      // the modal leads with the project's name — after the switch the
-      // session title is authoritative (rename-safe), the entry the fallback
-      const nameEl = document.getElementById('project-info-name');
-      if (nameEl !== null) {
-        nameEl.textContent = (window.HyperaudioSave.getProjectTitle && window.HyperaudioSave.getProjectTitle())
-          || entry.name || 'project';
-      }
-      const mediaEl = document.getElementById('project-info-media');
-      if (mediaEl !== null) {
-        const media = entry.media || {};
-        const rows = [];
-        if (media.kind === 'original' && media.filename) rows.push(['File', media.filename]);
-        if (media.kind === 'link') rows.push(['Source', 'remote URL']);
-        if (media.durationSeconds > 0) rows.push(['Duration', formatDuration(media.durationSeconds)]);
-        mediaEl.textContent = '';
-        if (rows.length === 0) {
-          const p = document.createElement('p');
-          p.textContent = 'No media — text only.';
-          mediaEl.appendChild(p);
-        }
-        rows.forEach(([label, value]) => {
-          const p = document.createElement('p');
-          const strong = document.createElement('strong');
-          strong.textContent = label + ':';
-          p.appendChild(strong);
-          p.appendChild(document.createTextNode(' ' + value));
-          mediaEl.appendChild(p);
-        });
-      }
-      const toggle = document.getElementById('info-modal');
-      if (toggle !== null) toggle.checked = true;
-    });
     menu.querySelector('.recents-menu-star').addEventListener('click', () => {
       closeMenu();
       lib().setStarred(entry.id, !isStarred); // the index write re-renders us
@@ -446,9 +419,80 @@
     render();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
+  /* ---- Transcript-card ⓘ (#480): Info for the CURRENT project, anchored
+     top-left of the transcript card — the mirror of the copy button at
+     top-right (top-right = act on the content, top-left = learn about it).
+     It never switches projects: full info on a background project is the
+     honest two-step — click the row, press ⓘ. Same visibility rules as the
+     copy button: hidden in caption mode (view-switch wiring below) and while
+     the transcript is aria-busy (CSS). ---- */
+
+  function bootInfoButton() {
+    const btn = document.createElement('button');
+    btn.id = 'transcript-info-btn';
+    btn.type = 'button';
+    btn.className = 'btn btn-square btn-ghost btn-sm tooltip';
+    btn.setAttribute('data-tip', 'Project info');
+    btn.setAttribute('aria-label', 'Project info');
+    btn.innerHTML = INFO_SVG;
+    btn.addEventListener('click', async () => {
+      const nameEl = document.getElementById('project-info-name');
+      if (nameEl !== null) {
+        nameEl.textContent = (window.HyperaudioSave && window.HyperaudioSave.getProjectTitle
+          && window.HyperaudioSave.getProjectTitle()) || 'project';
+      }
+      const mediaEl = document.getElementById('project-info-media');
+      if (mediaEl !== null) {
+        const library = lib();
+        const entry = library
+          ? (await library.list()).find((e) => e.id === library.currentId())
+          : undefined;
+        const media = (entry && entry.media) || {};
+        const rows = [];
+        if (media.kind === 'original' && media.filename) rows.push(['File', media.filename]);
+        if (media.kind === 'link') rows.push(['Source', 'remote URL']);
+        if (media.durationSeconds > 0) rows.push(['Duration', formatDuration(media.durationSeconds)]);
+        mediaEl.textContent = '';
+        if (rows.length === 0) {
+          const p = document.createElement('p');
+          p.textContent = 'No media — text only.';
+          mediaEl.appendChild(p);
+        }
+        rows.forEach(([label, value]) => {
+          const p = document.createElement('p');
+          const strong = document.createElement('strong');
+          strong.textContent = label + ':';
+          p.appendChild(strong);
+          p.appendChild(document.createTextNode(' ' + value));
+          mediaEl.appendChild(p);
+        });
+      }
+      const toggle = document.getElementById('info-modal');
+      if (toggle !== null) toggle.checked = true;
+    });
+    document.body.appendChild(btn);
+
+    // the caption editor owns the card in caption mode — hide/show with the
+    // view switch, covering the engines' programmatic switches too (same
+    // wiring as the copy button in transcript-doc-export.js)
+    const captionBtn = document.getElementById('caption-editor-btn');
+    const transcriptBtn = document.getElementById('transcript-editor-btn');
+    if (captionBtn !== null) {
+      captionBtn.addEventListener('click', () => { btn.style.display = 'none'; });
+    }
+    if (transcriptBtn !== null) {
+      transcriptBtn.addEventListener('click', () => { btn.style.display = ''; });
+    }
+  }
+
+  function bootAll() {
     boot();
+    bootInfoButton();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootAll);
+  } else {
+    bootAll();
   }
 })();

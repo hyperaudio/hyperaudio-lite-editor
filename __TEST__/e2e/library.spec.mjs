@@ -156,17 +156,23 @@ test('switching flushes the outgoing project\'s pending edit — nothing lost, n
   await expect(page.locator('#hypertranscript')).toContainText('PENDING-B');
 });
 
-test('Info lives in the kebab: switches to the project and shows ITS details (#456)', async ({ page }, testInfo) => {
+test('Info is the transcript ⓘ, current project only; the kebab is pure file actions (#480)', async ({ page }, testInfo) => {
   await openProject(page, testInfo, 'Project A');
   await openProject(page, testInfo, 'Project B'); // B is current now
 
+  // the kebab no longer carries Info — its Info silently switched projects
   await openKebab(page, 'Project A');
-  await page.locator('#recents-menu .recents-menu-info').click();
+  await expect(page.locator('#recents-menu .recents-menu-info')).toHaveCount(0);
+  await expect(page.locator('#recents-menu .recents-menu-sep')).toHaveCount(1);
+  await page.keyboard.press('Escape');
 
-  // Info made A current (dialog-free) and opened the modal with A's stored
-  // provenance and texts — not B's, and not a stale engine report
+  // full info on another project is the honest two-step: click the row…
+  await row(page, 'Project A').click();
   await expect(activeRow(page)).toHaveText('Project A');
-  expect(await page.evaluate(() => document.getElementById('info-modal').checked)).toBe(true);
+  // …then press ⓘ, which inspects the CURRENT project without any switch
+  // (the handler reads the library index before opening — poll, don't peek)
+  await page.locator('#transcript-info-btn').click();
+  await page.waitForFunction(() => document.getElementById('info-modal').checked);
   await expect(page.locator('#project-info-name')).toHaveText('Project A');
   await expect(page.locator('#project-info-media')).toContainText('tone.wav');
   await expect(page.locator('#project-info-media')).toContainText('Duration: 0:02'); // from the index's media meta

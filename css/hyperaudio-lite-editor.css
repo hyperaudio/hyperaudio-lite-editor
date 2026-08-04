@@ -616,6 +616,49 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-copy-btn { display: non
     transition: top 0.25s ease; /* follows the video collapse like the holder */
   }
 }
+/* Project-info ⓘ (#480): the copy button's top-LEFT mirror — top-right acts
+   on the content, top-left learns about it. Unlike the right edge, the
+   holder's LEFT edge moves with the sidebar (400 <-> 0), so the button
+   tracks body.sidebar-collapsed with the same 0.5s ease. */
+#transcript-info-btn {
+  position: fixed;
+  top: 88px;              /* holder top (78px) + 10px inset */
+  left: 412px;            /* holder left (400px) + 12px inset */
+  z-index: 20;
+  color: oklch(var(--bc) / 0.55);
+  transition: left 0.5s ease;
+}
+body.sidebar-collapsed #transcript-info-btn { left: 12px; }
+#transcript-info-btn:hover { color: oklch(var(--bc)); }
+html:has(#hypertranscript[aria-busy="true"]) #transcript-info-btn { display: none; }
+/* left-anchor the tooltip bubble so it opens inward, not off the card edge */
+#transcript-info-btn.tooltip::before {
+  left: 0;
+  transform: none;
+}
+@media screen and (max-width: 948px) {
+  #transcript-info-btn {
+    top: calc(var(--nav-h) + var(--player-h) + 10px);
+    left: 12px;
+    transition: top 0.25s ease;
+  }
+}
+/* the compact navbar band (#480): the holder's top drops 78px -> 58px at
+   1120, and both corner buttons must ride the card's edge with it. Bounded
+   below at 949 so the <=948 var-based rules above keep the last word. */
+@media screen and (max-width: 1120px) and (min-width: 949px) {
+  #transcript-copy-btn { top: 68px; }
+  #transcript-info-btn { top: 68px; }
+}
+
+/* Corner buttons vs scrolling text (#480): the mask-fade experiment was
+   removed — masking .transcript-holder faded the card's own top edge and
+   rounded corners away with the text, since the holder paints the chrome AND
+   is the scrollport. A fade needs those roles split (card chrome on the
+   holder, an inner scroll wrapper carrying the mask) — deferred. The
+   autoscroll landing offset (editor-core SCROLL_TOP_GAP) keeps parked lines
+   clear of the corner buttons meanwhile. */
+
 /* screen-reader-only live region for the copy announcement */
 #transcript-copy-status {
   position: absolute;
@@ -1234,6 +1277,12 @@ label[data-a11y-wired]:focus-visible {
   border-radius: 0.5rem;
   background-color: oklch(var(--b1));
   box-shadow: 0 4px 16px oklch(var(--bc) / 0.15), 0 0 0 1px oklch(var(--bc) / 0.06);
+}
+/* fences Delete off from the reversible actions (#480) */
+#recents-menu .recents-menu-sep {
+  border: none;
+  border-top: 1px solid oklch(var(--bc) / 0.12);
+  margin: 4px 6px;
 }
 #recents-menu button {
   display: flex;
