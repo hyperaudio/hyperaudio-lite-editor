@@ -1489,7 +1489,8 @@
     const settings = opts || {};
     const track = resetCaptionTrack();
     if (track === null) return null;
-    if (typeof vttSrc === 'string' && vttSrc !== '') track.src = vttSrc;
+    const src = (typeof vttSrc === 'string' && vttSrc !== '') ? vttSrc : '';
+    if (src !== '') track.src = src;
     if (settings.kind !== undefined) track.kind = settings.kind;
     if (settings.label !== undefined) track.label = settings.label;
     if (settings.srcLang !== undefined) track.srcLang = settings.srcLang;
@@ -1498,11 +1499,59 @@
     const video = document.getElementById('hyperplayer');
     const textTrack = video !== null && video.textTracks !== undefined
       ? video.textTracks[0] : undefined;
-    if (textTrack !== undefined) {
-      textTrack.mode = settings.mode !== undefined ? settings.mode : 'showing';
-    }
+    const mode = settings.mode !== undefined ? settings.mode : 'showing';
+    if (textTrack !== undefined) textTrack.mode = mode;
     flushCaptionPaint();
+    guardAgainstLateCaptionWrite(video, track, src, mode);
     return track;
+  }
+
+  // Part 3 of #356/#287, and the one that survived the first two fixes.
+  //
+  // The vendored caption.js applies its VTT on 'loadedmetadata' when the media
+  // has not loaded yet — and the listener closes over THAT document's captions.
+  // Nothing cancels it when the document changes, so a caption pass run while
+  // the intro (remote, slow) was still loading stays pending, and fires when the
+  // NEXT media's metadata arrives: the previous document's captions land on top
+  // of the one just opened. Measured — the write happens after everything the
+  // synchronous teardown and paint flush can reach, which is why the track ends
+  // up holding a data:text/vtt of the PREVIOUS transcript.
+  //
+  // Registering our own one-shot listener here re-asserts the swap after any
+  // such straggler: at the target, listeners run in registration order, and ours
+  // is necessarily registered later than a pending one. Only armed while
+  // metadata is still pending — once it has loaded, any stale listener has
+  // already fired and been removed, so there is nothing to outlast, and the
+  // window in which this could contend with a legitimate later caption pass
+  // stays as small as possible.
+  //
+  // The real fix belongs upstream (capture the media identity at registration
+  // and bail if it changed); this is the local defence until that lands.
+  function guardAgainstLateCaptionWrite(video, track, src, mode) {
+    if (video === null || video.readyState >= 1 /* HAVE_METADATA */) return;
+    video.addEventListener('loadedmetadata', function reassert() {
+      video.removeEventListener('loadedmetadata', reassert);
+      // Still OUR swap? resetCaptionTrack replaces the element, so a later
+      // applyCaptionTrack — a newer document — leaves a different one in place
+      // and this re-assert must stand down. A straggler from caption.js writes
+      // .src on the existing element, so identity still holds there, which is
+      // exactly the case worth correcting. Element identity rather than the
+      // media src: apply() sets media before captions, but nothing guarantees
+      // that order for every caller.
+      const current = document.getElementById('hyperplayer-vtt');
+      if (current === null || current !== track) return;
+      let changed = false;
+      if (src !== '' && current.getAttribute('src') !== src) {
+        current.src = src;
+        changed = true;
+      }
+      const tt = video.textTracks !== undefined ? video.textTracks[0] : undefined;
+      if (tt !== undefined && tt.mode !== mode) {
+        tt.mode = mode;
+        changed = true;
+      }
+      if (changed) flushCaptionPaint();
+    });
   }
 
   // the caption-regenerate path in editor-core reaches these by global name

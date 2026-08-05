@@ -15,6 +15,7 @@
 // TextTrack. On the pre-fix code the element was reused, so `sameElement` is true
 // and the stale cue can linger — this test fails there.
 import { test, expect } from '@playwright/test';
+import { ladderWav } from './helpers.mjs';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/index.html');
@@ -129,4 +130,61 @@ test('the regenerate path still flushes, via the shared helper (#356/#287)', asy
     document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
   });
   expect(await flushed(page)).toBe(true);
+});
+
+// Part 3 of #356/#287 — the late, ASYNCHRONOUS write that survived the first two
+// fixes. The vendored caption.js defers its VTT to 'loadedmetadata' when the
+// media has not loaded yet, closing over THAT document's captions; nothing
+// cancels it when the document changes. So a caption pass run while the intro
+// (remote, slow) was still loading stays pending and fires when the NEXT media's
+// metadata arrives, writing the previous transcript's captions over the project
+// just opened — after everything the teardown and paint flush can reach.
+//
+// Reproduces it directly: media A that never loads metadata, a caption pass to
+// arm the straggler, then a different document applied through the door.
+test('a caption pass armed on unloaded media cannot overwrite the next document (#356/#287)', async ({ page }) => {
+  await page.route('**/__never.mp3', async () => { /* never fulfils */ });
+  await page.route('**/__real.wav', (route) => route.fulfill({
+    body: ladderWav(3), contentType: 'audio/wav',
+  }));
+
+  // 1. media A, whose metadata never arrives, plus a caption pass over
+  //    transcript A: caption.js parks a listener holding A's captions
+  await page.evaluate(() => {
+    const v = document.getElementById('hyperplayer');
+    v.src = '/__never.mp3';
+    document.getElementById('hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">STALEWORD </span></p></section></article>';
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').readyState)).toBe(0);
+
+  // 2. a different document arrives the way a project open delivers one
+  await page.evaluate(async () => {
+    document.getElementById('hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">FRESHWORD </span></p></section></article>';
+    window.applyCaptionTrack(
+      'data:text/vtt,' + encodeURIComponent('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFRESHWORD\n'),
+      { kind: 'captions', mode: 'showing' }
+    );
+    const blob = await (await fetch('/__real.wav')).blob();
+    document.getElementById('hyperplayer').src = URL.createObjectURL(blob);
+  });
+
+  // 3. the new media's metadata is exactly when the straggler would fire
+  await page.waitForFunction(
+    () => document.getElementById('hyperplayer').readyState >= 1, null, { timeout: 15000 });
+  await page.waitForTimeout(500);
+
+  const result = await page.evaluate(() => {
+    const t = document.getElementById('hyperplayer-vtt');
+    const src = t === null ? '' : decodeURIComponent(t.src);
+    const tt = document.getElementById('hyperplayer').textTracks[0];
+    return { stale: /STALEWORD/.test(src), fresh: /FRESHWORD/.test(src), mode: tt && tt.mode };
+  });
+
+  expect(result.stale).toBe(false);   // pre-fix: true — the intro's captions won
+  expect(result.fresh).toBe(true);
+  expect(result.mode).toBe('showing');
 });
