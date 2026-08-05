@@ -73,11 +73,63 @@
 
   let editableDiv = document.querySelector('#hypertranscript');
 
+  // The transcript is time-aligned speech, not a rich-text document: a word is a
+  // <span data-m data-d> and the model carries no formatting. But #hypertranscript
+  // is a plain contenteditable, so the browser's own formatting commands applied
+  // anyway — ⌘B wrapped the selected word spans in <b>, which the writer then
+  // flattened away on save, silently losing what the user had just applied.
+  //
+  // Suppress the whole family rather than named shortcuts. beforeinput (not
+  // keydown) is the hook that catches every route into it — keyboard, the
+  // right-click menu, and the macOS Format/Edit menu bar — and inputType tells us
+  // which operation it is. Every format* type either injects an element or sets a
+  // style the transcript doesn't model, formatRemove included: nothing gets in, so
+  // there is nothing to clear (anything that does arrive — legacy files, or a
+  // paste per #487 — is flattened by the writer anyway).
+  //
+  // The editor's OWN strikethrough (redaction) sets span.style programmatically
+  // and never goes through either hook, so it is unaffected.
+  //
+  // Two hooks, because neither covers the ground alone:
+  //  - keydown stops ⌘/Ctrl+B/I/U, which is how this is actually reached (no UI
+  //    offers it). Deterministic, and the only route testable in our headless
+  //    Chromium, where the shortcut is otherwise inert.
+  //  - beforeinput catches format* from routes that raise it instead — a menu
+  //    bar, a context menu — and covers types no shortcut has. Measured caveat:
+  //    document.execCommand('bold') raises NO beforeinput in Chromium, so this
+  //    is not a general "no formatting can ever appear" guarantee; it closes the
+  //    user-reachable routes. Markup that still gets in (legacy files, a paste
+  //    per #487) is flattened by the writer on save.
+  editableDiv.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && /^[biu]$/i.test(e.key)) {
+      e.preventDefault();
+    }
+  });
+
+  editableDiv.addEventListener('beforeinput', function (e) {
+    if (typeof e.inputType === 'string' && e.inputType.startsWith('format')) {
+      e.preventDefault();
+    }
+  });
+
+  // Paste the clipboard's PLAIN text as plain text (#487). insertHTML parsed it
+  // as markup, so anything between < and > became an element instead of
+  // characters: pasting the literal "<inaudible>" produced an empty <inaudible>
+  // element and the word rendered as nothing — silently destroyed, and absent
+  // from the saved JSON. insertText inserts characters, so angle brackets
+  // survive as text (the invariant transcript-serializer.js already documents
+  // for words like "<inaudible>", #406/#409), and it still participates in
+  // native contenteditable undo, which matters until #400 owns undo itself.
+  //
+  // The "&nbsp;" replacement that stood here was a no-op — it discarded its
+  // return value, and plain-text clipboard content carries U+00A0 rather than
+  // that literal string. It was guarding against insertHTML decoding a pasted
+  // "&nbsp;" into a space, which insertText cannot do. normalizeTranscriptSpans
+  // converts real nbsp characters on the next pass either way (#339).
   editableDiv.addEventListener("paste", function(e) {
     e.preventDefault();
-    var text = e.clipboardData.getData("text/plain");
-    text.replaceAll("&nbsp;", " ");
-    document.execCommand("insertHTML", false, text);
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
   });
 
   window.document.addEventListener('hyperaudioInit', hyperaudio, false);

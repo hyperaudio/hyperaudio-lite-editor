@@ -268,6 +268,18 @@ origin.
 
 Rules:
 
+- **At least one paragraph.** A writer **MUST** emit a non-empty
+  `paragraphs` whenever `words` is non-empty. A transcript with no structure
+  is expressed as a single paragraph spanning the words with
+  `speaker: null` — nothing needs inventing, and the DOM equivalent
+  (`<article><section><p>…`) already holds in practice, so this removes an
+  asymmetry rather than adding a constraint.
+- **Readers stay tolerant.** A reader **MUST** accept `paragraphs: []` or an
+  absent `paragraphs` — files predate this rule and third-party JSON needn't
+  carry structure — and **MUST** synthesise the single spanning paragraph
+  above rather than dropping the words. Normalising once, where JSON enters,
+  is what lets everything downstream assume ≥ 1; leaving each projection to
+  handle the gap its own way is how they came to disagree (#492).
 - Times are **seconds** (float) throughout the JSON. (The editor's DOM uses
   integer milliseconds — `data-m`/`data-d`; the conversion is
   `ms = round(s × 1000)`; § 12.)
@@ -312,13 +324,25 @@ Role:
    storage) consume it without converters.
 2. **Inspectability**: opening the zip, a browser displays the transcript
    directly.
-3. **Safety net**: if the JSON round-trip ever had a bug, the editor's data
-   is still there.
+
+This entry is **not** an independent witness to the transcript. It is a
+projection of `hyperaudio.json.transcript`, so it cannot hold anything the
+JSON lost — the earlier "safety net" role is traded for guaranteed
+consistency. That trade is deliberate (#489): two independent derivations of
+the same transcript can disagree, and a second copy that disagrees is worse
+than no second copy.
 
 **Anti-divergence rule:** the source of truth is
 `hyperaudio.json.transcript`. The writer **MUST** generate `transcript.html`
-from the same state in the same save (the two files are consistent by
-construction).
+from that JSON in the same save — not from a second reading of its own
+editing surface, which makes the two entries consistent by construction
+rather than by promise.
+
+A writer **MAY** compare the word count it parsed against the words its
+editor holds, and against the words in the generated HTML. If either
+disagrees, it **SHOULD** write its raw transcript markup to this entry
+instead and record why: the parse or the projection is suspect exactly then,
+and the unprojected markup is the only copy that still has every word.
 
 **Fallback rules:** the reader **MUST** load from the JSON; using
 `transcript.html` as a source is allowed **only as recovery**, when the JSON
@@ -637,6 +661,8 @@ excepted.
 - [ ] writes `mimetype` as the first entry, STORE, exact content
 - [ ] writes `hyperaudio.json` with all required fields, times in seconds,
       defaults (`space: true`, `struck: false`) not serialized
+- [ ] writes at least one `transcript.paragraphs` entry whenever there are
+      words (§ 3.6)
 - [ ] writes `transcript.html` and `captions.vtt` consistent with the JSON of
       the same save
 - [ ] writes `transcript.original.json` once (at transcription time) and
@@ -663,6 +689,8 @@ excepted.
 - [ ] ignores unknown fields and files
 - [ ] tolerates the absence of `mimetype`, `transcript.html`,
       `transcript.original.json`, `captions.vtt`
+- [ ] tolerates an empty or absent `transcript.paragraphs`, synthesising one
+      unattributed paragraph spanning the words (§ 3.6)
 
 ---
 
@@ -675,6 +703,7 @@ excepted.
 | `struck` travels in the save, is applied at export | Redactions are reversible as long as you are in the working file. |
 | Captions ≠ transcript (§ 6.1) | Never "repair" the divergence: with `updateFromTranscript: false` it is intentional. |
 | Origin ≠ working copy (§ 5) | `transcript.original.json` is immutable and pre-redaction: never load it in place of the working transcript, never "update" it. |
+| At least one paragraph whenever there are words (§ 3.6) | Writers guarantee it, readers synthesise it. Every JSON→markup projection may then assume ≥ 1; when they each answered the paragraph-less case separately, one of them emitted an empty `<section>` and lost the whole transcript. |
 | The file is untrusted input (§ 10) | Whitelist-read, validation, DOM via `textContent`, sanitization of the HTML fallback. |
 | UTF-8 everywhere | Media filenames included (the zip's UTF-8 flag). |
 | One media file, original name | No ambiguity, no index to maintain. |

@@ -567,8 +567,20 @@ function htmlToJson(html) {
 // Convert JSON to Hypertranscript HTML. Accepts the flat shape
 // { words, paragraphs, sections } produced by htmlToJson.
 function jsonToHtml(jsonData) {
-  const words = (jsonData && jsonData.words) || [];
-  const paragraphs = (jsonData && jsonData.paragraphs) || [];
+  // Paragraph-less input used to produce <article><section></section></article>
+  // — every word silently gone, because the emit loop below is driven entirely
+  // by paragraphs and there were none. That was reachable from the JSON import
+  // path above and from native-app callers of window.jsonToHtml, so this needs
+  // its own guarantee (#492) rather than relying on a normalised caller: the
+  // shared normaliser when it is loaded, an inline span otherwise.
+  const normalized = typeof window !== 'undefined' && typeof window.normalizeTranscriptParagraphs === 'function'
+    ? window.normalizeTranscriptParagraphs(jsonData)
+    : jsonData;
+  const words = (normalized && normalized.words) || [];
+  const fromNormaliser = (normalized && normalized.paragraphs) || [];
+  const paragraphs = fromNormaliser.length > 0 || words.length === 0
+    ? fromNormaliser
+    : [{ start: words[0].start, end: words[words.length - 1].end, speaker: null }];
   const sections = (jsonData && jsonData.sections && jsonData.sections.length > 0)
     ? jsonData.sections
     : [{ start: -Infinity, end: Infinity }];

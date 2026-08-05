@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.1.4 — last changed in release 1.1.4
+ * @version 1.1.8 — last changed in release 1.1.8
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -537,6 +537,36 @@
     return name.replace(/\.[a-z0-9]+$/i, '');
   };
 
+  // Bundle the run's outputs into one archive (#396). Everything goes inside a
+  // single top-level FOLDER, which is the point: the interactive transcript
+  // links its media by bare filename, and handing the browser several downloads
+  // lets its de-duplication rename one of them — "clip.mp4" arrives as
+  // "clip (1).mp4" when Downloads already holds that name, and the transcript
+  // then silently plays whatever the older file was. Archive entries can't be
+  // renamed that way, and if the FOLDER collides on extraction it is the folder
+  // that gets suffixed while its contents keep their names and pairing.
+  //
+  // STORE, not deflate: the payload is already-compressed media, so compressing
+  // buys nothing and costs time on large exports.
+  const zipFolderName = (name) => {
+    const cleaned = String(name).replace(/[\\/:*?"<>|]+/g, '-').replace(/^\.+/, '').trim();
+    return cleaned !== '' ? cleaned : 'hyperaudio-export';
+  };
+
+  const buildOutputsZip = async (outputs, baseName, onProgress) => {
+    if (!window.HyperaudioSave || typeof window.HyperaudioSave.loadJSZip !== 'function') {
+      throw new Error('zip writer unavailable');
+    }
+    const JSZipImpl = await window.HyperaudioSave.loadJSZip();
+    const zip = new JSZipImpl();
+    const folder = zip.folder(zipFolderName(baseName));
+    outputs.forEach((out) => folder.file(out.name, out.blob));
+    return zip.generateAsync(
+      { type: 'blob', compression: 'STORE' },
+      (meta) => { if (typeof onProgress === 'function' && meta) onProgress(meta.percent || 0); }
+    );
+  };
+
   const downloadBlob = (blob, filename) => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -570,6 +600,9 @@
   const retimeCheck = document.getElementById('export-retime');
   const vttRow = document.getElementById('export-vtt-row');
   const vttCheck = document.getElementById('export-vtt');
+  const zipRow = document.getElementById('export-zip-row');
+  const zipCheck = document.getElementById('export-zip');
+  const nameNote = document.getElementById('export-name-note');
   const srtRow = document.getElementById('export-srt-row');
   const srtCheck = document.getElementById('export-srt');
   const projectRow = document.getElementById('export-project-row');
@@ -723,6 +756,30 @@
       projectRow.style.display =
         (show === 'flex' && window.HyperaudioSave
           && typeof window.HyperaudioSave.buildFlattenedProjectBlob === 'function') ? 'flex' : 'none';
+    }
+    updateZipVisibility();
+  };
+
+  // The zip only means anything when the run produces more than one file, so the
+  // toggle appears exactly then — and the "keep the downloads together" warning
+  // is only true when it is off, since a zip keeps them together by construction.
+  const checkedAndVisible = (check, row) =>
+    check !== null && check.checked && row !== null && row.style.display !== 'none';
+
+  const updateZipVisibility = () => {
+    if (zipRow === null) return;
+    const extras = [
+      checkedAndVisible(retimeCheck, retimeRow),
+      checkedAndVisible(vttCheck, vttRow),
+      checkedAndVisible(srtCheck, srtRow),
+      checkedAndVisible(projectCheck, projectRow),
+    ].filter(Boolean).length;
+    const multi = extras > 0;   // the media itself is always the first output
+    zipRow.style.display = multi ? 'flex' : 'none';
+    if (nameNote !== null) {
+      nameNote.textContent = (multi && zipCheck !== null && zipCheck.checked)
+        ? 'All exported files use this name. They arrive in one .zip, in a folder that keeps them together.'
+        : 'All exported files use this name. The interactive transcript links the video by it — keep the downloads together in one folder.';
     }
   };
 
@@ -947,11 +1004,32 @@
         }
       }
 
-      // 4. hand the browser each file, spaced out so Safari doesn't drop all but
-      // the last of a multi-file download
-      for (let i = 0; i < outputs.length; i++) {
-        downloadBlob(outputs[i].blob, outputs[i].name);
-        if (i < outputs.length - 1) await sleep(250);
+      // 4. hand the files to the browser — as one .zip when asked, else each on
+      // its own, spaced out so Safari doesn't drop all but the last (#396).
+      // Decided by what the run actually produced plus the toggle — NOT by the
+      // row's visibility, which is presentation and can lag a programmatic
+      // checkbox change that fired no 'change' event.
+      const asZip = outputs.length > 1 && zipCheck !== null && zipCheck.checked;
+      let zipped = false;
+      if (asZip) {
+        try {
+          setStatus('Packaging…');
+          const zipBlob = await buildOutputsZip(outputs, baseName, (pct) => {
+            setStatus(`Packaging… ${Math.round(pct)}%`);
+          });
+          downloadBlob(zipBlob, `${baseName}.zip`);
+          zipped = true;
+        } catch (e) {
+          // A failed package must not cost the user the render they just waited
+          // for — fall through to the individual downloads instead.
+          console.warn('media-export: zip packaging failed, downloading separately', e);
+        }
+      }
+      if (!zipped) {
+        for (let i = 0; i < outputs.length; i++) {
+          downloadBlob(outputs[i].blob, outputs[i].name);
+          if (i < outputs.length - 1) await sleep(250);
+        }
       }
 
       setProgress(1);
@@ -967,6 +1045,11 @@
   };
 
   modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
+  // the zip offer tracks how many files the run will produce, so it has to
+  // re-evaluate whenever a sidecar is toggled (and its own state changes the note)
+  [retimeCheck, vttCheck, srtCheck, projectCheck, zipCheck].forEach((el) => {
+    if (el !== null) el.addEventListener('change', updateZipVisibility);
+  });
   sourceEntire.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
   sourceEdited.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
   formatSelect.addEventListener('change', updateBurnVisibility);
