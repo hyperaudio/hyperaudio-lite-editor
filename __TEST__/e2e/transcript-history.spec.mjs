@@ -135,7 +135,7 @@ test('history is bounded while retaining an undoable baseline', async ({ page })
   expect(await page.evaluate(() => transcriptHistory.undo())).toBe(true);
 });
 
-test('caption mode is a no-op and touch controls stay unique and accessible', async ({ page }) => {
+test('caption mode is a no-op and the controls stay unique and accessible', async ({ page }) => {
   await page.evaluate(() => {
     const word = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
     transcriptGateway.mutate(() => { word.textContent += 'step'; }, { origin: 'step' });
@@ -145,9 +145,27 @@ test('caption mode is a no-op and touch controls stay unique and accessible', as
   await expect(page.locator('#transcript-undo')).toBeDisabled();
   await page.click('#transcript-editor-btn');
   await expect(page.locator('#transcript-undo')).toBeEnabled();
-  await page.click('#transcript-undo');
-  expect(await page.evaluate(() => document.activeElement.id)).toBe('hypertranscript');
   await expect(page.locator('#transcript-undo')).toHaveCount(1);
   await expect(page.locator('#transcript-redo')).toHaveCount(1);
   await expect(page.locator('#transcript-undo')).toHaveAttribute('aria-label', 'Undo transcript edit');
+});
+
+// The ↶/↷ buttons became touch-only when they left the top bar for the
+// transcript card's corner (the ⓘ/copy pattern) — on fine-pointer devices
+// they are display:none and ⌘Z owns undo. Clicking them therefore needs a
+// touch-emulated context; the default (fine-pointer) context above can still
+// assert existence, aria and disabled state, which ignore visibility.
+test.describe('touch devices', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test('the corner undo button undoes and returns focus to the transcript', async ({ page }) => {
+    await page.evaluate(() => {
+      const word = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+      transcriptGateway.mutate(() => { word.textContent += 'step'; }, { origin: 'step' });
+    });
+    await expect(page.locator('#transcript-undo')).toBeVisible();
+    await page.click('#transcript-undo');
+    expect(await page.evaluate(() => document.activeElement.id)).toBe('hypertranscript');
+    expect(await page.evaluate(() => transcriptHistory.canRedo())).toBe(true);
+  });
 });
