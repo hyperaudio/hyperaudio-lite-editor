@@ -21,10 +21,9 @@
   }
 
   function signalIdentity(origin, extra) {
-    if (liveTimedTranscript() === null) {
-      console.warn('transcript-lifecycle: ignored identity signal without a timed transcript');
-      return false;
-    }
+    // Identity is unconditional: loader/error/empty documents must still end
+    // the previous document's history. Consumers decide whether the new DOM is
+    // eligible for a timed-transcript baseline.
     generation += 1;
     const detail = Object.freeze(Object.assign({}, extra || {}, {
       generation,

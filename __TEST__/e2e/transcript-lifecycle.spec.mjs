@@ -82,7 +82,7 @@ test('restore invalidates find references without changing identity', async ({ p
   expect(await page.evaluate(() => window.transcriptLifecycle.generation())).toBe(0);
 });
 
-test('lifecycle ignores signals while the container is loader markup', async ({ page }) => {
+test('identity remains unconditional while restore rejects loader markup', async ({ page }) => {
   const result = await page.evaluate(() => {
     const lifecycle = window.transcriptLifecycle;
     const transcript = document.getElementById('hypertranscript');
@@ -102,8 +102,8 @@ test('lifecycle ignores signals while the container is loader markup', async ({ 
 
   expect(result).toEqual({
     before: 0,
-    after: 0,
-    identityAccepted: false,
+    after: 1,
+    identityAccepted: true,
     restoreAccepted: false,
   });
 });

@@ -743,6 +743,17 @@
         }
       }
 
+      // History restore replaces the transcript DOM synchronously. Cancel any
+      // timer belonging to the pre-restore DOM and run exactly one fresh pass;
+      // its explicit fold policy lets history amend the restored entry without
+      // consuming redo or creating a visible step.
+      window.hyperaudioNormalizeAfterHistoryRestore = function () {
+        clearTimeout(time);
+        if (captionMode === true || imeComposing === true) return false;
+        mutateTranscript(sanitise, 'history-restore-normalize', 'normalization');
+        return true;
+      };
+
       //longpress to set playhead on mobile
 
       function longPress(element, callback) {
