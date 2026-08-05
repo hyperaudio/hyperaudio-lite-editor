@@ -40,11 +40,12 @@
 }
 
 .hyperaudio-transcript .unread {
-  color: #666;
+  color: #777;
 }
 
-.hyperaudio-transcript .search-match {
+.hyperaudio-transcript .search-mark {
   background-color: pink;
+  color: inherit;
 }
 
 .hyperaudio-transcript .share-match {
