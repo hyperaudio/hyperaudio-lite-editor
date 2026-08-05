@@ -662,6 +662,68 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-info-btn { display: non
   #transcript-info-btn { top: 76px; }
 }
 
+/* Undo/redo (#400): the history module injects ↶/↷ beside the strikethrough
+   button, but the top bar has no room to give — especially on mobile. So:
+   fine-pointer devices hide them entirely (⌘Z owns undo there; the rule at
+   the end of this block), and touch devices get them RELOCATED into the
+   floating corner-button pattern the ⓘ and copy buttons established — fixed
+   to the transcript card's TOP edge, left of the copy button.
+
+   Top, not bottom, deliberately: the virtual keyboard eats the bottom of the
+   viewport at exactly the moment the user is editing, which is when undo is
+   wanted. The card's top edge stays visible while typing.
+
+   Touch means ALL touch: pointer media queries cannot tell Android from iOS.
+   iOS technically doesn't need these (the system three-finger gestures reach
+   the history module via beforeinput historyUndo/historyRedo), but those
+   gestures are undiscoverable and the redundancy is harmless. Android has no
+   system undo path at all — these buttons are it.
+
+   CSS-only relocation, on purpose: the history module is another author's
+   work (#400 branch) and stays untouched. The buttons stay in the toolbar's
+   DOM; position:fixed just paints them at the card edge. Their inline
+   margin-right (set by the injector for the toolbar layout) would shift the
+   fixed box, hence the !important zero. Offsets mirror #transcript-copy-btn
+   band for band; sized down to the corner buttons' 2rem so the trio reads
+   as one family. */
+#transcript-undo,
+#transcript-redo {
+  position: fixed;
+  top: 88px;               /* holder top (78px) + 10px inset, as the others */
+  z-index: 20;
+  width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  margin: 0 !important;    /* neutralize the injector's toolbar margin */
+  font-size: 1rem;
+}
+#transcript-undo { right: 108px; }  /* copy (28px) + 2 button widths + gaps */
+#transcript-redo { right: 68px; }
+/* the loader owns the card while a transcription runs — same rule as ⓘ/copy */
+html:has(#hypertranscript[aria-busy="true"]) #transcript-undo,
+html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
+@media screen and (max-width: 1120px) and (min-width: 949px) {
+  #transcript-undo { top: 76px; }
+  #transcript-redo { top: 76px; }
+}
+@media screen and (max-width: 948px) {
+  #transcript-undo,
+  #transcript-redo {
+    top: calc(var(--nav-h) + var(--player-h) + 10px);
+    transition: top 0.25s ease;  /* follows the video collapse like the holder */
+  }
+  #transcript-undo { right: 92px; }   /* copy at 12px on this band */
+  #transcript-redo { right: 52px; }
+}
+/* Desktop: the keyboard owns undo. Hidden entirely — the top bar stays clear
+   and the corner cluster stays two buttons on the devices that don't need
+   these. Must stay LAST in this block so it wins over the float rules. */
+@media (hover: hover) and (pointer: fine) {
+  #transcript-undo,
+  #transcript-redo { display: none; }
+}
+
 /* Corner buttons vs scrolling text (#480): the mask-fade experiment was
    removed — masking .transcript-holder faded the card's own top edge and
    rounded corners away with the text, since the holder paints the chrome AND

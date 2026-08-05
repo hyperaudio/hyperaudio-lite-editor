@@ -95,11 +95,20 @@
     if (span && typeof span.normalize === 'function') span.normalize();
   };
 
+  const mutateTranscript = (fn, origin) => {
+    if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
+      return window.transcriptGateway.mutate(fn, { origin });
+    }
+    return fn();
+  };
+
   const replaceOne = () => {
     if (activeIndex < 0 || !matches[activeIndex]) return;
     const at = activeIndex;
-    replaceMark(matches[activeIndex]);
-    markDirty();
+    mutateTranscript(() => {
+      replaceMark(matches[activeIndex]);
+      markDirty();
+    }, 'replace-one');
     runSearch(true);           // refresh; keep position so we land on the next hit
     if (matches.length) {
       activeIndex = Math.min(at, matches.length - 1);
@@ -109,8 +118,10 @@
 
   const replaceAll = () => {
     if (matches.length === 0) return;
-    matches.forEach(replaceMark);
-    markDirty();
+    mutateTranscript(() => {
+      matches.forEach(replaceMark);
+      markDirty();
+    }, 'replace-all');
     activeIndex = -1;
     runSearch(false);
   };
@@ -129,6 +140,15 @@
     document.body.classList.remove('find-replace-open');
     clearActive();
   };
+
+  // A history restore replaces transcript.innerHTML, invalidating every mark
+  // reference held in matches. Search is view state: clear its UI cache and do
+  // not persist or automatically recreate highlights in the restored document.
+  document.addEventListener('hyperaudioTranscriptRestored', () => {
+    matches = [];
+    activeIndex = -1;
+    renderActive();
+  });
 
   toggle.addEventListener('click', () => { isOpen() ? closePanel() : openPanel(); });
 

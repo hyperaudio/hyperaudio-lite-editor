@@ -365,3 +365,82 @@ test('suppressing formatting leaves typing and redaction alone', async ({ page }
   expect(struck).toBe(true);
   expect(await page.locator('#hypertranscript b, #hypertranscript i').count()).toBe(0);
 });
+
+// #511 — the caret survives the debounced sanitise pass. The nbsp walk ran
+// BEFORE the caret was saved: rewriting nodeValue on the caret's own text node
+// collapses the selection to a node boundary, so the save recorded the corpse
+// and the restore reproduced it — after every natural typing pause the caret
+// parked before the word being typed, and the next keystrokes landed there.
+test('the caret stays where the user typed across the sanitise pass (#511)', async ({ page }) => {
+  // caret at the end of a word span, then real typing (this is what leaves
+  // nbsp in the node — the trigger)
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'makes');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, span.firstChild.nodeValue.length);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('scooby dooby doo ');
+  await page.waitForTimeout(1600); // past the debounced sanitise (splits fire)
+
+  const r = await page.evaluate(() => {
+    const sel = window.getSelection();
+    return {
+      // the caret must sit at the end of the last typed word, inside its span
+      anchorText: sel.anchorNode && sel.anchorNode.nodeValue,
+      atEnd: sel.anchorNode && sel.anchorOffset === sel.anchorNode.nodeValue.length,
+      spans: [...document.querySelectorAll('#hypertranscript span[data-m]')]
+        .map((s) => s.textContent.trim()).filter((t) => /^(scooby|dooby|doo)$/.test(t)),
+    };
+  });
+  expect(r.spans).toEqual(['scooby', 'dooby', 'doo']); // the split still works
+  expect(r.anchorText).toBe('doo ');
+  expect(r.atEnd).toBe(true);
+});
+
+test('the caret survives a pass where only the nbsp rewrite fires (#511)', async ({ page }) => {
+  // one word, no internal space: no split/merge/reflow — the old restore
+  // condition skipped this case entirely, so the nbsp rewrite alone lost the
+  // caret with nothing to put it back
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'makes');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('X');
+  // force an nbsp into the caret's node the way contenteditable does
+  await page.evaluate(() => {
+    const sel = window.getSelection();
+    const node = sel.anchorNode;
+    const offset = sel.anchorOffset;
+    node.nodeValue = node.nodeValue.replace(/^ma/, 'ma '.slice(0, 2)) // no-op guard
+      || node.nodeValue;
+    // put a real nbsp after the caret so the walk must rewrite THIS node
+    node.nodeValue = node.nodeValue.slice(0, offset) + ' ' + node.nodeValue.slice(offset + 1);
+    const r = document.createRange();
+    r.setStart(node, offset);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.press('Shift'); // a keyup to reset the sanitise timer
+  await page.waitForTimeout(1600);
+
+  const r = await page.evaluate(() => {
+    const sel = window.getSelection();
+    return { anchorText: sel.anchorNode && sel.anchorNode.nodeValue, offset: sel.anchorOffset };
+  });
+  expect(r.anchorText).toContain('maX'); // still in the edited word's node
+  expect(r.offset).toBe(3); // right after the typed X
+});

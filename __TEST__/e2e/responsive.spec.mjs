@@ -92,3 +92,45 @@ test('audio-only collapses the pinned player to the controls strip', async ({ pa
   expect((await rect(page, '.transcript-holder')).y).toBeLessThan(before);
   expect(await page.evaluate(() => document.body.classList.contains('video-collapsed'))).toBe(true);
 });
+
+// The undo/redo corner float (#400): touch-only, riding the transcript card's
+// top edge like ⓘ/copy. The default test context is a fine-pointer device, so
+// here they must be hidden regardless of viewport width.
+test('undo/redo buttons are hidden on fine-pointer devices', async ({ page }) => {
+  await expect(page.locator('#transcript-undo')).toBeHidden();
+  await expect(page.locator('#transcript-redo')).toBeHidden();
+});
+
+test.describe('touch devices', () => {
+  test.use({ isMobile: true, hasTouch: true });
+
+  test('undo/redo float on the card edge, clear of the copy button and the text', async ({ page }) => {
+    const boxes = await page.evaluate(() => {
+      const box = (s) => {
+        const el = document.querySelector(s);
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return null;
+        const r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+      };
+      return {
+        undo: box('#transcript-undo'),
+        redo: box('#transcript-redo'),
+        copy: box('#transcript-copy-btn'),
+        word: box('#hypertranscript [data-m]'),
+        transcript: box('#hypertranscript'),
+      };
+    });
+    expect(boxes.undo).not.toBeNull();
+    expect(boxes.redo).not.toBeNull();
+    // riding the same top edge as the rest of the corner family
+    for (const name of ['undo', 'redo']) {
+      expect(Math.abs(boxes[name].top - boxes.transcript.top),
+        `${name} off the transcript's top edge`).toBeLessThanOrEqual(4);
+      expect(boxes[name].bottom, `${name} overlaps the first line`).toBeLessThanOrEqual(boxes.word.top);
+    }
+    // ↶ ↷ 📋 in a row, no overlaps
+    expect(boxes.undo.right).toBeLessThanOrEqual(boxes.redo.left);
+    if (boxes.copy !== null) expect(boxes.redo.right).toBeLessThanOrEqual(boxes.copy.left);
+  });
+});
