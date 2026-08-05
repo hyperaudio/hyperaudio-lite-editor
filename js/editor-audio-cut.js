@@ -12,9 +12,16 @@
 
   strikethroughBtn.addEventListener('click', () => {
     if (strikethroughBtn.classList.contains('btn-disabled')) return;
-    applyStrikeThroughToSelection();
-    rebuildAudioDataArray();
-    ensureSkipListeners();
+    const applyStrike = () => {
+      applyStrikeThroughToSelection();
+      rebuildAudioDataArray();
+      ensureSkipListeners();
+    };
+    if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
+      window.transcriptGateway.mutate(applyStrike, { origin: 'strike' });
+    } else {
+      applyStrike();
+    }
   });
 
   // #274: grey out the strikethrough button unless text is selected in the
@@ -147,6 +154,9 @@
 
   registerStrikeThrus();
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
+  // Undo/redo replaces the DOM of the current document. Refresh derived audio
+  // and player indexes without using hyperaudioInit (which means new identity).
+  window.document.addEventListener('hyperaudioTranscriptRestored', registerStrikeThrus, false);
   // Also rebuild on hyperaudioInit so transcribe (Deepgram/Whisper) and
   // JSON/SRT/VTT import inherit the current gap-skip settings against the
   // freshly-loaded transcript.
@@ -603,4 +613,3 @@
     }
 
     // Alignment functions are now in js/word-alignment.js
-

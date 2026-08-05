@@ -249,6 +249,10 @@
 
     window.addEventListener('resize', trigger);
     document.addEventListener('hyperaudioInit', trigger, false);
+    document.addEventListener('hyperaudioTranscriptRestored', () => {
+      attachToTranscript();
+      trigger();
+    }, false);
 
     attachToTranscript();
 

@@ -655,6 +655,17 @@
   let editGeneration = 0;      // bumps on every edit signal
   let identityGeneration = 0;  // bumps when a DIFFERENT document commits
   let saveInFlight = false;
+
+  // History and other same-document features must not infer identity from a
+  // generic DOM refresh. Emit only beside identityGeneration commits.
+  function signalDocumentIdentity(origin) {
+    if (window.transcriptLifecycle
+        && typeof window.transcriptLifecycle.signalIdentity === 'function') {
+      window.transcriptLifecycle.signalIdentity(origin, {
+        projectId: session.projectId,
+      });
+    }
+  }
   // Snapshot writes serialize on a promise chain (#448: parallel writes could
   // interleave files from different states); calls landing while one is
   // running or queued coalesce into ONE queued follow-up, which re-gathers —
@@ -1385,6 +1396,7 @@
       // previous project's transcription details
       renderTranscriptionInfo(null, '');
     }
+    signalDocumentIdentity('transcription-or-import');
     try {
       if (opfsAvailable && session.projectId !== null) {
         await acquireProjectLock(session.projectId); // fresh id: always granted
@@ -1884,6 +1896,7 @@
       sessionEdited = false; // the opened file IS the downloaded state
       identityGeneration += 1; // a different document now owns the session
       updateSaveIndicator();
+      signalDocumentIdentity('project-file-open');
 
       if (opfsAvailable && session.projectId !== null) {
         await acquireProjectLock(session.projectId); // fresh id: always granted
@@ -2022,6 +2035,7 @@
     session.hasOriginal = files.originalText !== null;
     session.originalJson = files.originalText;
     session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
+    signalDocumentIdentity('project-library-open');
   }
 
   // Switching asks nothing and loses nothing (#456): flush the outgoing
