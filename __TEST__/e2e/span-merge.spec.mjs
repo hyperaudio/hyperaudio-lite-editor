@@ -267,3 +267,101 @@ test('a clean transcript is untouched on blur (no spurious merges)', async ({ pa
   });
   expect(after).toBe(before);
 });
+
+// The transcript models words and timings, not rich text — but #hypertranscript
+// is a plain contenteditable, so the browser's own formatting applied anyway:
+// ⌘B over a selection wrapped the word spans in <b>, and the writer then
+// flattened it away on save, silently discarding what the user had applied.
+//
+// Measured while writing this: headless Chromium treats Ctrl+B in contenteditable
+// as inert (no bold, and no beforeinput), and document.execCommand('bold') raises
+// no beforeinput at all. So neither the real shortcut nor execCommand can stand in
+// for the user's route here. What IS deterministic is our own guard: assert the
+// handler cancels the shortcut, and that the transcript stays free of formatting.
+test('the transcript cancels the bold/italic/underline shortcuts', async ({ page }) => {
+  const cancelled = await page.evaluate(() => {
+    const ht = document.getElementById('hypertranscript');
+    ht.focus();
+    const fire = (key, mods) => {
+      const e = new KeyboardEvent('keydown', Object.assign(
+        { key, bubbles: true, cancelable: true }, mods));
+      ht.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    return {
+      metaB: fire('b', { metaKey: true }),
+      metaI: fire('i', { metaKey: true }),
+      metaU: fire('u', { metaKey: true }),
+      ctrlB: fire('b', { ctrlKey: true }),
+      // unmodified typing and unrelated shortcuts must pass through untouched
+      // ('k' is bound to nothing; ⌘S is deliberately cancelled by the save
+      // handler in hyperaudio-save.js, so it is no use as a control here)
+      plainB: fire('b', {}),
+      metaK: fire('k', { metaKey: true }),
+    };
+  });
+
+  expect(cancelled.metaB).toBe(true);
+  expect(cancelled.metaI).toBe(true);
+  expect(cancelled.metaU).toBe(true);
+  expect(cancelled.ctrlB).toBe(true);
+  expect(cancelled.plainB).toBe(false);   // typing the letter b still works
+  expect(cancelled.metaK).toBe(false);    // unrelated shortcuts are untouched
+});
+
+test('format* input types are refused by the transcript', async ({ page }) => {
+  // the other hook: routes that raise beforeinput (menu bar, context menu)
+  const result = await page.evaluate(() => {
+    const ht = document.getElementById('hypertranscript');
+    const send = (inputType) => {
+      const e = new InputEvent('beforeinput', { inputType, bubbles: true, cancelable: true });
+      ht.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    // NB: Chromium's InputEvent constructor validates inputType against a known
+    // list and normalises anything else to "" — formatBackColor and
+    // formatFontColor arrive empty, so they cannot be exercised this way. Only
+    // constructible types are asserted here; the guard itself matches on the
+    // format* prefix, so it covers the rest when a real UI raises them.
+    return {
+      bold: send('formatBold'),
+      italic: send('formatItalic'),
+      underline: send('formatUnderline'),
+      strike: send('formatStrikeThrough'),
+      typing: send('insertText'),                 // ordinary input must survive
+      paste: send('insertFromPaste'),
+    };
+  });
+
+  expect(result.bold).toBe(true);
+  expect(result.italic).toBe(true);
+  expect(result.underline).toBe(true);
+  expect(result.strike).toBe(true);
+  expect(result.typing).toBe(false);
+  expect(result.paste).toBe(false);
+});
+
+test('suppressing formatting leaves typing and redaction alone', async ({ page }) => {
+  await page.evaluate(() => {
+    const ht = document.getElementById('hypertranscript');
+    ht.focus();
+    const span = ht.querySelector('span[data-m]:not(.speaker)');
+    const range = document.createRange();
+    range.setStart(span.firstChild, 0);
+    range.collapse(true);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+  await page.keyboard.type('TYPED');
+  await expect(page.locator('#hypertranscript')).toContainText('TYPED');
+
+  // redaction sets span.style directly and bypasses both hooks
+  const struck = await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.style.textDecoration = 'line-through';
+    return /line-through/.test(span.getAttribute('style') || '');
+  });
+  expect(struck).toBe(true);
+  expect(await page.locator('#hypertranscript b, #hypertranscript i').count()).toBe(0);
+});
