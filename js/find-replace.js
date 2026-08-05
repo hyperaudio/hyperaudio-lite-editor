@@ -130,6 +130,15 @@
     clearActive();
   };
 
+  // A history restore replaces transcript.innerHTML, invalidating every mark
+  // reference held in matches. Search is view state: clear its UI cache and do
+  // not persist or automatically recreate highlights in the restored document.
+  document.addEventListener('hyperaudioTranscriptRestored', () => {
+    matches = [];
+    activeIndex = -1;
+    renderActive();
+  });
+
   toggle.addEventListener('click', () => { isOpen() ? closePanel() : openPanel(); });
 
   // Click anywhere outside the find/replace widget closes the panel; Escape too.

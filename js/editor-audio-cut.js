@@ -147,6 +147,9 @@
 
   registerStrikeThrus();
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
+  // Undo/redo replaces the DOM of the current document. Refresh derived audio
+  // and player indexes without using hyperaudioInit (which means new identity).
+  window.document.addEventListener('hyperaudioTranscriptRestored', registerStrikeThrus, false);
   // Also rebuild on hyperaudioInit so transcribe (Deepgram/Whisper) and
   // JSON/SRT/VTT import inherit the current gap-skip settings against the
   // freshly-loaded transcript.
@@ -603,4 +606,3 @@
     }
 
     // Alignment functions are now in js/word-alignment.js
-
