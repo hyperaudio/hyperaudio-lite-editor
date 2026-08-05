@@ -268,6 +268,18 @@ origin.
 
 Rules:
 
+- **At least one paragraph.** A writer **MUST** emit a non-empty
+  `paragraphs` whenever `words` is non-empty. A transcript with no structure
+  is expressed as a single paragraph spanning the words with
+  `speaker: null` — nothing needs inventing, and the DOM equivalent
+  (`<article><section><p>…`) already holds in practice, so this removes an
+  asymmetry rather than adding a constraint.
+- **Readers stay tolerant.** A reader **MUST** accept `paragraphs: []` or an
+  absent `paragraphs` — files predate this rule and third-party JSON needn't
+  carry structure — and **MUST** synthesise the single spanning paragraph
+  above rather than dropping the words. Normalising once, where JSON enters,
+  is what lets everything downstream assume ≥ 1; leaving each projection to
+  handle the gap its own way is how they came to disagree (#492).
 - Times are **seconds** (float) throughout the JSON. (The editor's DOM uses
   integer milliseconds — `data-m`/`data-d`; the conversion is
   `ms = round(s × 1000)`; § 12.)
@@ -649,6 +661,8 @@ excepted.
 - [ ] writes `mimetype` as the first entry, STORE, exact content
 - [ ] writes `hyperaudio.json` with all required fields, times in seconds,
       defaults (`space: true`, `struck: false`) not serialized
+- [ ] writes at least one `transcript.paragraphs` entry whenever there are
+      words (§ 3.6)
 - [ ] writes `transcript.html` and `captions.vtt` consistent with the JSON of
       the same save
 - [ ] writes `transcript.original.json` once (at transcription time) and
@@ -675,6 +689,8 @@ excepted.
 - [ ] ignores unknown fields and files
 - [ ] tolerates the absence of `mimetype`, `transcript.html`,
       `transcript.original.json`, `captions.vtt`
+- [ ] tolerates an empty or absent `transcript.paragraphs`, synthesising one
+      unattributed paragraph spanning the words (§ 3.6)
 
 ---
 
@@ -687,6 +703,7 @@ excepted.
 | `struck` travels in the save, is applied at export | Redactions are reversible as long as you are in the working file. |
 | Captions ≠ transcript (§ 6.1) | Never "repair" the divergence: with `updateFromTranscript: false` it is intentional. |
 | Origin ≠ working copy (§ 5) | `transcript.original.json` is immutable and pre-redaction: never load it in place of the working transcript, never "update" it. |
+| At least one paragraph whenever there are words (§ 3.6) | Writers guarantee it, readers synthesise it. Every JSON→markup projection may then assume ≥ 1; when they each answered the paragraph-less case separately, one of them emitted an empty `<section>` and lost the whole transcript. |
 | The file is untrusted input (§ 10) | Whitelist-read, validation, DOM via `textContent`, sanitization of the HTML fallback. |
 | UTF-8 everywhere | Media filenames included (the zip's UTF-8 flag). |
 | One media file, original name | No ambiguity, no index to maintain. |

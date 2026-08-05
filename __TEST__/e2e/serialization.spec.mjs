@@ -115,3 +115,42 @@ test('word timings survive wrappers and stray placement (#486 review)', async ({
   expect(cases.orphan.after).toEqual(cases.orphan.before);
   expect(cases.noParagraphs.after).toEqual(cases.noParagraphs.before);
 });
+
+// #492 — every transcript carries at least one paragraph. Three JSON→markup
+// projections existed, and on paragraph-less input (words present,
+// paragraphs: []) they gave three different answers: jsonToHTML fell back to a
+// single <p>, buildTranscriptDomFromJson synthesised an unbounded range, and
+// jsonToHtml — reachable from the JSON import path and exposed to native apps —
+// emitted <article><section></section></article>, losing every word. They now
+// share one normaliser, so the only acceptable answer is "all the words".
+test('every projection keeps all the words when the JSON has no paragraphs (#492)', async ({ page }) => {
+  const counts = await page.evaluate(() => {
+    const transcript = {
+      words: [
+        { start: 0, end: 0.5, text: 'one' },
+        { start: 0.5, end: 1, text: 'two' },
+        { start: 1, end: 1.5, text: 'three' },
+      ],
+      paragraphs: [],
+    };
+    const spansIn = (html) => {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      return [...doc.querySelectorAll('span[data-m]:not(.speaker)')].map((s) => s.textContent.trim());
+    };
+    return {
+      normalized: window.normalizeTranscriptParagraphs(transcript).paragraphs,
+      // the transcript's own projection (html-json-converter.js)
+      jsonToHTML: spansIn(window.jsonToHTML(transcript)),
+      // the import / native-app projection (hyperaudio-lite-editor-export.js)
+      jsonToHtml: spansIn(window.jsonToHtml(transcript)),
+      // and the input is not mutated on the way through
+      untouched: transcript.paragraphs.length,
+    };
+  });
+
+  expect(counts.jsonToHTML).toEqual(['one', 'two', 'three']);
+  expect(counts.jsonToHtml).toEqual(['one', 'two', 'three']);
+  // one unattributed paragraph spanning the words (§ 3.6 allows speaker: null)
+  expect(counts.normalized).toEqual([{ start: 0, end: 1.5, speaker: null }]);
+  expect(counts.untouched).toBe(0);
+});
