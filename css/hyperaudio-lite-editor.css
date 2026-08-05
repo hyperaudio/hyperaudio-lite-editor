@@ -378,7 +378,11 @@ dialog::backdrop {
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 8px 12px 48px;
+    /* Top padding stays at the desktop 48px: the ⓘ and copy buttons are pinned
+       to the card's top corners at holder-top + 10px and are 32px tall, so text
+       starting any higher runs underneath them. The shorthand used to reset this
+       to 8px, which put the first line under both icons at these widths. */
+    padding: 48px 12px 48px;
   }
 
   #playbar {
@@ -645,10 +649,17 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-info-btn { display: non
 }
 /* the compact navbar band (#480): the holder's top drops 78px -> 58px at
    1120, and both corner buttons must ride the card's edge with it. Bounded
-   below at 949 so the <=948 var-based rules above keep the last word. */
+   below at 949 so the <=948 var-based rules above keep the last word.
+
+   76px, not the holder's 58 + 10: in THIS band the holder also takes 8px of
+   padding and #hypertranscript keeps its own top:10px, so the text column
+   starts at 76 — 58 + 10 parked the buttons 8px above it and left a gap under
+   them half again the size of the one above. Every band aligns the buttons
+   with the transcript element's top edge (88 at >1120, ~290 at <=948); this
+   is that same edge, arrived at through two more offsets. */
 @media screen and (max-width: 1120px) and (min-width: 949px) {
-  #transcript-copy-btn { top: 68px; }
-  #transcript-info-btn { top: 68px; }
+  #transcript-copy-btn { top: 76px; }
+  #transcript-info-btn { top: 76px; }
 }
 
 /* Corner buttons vs scrolling text (#480): the mask-fade experiment was
