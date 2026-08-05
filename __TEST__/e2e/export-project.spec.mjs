@@ -42,8 +42,10 @@ test('flattened .hyperaudio export: edited media, re-timed struck-free transcrip
   await page.waitForFunction(() => document.getElementById('export-format').options.length > 0, null, { timeout: 60000 });
   await page.selectOption('#export-format', 'wav');
   await page.evaluate(() => {
-    // only the media file + the project container
-    for (const id of ['export-retime', 'export-vtt', 'export-srt', 'export-burn']) {
+    // only the media file + the project container, delivered separately —
+    // export-zip is on by default for multi-file runs (#396) and this test is
+    // about the container itself, not the packaging
+    for (const id of ['export-retime', 'export-vtt', 'export-srt', 'export-burn', 'export-zip']) {
       const c = document.getElementById(id);
       if (c) c.checked = false;
     }
