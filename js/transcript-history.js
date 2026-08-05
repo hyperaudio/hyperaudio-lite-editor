@@ -4,7 +4,12 @@
   'use strict';
 
   const MAX_ENTRIES = 100;
-  const MAX_BYTES = 12 * 1024 * 1024;
+  // 48MB, from 12 (#510): entries are proportional to document size, so a
+  // byte cap is really a depth dial — at 12MB a one-hour interview transcript
+  // (~1.4MB per entry once the fingerprint is hashed) kept undo ~8 deep, and
+  // before the hashing, ~3. 48MB holds ~30+ entries there; MAX_ENTRIES still
+  // governs small documents. The durable fix is delta entries — #510.
+  const MAX_BYTES = 48 * 1024 * 1024;
   const COALESCE_MS = 500;
   const gateway = window.transcriptGateway;
   let entries = [];
@@ -49,6 +54,19 @@
     });
     clone.normalize();
     return clone;
+  }
+
+  // FNV-1a over the fingerprint string, suffixed with its length. Equality of
+  // hashes stands in for equality of strings at the fold sites; a collision
+  // would merely fold one normalize pass it shouldn't have (one lost undo
+  // step), and the length guard makes that astronomically unlikely.
+  function fingerprintHash(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(36) + ':' + str.length;
   }
 
   function semanticFingerprint(root) {
@@ -147,14 +165,21 @@
     if (!root) return null;
     const clone = cleanClone(root);
     const html = clone.innerHTML;
-    const fingerprint = semanticFingerprint(clone);
+    // The fingerprint is only ever compared for EQUALITY (the fold decisions
+    // below) — never read as content — so it is stored as a hash, not the
+    // string. Measured on a real interview transcript (#510): the fingerprint
+    // string is the same order of magnitude as the HTML, and storing both,
+    // counted as UTF-16, cost ~2.9MB per entry — the 12MB cap then held four
+    // entries, and undo was three steps deep on ordinary content. The length
+    // rides along as a collision guard.
+    const fingerprint = fingerprintHash(semanticFingerprint(clone));
     return Object.freeze({
       html,
       semanticFingerprint: fingerprint,
       selection: captureSelection(root),
       origin: origin || 'unknown',
       timestamp: Date.now(),
-      bytes: (html.length + fingerprint.length) * 2,
+      bytes: html.length * 2,
     });
   }
 
