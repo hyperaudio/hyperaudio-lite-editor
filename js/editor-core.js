@@ -385,6 +385,9 @@
   // line-through (the strikeout/cut model) and display on speaker labels (the
   // Speakers toggle). Preserve those, drop everything else, and unwrap
   // non-data-m wrapper spans so their text folds back into the flow.
+  // Returns whether any span was UNWRAPPED — the one scrub action that moves
+  // the caret's text node, so callers know the selection may need restoring
+  // (#511). The style strip touches attributes only and cannot move a caret.
   function scrubEditingArtifacts(root) {
     root.querySelectorAll('span[style]').forEach((span) => {
       const display = span.classList.contains('speaker') ? span.style.display : '';
@@ -393,10 +396,13 @@
       if (display) span.style.display = display;
       if (struck) span.style.textDecoration = 'line-through';
     });
+    let unwrapped = false;
     root.querySelectorAll('span:not([data-m])').forEach((span) => {
       if (span.classList.contains('speaker')) return;
       span.replaceWith(...span.childNodes);
+      unwrapped = true;
     });
+    return unwrapped;
   }
 
   // Spans containing a bracket belong to the SPEAKER machinery, not word
@@ -480,25 +486,40 @@
   // blur handler and the debounced sanitise pass.
   function normalizeTranscriptSpans(root) {
     if (!root || imeComposing) return;
-    // nbsp -> normal space (#339)
+    // The caret is measured BEFORE anything in this pass mutates text (#511).
+    // The nbsp walk used to run first, and writing nodeValue on the text node
+    // holding the caret collapses the selection to a node boundary —
+    // saveCaretOffset then recorded that corpse and the restore faithfully
+    // reproduced it, parking the caret before the word being typed after
+    // every natural typing pause. Both pre-steps below preserve total
+    // character count (nbsp→space is same-length; the artifact unwrap MOVES
+    // text nodes rather than rewriting them), so offsets measured here stay
+    // valid for the restore. Only when the transcript has focus — on blur
+    // there is nothing to preserve.
+    const hasFocus = document.activeElement === root;
+    const caret = hasFocus ? saveCaretOffset(root) : null;
+    // nbsp -> normal space (#339); flagged, because rewriting the caret's own
+    // node is precisely the mutation that needs the restore afterwards
+    let nbspRewritten = false;
     if (root.textContent.indexOf(' ') !== -1) {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
         if (node.nodeValue.indexOf(' ') !== -1) {
           node.nodeValue = node.nodeValue.replace(/ /g, ' ');
+          nbspRewritten = true;
         }
       }
     }
     // artifact hygiene runs regardless of the timing-repair switch (#415)
-    scrubEditingArtifacts(root);
-    if (!WORD_SPLIT_TIMING) return;
-    // The repairs rewrite text nodes, which would throw the caret to the start
-    // of the affected word mid-edit — save it as a character offset first and
-    // re-resolve after, but only when the transcript actually has focus (on
-    // blur there is nothing to preserve) and a rewrite actually happened.
-    const hasFocus = document.activeElement === root;
-    const caret = hasFocus ? saveCaretOffset(root) : null;
+    const unwrapped = scrubEditingArtifacts(root);
+    const preChanged = nbspRewritten || unwrapped;
+    if (!WORD_SPLIT_TIMING) {
+      // no timing repairs, but the pre-steps may still have broken the live
+      // selection — restore before leaving (#511)
+      if (caret !== null && preChanged) restoreCaretOffset(root, caret);
+      return;
+    }
     // disjoint conditions, in order: reflow (internal space + no trailing),
     // merge (no internal + no trailing), split (internal space + trailing).
     const reflowed = reflowLeakedFragments(root);
@@ -511,7 +532,7 @@
         split = true;
       }
     }
-    if (caret !== null && (reflowed || merged || split)) {
+    if (caret !== null && (preChanged || reflowed || merged || split)) {
       restoreCaretOffset(root, caret);
     }
     // Re-index whenever merge or split FIRED — not on a span-count comparison:
