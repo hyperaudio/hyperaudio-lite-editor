@@ -834,3 +834,73 @@ test('a project with no paragraphs opens whole and is written back with one (#49
   expect(transcript.words.map((w) => w.text)).toEqual(['Benvenuto', 'ehm', 'a']);
   expect(transcript.paragraphs.length).toBeGreaterThanOrEqual(1);
 });
+
+// Undo landing exactly on the last committed state clears the dirty dot (the
+// VS Code / NSDocument semantics) — compared by state signature, not by step
+// count, so a pending edit undo can't reach keeps the dot honest.
+test('undo back to the last save clears the dirty dot and retires the draft', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page); // v0 committed: the screen IS the saved state
+
+  // a real keystroke, so the history module owns the edit
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = t.querySelector('span[data-m]:not(.speaker)');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('ZZ');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  // the pre-undo draft dies with the cleanliness — reload must not resurrect
+  // "unsaved edits" that no longer exist
+  await pollPage(page, async () => {
+    const id = window.HyperaudioSave.library.currentId();
+    const root = await navigator.storage.getDirectory();
+    const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+    try { await dir.getFileHandle('draft.json'); return false; } catch (e) { return true; }
+  });
+
+  // and redoing away from the save is dirty again
+  await page.keyboard.press('Shift+Meta+z');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+test('undo does not clear the dot while a non-transcript edit is pending', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  // an edit undo cannot reach: the summary
+  await page.evaluate(() => {
+    const s = document.getElementById('summary');
+    s.textContent = 'still pending';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = t.querySelector('span[data-m]:not(.speaker)');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('ZZ');
+  await page.keyboard.press('Meta+z'); // transcript back to saved; summary is not
+
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});

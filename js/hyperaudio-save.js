@@ -656,6 +656,27 @@
   let identityGeneration = 0;  // bumps when a DIFFERENT document commits
   let saveInFlight = false;
 
+  // The last committed state's signature, so an undo that lands the editor
+  // EXACTLY back on it can clear the dirty dot (the VS Code / NSDocument
+  // semantics). sessionEdited alone can't express that — it's a monotone
+  // edit-event flag with no notion of content equality. null = unknown (e.g.
+  // a draft was restored, so the saved state isn't what's on screen); unknown
+  // stays dirty, which is the previous behaviour.
+  let savedSignature = null;
+  // `modified` is stamped at every gather, so it would defeat any comparison;
+  // captions ride outside the project json and must be part of the identity —
+  // undoing the transcript back while a caption edit is pending is NOT clean.
+  function signatureOfParts(json, vtt) {
+    const project = JSON.parse(json);
+    project.modified = '';
+    return JSON.stringify(project) + '\u001f' + (vtt || '');
+  }
+  function stateSignature() {
+    const project = buildProjectJson(gather());
+    project.modified = '';
+    return JSON.stringify(project) + '\u001f' + (getCaptionsVtt() || '');
+  }
+
   // History and other same-document features must not infer identity from a
   // generic DOM refresh. Emit only beside identityGeneration commits.
   function signalDocumentIdentity(origin) {
@@ -1138,11 +1159,16 @@
     const state = gather();
     const dir = await getProjectDir(projectId, true);
     const vtt = getCaptionsVtt();
+    const json = serializeProjectJson(buildProjectJson(state));
     await writeFileTo(dir, filename, JSON.stringify({
-      json: serializeProjectJson(buildProjectJson(state)),
+      json,
       html: state.html,
       captionsVtt: vtt !== '' ? vtt : null,
     }));
+    // Every commit funnels through here (save, project birth, open-seeding),
+    // so this is the one place the clean-state signature is captured — from
+    // the parts actually written, not a re-gather that later edits could skew.
+    if (filename === SAVED_FILE) savedSignature = signatureOfParts(json, vtt);
     return state;
   }
 
@@ -2035,6 +2061,11 @@
     session.hasOriginal = files.originalText !== null;
     session.originalJson = files.originalText;
     session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
+    // Clean restore: what's on screen IS the saved state, so sign it — an
+    // undo can then find its way back to clean. A draft restore leaves the
+    // signature unknown (the saved state is not what's on screen), which
+    // keeps the previous always-dirty behaviour for that case.
+    savedSignature = files.fromDraft ? null : stateSignature();
     signalDocumentIdentity('project-library-open');
   }
 
@@ -2505,6 +2536,41 @@
       // committed v0, not an edit — see birthInProgress
       if (birthInProgress) return;
       scheduleAutosave();
+    });
+    // Undo/redo (#400): a restore that lands the editor EXACTLY back on the
+    // last committed state clears the dirty dot and retires the draft — the
+    // project is the save again, so there is nothing to lose. Compared by
+    // signature, not by step-counting, so a pending NON-transcript edit
+    // (summary, captions, options) keeps the dot on: undo can't revert those,
+    // and the project genuinely differs from the save. Restores that DON'T
+    // land on the save re-dirty through the synthetic input the history
+    // module dispatches, like any other edit.
+    document.addEventListener('hyperaudioTranscriptRestored', () => {
+      if (!session.active || savedSignature === null || !sessionEdited) return;
+      if (stateSignature() !== savedSignature) return;
+      sessionEdited = false;
+      clearTimeout(autosaveTimer);
+      autosaveTimer = null;
+      autosavePending = false;
+      updateSaveIndicator();
+      // The draft predates the undo and now describes a dirtier state than
+      // the screen; left in place it would resurrect as "unsaved edits" on
+      // reload. Ride the snapshot chain so a queued draft write can't
+      // interleave, and re-check the flag there — an edit that lands while
+      // this waits makes the retirement wrong, so it must stand down.
+      if (opfsAvailable && hasProjectLock && session.projectId !== null) {
+        const id = session.projectId;
+        snapshotChain = snapshotChain.then(async () => {
+          if (sessionEdited || id !== session.projectId) return;
+          const dir = await getProjectDir(id, false);
+          await dir.removeEntry(DRAFT_FILE).catch(() => {});
+          await updateLibrary((lib) => {
+            const entry = lib.projects.find((p) => p.id === id);
+            if (entry !== undefined) entry.lastDraftAt = 0;
+          });
+          notifyLibraryChanged(false);
+        }).catch((e) => console.warn('hyperaudio-save: draft retirement failed', e));
+      }
     });
     ['#remove-gaps-enabled', '#remove-gaps-threshold', '#remove-gaps-buffer', '#show-speakers', '#show-timecodes']
       .forEach((selector) => {
