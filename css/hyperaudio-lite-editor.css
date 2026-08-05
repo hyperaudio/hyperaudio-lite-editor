@@ -669,14 +669,26 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-info-btn { display: non
   white-space: nowrap;
 }
 
-/* Search: highlight only the matched substring. searchPhrase wraps the match in
-   <mark class="search-mark"> and also tags the word .search-match — neutralise
-   the vendored whole-word background so just the mark shows, tinted with a much
-   lighter version of the signature purple (the DaisyUI primary at low opacity). */
-.hyperaudio-transcript .search-match {
-  background-color: transparent;
+/* Two deviations from the vendored player stylesheet live here rather than in
+   the file itself (#495), so css/hyperaudio-lite-player.css stays byte-identical
+   to upstream and can be re-vendored without anyone having to notice a fork.
+   This sheet is linked after it, so equal-specificity rules here win. */
+
+/* Unread words sit a shade darker than upstream's #777 — a contrast decision
+   from "best practices and accessibility" (5e37ad6), not drift. */
+.hyperaudio-transcript .unread {
+  color: #666;
 }
-mark.search-mark {
+
+/* Search: highlight only the matched substring. searchPhrase wraps the match in
+   <mark class="search-mark"> and also tags the whole word .search-match. Upstream
+   paints .search-mark pink at (0,2,0), so this must outrank it — hence the
+   descendant + element selector rather than a bare mark.search-mark, which at
+   (0,1,1) would lose and turn every hit pink on the next re-vendor. Tinted with a
+   much lighter version of the signature purple (DaisyUI primary at low opacity).
+   Nothing styles .search-match now, so the whole-word background it used to
+   inherit needs no neutralising. */
+.hyperaudio-transcript mark.search-mark {
   background-color: oklch(var(--p) / 0.22);
   color: inherit;
   border-radius: 2px;
@@ -726,7 +738,10 @@ mark.search-mark {
   white-space: nowrap;
 }
 .replace-spacer { flex: 1; }
-mark.search-mark.active { background-color: #f6c344; color: inherit; border-radius: 2px; }
+/* Outranks both the general hit above and upstream's .search-mark on specificity
+   rather than on source order, so reordering this sheet cannot silently lose the
+   active-match colour. */
+.hyperaudio-transcript mark.search-mark.active { background-color: #f6c344; color: inherit; border-radius: 2px; }
 
 /* When the replace panel is open, drop the transcript start so the panel doesn't
    cover the first line. */
