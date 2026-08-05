@@ -312,13 +312,25 @@ Role:
    storage) consume it without converters.
 2. **Inspectability**: opening the zip, a browser displays the transcript
    directly.
-3. **Safety net**: if the JSON round-trip ever had a bug, the editor's data
-   is still there.
+
+This entry is **not** an independent witness to the transcript. It is a
+projection of `hyperaudio.json.transcript`, so it cannot hold anything the
+JSON lost — the earlier "safety net" role is traded for guaranteed
+consistency. That trade is deliberate (#489): two independent derivations of
+the same transcript can disagree, and a second copy that disagrees is worse
+than no second copy.
 
 **Anti-divergence rule:** the source of truth is
 `hyperaudio.json.transcript`. The writer **MUST** generate `transcript.html`
-from the same state in the same save (the two files are consistent by
-construction).
+from that JSON in the same save — not from a second reading of its own
+editing surface, which makes the two entries consistent by construction
+rather than by promise.
+
+A writer **MAY** compare the word count it parsed against the words its
+editor holds, and against the words in the generated HTML. If either
+disagrees, it **SHOULD** write its raw transcript markup to this entry
+instead and record why: the parse or the projection is suspect exactly then,
+and the unprojected markup is the only copy that still has every word.
 
 **Fallback rules:** the reader **MUST** load from the JSON; using
 `transcript.html` as a source is allowed **only as recovery**, when the JSON

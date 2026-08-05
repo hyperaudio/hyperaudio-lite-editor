@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.1.8 — last changed in release 1.1.8
+ * @version 1.1.9 — last changed in release 1.1.9
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -650,46 +650,79 @@
     return new Date().toISOString();
   }
 
-  // Canonical serialization of a transcript root for the writer (#486). Raw
-  // innerHTML shipped whatever the live DOM had accumulated straight into
-  // transcript.html — search's <mark class="search-mark">, elements a paste
-  // injected (#487), WebKit inline styles — but § 4 of the format defines that
-  // entry as one <span> per word. serializeTranscriptHtml rebuilds each span
-  // from textContent, keeping the two functional bits of state (speaker class,
-  // strikethrough), so foreign markup is flattened to its text rather than
-  // persisted.
+  // THE authoritative read of the transcript (#489): the live element's raw
+  // innerHTML, or the caption-mode clone's, with only the class strip applied.
+  // Nothing may transform it on the way in. htmlToJSON's selectors are
+  // descendant-based, so a word span is found wherever editing has left it —
+  // inside a wrapper the browser added, outside any <p> — and the JSON gets every
+  // word. #486 briefly ran this through the canonical serializer instead, which
+  // put the source of truth downstream of a presentation transform: two shapes
+  // the serializer flattened stopped being cosmetic and started deleting words
+  // from the container outright.
   //
-  // The word set is preserved, which matters because gather() derives the
-  // project JSON from this same string: the serializer descends into wrappers
-  // that enclose timed spans and keeps spans belonging to no <p>, so no word
-  // loses its data-m/data-d (and with it its place in the JSON) on the way out.
-  //
-  // No class strip on the canonical path: the serializer emits class="speaker"
-  // and nothing else, while running the strip's regex over the whole string
-  // could delete a literal class="…" appearing inside a word's own text. The
-  // innerHTML fallback — loader markup mid transcription, no timed spans yet —
-  // still sanitizes exactly as it did before.
-  function canonicalTranscriptHtml(root) {
-    const hasWords = typeof root.querySelector === 'function'
-      && root.querySelector('span[data-m]') !== null;
-    if (hasWords && typeof serializeTranscriptHtml === 'function') {
-      return serializeTranscriptHtml(root);
-    }
-    return sanitizeTranscriptClasses(root.innerHTML);
-  }
-
-  // The transcript's markup for the writer. Reads the live element directly
-  // (NOT getTranscriptData(), whose blanket class strip destroys the speaker
-  // class); in caption mode the transcript element only exists inside
-  // editor-core's transcriptCache clone — read it from there.
-  function getEditorHtml() {
+  // NOT getTranscriptData(), whose blanket class strip destroys the speaker class.
+  function getEditorTranscriptHtml() {
     const el = document.querySelector('#hypertranscript');
-    if (el !== null) return canonicalTranscriptHtml(el);
+    if (el !== null) return sanitizeTranscriptClasses(el.innerHTML);
     if (typeof transcriptCache !== 'undefined' && transcriptCache !== null) {
       const cached = transcriptCache.querySelector('#hypertranscript');
-      if (cached !== null) return canonicalTranscriptHtml(cached);
+      if (cached !== null) return sanitizeTranscriptClasses(cached.innerHTML);
     }
     return typeof getTranscriptData === 'function' ? getTranscriptData() : '';
+  }
+
+  // The transcript JSON — the container's source of truth. One parse, one place.
+  function getEditorTranscriptJson() {
+    return htmlToJSON(getEditorTranscriptHtml());
+  }
+
+  const wordSpanCount = (html) => {
+    try {
+      return new DOMParser().parseFromString(String(html), 'text/html')
+        .querySelectorAll('span[data-m]:not(.speaker)').length;
+    } catch (e) {
+      return -1; // unknown; the invariant below treats that as "don't judge"
+    }
+  };
+
+  // transcript.html is a PROJECTION of the JSON, not a second reading of the DOM
+  // (§ 4 calls it the compatibility copy, generated from the same state in the
+  // same save). jsonToHTML is the same writer the alignment path already uses, so
+  // the two entries cannot disagree by construction — where two independent
+  // derivations could, and § 4's anti-divergence rule would be a promise the code
+  // had to keep rather than one it holds structurally.
+  //
+  // The invariant is checked rather than assumed: every word span in the DOM must
+  // survive into the JSON, and every JSON word into the projection. On a mismatch
+  // the raw source is written instead and the discrepancy logged — § 4's MAY/SHOULD
+  // for exactly this case. A projection can hold nothing the JSON lost, so when the
+  // parse or the projection is suspect, the unprojected markup is the only copy
+  // left with every word in it. (§ 4 no longer claims this entry is an independent
+  // witness in the normal case; that role went with the change, deliberately.)
+  function projectTranscriptHtml(transcript, source) {
+    const words = (transcript && transcript.words) || [];
+    // no timed words yet — loader markup mid-transcription; pass it through as
+    // before rather than projecting an empty article over it
+    if (words.length === 0) return source;
+    if (typeof jsonToHTML !== 'function') return source;
+
+    const inDom = wordSpanCount(source);
+    if (inDom >= 0 && inDom !== words.length) {
+      console.warn('hyperaudio-save: transcript parse lost words —'
+        + ` ${inDom} word spans in the editor, ${words.length} in the JSON.`
+        + ' Writing the raw transcript markup so nothing is dropped from both.');
+      return source;
+    }
+
+    const projected = jsonToHTML(transcript);
+    const inProjection = wordSpanCount(projected);
+    if (inProjection >= 0 && inProjection !== words.length) {
+      console.warn('hyperaudio-save: transcript projection lost words —'
+        + ` ${words.length} in the JSON, ${inProjection} in the generated HTML.`
+        + ' Writing the raw transcript markup instead.');
+      return source;
+    }
+    return projected;
   }
 
   function getCaptionsVtt() {
@@ -771,8 +804,11 @@
   // Snapshot the full editor state for the writer. Pure DOM reads; the media
   // bytes themselves are handled separately (write-once / resolve-on-demand).
   function gather() {
-    const html = getEditorHtml();
-    const transcript = htmlToJSON(html);
+    // One read of the DOM, parsed once; the HTML entry is projected from the
+    // resulting JSON rather than read again (#489).
+    const source = getEditorTranscriptHtml();
+    const transcript = htmlToJSON(source);
+    const html = projectTranscriptHtml(transcript, source);
     const versionMeta = document.querySelector('meta[name="version"]');
     const titleField = document.querySelector('#project-title'); // #449's field, when present
     const summaryEl = document.getElementById('summary');
@@ -1317,7 +1353,7 @@
     try {
       if (opfsAvailable && session.projectId !== null) {
         await acquireProjectLock(session.projectId); // fresh id: always granted
-        await writeOriginOnce(htmlToJSON(getEditorHtml()));
+        await writeOriginOnce(getEditorTranscriptJson());
         await resolveMediaFile();
         await writeMediaOnce();
         await commitInitialState(session.projectId); // v0: as transcribed/imported
@@ -2535,7 +2571,7 @@
     getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
     // the document exports (#467) read the transcript through here: the same
     // speaker-preserving, caption-mode-aware gather the save path uses
-    getTranscriptJson: () => htmlToJSON(getEditorHtml()),
+    getTranscriptJson: () => getEditorTranscriptJson(),
     loadJSZip, // shared vendored-zip loader (the .docx export packages with it)
     openFromFile,
     autosaveNow: writeDraft,

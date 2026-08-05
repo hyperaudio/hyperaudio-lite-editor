@@ -725,3 +725,74 @@ test('opening keeps words sitting exactly on a paragraph boundary (#488)', async
   expect(await page.locator('#hypertranscript p').count()).toBe(2);
   expect(dialogs).toEqual([]);
 });
+
+// #489 — transcript.html is a PROJECTION of the JSON, not a second reading of the
+// DOM. #486 briefly derived the JSON from the canonical serializer's output, which
+// put the source of truth downstream of a presentation transform: two shapes the
+// serializer flattened (a wrapper around word spans, spans outside any <p>)
+// stopped being cosmetic and deleted words from the container. Reading once and
+// projecting means the two entries cannot disagree, and the shapes that used to
+// cost words cost nothing.
+test('a wrapper around word spans costs no words in the saved project (#489)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  // exactly what Cmd+B over a selection produces, and what a paste of markup
+  // used to inject (#487): a <b> ENCLOSING timed word spans
+  await page.evaluate(() => {
+    const ht = document.getElementById('hypertranscript');
+    ht.innerHTML = '<article><section><p>'
+      + '<span data-m="0" data-d="100">one </span>'
+      + '<b><span data-m="100" data-d="100">two </span>'
+      + '<span data-m="200" data-d="100">three </span></b>'
+      + '<span data-m="300" data-d="100">four </span>'
+      + '</p></section>'
+      // and a timed span parked outside every <p>
+      + '<section><span data-m="400" data-d="100">five </span></section></article>';
+    ht.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  const saved = (await readCurrentProject(page)).saved;
+  const words = JSON.parse(saved.json).transcript.words.map((w) => w.text);
+
+  // every word reaches the JSON — the source of truth
+  expect(words).toEqual(['one', 'two', 'three', 'four', 'five']);
+
+  // and the HTML copy carries the same set, so the two entries agree (§ 4)
+  const htmlWords = [...saved.html.matchAll(/<span[^>]*data-m[^>]*>([^<]*)</g)]
+    .map((m) => m[1].trim())
+    .filter((t) => t !== '' && !t.startsWith('['));
+  expect(htmlWords).toEqual(words);
+});
+
+test('the saved HTML and JSON always describe the same words (#489)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'PROJECTED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  const saved = (await readCurrentProject(page)).saved;
+  const jsonWords = JSON.parse(saved.json).transcript.words.map((w) => w.text);
+  expect(jsonWords).toContain('PROJECTED');
+
+  // the projection is generated from that JSON, so a re-parse must agree exactly
+  const reparsed = [...saved.html.matchAll(/<span[^>]*data-m[^>]*>([^<]*)</g)]
+    .map((m) => m[1].trim())
+    .filter((t) => t !== '' && !t.startsWith('['));
+  expect(reparsed).toEqual(jsonWords);
+
+  // struck words and the speaker label still survive the round trip
+  expect(saved.html).toContain('class="speaker"');
+  expect(JSON.parse(saved.json).transcript.words.some((w) => w.struck === true)).toBe(true);
+});
