@@ -105,11 +105,24 @@
     }
   });
 
+  // Paste the clipboard's PLAIN text as plain text (#487). insertHTML parsed it
+  // as markup, so anything between < and > became an element instead of
+  // characters: pasting the literal "<inaudible>" produced an empty <inaudible>
+  // element and the word rendered as nothing — silently destroyed, and absent
+  // from the saved JSON. insertText inserts characters, so angle brackets
+  // survive as text (the invariant transcript-serializer.js already documents
+  // for words like "<inaudible>", #406/#409), and it still participates in
+  // native contenteditable undo, which matters until #400 owns undo itself.
+  //
+  // The "&nbsp;" replacement that stood here was a no-op — it discarded its
+  // return value, and plain-text clipboard content carries U+00A0 rather than
+  // that literal string. It was guarding against insertHTML decoding a pasted
+  // "&nbsp;" into a space, which insertText cannot do. normalizeTranscriptSpans
+  // converts real nbsp characters on the next pass either way (#339).
   editableDiv.addEventListener("paste", function(e) {
     e.preventDefault();
-    var text = e.clipboardData.getData("text/plain");
-    text.replaceAll("&nbsp;", " ");
-    document.execCommand("insertHTML", false, text);
+    const text = e.clipboardData.getData("text/plain");
+    document.execCommand("insertText", false, text);
   });
 
   window.document.addEventListener('hyperaudioInit', hyperaudio, false);

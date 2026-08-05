@@ -36,3 +36,39 @@ test('clearing the query clears the marks', async ({ page }) => {
   const after = await search(page, '');
   expect(after).toEqual([]);
 });
+
+// #495 — css/hyperaudio-lite-player.css is byte-identical to upstream again, with
+// the editor's deviations moved into css/hyperaudio-lite-editor.css. Upstream
+// paints .hyperaudio-transcript .search-mark PINK at specificity (0,2,0), so the
+// editor's override has to outrank it; a bare `mark.search-mark` is only (0,1,1)
+// and would lose, turning every hit pink. This guards that arithmetic, which is
+// otherwise invisible until someone re-vendors the file.
+test('the editor\'s search colours outrank the vendored player stylesheet (#495)', async ({ page }) => {
+  await search(page, 'the');
+  const colours = await page.evaluate(() => {
+    const marks = [...document.querySelectorAll('#hypertranscript mark.search-mark')];
+    if (marks.length === 0) return null;
+    marks[0].classList.add('active');
+    const active = getComputedStyle(marks[0]).backgroundColor;
+    marks[0].classList.remove('active');
+    return { hit: getComputedStyle(marks[0]).backgroundColor, active };
+  });
+
+  expect(colours).not.toBeNull();
+  // upstream's pink is rgb(255, 192, 203) — losing the cascade would show it
+  expect(colours.hit).not.toBe('rgb(255, 192, 203)');
+  expect(colours.active).not.toBe('rgb(255, 192, 203)');
+  // the active match stays visually distinct from an ordinary hit
+  expect(colours.active).not.toBe(colours.hit);
+  // and it is the intended amber, on specificity rather than source order
+  expect(colours.active).toBe('rgb(246, 195, 68)');
+});
+
+test('unread words keep the accessibility contrast, not upstream\'s lighter grey (#495)', async ({ page }) => {
+  const colour = await page.evaluate(() => {
+    const el = document.querySelector('#hypertranscript span[data-m].unread');
+    return el === null ? null : getComputedStyle(el).color;
+  });
+  // #666 from 5e37ad6 ("best practices and accessibility"), not upstream's #777
+  if (colour !== null) expect(colour).toBe('rgb(102, 102, 102)');
+});

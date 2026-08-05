@@ -14,7 +14,10 @@ const JSZip = require('jszip');
 
 const FIXTURE_VTT = 'WEBVTT\n\n00:00:00.320 --> 00:00:01.500\nBenvenuti a Hyperaudio\n';
 
-async function buildFixture() {
+// mutateJson lets a test write a container the WRITER can no longer produce —
+// e.g. paragraphs: [], which buildProjectJson now normalises away (#492) but
+// files predating the rule still carry, and readers must still tolerate.
+async function buildFixture(mutateJson) {
   const state = {
     generatorVersion: 'e2e',
     created: '2026-07-10T09:00:00Z',
@@ -40,8 +43,10 @@ async function buildFixture() {
       paragraphs: [{ speaker: 'Maria', start: 0.32, end: 1.5 }],
     },
   };
+  const project = save.buildProjectJson(state);
+  if (typeof mutateJson === 'function') mutateJson(project);
   return save.zipProject({
-    json: save.serializeProjectJson(save.buildProjectJson(state)),
+    json: save.serializeProjectJson(project),
     html: '<article><section><p><span data-m="320" data-d="520">Benvenuti </span></p></section></article>',
     originalJson: JSON.stringify({ words: [{ start: 0.32, end: 0.84, text: 'benvenuti' }], paragraphs: [] }),
     captionsVtt: FIXTURE_VTT,
@@ -51,9 +56,9 @@ async function buildFixture() {
 
 // Open the fixture in the live page via the module's hidden input; collect any
 // native dialogs (a conformant open must produce none).
-async function openFixture(page, testInfo, dialogs) {
+async function openFixture(page, testInfo, dialogs, mutateJson) {
   const fixturePath = testInfo.outputPath('fixture.hyperaudio');
-  fs.writeFileSync(fixturePath, await buildFixture());
+  fs.writeFileSync(fixturePath, await buildFixture(mutateJson));
   page.on('dialog', (dialog) => {
     dialogs.push(dialog.message());
     dialog.accept();
@@ -724,4 +729,108 @@ test('opening keeps words sitting exactly on a paragraph boundary (#488)', async
   expect(words.length).toBe(new Set(words).size);
   expect(await page.locator('#hypertranscript p').count()).toBe(2);
   expect(dialogs).toEqual([]);
+});
+
+// #489 — transcript.html is a PROJECTION of the JSON, not a second reading of the
+// DOM. #486 briefly derived the JSON from the canonical serializer's output, which
+// put the source of truth downstream of a presentation transform: two shapes the
+// serializer flattened (a wrapper around word spans, spans outside any <p>)
+// stopped being cosmetic and deleted words from the container. Reading once and
+// projecting means the two entries cannot disagree, and the shapes that used to
+// cost words cost nothing.
+test('a wrapper around word spans costs no words in the saved project (#489)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  // exactly what Cmd+B over a selection produces, and what a paste of markup
+  // used to inject (#487): a <b> ENCLOSING timed word spans
+  await page.evaluate(() => {
+    const ht = document.getElementById('hypertranscript');
+    ht.innerHTML = '<article><section><p>'
+      + '<span data-m="0" data-d="100">one </span>'
+      + '<b><span data-m="100" data-d="100">two </span>'
+      + '<span data-m="200" data-d="100">three </span></b>'
+      + '<span data-m="300" data-d="100">four </span>'
+      + '</p></section>'
+      // and a timed span parked outside every <p>
+      + '<section><span data-m="400" data-d="100">five </span></section></article>';
+    ht.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  const saved = (await readCurrentProject(page)).saved;
+  const words = JSON.parse(saved.json).transcript.words.map((w) => w.text);
+
+  // every word reaches the JSON — the source of truth
+  expect(words).toEqual(['one', 'two', 'three', 'four', 'five']);
+
+  // and the HTML copy carries the same set, so the two entries agree (§ 4)
+  const htmlWords = [...saved.html.matchAll(/<span[^>]*data-m[^>]*>([^<]*)</g)]
+    .map((m) => m[1].trim())
+    .filter((t) => t !== '' && !t.startsWith('['));
+  expect(htmlWords).toEqual(words);
+});
+
+test('the saved HTML and JSON always describe the same words (#489)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'PROJECTED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  const saved = (await readCurrentProject(page)).saved;
+  const jsonWords = JSON.parse(saved.json).transcript.words.map((w) => w.text);
+  expect(jsonWords).toContain('PROJECTED');
+
+  // the projection is generated from that JSON, so a re-parse must agree exactly
+  const reparsed = [...saved.html.matchAll(/<span[^>]*data-m[^>]*>([^<]*)</g)]
+    .map((m) => m[1].trim())
+    .filter((t) => t !== '' && !t.startsWith('['));
+  expect(reparsed).toEqual(jsonWords);
+
+  // struck words and the speaker label still survive the round trip
+  expect(saved.html).toContain('class="speaker"');
+  expect(JSON.parse(saved.json).transcript.words.some((w) => w.struck === true)).toBe(true);
+});
+
+// #492 — the invariant is "writers emit >= 1 paragraph", but readers stay
+// tolerant: files written before the rule, and third-party JSON, legitimately
+// carry none. Opening one must still land every word, and the next save brings
+// the project back to conformance rather than preserving the gap.
+test('a project with no paragraphs opens whole and is written back with one (#492)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs, (project) => {
+    project.transcript.paragraphs = [];
+  });
+  await awaitLibraryEntry(page);
+
+  // every word reached the editor — not just the one openFixture waits on
+  const words = await page.locator('#hypertranscript span[data-m]:not(.speaker)').allTextContents();
+  expect(words.map((w) => w.trim())).toEqual(['Benvenuti', 'ehm', 'a']);
+  expect(dialogs).toEqual([]);
+
+  // an opened project is CLEAN, so ⌘S alone commits nothing — edit first, which
+  // is the path a real file predating the rule would take back to conformance
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'Benvenuto ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  const saved = (await readCurrentProject(page)).saved;
+  const transcript = JSON.parse(saved.json).transcript;
+  expect(transcript.words.map((w) => w.text)).toEqual(['Benvenuto', 'ehm', 'a']);
+  expect(transcript.paragraphs.length).toBeGreaterThanOrEqual(1);
 });

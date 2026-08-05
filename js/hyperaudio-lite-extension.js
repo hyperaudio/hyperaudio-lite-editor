@@ -1,5 +1,21 @@
 /*! (C) The Hyperaudio Project. MIT @license: en.wikipedia.org/wiki/MIT_License. */
 
+/*
+ * A FORK, not a vendored copy — do not overwrite this from upstream (#495).
+ *
+ * It began as hyperaudio-lite's extension and has since diverged substantially:
+ * ours carries the editor's search-form wiring and playback-rate controls, which
+ * upstream has no notion of, and its search predates upstream's search-mark
+ * rewrite. It also carries its own ?v= in index.html rather than tracking the
+ * library's version.
+ *
+ * Of the four files that look vendored from hyperaudio-lite, only
+ * js/hyperaudio-lite.js and js/caption.js genuinely are (both byte-identical to
+ * upstream v2.6.4 and safe to replace). css/hyperaudio-lite-player.css was
+ * returned to byte-identical in #495, with the editor's two deviations moved
+ * into css/hyperaudio-lite-editor.css. This file is the one real fork.
+ */
+
 'use strict';
 // Example wrapper for hyperaudio-lite with search and playbackRate included
 
