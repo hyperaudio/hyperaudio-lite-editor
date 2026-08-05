@@ -12,9 +12,16 @@
 
   strikethroughBtn.addEventListener('click', () => {
     if (strikethroughBtn.classList.contains('btn-disabled')) return;
-    applyStrikeThroughToSelection();
-    rebuildAudioDataArray();
-    ensureSkipListeners();
+    const applyStrike = () => {
+      applyStrikeThroughToSelection();
+      rebuildAudioDataArray();
+      ensureSkipListeners();
+    };
+    if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
+      window.transcriptGateway.mutate(applyStrike, { origin: 'strike' });
+    } else {
+      applyStrike();
+    }
   });
 
   // #274: grey out the strikethrough button unless text is selected in the

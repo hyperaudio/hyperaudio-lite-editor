@@ -51,6 +51,13 @@
   let captionMode = false; // used to detect whether we need to sanitise amongst other things
   let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
 
+  function mutateTranscript(fn, origin, foldPolicy) {
+    if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
+      return window.transcriptGateway.mutate(fn, { origin, foldPolicy });
+    }
+    return fn();
+  }
+
   let alertOkBtn = document.querySelector('#captionsource-alert-ok');
 
   alertOkBtn.addEventListener('click', function() {
@@ -549,7 +556,11 @@
       // and the debounced sanitise pass runs it too so it also fires while
       // editing without a blur (e.g. clicking words to seek). See normalize-
       // TranscriptSpans above and the sanitise() call below.
-      transcriptEl.addEventListener('blur', () => normalizeTranscriptSpans(transcriptEl));
+      transcriptEl.addEventListener('blur', () => mutateTranscript(
+        () => normalizeTranscriptSpans(transcriptEl),
+        'normalize-blur',
+        'normalization',
+      ));
     }
 
     const sanitisationCheck = function () {
@@ -724,7 +735,11 @@
       function resetTimer() {
         clearTimeout(time);
         if (captionMode !== true) {
-          time = setTimeout(sanitise, 1000);
+          time = setTimeout(() => mutateTranscript(
+            sanitise,
+            'sanitise',
+            'normalization',
+          ), 1000);
         }
       }
 
