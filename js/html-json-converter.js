@@ -88,17 +88,58 @@ function escapeHTMLText(text) {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * FUNCTION: normalizeTranscriptParagraphs
+ *
+ * PURPOSE: Guarantee the "at least one paragraph" invariant (#492).
+ *
+ * WHY: paragraph-less JSON is reachable — htmlToJSON returns none whenever the
+ *      DOM has no <p>, writeOriginOnce defaulted to [], and imported
+ *      third-party JSON needn't carry structure at all. Each projection then
+ *      handled the gap its own way, and one of the three dropped every word.
+ *      Normalising once, at the point JSON arrives, lets every projection
+ *      downstream assume >= 1 and deletes that whole class of edge case.
+ *
+ * The synthesised paragraph spans the words and is unattributed — § 3.6 allows
+ * speaker: null, so a structureless transcript is expressible without
+ * inventing anything. A transcript with no words still gets one (0/0): the
+ * invariant is simpler with no exception, and the projections drop an empty
+ * paragraph anyway.
+ *
+ * Non-mutating, and unknown fields are carried over (§ 8.1).
+ */
+function normalizeTranscriptParagraphs(transcript) {
+  const source = (transcript !== null && typeof transcript === 'object') ? transcript : {};
+  const words = source.words || [];
+  const paragraphs = source.paragraphs || [];
+  if (paragraphs.length > 0) return source;
+
+  let start = 0;
+  let end = 0;
+  if (words.length > 0) {
+    // min/max rather than first/last: nothing guarantees the caller sorted them
+    start = words[0].start;
+    end = words[0].end;
+    words.forEach((word) => {
+      if (word.start < start) start = word.start;
+      if (word.end > end) end = word.end;
+    });
+  }
+  return Object.assign({}, source, { paragraphs: [{ start, end, speaker: null }] });
+}
+
 function jsonToHTML(jsonData) {
-  const words = jsonData.words || [];
-  const paragraphs = jsonData.paragraphs || [];
-  
+  // >= 1 paragraph guaranteed here (#492), so the single-paragraph fallback
+  // this function used to carry — a second, separately maintained copy of the
+  // word-emitting loop — is gone.
+  const normalized = normalizeTranscriptParagraphs(jsonData);
+  const words = normalized.words || [];
+  const paragraphs = normalized.paragraphs;
+
   // Start HTML structure
   let html = '<article><section>\n';
-  
-  if (paragraphs.length > 0) {
-    // ===== MULTI-PARAGRAPH CASE =====
-    // Generate separate <p> tags based on paragraph data
 
+  {
     // Assign EVERY word to a paragraph — never drop (#408). The old half-open
     // range filter (start >= pStart && start < pEnd) silently deleted words:
     // a zero-duration last word (end == start) failed its own paragraph's
@@ -154,27 +195,8 @@ function jsonToHTML(jsonData) {
       
       html += '  </p>\n';
     });
-    
-  } else {
-    // ===== SINGLE PARAGRAPH FALLBACK =====
-    // No paragraph data, put all words in one <p>
-    html += '  <p>\n';
-    
-    words.forEach((word, wordIndex) => {
-      const startMs = Math.round(word.start * 1000);
-      const endMs = Math.round(word.end * 1000);
-      const durationMs = endMs - startMs;
-      const trail = word.space === false ? '' : ' ';
-      const strike = word.struck === true ? ' style="text-decoration: line-through;"' : '';
-      const gluedToPrev = wordIndex > 0 && words[wordIndex - 1].space === false;
-      const lead = wordIndex === 0 ? '    ' : gluedToPrev ? '' : '\n    ';
-      html += `${lead}<span data-m="${startMs}" data-d="${durationMs}"${strike}>${escapeHTMLText(word.text)}${trail}</span>`;
-    });
-    html += '\n';
-    
-    html += '  </p>\n';
   }
-  
+
   html += '</section></article>';
   
   return html;
@@ -332,6 +354,14 @@ function htmlToJSON(html) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     jsonToHTML,
-    htmlToJSON
+    htmlToJSON,
+    normalizeTranscriptParagraphs
   };
+}
+
+// Loaded as a plain <script> ahead of every other editor script, so the
+// projections in hyperaudio-save.js and hyperaudio-lite-editor-export.js
+// (a module — it reads this off window) can share the one normaliser.
+if (typeof window !== 'undefined') {
+  window.normalizeTranscriptParagraphs = normalizeTranscriptParagraphs;
 }

@@ -207,6 +207,24 @@
     return { ok: errors.length === 0, errors };
   }
 
+  // The >= 1 paragraph normaliser (#492) lives in html-json-converter.js: a
+  // plain global in the browser (it loads first), a require in the node
+  // pure-layer tests — buildProjectJson is exported to those, so the invariant
+  // has to hold on both sides or "writers emit at least one paragraph" is only
+  // half true. Resolved once; null only if the converter is missing entirely,
+  // and every caller below falls back to what it did before.
+  const paragraphNormalizer = (function () {
+    if (typeof normalizeTranscriptParagraphs === 'function') return normalizeTranscriptParagraphs;
+    if (typeof require === 'function') {
+      try {
+        return require('./html-json-converter.js').normalizeTranscriptParagraphs || null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  })();
+
   // Assemble a complete hyperaudio.json object from gathered state. Defaults
   // (space: true, struck: false) are already omitted by htmlToJSON; times are
   // seconds throughout (the DOM's data-m/data-d are ms — ms = round(s × 1000)).
@@ -241,7 +259,13 @@
         summary: state.texts.summary || '',
         topics: Array.isArray(state.texts.topics) ? state.texts.topics : [],
       }),
-      transcript: state.transcript,
+      // Writers emit at least one paragraph (§ 3.6, #492). One line covers
+      // every path — the silent save, Export Project, the flattened export —
+      // because they all assemble their JSON through here.
+      transcript: (state.transcript !== null && state.transcript !== undefined
+        && paragraphNormalizer !== null)
+        ? paragraphNormalizer(state.transcript)
+        : state.transcript,
     });
     if (state.provenance && (state.provenance.engine || state.provenance.model)) {
       project.provenance = Object.assign({}, state.provenance);
@@ -854,9 +878,16 @@
   // textContent only (spec § 10.5: never innerHTML on file data).
   function buildTranscriptDomFromJson(transcript) {
     const words = transcript.words || [];
+    // >= 1 paragraph via the shared normaliser (#492) — the local
+    // -Infinity/Infinity synthesis this replaces was a third answer to the
+    // same question, and the three projections disagreed. The inline fallback
+    // stays: readers MUST tolerate paragraph-less input, and this one runs
+    // against file data.
     const paragraphs = (transcript.paragraphs && transcript.paragraphs.length > 0)
       ? transcript.paragraphs
-      : [{ start: -Infinity, end: Infinity, speaker: null }];
+      : (paragraphNormalizer !== null
+        ? paragraphNormalizer(transcript).paragraphs
+        : [{ start: -Infinity, end: Infinity, speaker: null }]);
     const article = document.createElement('article');
     const section = document.createElement('section');
     article.appendChild(section);
@@ -1299,7 +1330,11 @@
         if (w.space === false) word.space = false;
         return word;
       }),
-      paragraphs: transcript.paragraphs || [],
+      // the origin is a written file too, so it carries the invariant (#492) —
+      // this defaulted to [], one of the places paragraph-less JSON came from
+      paragraphs: (paragraphNormalizer !== null
+        ? paragraphNormalizer(transcript).paragraphs
+        : transcript.paragraphs || []),
     };
     session.hasOriginal = true;
     session.originalJson = JSON.stringify(clean, null, 2);
