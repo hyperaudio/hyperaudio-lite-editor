@@ -141,6 +141,15 @@
         }
       });
 
+      // The loop only pushes a cue when it meets the NEXT timestamp line, so
+      // the last one was never pushed — every VTT lost its final caption, and
+      // a single-cue VTT produced no rows at all (#513). Not cosmetic: the
+      // editor is what generateCaptionsFromCaptionEditor rebuilds the VTT
+      // from, so the dropped cue vanished for good on the next save.
+      if (start !== undefined) {
+        data.push({start, stop, text});
+      }
+
       populateCaptionEditor(data);
 
       if (updateCaptionsFromTranscript === false && localStorage.getItem("noCaptionAlert") !== "true") {
