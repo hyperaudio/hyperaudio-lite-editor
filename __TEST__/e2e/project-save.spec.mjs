@@ -17,7 +17,7 @@ const FIXTURE_VTT = 'WEBVTT\n\n00:00:00.320 --> 00:00:01.500\nBenvenuti a Hypera
 // mutateJson lets a test write a container the WRITER can no longer produce —
 // e.g. paragraphs: [], which buildProjectJson now normalises away (#492) but
 // files predating the rule still carry, and readers must still tolerate.
-async function buildFixture(mutateJson) {
+async function buildFixture(mutateJson, captionsVtt) {
   const state = {
     generatorVersion: 'e2e',
     created: '2026-07-10T09:00:00Z',
@@ -49,16 +49,16 @@ async function buildFixture(mutateJson) {
     json: save.serializeProjectJson(project),
     html: '<article><section><p><span data-m="320" data-d="520">Benvenuti </span></p></section></article>',
     originalJson: JSON.stringify({ words: [{ start: 0.32, end: 0.84, text: 'benvenuti' }], paragraphs: [] }),
-    captionsVtt: FIXTURE_VTT,
+    captionsVtt: captionsVtt || FIXTURE_VTT,
     media: { name: 'tone.wav', data: ladderWav(2) },
   }, JSZip, 'nodebuffer');
 }
 
 // Open the fixture in the live page via the module's hidden input; collect any
 // native dialogs (a conformant open must produce none).
-async function openFixture(page, testInfo, dialogs, mutateJson) {
+async function openFixture(page, testInfo, dialogs, mutateJson, captionsVtt) {
   const fixturePath = testInfo.outputPath('fixture.hyperaudio');
-  fs.writeFileSync(fixturePath, await buildFixture(mutateJson));
+  fs.writeFileSync(fixturePath, await buildFixture(mutateJson, captionsVtt));
   page.on('dialog', (dialog) => {
     dialogs.push(dialog.message());
     dialog.accept();
@@ -904,3 +904,110 @@ test('undo does not clear the dot while a non-transcript edit is pending', async
 
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
 });
+
+// #513 — the caption editor is populated by parsing the saved VTT, and the
+// parse dropped the final cue every time (a single-cue VTT produced no rows at
+// all). Not cosmetic: generateCaptionsFromCaptionEditor rebuilds the VTT from
+// these rows, so editing any caption made the missing one permanent.
+test('every cue in the saved VTT reaches the caption editor (#513)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  const THREE_CUES = 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFirst cue\n\n'
+    + '00:00:01.000 --> 00:00:02.000\nSecond cue\n\n'
+    + '00:00:02.000 --> 00:00:03.000\nThird cue\n';
+  await openFixture(page, testInfo, dialogs, null, THREE_CUES);
+  await awaitLibraryEntry(page);
+
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+
+  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+    (els) => els.map((e) => e.value.trim()));
+  expect(lines).toEqual(['First cue', 'Second cue', 'Third cue']);
+});
+
+// #505 — NO caption edit reached the save module. The three structural buttons
+// are onclick handlers that rewrite the caption list without firing an input
+// event; typing does fire one, but EDIT_SCOPE names '#caption-editor', which is
+// a placeholder in a hidden modal — the real rows live in the transcript holder,
+// so the selector matched nothing. Captions changed, the project stayed clean,
+// and the edit was lost on close.
+const CAPTION = '#captions-display .caption';
+const enterCaptionMode = async (page) => {
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, CAPTION);
+  // Opening a project whose captions are curated raises the "Captions have
+  // been edited" notice, and it sits OVER the first caption rows, intercepting
+  // clicks — dismiss it the way a user must (see #506, which is about that
+  // notice's design).
+  const alertBox = page.locator('#captionsource-alert');
+  if (await alertBox.isVisible()) await page.click('#captionsource-alert-ok');
+  await expect(alertBox).toBeHidden();
+};
+
+for (const action of ['insert', 'merge', 'delete']) {
+  test(`caption ${action} marks the project dirty (#505)`, async ({ page }, testInfo) => {
+    const dialogs = [];
+    await openFixture(page, testInfo, dialogs);
+    await awaitLibraryEntry(page);
+    await enterCaptionMode(page);
+    await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+    // merge needs a second caption below the first to merge INTO
+    if (action === 'merge') {
+      await page.locator(CAPTION).first()
+        .locator('button', { hasText: 'insert' }).click();
+      await page.evaluate(() => window.HyperaudioSave.autosaveNow());
+      await page.evaluate(() => {
+        document.getElementById('project-save-btn').classList.remove('dirty');
+      });
+    }
+
+    const countBefore = await page.locator(CAPTION).count();
+    await page.locator(CAPTION).first()
+      .locator('button', { hasText: action }).click();
+
+    // the caption list really changed...
+    const countAfter = await page.locator(CAPTION).count();
+    expect(countAfter).toBe(action === 'insert' ? countBefore + 1 : countBefore - 1);
+    // ...and the save module heard about it
+    await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+  });
+}
+
+test('typing in a caption marks the project dirty (#505)', async ({ page }, testInfo) => {
+  // EDIT_SCOPE lists '#caption-editor', but the caption rows are not in it —
+  // that id belongs to a hidden modal placeholder — so typing never reached
+  // the save module either. The choke-point announcement covers it.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await enterCaptionMode(page);
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  await page.locator(CAPTION).first().locator('input.line1').click();
+  await page.keyboard.type('EDITED');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+test('a caption deletion survives the save that follows it (#505)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await enterCaptionMode(page);
+
+  const firstLine = await page.locator(CAPTION).first()
+    .locator('input.line1').inputValue();
+  expect(firstLine.trim()).not.toBe('');
+
+  await page.locator(CAPTION).first()
+    .locator('button', { hasText: 'delete' }).click();
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  // the saved VTT no longer carries the deleted cue's text
+  const saved = (await readCurrentProject(page)).saved;
+  expect(saved.captionsVtt).not.toContain(firstLine.trim());
+});
+
