@@ -17,7 +17,7 @@ const FIXTURE_VTT = 'WEBVTT\n\n00:00:00.320 --> 00:00:01.500\nBenvenuti a Hypera
 // mutateJson lets a test write a container the WRITER can no longer produce —
 // e.g. paragraphs: [], which buildProjectJson now normalises away (#492) but
 // files predating the rule still carry, and readers must still tolerate.
-async function buildFixture(mutateJson) {
+async function buildFixture(mutateJson, captionsVtt) {
   const state = {
     generatorVersion: 'e2e',
     created: '2026-07-10T09:00:00Z',
@@ -49,16 +49,16 @@ async function buildFixture(mutateJson) {
     json: save.serializeProjectJson(project),
     html: '<article><section><p><span data-m="320" data-d="520">Benvenuti </span></p></section></article>',
     originalJson: JSON.stringify({ words: [{ start: 0.32, end: 0.84, text: 'benvenuti' }], paragraphs: [] }),
-    captionsVtt: FIXTURE_VTT,
+    captionsVtt: captionsVtt || FIXTURE_VTT,
     media: { name: 'tone.wav', data: ladderWav(2) },
   }, JSZip, 'nodebuffer');
 }
 
 // Open the fixture in the live page via the module's hidden input; collect any
 // native dialogs (a conformant open must produce none).
-async function openFixture(page, testInfo, dialogs, mutateJson) {
+async function openFixture(page, testInfo, dialogs, mutateJson, captionsVtt) {
   const fixturePath = testInfo.outputPath('fixture.hyperaudio');
-  fs.writeFileSync(fixturePath, await buildFixture(mutateJson));
+  fs.writeFileSync(fixturePath, await buildFixture(mutateJson, captionsVtt));
   page.on('dialog', (dialog) => {
     dialogs.push(dialog.message());
     dialog.accept();
@@ -903,4 +903,24 @@ test('undo does not clear the dot while a non-transcript edit is pending', async
   await page.keyboard.press('Meta+z'); // transcript back to saved; summary is not
 
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+// #513 — the caption editor is populated by parsing the saved VTT, and the
+// parse dropped the final cue every time (a single-cue VTT produced no rows at
+// all). Not cosmetic: generateCaptionsFromCaptionEditor rebuilds the VTT from
+// these rows, so editing any caption made the missing one permanent.
+test('every cue in the saved VTT reaches the caption editor (#513)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  const THREE_CUES = 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFirst cue\n\n'
+    + '00:00:01.000 --> 00:00:02.000\nSecond cue\n\n'
+    + '00:00:02.000 --> 00:00:03.000\nThird cue\n';
+  await openFixture(page, testInfo, dialogs, null, THREE_CUES);
+  await awaitLibraryEntry(page);
+
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+
+  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+    (els) => els.map((e) => e.value.trim()));
+  expect(lines).toEqual(['First cue', 'Second cue', 'Third cue']);
 });
