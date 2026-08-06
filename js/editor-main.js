@@ -421,10 +421,20 @@
       makeCaptionEditorActive();
     }
 
+    // The one door every caption edit passes through — typing (captionChange),
+    // insert, merge and delete all land here. Typing alone reached the save
+    // module, because its inputs fire a real `input` event that the module's
+    // delegation picks up inside #caption-editor; the three structural buttons
+    // are onclick handlers that mutate the caption list without any input
+    // event, so their changes — and the updateCaptionsFromTranscript flip
+    // below, which is itself persisted project state — left the project
+    // looking clean and were lost on close (#505). Announcing it here covers
+    // all four in one place rather than chasing three onclick handlers.
     function makeCaptionEditorActive() {
       updateCaptionsFromTranscript = false;
       document.querySelector('#regenerate-btn').classList.remove("btn-disabled");
       generateCaptionsFromCaptionEditor();
+      document.dispatchEvent(new CustomEvent('hyperaudioCaptionsEdited'));
     }
 
     function generateCaptionsFromCaptionEditor() {

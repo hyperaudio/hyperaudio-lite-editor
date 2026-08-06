@@ -924,3 +924,90 @@ test('every cue in the saved VTT reaches the caption editor (#513)', async ({ pa
     (els) => els.map((e) => e.value.trim()));
   expect(lines).toEqual(['First cue', 'Second cue', 'Third cue']);
 });
+
+// #505 — NO caption edit reached the save module. The three structural buttons
+// are onclick handlers that rewrite the caption list without firing an input
+// event; typing does fire one, but EDIT_SCOPE names '#caption-editor', which is
+// a placeholder in a hidden modal — the real rows live in the transcript holder,
+// so the selector matched nothing. Captions changed, the project stayed clean,
+// and the edit was lost on close.
+const CAPTION = '#captions-display .caption';
+const enterCaptionMode = async (page) => {
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, CAPTION);
+  // Opening a project whose captions are curated raises the "Captions have
+  // been edited" notice, and it sits OVER the first caption rows, intercepting
+  // clicks — dismiss it the way a user must (see #506, which is about that
+  // notice's design).
+  const alertBox = page.locator('#captionsource-alert');
+  if (await alertBox.isVisible()) await page.click('#captionsource-alert-ok');
+  await expect(alertBox).toBeHidden();
+};
+
+for (const action of ['insert', 'merge', 'delete']) {
+  test(`caption ${action} marks the project dirty (#505)`, async ({ page }, testInfo) => {
+    const dialogs = [];
+    await openFixture(page, testInfo, dialogs);
+    await awaitLibraryEntry(page);
+    await enterCaptionMode(page);
+    await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+    // merge needs a second caption below the first to merge INTO
+    if (action === 'merge') {
+      await page.locator(CAPTION).first()
+        .locator('button', { hasText: 'insert' }).click();
+      await page.evaluate(() => window.HyperaudioSave.autosaveNow());
+      await page.evaluate(() => {
+        document.getElementById('project-save-btn').classList.remove('dirty');
+      });
+    }
+
+    const countBefore = await page.locator(CAPTION).count();
+    await page.locator(CAPTION).first()
+      .locator('button', { hasText: action }).click();
+
+    // the caption list really changed...
+    const countAfter = await page.locator(CAPTION).count();
+    expect(countAfter).toBe(action === 'insert' ? countBefore + 1 : countBefore - 1);
+    // ...and the save module heard about it
+    await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+  });
+}
+
+test('typing in a caption marks the project dirty (#505)', async ({ page }, testInfo) => {
+  // EDIT_SCOPE lists '#caption-editor', but the caption rows are not in it —
+  // that id belongs to a hidden modal placeholder — so typing never reached
+  // the save module either. The choke-point announcement covers it.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await enterCaptionMode(page);
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  await page.locator(CAPTION).first().locator('input.line1').click();
+  await page.keyboard.type('EDITED');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+test('a caption deletion survives the save that follows it (#505)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await enterCaptionMode(page);
+
+  const firstLine = await page.locator(CAPTION).first()
+    .locator('input.line1').inputValue();
+  expect(firstLine.trim()).not.toBe('');
+
+  await page.locator(CAPTION).first()
+    .locator('button', { hasText: 'delete' }).click();
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  // the saved VTT no longer carries the deleted cue's text
+  const saved = (await readCurrentProject(page)).saved;
+  expect(saved.captionsVtt).not.toContain(firstLine.trim());
+});
+

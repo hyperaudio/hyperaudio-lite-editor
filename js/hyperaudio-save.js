@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.2.0 — last changed in release 1.2.0
+ * @version 1.2.1 — last changed in release 1.2.1
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -2534,6 +2534,18 @@
     document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', () => {
       // the engine-driven caption pass during project birth is part of the
       // committed v0, not an edit — see birthInProgress
+      if (birthInProgress) return;
+      scheduleAutosave();
+    });
+    // Caption edits from the caption editor itself (#505). EDIT_SCOPE already
+    // catches TYPING there, because the caption inputs fire a real `input`
+    // event — but insert, merge and delete are onclick handlers that rewrite
+    // the caption list silently, so the project stayed clean over a change
+    // that was then lost on close. editor-main announces all four from its one
+    // choke point; typing therefore signals twice, which costs nothing (this
+    // only sets the flag and restarts the debounce). Same birth guard as
+    // above: a caption pass belonging to the committed v0 is not an edit.
+    document.addEventListener('hyperaudioCaptionsEdited', () => {
       if (birthInProgress) return;
       scheduleAutosave();
     });
