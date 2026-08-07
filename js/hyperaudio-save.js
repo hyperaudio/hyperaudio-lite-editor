@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.2.1 — last changed in release 1.2.1
+ * @version 1.2.2 — last changed in release 1.2.2
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -317,7 +317,7 @@
   // media?: {name, data}}. The mimetype entry goes FIRST and STORED so the MIME
   // type sits at byte offset 38 (EPUB convention, § 2.1); the media entry is
   // STORED because media formats are already compressed.
-  function zipProject(files, JSZipImpl, outType) {
+  function zipProject(files, JSZipImpl, outType, onUpdate) {
     const zip = new JSZipImpl();
     zip.file(ENTRY.mimetype, CONTAINER_MIMETYPE, { compression: 'STORE' });
     zip.file(ENTRY.json, files.json);
@@ -327,11 +327,15 @@
     if (files.media) {
       zip.file(MEDIA_DIR + sanitizeMediaFilename(files.media.name), files.media.data, { compression: 'STORE', binary: true });
     }
+    // onUpdate is JSZip's own progress callback (second argument to
+    // generateAsync) — optional so the node pure-layer tests call this
+    // unchanged. Packing the media dominates the wait, so this is the only
+    // step that can report a real percentage rather than a spinner (#502).
     return zip.generateAsync({
       type: outType || 'uint8array',
       compression: 'DEFLATE',
       streamFiles: true,
-    });
+    }, typeof onUpdate === 'function' ? onUpdate : undefined);
   }
 
   // Whitelist-read of a container (spec § 10.1): only entries with known names
@@ -1748,17 +1752,27 @@
   // touches it.
   let exportInFlight = false;
   async function exportProject(opts) {
-    if (exportInFlight) return false; // one container build at a time (#448)
+    if (exportInFlight) {
+      // Returning false silently (as this did) is the same dead end that makes
+      // a user click again in the first place — the build is slow and, before
+      // #502, invisible. Say what is happening instead.
+      showProgress('Still building the project file…', 2000);
+      return false;
+    }
     exportInFlight = true;
     try {
       return await exportProjectInner(!!(opts && opts.asSave));
     } finally {
       exportInFlight = false;
+      hideProgress();
     }
   }
 
   async function exportProjectInner(asSave) {
     const identityAtStart = identityGeneration;
+    // Before the first await: the click is acknowledged even if resolving the
+    // media out of OPFS takes a moment.
+    showProgress('Preparing the project file…');
     let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
     const remoteSrc = player !== null && /^https?:/i.test(player.src) ? player.src : null;
@@ -1769,6 +1783,9 @@
         mediaFile = session.mediaFile; // already embedded by a previous save of this project
       } else {
         try {
+          // a full media download over the network — the one step that can
+          // take longer than the packing, so it gets its own message
+          showProgress('Downloading the media…');
           mediaFile = await fetchRemoteMediaFile(remoteSrc);
           session.mediaFile = mediaFile;
           session.mediaFileFromUrl = remoteSrc;
@@ -1811,14 +1828,22 @@
     }
     state.hasOriginal = originalJson !== null;
 
+    showProgress('Packaging the project file…');
     const JSZipImpl = await loadJSZip();
+    let lastPercent = -1;
     const blob = await zipProject({
       json: serializeProjectJson(buildProjectJson(state)),
       html: state.html,
       originalJson,
       captionsVtt: getCaptionsVtt() || null,
       media: mediaFile !== null ? { name: mediaFile.name, data: mediaFile } : null,
-    }, JSZipImpl, 'blob');
+    }, JSZipImpl, 'blob', (meta) => {
+      // JSZip fires this very frequently; only repaint on a whole percent
+      const percent = Math.floor(meta.percent);
+      if (percent === lastPercent) return;
+      lastPercent = percent;
+      showProgress('Packaging the project file… ' + percent + '%');
+    });
 
     const safeTitle = (state.texts.title || 'project')
       .replace(/\.hyperaudio$/i, '')
@@ -2592,6 +2617,49 @@
           el.addEventListener('input', scheduleAutosave);
         }
       });
+  }
+
+  /* --------------------------------------------------------------------------
+   * Export progress (#502). Building a container reads the media out of OPFS,
+   * may download it over the network, and packs the whole thing into a blob —
+   * seconds to minutes on real media, during which the app looked completely
+   * inert. The only pre-existing signal was a confirm dialog above 500MB, so
+   * an ordinary 100MB interview got nothing at all.
+   *
+   * A fixed pill rather than a notice in #side-notices: that panel is an
+   * off-canvas drawer on the small-screen layout, so a notice there is
+   * invisible on exactly the devices where the wait is longest. role=status +
+   * aria-live announces each stage without stealing focus.
+   * ----------------------------------------------------------------------- */
+  let progressEl = null;
+  let progressHoldUntil = 0;
+
+  // holdMs pins a message for a moment against the routine progress stream.
+  // Needed because packing fires onUpdate every few milliseconds: a message
+  // answering something the USER just did ("still building", after a second
+  // click) was overwritten before it could be read — the test caught nothing
+  // because it read the text synchronously, which a human cannot do.
+  function showProgress(message, holdMs) {
+    if (typeof document === 'undefined') return;
+    const now = Date.now();
+    if (!holdMs && now < progressHoldUntil) return; // a held message is on screen
+    if (progressEl === null) {
+      progressEl = document.createElement('div');
+      progressEl.id = 'project-progress';
+      progressEl.setAttribute('role', 'status');
+      progressEl.setAttribute('aria-live', 'polite');
+      document.body.appendChild(progressEl);
+    }
+    progressEl.textContent = message;
+    progressHoldUntil = holdMs ? now + holdMs : 0;
+  }
+
+  function hideProgress() {
+    progressHoldUntil = 0;
+    if (progressEl !== null) {
+      progressEl.remove();
+      progressEl = null;
+    }
   }
 
   function showTabGuardBanner() {
