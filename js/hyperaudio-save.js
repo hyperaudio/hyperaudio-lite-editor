@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.2.0 — last changed in release 1.2.0
+ * @version 1.2.2 — last changed in release 1.2.2
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -291,10 +291,34 @@
       (b.modifiedAt || b.createdAt || 0) - (a.modifiedAt || a.createdAt || 0));
   }
 
+  // Boot restores the project you were last LOOKING AT, which is not the same
+  // as the last one written. modifiedAt is stamped by writes, so simply
+  // opening a project to read it left it invisible to the boot order — and
+  // switching away from A to B flushes A's pending draft, stamping A as the
+  // newest, so a reload landed back on the project you had just left.
+  // lastActiveAt is stamped when a project BECOMES current. Entries written
+  // before this field fall back to modifiedAt, so an existing library keeps
+  // its previous ordering rather than jumping to the bottom.
+  function sortByLastActive(entries) {
+    const key = (e) => e.lastActiveAt || e.modifiedAt || e.createdAt || 0;
+    return entries.slice().sort((a, b) => key(b) - key(a));
+  }
+
   // The deterministic per-project "dirty" rule (#456, Glider-matched): a
   // draft has been written since the last manual Save. A never-saved project
   // (fresh transcription) is dirty; an opened .hyperaudio starts clean (the
   // file IS the saved state).
+  // Best-effort: a project the library has no entry for yet (a birth, before
+  // its first write) gets its stamp when that write creates the entry.
+  function markProjectActive(id) {
+    if (!opfsAvailable || id === null) return;
+    const now = Date.now();
+    updateLibrary((lib) => {
+      const entry = lib.projects.find((p) => p.id === id);
+      if (entry !== undefined) entry.lastActiveAt = now;
+    }).catch((e) => console.warn('hyperaudio-save: marking the project active failed', e));
+  }
+
   function isEntryDirty(entry) {
     return (entry.lastDraftAt || 0) > (entry.lastSavedAt || 0);
   }
@@ -317,7 +341,7 @@
   // media?: {name, data}}. The mimetype entry goes FIRST and STORED so the MIME
   // type sits at byte offset 38 (EPUB convention, § 2.1); the media entry is
   // STORED because media formats are already compressed.
-  function zipProject(files, JSZipImpl, outType) {
+  function zipProject(files, JSZipImpl, outType, onUpdate) {
     const zip = new JSZipImpl();
     zip.file(ENTRY.mimetype, CONTAINER_MIMETYPE, { compression: 'STORE' });
     zip.file(ENTRY.json, files.json);
@@ -327,11 +351,15 @@
     if (files.media) {
       zip.file(MEDIA_DIR + sanitizeMediaFilename(files.media.name), files.media.data, { compression: 'STORE', binary: true });
     }
+    // onUpdate is JSZip's own progress callback (second argument to
+    // generateAsync) — optional so the node pure-layer tests call this
+    // unchanged. Packing the media dominates the wait, so this is the only
+    // step that can report a real percentage rather than a spinner (#502).
     return zip.generateAsync({
       type: outType || 'uint8array',
       compression: 'DEFLATE',
       streamFiles: true,
-    });
+    }, typeof onUpdate === 'function' ? onUpdate : undefined);
   }
 
   // Whitelist-read of a container (spec § 10.1): only entries with known names
@@ -340,7 +368,7 @@
   // htmlText, ...} when hyperaudio.json is missing/unreadable but the HTML
   // compatibility copy can be used (spec § 4 recovery). Throws {code, message}
   // on rejection (version-major, media-kind, unreadable, entry-too-large).
-  async function unzipProject(data, JSZipImpl) {
+  async function unzipProject(data, JSZipImpl, onMediaProgress) {
     const rejection = (code, message) => {
       const err = new Error(message);
       err.code = code;
@@ -443,7 +471,10 @@
         if (comp && comp.magic && comp.magic !== '\x00\x00') {
           throw rejection('media-compressed', 'the media entry is compressed; the format requires STORE');
         }
-        mediaData = await mediaEntry.async('uint8array');
+        // Extracting the media is the long pole on the way in, and the only
+        // step that can report a real percentage (#503).
+        mediaData = await mediaEntry.async('uint8array',
+          typeof onMediaProgress === 'function' ? onMediaProgress : undefined);
         mediaEntryName = project.media.path.slice(MEDIA_DIR.length);
       }
     }
@@ -1208,6 +1239,7 @@
           createdAt: Date.parse(state.created) || now,
           lastDraftAt: 0,
           lastSavedAt: 0,
+          lastActiveAt: now, // a project being written IS the current one
         };
         lib.projects.push(entry);
       }
@@ -1748,17 +1780,28 @@
   // touches it.
   let exportInFlight = false;
   async function exportProject(opts) {
-    if (exportInFlight) return false; // one container build at a time (#448)
+    if (exportInFlight) {
+      // Returning false silently (as this did) is the same dead end that makes
+      // a user click again in the first place — the build is slow and, before
+      // #502, invisible. Say what is happening instead.
+      showProgress('Still building the project file…', 2000);
+      return false;
+    }
     exportInFlight = true;
+    const token = beginProgress();
     try {
-      return await exportProjectInner(!!(opts && opts.asSave));
+      return await exportProjectInner(!!(opts && opts.asSave), token);
     } finally {
       exportInFlight = false;
+      hideProgress(token);
     }
   }
 
-  async function exportProjectInner(asSave) {
+  async function exportProjectInner(asSave, token) {
     const identityAtStart = identityGeneration;
+    // Before the first await: the click is acknowledged even if resolving the
+    // media out of OPFS takes a moment.
+    showProgress('Preparing the project file…', 0, token);
     let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
     const remoteSrc = player !== null && /^https?:/i.test(player.src) ? player.src : null;
@@ -1769,6 +1812,9 @@
         mediaFile = session.mediaFile; // already embedded by a previous save of this project
       } else {
         try {
+          // a full media download over the network — the one step that can
+          // take longer than the packing, so it gets its own message
+          showProgress('Downloading the media…', 0, token);
           mediaFile = await fetchRemoteMediaFile(remoteSrc);
           session.mediaFile = mediaFile;
           session.mediaFileFromUrl = remoteSrc;
@@ -1811,14 +1857,22 @@
     }
     state.hasOriginal = originalJson !== null;
 
+    showProgress('Packaging the project file…', 0, token);
     const JSZipImpl = await loadJSZip();
+    let lastPercent = -1;
     const blob = await zipProject({
       json: serializeProjectJson(buildProjectJson(state)),
       html: state.html,
       originalJson,
       captionsVtt: getCaptionsVtt() || null,
       media: mediaFile !== null ? { name: mediaFile.name, data: mediaFile } : null,
-    }, JSZipImpl, 'blob');
+    }, JSZipImpl, 'blob', (meta) => {
+      // JSZip fires this very frequently; only repaint on a whole percent
+      const percent = Math.floor(meta.percent);
+      if (percent === lastPercent) return;
+      lastPercent = percent;
+      showProgress('Packaging the project file… ' + percent + '%', 0, token);
+    });
 
     const safeTitle = (state.texts.title || 'project')
       .replace(/\.hyperaudio$/i, '')
@@ -1858,15 +1912,48 @@
     return true;
   }
 
+  // One open at a time (#504). openFromFile is await-heavy — unzip, draft
+  // flush, apply, OPFS seeding — and the file input called it directly, so a
+  // second open starting mid-flight interleaved with the first at every await
+  // point: two library entries, and session.projectId, the OPFS lock and the
+  // media write left in an order neither call controlled. The export path has
+  // refused concurrent runs since #448; this is the same guard for the way in.
+  let openInFlight = false;
+
   async function openFromFile(file) {
+    if (openInFlight) {
+      showProgress('Still opening a project — one at a time.', 2000);
+      return;
+    }
+    openInFlight = true;
+    const token = beginProgress();
+    try {
+      return await openFromFileInner(file, token);
+    } finally {
+      openInFlight = false;
+      hideProgress(token);
+    }
+  }
+
+  async function openFromFileInner(file, token) {
     // Parse and validate BEFORE the replace-confirmation: asking permission
     // to replace the current project and THEN refusing the file meant the
     // user consented to a replacement that never happened (prepare → confirm
     // → apply, the #448 ordering).
     let loaded;
     try {
+      // Before the first await: opening a real project reads the whole media
+      // into memory twice (unzip, then the File wrapper) and seeds OPFS with
+      // it, which is seconds of nothing on screen (#503).
+      showProgress('Opening the project file…', 0, token);
       const JSZipImpl = await loadJSZip();
-      loaded = await unzipProject(file, JSZipImpl);
+      let lastPercent = -1;
+      loaded = await unzipProject(file, JSZipImpl, (meta) => {
+        const percent = Math.floor(meta.percent);
+        if (percent === lastPercent) return;
+        lastPercent = percent;
+        showProgress('Reading the media… ' + percent + '%', 0, token);
+      });
     } catch (e) {
       const messages = {
         'version-major': 'This project was saved by a newer version of the editor and cannot be opened here. Please update the editor.',
@@ -1880,6 +1967,7 @@
       return;
     }
 
+    showProgress('Loading the project…', 0, token);
     // No discard dialog (#456): the outgoing project's pending draft flushes
     // to its own directory and stays in the library — opening loses nothing.
     // The dialog existed only because there was one work slot.
@@ -2051,6 +2139,7 @@
     apply({ recovered: false, project, captionsVtt: files.captionsVtt, mediaFile: files.mediaFile });
     session.active = true;
     session.projectId = id;
+    markProjectActive(id);   // this is now the project you are looking at
     identityGeneration += 1; // a different document owns the session now
     session.created = project.created || nowIso();
     session.provenance = project.provenance || null;
@@ -2303,9 +2392,9 @@
       await migrateSingleSlotWork();
       const lib = await readLibrary();
       syncProjectsHint(lib); // self-heal a cleared/stale hint (#473)
-      // Most recently edited first; a corrupt head entry falls through to the
+      // Most recently ACTIVE first; a corrupt head entry falls through to the
       // next rather than abandoning the boot (the demo stays for none).
-      for (const entry of sortLibraryEntries(lib.projects)) {
+      for (const entry of sortByLastActive(lib.projects)) {
         if (await switchToProject(entry.id)) break;
       }
     } catch (e) {
@@ -2537,6 +2626,18 @@
       if (birthInProgress) return;
       scheduleAutosave();
     });
+    // Caption edits from the caption editor itself (#505). EDIT_SCOPE already
+    // catches TYPING there, because the caption inputs fire a real `input`
+    // event — but insert, merge and delete are onclick handlers that rewrite
+    // the caption list silently, so the project stayed clean over a change
+    // that was then lost on close. editor-main announces all four from its one
+    // choke point; typing therefore signals twice, which costs nothing (this
+    // only sets the flag and restarts the debounce). Same birth guard as
+    // above: a caption pass belonging to the committed v0 is not an edit.
+    document.addEventListener('hyperaudioCaptionsEdited', () => {
+      if (birthInProgress) return;
+      scheduleAutosave();
+    });
     // Undo/redo (#400): a restore that lands the editor EXACTLY back on the
     // last committed state clears the dirty dot and retires the draft — the
     // project is the save again, so there is nothing to lose. Compared by
@@ -2580,6 +2681,61 @@
           el.addEventListener('input', scheduleAutosave);
         }
       });
+  }
+
+  /* --------------------------------------------------------------------------
+   * Export progress (#502). Building a container reads the media out of OPFS,
+   * may download it over the network, and packs the whole thing into a blob —
+   * seconds to minutes on real media, during which the app looked completely
+   * inert. The only pre-existing signal was a confirm dialog above 500MB, so
+   * an ordinary 100MB interview got nothing at all.
+   *
+   * A fixed pill rather than a notice in #side-notices: that panel is an
+   * off-canvas drawer on the small-screen layout, so a notice there is
+   * invisible on exactly the devices where the wait is longest. role=status +
+   * aria-live announces each stage without stealing focus.
+   * ----------------------------------------------------------------------- */
+  let progressEl = null;
+  let progressHoldUntil = 0;
+  // Operations overlap — an open can still be seeding OPFS when an export
+  // starts — and they share one pill. Without ownership the older operation's
+  // cleanup wiped the newer one's message (caught by a full-suite run, where
+  // a slow open's finally landed mid-export and cleared a held message).
+  // beginProgress hands out a token; stale tokens are ignored.
+  let progressToken = 0;
+  function beginProgress() {
+    progressToken += 1;
+    return progressToken;
+  }
+
+  // holdMs pins a message for a moment against the routine progress stream.
+  // Needed because packing fires onUpdate every few milliseconds: a message
+  // answering something the USER just did ("still building", after a second
+  // click) was overwritten before it could be read — the test caught nothing
+  // because it read the text synchronously, which a human cannot do.
+  function showProgress(message, holdMs, token) {
+    if (typeof document === 'undefined') return;
+    if (token !== undefined && token !== progressToken) return; // superseded
+    const now = Date.now();
+    if (!holdMs && now < progressHoldUntil) return; // a held message is on screen
+    if (progressEl === null) {
+      progressEl = document.createElement('div');
+      progressEl.id = 'project-progress';
+      progressEl.setAttribute('role', 'status');
+      progressEl.setAttribute('aria-live', 'polite');
+      document.body.appendChild(progressEl);
+    }
+    progressEl.textContent = message;
+    progressHoldUntil = holdMs ? now + holdMs : 0;
+  }
+
+  function hideProgress(token) {
+    if (token !== undefined && token !== progressToken) return; // not ours to clear
+    progressHoldUntil = 0;
+    if (progressEl !== null) {
+      progressEl.remove();
+      progressEl = null;
+    }
   }
 
   function showTabGuardBanner() {

@@ -17,7 +17,7 @@ const FIXTURE_VTT = 'WEBVTT\n\n00:00:00.320 --> 00:00:01.500\nBenvenuti a Hypera
 // mutateJson lets a test write a container the WRITER can no longer produce —
 // e.g. paragraphs: [], which buildProjectJson now normalises away (#492) but
 // files predating the rule still carry, and readers must still tolerate.
-async function buildFixture(mutateJson) {
+async function buildFixture(mutateJson, captionsVtt, mediaSeconds) {
   const state = {
     generatorVersion: 'e2e',
     created: '2026-07-10T09:00:00Z',
@@ -49,16 +49,16 @@ async function buildFixture(mutateJson) {
     json: save.serializeProjectJson(project),
     html: '<article><section><p><span data-m="320" data-d="520">Benvenuti </span></p></section></article>',
     originalJson: JSON.stringify({ words: [{ start: 0.32, end: 0.84, text: 'benvenuti' }], paragraphs: [] }),
-    captionsVtt: FIXTURE_VTT,
-    media: { name: 'tone.wav', data: ladderWav(2) },
+    captionsVtt: captionsVtt || FIXTURE_VTT,
+    media: { name: 'tone.wav', data: ladderWav(mediaSeconds || 2) },
   }, JSZip, 'nodebuffer');
 }
 
 // Open the fixture in the live page via the module's hidden input; collect any
 // native dialogs (a conformant open must produce none).
-async function openFixture(page, testInfo, dialogs, mutateJson) {
+async function openFixture(page, testInfo, dialogs, mutateJson, captionsVtt, mediaSeconds) {
   const fixturePath = testInfo.outputPath('fixture.hyperaudio');
-  fs.writeFileSync(fixturePath, await buildFixture(mutateJson));
+  fs.writeFileSync(fixturePath, await buildFixture(mutateJson, captionsVtt, mediaSeconds));
   page.on('dialog', (dialog) => {
     dialogs.push(dialog.message());
     dialog.accept();
@@ -903,4 +903,265 @@ test('undo does not clear the dot while a non-transcript edit is pending', async
   await page.keyboard.press('Meta+z'); // transcript back to saved; summary is not
 
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+// #513 — the caption editor is populated by parsing the saved VTT, and the
+// parse dropped the final cue every time (a single-cue VTT produced no rows at
+// all). Not cosmetic: generateCaptionsFromCaptionEditor rebuilds the VTT from
+// these rows, so editing any caption made the missing one permanent.
+test('every cue in the saved VTT reaches the caption editor (#513)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  const THREE_CUES = 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFirst cue\n\n'
+    + '00:00:01.000 --> 00:00:02.000\nSecond cue\n\n'
+    + '00:00:02.000 --> 00:00:03.000\nThird cue\n';
+  await openFixture(page, testInfo, dialogs, null, THREE_CUES);
+  await awaitLibraryEntry(page);
+
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+
+  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+    (els) => els.map((e) => e.value.trim()));
+  expect(lines).toEqual(['First cue', 'Second cue', 'Third cue']);
+});
+
+// #505 — NO caption edit reached the save module. The three structural buttons
+// are onclick handlers that rewrite the caption list without firing an input
+// event; typing does fire one, but EDIT_SCOPE names '#caption-editor', which is
+// a placeholder in a hidden modal — the real rows live in the transcript holder,
+// so the selector matched nothing. Captions changed, the project stayed clean,
+// and the edit was lost on close.
+const CAPTION = '#captions-display .caption';
+const enterCaptionMode = async (page) => {
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, CAPTION);
+  // Opening a project whose captions are curated raises the "Captions have
+  // been edited" notice, and it sits OVER the first caption rows, intercepting
+  // clicks — dismiss it the way a user must (see #506, which is about that
+  // notice's design).
+  const alertBox = page.locator('#captionsource-alert');
+  if (await alertBox.isVisible()) await page.click('#captionsource-alert-ok');
+  await expect(alertBox).toBeHidden();
+};
+
+for (const action of ['insert', 'merge', 'delete']) {
+  test(`caption ${action} marks the project dirty (#505)`, async ({ page }, testInfo) => {
+    const dialogs = [];
+    await openFixture(page, testInfo, dialogs);
+    await awaitLibraryEntry(page);
+    await enterCaptionMode(page);
+    await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+    // merge needs a second caption below the first to merge INTO
+    if (action === 'merge') {
+      await page.locator(CAPTION).first()
+        .locator('button', { hasText: 'insert' }).click();
+      await page.evaluate(() => window.HyperaudioSave.autosaveNow());
+      await page.evaluate(() => {
+        document.getElementById('project-save-btn').classList.remove('dirty');
+      });
+    }
+
+    const countBefore = await page.locator(CAPTION).count();
+    await page.locator(CAPTION).first()
+      .locator('button', { hasText: action }).click();
+
+    // the caption list really changed...
+    const countAfter = await page.locator(CAPTION).count();
+    expect(countAfter).toBe(action === 'insert' ? countBefore + 1 : countBefore - 1);
+    // ...and the save module heard about it
+    await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+  });
+}
+
+test('typing in a caption marks the project dirty (#505)', async ({ page }, testInfo) => {
+  // EDIT_SCOPE lists '#caption-editor', but the caption rows are not in it —
+  // that id belongs to a hidden modal placeholder — so typing never reached
+  // the save module either. The choke-point announcement covers it.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await enterCaptionMode(page);
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  await page.locator(CAPTION).first().locator('input.line1').click();
+  await page.keyboard.type('EDITED');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+test('a caption deletion survives the save that follows it (#505)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await enterCaptionMode(page);
+
+  const firstLine = await page.locator(CAPTION).first()
+    .locator('input.line1').inputValue();
+  expect(firstLine.trim()).not.toBe('');
+
+  await page.locator(CAPTION).first()
+    .locator('button', { hasText: 'delete' }).click();
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  // the saved VTT no longer carries the deleted cue's text
+  const saved = (await readCurrentProject(page)).saved;
+  expect(saved.captionsVtt).not.toContain(firstLine.trim());
+});
+
+
+// #502 — building a container reads the media out of OPFS, may download it,
+// and packs the whole thing into a blob: seconds to minutes on real media,
+// during which the app showed nothing at all. The only prior signal was a
+// confirm dialog above 500MB, so an ordinary 100MB interview got none.
+// openFixture resolves as soon as the transcript paints, but the open keeps
+// running (draft flush, OPFS seeding). Waiting for the progress pill to clear
+// is the precise signal that openFromFile's finally has run — without it a
+// following open is legitimately refused by the #504 guard.
+const awaitOpenIdle = (page) => pollPage(page, async () =>
+  document.getElementById('project-progress') === null
+  && window.HyperaudioSave.library.currentId() !== null);
+
+const watchProgress = async (page) => {
+  const seen = [];
+  await page.exposeFunction('__recordProgress', (t) => { seen.push(t); });
+  await page.evaluate(() => {
+    new MutationObserver(() => {
+      const el = document.getElementById('project-progress');
+      if (el) window.__recordProgress(el.textContent);
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  return seen;
+};
+
+test('exporting reports progress, and clears it when the download arrives (#502)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  const seen = await watchProgress(page);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => document.getElementById('project-export-hyperaudio').click());
+  await downloadPromise;
+
+  expect(seen.some((t) => /Preparing/.test(t))).toBe(true);   // click acknowledged
+  expect(seen.some((t) => /Packaging.*\d+%/.test(t))).toBe(true); // real percentage
+  await expect(page.locator('#project-progress')).toHaveCount(0); // gone when done
+  expect(dialogs).toEqual([]);
+});
+
+test('a second export while one is running says so rather than nothing (#502)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  // 10 minutes of audio: packing has to still be running when the hold is
+  // checked, which is the whole condition the hold exists for
+  await openFixture(page, testInfo, dialogs, null, null, 600);
+
+  const result = await page.evaluate(async () => {
+    const first = window.HyperaudioSave.exportProject();   // deliberately not awaited
+    const secondPromise = window.HyperaudioSave.exportProject();
+    // Read the pill SYNCHRONOUSLY: the refusal path has no await before it
+    // shows its message, so the text is correct right now — awaiting first
+    // would let the running export overwrite it with its own next stage.
+    const el = document.getElementById('project-progress');
+    const text = el ? el.textContent : null;
+    // the pill is guaranteed on screen at this instant — pin its placement
+    const bar = document.getElementById('playbar').getBoundingClientRect();
+    const r = el ? el.getBoundingClientRect() : null;
+    const box = r ? {
+      onScreen: r.top >= 0 && r.left >= 0
+        && r.right <= window.innerWidth && r.bottom <= window.innerHeight,
+      clearsPlaybar: r.bottom <= bar.top,
+      visible: getComputedStyle(el).display !== 'none' && r.width > 0,
+    } : null;
+    const second = await secondPromise;
+    await new Promise((r) => setTimeout(r, 400)); // packing is streaming updates
+    const stillEl = document.getElementById('project-progress');
+    const textAfterDelay = stillEl ? stillEl.textContent : null;
+    await first;
+    return { second, text, box, textAfterDelay };
+  });
+
+  expect(result.second).toBe(false);                 // still one build at a time
+  expect(result.text).toMatch(/Still building/);     // but it explains itself
+  // and it STAYS readable: packing fires progress updates every few ms, which
+  // used to overwrite this before anyone could read it
+  expect(result.textAfterDelay).toMatch(/Still building/);
+  // and it is actually visible, fully on screen, clear of the play bar
+  expect(result.box).toEqual({ onScreen: true, clearsPlaybar: true, visible: true });
+});
+
+
+// #504 — the open path had no in-flight guard, where export has refused
+// concurrent runs since #448. Note what this does NOT claim: two concurrent
+// opens were measured (including with slow, large media) and produced no
+// duplicate library entries and no inconsistent session state — the harm the
+// issue predicted did not reproduce. The guard earns its place by bounding the
+// concurrency explicitly rather than leaving it to be reasoned about, and by
+// telling the user why their second attempt did nothing.
+test('the in-flight open explains itself rather than doing nothing (#504)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+
+  // Two opens started back to back. What the file contains does not matter —
+  // the guard is set synchronously before the first await, so the second call
+  // takes the refusal path regardless of whether the first ultimately succeeds.
+  const text = await page.evaluate(async () => {
+    const dummy = () => new File(['not a zip'], 'x.hyperaudio');
+    const first = window.HyperaudioSave.openFromFile(dummy());
+    const second = window.HyperaudioSave.openFromFile(dummy());
+    const el = document.getElementById('project-progress');
+    const t = el ? el.textContent : null;
+    await Promise.allSettled([first, second]);
+    return t;
+  });
+
+  expect(text).toMatch(/one at a time/);
+});
+
+// #503 — the mirror of #502 on the way in. Opening a real project unzips the
+// media into memory, wraps it in a File (a second full copy) and seeds OPFS
+// with it, all before the first visible change: seconds of nothing.
+test('opening a project reports progress and clears it (#503)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);      // one open to get a File in the input
+  await awaitOpenIdle(page);
+
+  // Sample the pill from inside the page while the open runs: the record-to-node
+  // bridge is asynchronous and was losing entries against a fast open.
+  const result = await page.evaluate(async () => {
+    const seen = [];
+    const sample = () => {
+      const el = document.getElementById('project-progress');
+      if (el && seen[seen.length - 1] !== el.textContent) seen.push(el.textContent);
+    };
+    const timer = setInterval(sample, 5);
+    const file = document.getElementById('project-open-input').files[0];
+    const p = window.HyperaudioSave.openFromFile(file);
+    sample();
+    await p;
+    clearInterval(timer);
+    return { seen, pillLeft: !!document.getElementById('project-progress') };
+  });
+
+  expect(result.seen.some((t) => /Opening the project file/.test(t))).toBe(true);
+  expect(result.seen.some((t) => /Loading the project/.test(t))).toBe(true);
+  expect(result.pillLeft).toBe(false);   // cleared when the work is done
+  expect(dialogs).toEqual([]);
+});
+
+test('reading a large media reports a percentage while opening (#503)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  // big enough that JSZip streams the extraction rather than finishing in one tick
+  await openFixture(page, testInfo, dialogs, null, null, 600);
+  await awaitOpenIdle(page);
+  const seen = await watchProgress(page);
+
+  await page.evaluate(async () => {
+    const file = document.getElementById('project-open-input').files[0];
+    await window.HyperaudioSave.openFromFile(file);
+  });
+  await page.waitForTimeout(300);
+
+  expect(seen.some((t) => /Reading the media… \d+%/.test(t))).toBe(true);
 });
