@@ -273,12 +273,21 @@
       && !/^deleteContent(?:Backward|Forward)$/.test(inputType);
   }
 
+  // Paste is a forced boundary (the design contract), but it arrives as
+  // execCommand('insertText') — the #487 paste path — which is
+  // indistinguishable from typing by inputType alone, so it coalesced into an
+  // adjacent typing entry within the 500ms window (#514). The capture-phase
+  // paste listener below raises this flag before the editor's own paste
+  // handler runs; the commit it produces is then forced to its own entry, and
+  // the chain is severed on BOTH sides so following typing starts fresh too.
+  let pasteBoundary = false;
+
   function commitNative(before, inputType, origin) {
     const after = snapshot(origin || inputType);
     if (!after || !before || before.semanticFingerprint === after.semanticFingerprint) return;
     const category = inputCategory(inputType);
     const now = Date.now();
-    const coalesce = !boundaryInput(inputType) && lastNative
+    const coalesce = !pasteBoundary && !boundaryInput(inputType) && lastNative
       && lastNative.category === category
       && now - lastNative.at <= COALESCE_MS
       && lastNative.generation === (window.transcriptLifecycle
@@ -287,6 +296,13 @@
       && position === entries.length - 1;
     if (coalesce) replaceCurrent(after);
     else push(after);
+    if (pasteBoundary) {
+      // sever the trailing side too: typing right after a paste must not
+      // coalesce into the paste's entry
+      pasteBoundary = false;
+      lastNative = null;
+      return;
+    }
     lastNative = {
       category,
       at: now,
@@ -380,6 +396,12 @@
     pendingNative = { before: snapshot(`before-${event.inputType}`), inputType: event.inputType || 'native' };
     rememberPreEditSelection(pendingNative.before);
     if (boundaryInput(pendingNative.inputType)) lastNative = null;
+  }, true);
+
+  document.addEventListener('paste', (event) => {
+    if (!inTranscript(event.target) || captionMode()) return;
+    pasteBoundary = true;
+    lastNative = null; // the paste cannot join the entry before it
   }, true);
 
   document.addEventListener('input', (event) => {
