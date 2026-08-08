@@ -15,6 +15,7 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test \"__TEST__/unit/**/*.test.mjs\"",
     "test:e2e": "playwright test",
+    "test:quick": "playwright test --grep-invert transcript-bench",
     "test:soak": "playwright test --config playwright.soak.config.mjs"
   }
 }

@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.2.3 — last changed in release 1.2.3
+ * @version 1.2.4 — last changed in release 1.2.4
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1668,46 +1668,71 @@
   // Nothing cancels it when the document changes, so a caption pass run while
   // the intro (remote, slow) was still loading stays pending, and fires when the
   // NEXT media's metadata arrives: the previous document's captions land on top
-  // of the one just opened. Measured — the write happens after everything the
-  // synchronous teardown and paint flush can reach, which is why the track ends
-  // up holding a data:text/vtt of the PREVIOUS transcript.
+  // of the one just opened.
   //
-  // Registering our own one-shot listener here re-asserts the swap after any
-  // such straggler: at the target, listeners run in registration order, and ours
-  // is necessarily registered later than a pending one. Only armed while
-  // metadata is still pending — once it has loaded, any stale listener has
-  // already fired and been removed, so there is nothing to outlast, and the
-  // window in which this could contend with a legitimate later caption pass
-  // stays as small as possible.
+  // ONE armed listener with a mutable target (#515): the original armed a
+  // fresh one-shot listener per call, which was fine for the open path but
+  // stacks listeners if a per-keystroke route arms it while metadata stays
+  // pending — the sanitise pass fires every second while typing. Each call
+  // now just updates the target; the single listener re-asserts the LATEST
+  // intended swap after any straggler (at the target, listeners run in
+  // registration order, and this one is necessarily registered later than a
+  // pending stale one). Only armed while metadata is pending — once loaded, a
+  // stale listener has already fired, so there is nothing to outlast.
   //
   // The real fix belongs upstream (capture the media identity at registration
   // and bail if it changed); this is the local defence until that lands.
+  let lateWriteTarget = null; // { track, src, mode }
+  let lateWriteVideo = null;  // the element the armed listener is bound to
+
   function guardAgainstLateCaptionWrite(video, track, src, mode) {
-    if (video === null || video.readyState >= 1 /* HAVE_METADATA */) return;
+    if (video === null) return;
+    if (video.readyState >= 1 /* HAVE_METADATA */) { lateWriteTarget = null; return; }
+    lateWriteTarget = { track, src, mode };
+    if (lateWriteVideo === video) return; // armed already; target updated above
+    lateWriteVideo = video;
     video.addEventListener('loadedmetadata', function reassert() {
       video.removeEventListener('loadedmetadata', reassert);
+      lateWriteVideo = null;
+      const target = lateWriteTarget;
+      lateWriteTarget = null;
+      if (target === null) return;
       // Still OUR swap? resetCaptionTrack replaces the element, so a later
       // applyCaptionTrack — a newer document — leaves a different one in place
       // and this re-assert must stand down. A straggler from caption.js writes
       // .src on the existing element, so identity still holds there, which is
-      // exactly the case worth correcting. Element identity rather than the
-      // media src: apply() sets media before captions, but nothing guarantees
-      // that order for every caller.
+      // exactly the case worth correcting.
       const current = document.getElementById('hyperplayer-vtt');
-      if (current === null || current !== track) return;
+      if (current === null || current !== target.track) return;
       let changed = false;
-      if (src !== '' && current.getAttribute('src') !== src) {
-        current.src = src;
+      if (target.src !== '' && current.getAttribute('src') !== target.src) {
+        current.src = target.src;
         changed = true;
       }
       const tt = video.textTracks !== undefined ? video.textTracks[0] : undefined;
-      if (tt !== undefined && tt.mode !== mode) {
-        tt.mode = mode;
+      if (tt !== undefined && tt.mode !== target.mode) {
+        tt.mode = target.mode;
         changed = true;
       }
       if (changed) flushCaptionPaint();
     });
   }
+
+  // The transcribe/regenerate routes write the track in editor-core's
+  // generateCaptionsFromTranscript, outside applyCaptionTrack — before #515
+  // they survived a stale caption.js straggler only because caption.js also
+  // defers ITS write and registration order happened to put the right one
+  // last. This zero-argument form lets that funnel arm the same guard the
+  // open/import paths use: it reads whatever was just written and defends it.
+  function guardCurrentCaptionWrite() {
+    const video = document.getElementById('hyperplayer');
+    const track = document.getElementById('hyperplayer-vtt');
+    if (video === null || track === null) return;
+    const tt = video.textTracks !== undefined ? video.textTracks[0] : undefined;
+    guardAgainstLateCaptionWrite(video, track, track.getAttribute('src') || '',
+      tt !== undefined ? tt.mode : 'showing');
+  }
+  window.guardCurrentCaptionWrite = guardCurrentCaptionWrite;
 
   // the caption-regenerate path in editor-core reaches these by global name
   // (typeof-guarded), as it did when the legacy module defined resetCaptionTrack
@@ -2292,6 +2317,11 @@
   // project leaves the document on screen (the only undo there is) but
   // nothing owns it anymore — autosave stops until the panel's Restore
   // re-homes it as a new entry.
+  // Deleting the CURRENT project keeps the document ON SCREEN — the undo's
+  // raw material — while the library entry and directory go. The panel shows
+  // a placeholder row carrying Restore (which re-homes the on-screen
+  // document) in the deleted row's place; any navigation elsewhere replaces
+  // the screen and withdraws the offer. Returns { wasCurrent }.
   async function deleteProject(id) {
     const wasCurrent = id === session.projectId;
     if (wasCurrent) {
@@ -2306,12 +2336,12 @@
     await updateLibrary((lib) => {
       lib.projects = lib.projects.filter((p) => p.id !== id);
     });
-    return wasCurrent;
+    return { wasCurrent };
   }
 
   // Undo for deleting the current project: re-home the on-screen document —
   // still fully held by the session — under a fresh id.
-  async function restoreCurrentAsNewProject(starred) {
+  async function restoreCurrentAsNewProject(starred, stamps) {
     if (!opfsAvailable || !session.active || session.projectId !== null) return null;
     session.projectId = newProjectId();
     const id = session.projectId;
@@ -2320,9 +2350,24 @@
     await writeMediaOnce();
     // a rebirth: the on-screen content IS the new baseline — commit it clean
     await commitInitialState(id);
+    // A restore is an UNDO, not new work: carry the original entry's ordering
+    // stamps so the row reappears where it lived (the panel orders by
+    // modifiedAt), rather than teleporting to the top as freshly written.
+    // lastActiveAt stays fresh — the restored project IS the one on screen,
+    // and a reload should return to it.
+    if (stamps && (stamps.modifiedAt || stamps.createdAt)) {
+      await updateLibrary((lib) => {
+        const entry = lib.projects.find((p) => p.id === id);
+        if (entry !== undefined) {
+          if (stamps.modifiedAt) entry.modifiedAt = stamps.modifiedAt;
+          if (stamps.createdAt) entry.createdAt = stamps.createdAt;
+        }
+      });
+    }
     sessionEdited = false;
     updateSaveIndicator();
     if (starred === true) await setProjectStarred(id, true);
+    notifyLibraryChanged(false);
     return id;
   }
 
@@ -2512,6 +2557,30 @@
         event.returnValue = '';
       }
     });
+
+    // Land the pending draft on the way out (#519): the autosave debounce is
+    // 1.5 s and nothing flushed it at teardown, so closing the tab (or
+    // switching apps on mobile) dropped the newest keystrokes — the last
+    // sentence typed, the part most likely to be noticed missing.
+    // visibilitychange→hidden fires on tab/app switches, usually well before
+    // a close; pagehide covers iOS Safari, where beforeunload often does not.
+    // Neither can await — the flush is INITIATED and in practice lands (both
+    // fire earlier in teardown than beforeunload, and OPFS writes are fast at
+    // draft sizes). flushPendingDraft is idempotent across the pair firing in
+    // one teardown: it clears the timer, writes only when a write is actually
+    // pending, and otherwise just awaits the chain — so hide→show→hide and
+    // visibilitychange-then-pagehide cannot double-write or race the chain.
+    // beforeunload stays what #449/#456 narrowed it to (the genuine-loss
+    // warning) — this is about landing the write, not warning.
+    const flushOnHide = () => {
+      if (session.active && autosavePending) {
+        flushPendingDraft().catch((e) => console.warn('hyperaudio-save: hide flush failed', e));
+      }
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushOnHide();
+    });
+    window.addEventListener('pagehide', flushOnHide);
 
     const input = document.createElement('input');
     input.type = 'file';

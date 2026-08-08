@@ -188,3 +188,168 @@ test('a caption pass armed on unloaded media cannot overwrite the next document 
   expect(result.fresh).toBe(true);
   expect(result.mode).toBe('showing');
 });
+
+// #515 — the transcribe/regenerate caption routes survived a stale caption.js
+// straggler only by registration order: caption.js happens to defer its own
+// write too, and the right one happened to land last. Safety by accident. The
+// generateCaptionsFromTranscript funnel now arms the same guard the open path
+// uses.
+//
+// HONESTY NOTE about these tests' teeth: they pass against today's code even
+// WITHOUT the guard, because the accident also covers this synthetic attack —
+// which is precisely #515's finding. Their value is as a tripwire for the
+// feared future change: if the deferral is ever removed (the pass applying
+// synchronously), the accident vanishes, and these tests then fail unless the
+// guard — now armed by design on this route — holds the line. The third test
+// below exercises the guard in isolation (a synchronous write defended by
+// guardCurrentCaptionWrite, no deferral in play) and DOES fail without it.
+test('a stray caption write after the transcribe pass is corrected at metadata (#515)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  const result = await page.evaluate(async () => {
+    const video = document.getElementById('hyperplayer');
+    video.src = '/__stalls_forever__.mp4'; // metadata pending, as with the remote intro
+    video.load();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // the transcribe/regenerate route writes the track and (now) arms the guard
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+    const intended = document.getElementById('hyperplayer-vtt').getAttribute('src');
+
+    // a stale straggler lands AFTER the pass — the case ordering cannot save
+    document.getElementById('hyperplayer-vtt').src =
+      'data:text/vtt,' + encodeURIComponent('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nSTALE INTRO\n');
+
+    // metadata finally arrives; the guard must re-assert the pass's write
+    video.dispatchEvent(new Event('loadedmetadata'));
+    await new Promise((r) => setTimeout(r, 50));
+    return {
+      intended: decodeURIComponent(intended).slice(0, 60),
+      final: decodeURIComponent(document.getElementById('hyperplayer-vtt').getAttribute('src')).slice(0, 60),
+      hasStale: document.getElementById('hyperplayer-vtt').getAttribute('src').includes('STALE'),
+    };
+  });
+
+  expect(result.hasStale).toBe(false);
+  expect(result.final).toBe(result.intended);
+});
+
+test('the guard is a no-op once metadata is loaded (#515)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  const result = await page.evaluate(async () => {
+    const video = document.getElementById('hyperplayer');
+    // demo intro may or may not have loaded in test time — force the loaded
+    // state deterministically
+    Object.defineProperty(video, 'readyState', { value: 4, configurable: true });
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+
+    // a write after the pass with metadata LOADED is a legitimate later write
+    // (a newer caption pass, a user edit) — the guard must not fight it
+    document.getElementById('hyperplayer-vtt').src =
+      'data:text/vtt,' + encodeURIComponent('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nLEGITIMATE\n');
+    video.dispatchEvent(new Event('loadedmetadata'));
+    await new Promise((r) => setTimeout(r, 50));
+    return document.getElementById('hyperplayer-vtt').getAttribute('src').includes('LEGITIMATE');
+  });
+
+  expect(result).toBe(true);
+});
+
+test('the guard alone defends a synchronous caption write (#515)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  const result = await page.evaluate(async () => {
+    const video = document.getElementById('hyperplayer');
+    video.src = '/__stalls_forever__.mp4';
+    video.load();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // the feared future shape: a route writes the track SYNCHRONOUSLY (no
+    // caption.js deferral to accidentally save it) and arms the guard, as the
+    // funnel now does
+    const track = document.getElementById('hyperplayer-vtt');
+    const intended = 'data:text/vtt,' + encodeURIComponent('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nINTENDED\n');
+    track.src = intended;
+    if (typeof window.guardCurrentCaptionWrite === 'function') window.guardCurrentCaptionWrite();
+
+    // stale straggler
+    track.src = 'data:text/vtt,' + encodeURIComponent('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nSTALE\n');
+    video.dispatchEvent(new Event('loadedmetadata'));
+    await new Promise((r) => setTimeout(r, 50));
+    return document.getElementById('hyperplayer-vtt').getAttribute('src').includes('INTENDED');
+  });
+
+  expect(result).toBe(true);
+});
+
+// The caption editor's first visit after transcript edits showed PRE-EDIT
+// captions: the row cache is primed at transcription time (the engines'
+// caption pass runs the builder with captionMode false), transcript edits
+// regenerate only the track, and entering the caption view then trusted the
+// stale cache over the fresh data it had just computed. While captions are
+// machine-synced the cache must never win; once hand-edited (sync off) it is
+// authoritative again — that is what it exists for.
+test('the caption editor reflects transcript edits on first visit', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  // prime the cache exactly as a fresh transcription does
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript')));
+
+  // edit the transcript AFTER the prime
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'EDITED-WORD ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // first visit to the caption editor must carry the edit
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+    (els) => els.map((e) => e.value).join(' '));
+  expect(lines).toContain('EDITED-WORD');
+});
+
+// The layer BENEATH the stale-cache fix, found because the fix checked a flag
+// that was lying: nothing reset updateCaptionsFromTranscript on a NEW
+// transcription — it inherited the previous project's value. After any
+// project with curated captions (every opened .hyperaudio with edited
+// captions, every VTT import), a fresh transcription's edits updated neither
+// the video captions nor the caption editor.
+// (No companion test for the import routes keeping sync OFF: they set the
+// flag immediately after the synchronous init dispatch, so the override
+// winning is language semantics — a test would be testing dispatchEvent.)
+test('a new transcription turns caption sync back on', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  // the inherited state: a previous project left sync off
+  // unqualified access reaches the scripts' top-level let (a window property
+  // would be a shadow — top-level let is global-lexical, not on window)
+  await page.evaluate(() => { updateCaptionsFromTranscript = false; });
+
+  // a fresh transcription lands, exactly as every engine delivers it
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  expect(await page.evaluate(() => updateCaptionsFromTranscript)).toBe(true);
+
+  // edit, then first visit to the caption editor: the edit is there
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'POST-TRANSCRIBE-EDIT ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+    (els) => els.map((e) => e.value).join(' '));
+  expect(lines).toContain('POST-TRANSCRIBE-EDIT');
+});
+
