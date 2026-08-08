@@ -21,6 +21,23 @@ test('bench panel appears with ?bench=1 and produces measurements', async ({ pag
   const copied = panel.getByText('Copied ✓');
   const fallback = panel.locator('textarea[aria-label="Benchmark JSON"]');
   await expect(copied.or(fallback)).toBeVisible();
+
+  // the markdown copy carries the table and the embedded JSON fence
+  await panel.getByRole('button', { name: 'Copy MD' }).click();
+  await expect(copied.or(fallback)).toBeVisible();
+  const md = await page.evaluate(() =>
+    navigator.clipboard && navigator.clipboard.readText
+      ? navigator.clipboard.readText().catch(() => null) : null);
+  if (md) {
+    expect(md).toContain('| Speech | Words |');
+    expect(md).toContain('```json');
+  }
+
+  // the download is the same markdown as a dated .md file
+  const downloadPromise = page.waitForEvent('download');
+  await panel.getByRole('button', { name: 'Download .md' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^hle-benchmark-\d{4}-\d{2}-\d{2}\.md$/);
 });
 
 test('the benchmark runs in its own project and returns you to yours', async ({ page }) => {
