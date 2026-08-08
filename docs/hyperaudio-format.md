@@ -13,6 +13,12 @@ this file supersedes that comment. Shared conformance fixtures live in
 | 1.1 | `media.kind: "link"` — declared remote media with reconciliation (§ 7.2.1, § 7.3) |
 | 1.2 | `media.kind: "none"` (§ 7.2.2); writer-side unknown-field preservation made normative (§ 8.1); STORE required for media entries on read (§ 7.1); `media.path` segment rule and byte-measured caps pinned (§ 10.2, § 10.3); container exclusion of app/session identity made explicit (§ 9) |
 
+> **Clarifications since 1.2, no version bump:** the `versions/` namespace is
+> reserved (§ 2.2) and § 9.4's "editor history" exclusion is narrowed to
+> session history to accommodate it. Neither changes what a conforming 1.2
+> writer emits or what a 1.2 reader accepts, so `formatVersion` stays at
+> `1.2`; the bump belongs to the release that first *writes* versions.
+
 ---
 
 > **To the reader (human or LLM):** this document specifies a file format. Rules
@@ -84,8 +90,9 @@ project.hyperaudio  (ZIP)
 ├── transcript.html            ← the transcript in the editor's native format, for compatibility (§ 4)
 ├── transcript.original.json   ← optional: the original machine transcription, immutable (§ 5)
 ├── captions.vtt               ← the current captions, WebVTT (§ 6)
-└── media/
-    └── <original filename>    ← the original media, STORE entry (§ 7)
+├── media/
+│   └── <original filename>    ← the original media, STORE entry (§ 7)
+└── versions/                  ← RESERVED, not yet written by any writer (§ 2.2)
 ```
 
 Rules:
@@ -101,6 +108,8 @@ Rules:
   is `"link"` (§ 7.2.1).
 - Readers **MUST** ignore unknown files in the container (this allows
   non-breaking future additions).
+- `versions/` is **reserved** (§ 2.2). No conforming writer emits it today;
+  no name inside it may be used for anything else.
 
 ### 2.1 The `mimetype` entry (EPUB/ODF convention)
 
@@ -119,6 +128,72 @@ reading the first ~80 bytes, without even opening the zip.
 - Writers **MUST** write this entry first, uncompressed.
 - Readers **SHOULD** verify it, but **MUST** tolerate its absence (files
   produced by generic tools that re-zip the content remain valid).
+
+### 2.2 Reserved: the `versions/` namespace
+
+The name `versions/` is **reserved** for durable document versions — named
+save-point snapshots of the transcript, browsable and restorable by the user
+(hyperaudio-lite-editor#401, #509; glider#169). The feature is **not
+specified here and not implemented by any conforming writer**. This section
+reserves the name and nothing else.
+
+Rules today:
+
+- Writers **MUST NOT** emit `versions/` entries, and **MUST NOT** use any
+  name under `versions/` for an unrelated purpose.
+- Readers treat it as any other unknown namespace: ignored, never extracted
+  (§ 10.1).
+
+Reserving it now is deliberate. Adding it later without a reservation is a
+compatibility cliff: under whitelist-read (§ 10.1) a reader ignores unknown
+entries, and a writer that rebuilds the container from a working copy drops
+them — so an already-shipped reader silently destroys a newer writer's
+history on the first open→save round trip. Software already installed cannot
+be patched retroactively; the name has to be off-limits before the first
+writer uses it.
+
+**Note the round-trip guarantee does not cover this.** § 8.1 makes
+preservation normative for unknown *fields* in `hyperaudio.json`, not for
+unknown *zip entries*. Preserving foreign entries requires a writer that
+carries them through the working copy, which is a behavioural change and a
+separate piece of work — the reservation alone does not make round trips
+safe.
+
+**Anticipated shape (not normative).** Two writer roles are expected, and the
+naming scheme should accommodate both from the start:
+
+- An **accumulating** writer appends a version per explicit save and keeps a
+  history under its own retention policy.
+- A **single-head** writer maintains exactly *one* entry — the state as of
+  its last save — and rewrites that entry on every subsequent save. Its
+  contribution to the container is bounded at one version no matter how many
+  times the user saves, and "revert to last save" is a read of that entry.
+
+A container may therefore carry versions from more than one writer, and a
+reader **SHOULD** be able to attribute each to the writer that produced it: a
+single-head entry can represent many collapsed saves, and presenting it as a
+peer of individually-saved versions misrepresents the timeline. An
+accumulating writer that opens such a container **SHOULD** adopt a foreign
+head as an ordinary version and append after it, rather than orphaning or
+overwriting it.
+
+Consequences for whoever specifies the feature:
+
+- Preservation, if adopted, is a **MUST** for entries the writer did not
+  create. An implementation that retains its own N most recent versions
+  **MUST NOT** apply that retention policy to versions written by another
+  implementation — pruning another app's history is data loss caused by a
+  rule, which is worse than data loss caused by ignorance.
+- Until preservation ships, a writer **SHOULD** make loss *detectable*: an
+  unknown field in `hyperaudio.json` recording the expected version count or
+  digest is preserved across a round trip by § 8.1, so a later open can tell
+  the user that another application stripped the history rather than failing
+  silently.
+- The full specification is still owed: manifest schema, safe path grammar,
+  duplicate-name behaviour, count and byte caps, canonical transcript
+  representation, timestamps and identifiers, pruning policy, malformed-entry
+  behaviour, and the § 10 security tests (path traversal, zip bombs,
+  oversized entries, invalid UTF-8).
 
 ---
 
@@ -578,7 +653,13 @@ field.
    *project* settings belong here.
 3. **Derived artifacts**: edited media, burned-in captions, karaoke VTT,
    re-timed transcript.
-4. **Data from other projects**, or editor history.
+4. **Data from other projects**, or editor history — meaning *session*
+   history: undo/redo stacks, edit journals, per-keystroke snapshots, and
+   anything else scoped to an editing session rather than to the document.
+   The reserved `versions/` namespace (§ 2.2) is the deliberate exception:
+   durable, user-created save points are part of the document, not session
+   state. The distinction is who made the boundary — the user, by saving, or
+   the editor, by running.
 5. **App/session identity and storage bookkeeping** — working-copy project
    IDs, tab/session identifiers, dirty flags, autosave state. Project
    identity is application state; two apps sharing a file must never fight
@@ -597,9 +678,15 @@ The reader **MUST NOT** iterate the zip entries extracting them or writing
 them to paths taken from the file. It reads **only entries with known
 names**: `mimetype`, `hyperaudio.json`, `transcript.html`,
 `transcript.original.json`, `captions.vtt`, plus the media indicated by
-`media.path`. Every other entry is ignored (§ 2). This neutralises path
-traversal (`../`, absolute paths) *by design*: no path from the file is ever
-used as a write destination.
+`media.path`. Every other entry is ignored (§ 2) — including the reserved
+`versions/` namespace (§ 2.2). This neutralises path traversal (`../`,
+absolute paths) *by design*: no path from the file is ever used as a write
+destination.
+
+Should `versions/` later be preserved across a round trip, this rule still
+holds: entries are copied **opaquely**, by name, from the opened container to
+the written one. Their names are never resolved against the filesystem or the
+working copy, so preservation adds no extraction surface.
 
 ### 10.2 Constraints on `media.path`
 
