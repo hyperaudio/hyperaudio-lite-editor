@@ -291,10 +291,34 @@
       (b.modifiedAt || b.createdAt || 0) - (a.modifiedAt || a.createdAt || 0));
   }
 
+  // Boot restores the project you were last LOOKING AT, which is not the same
+  // as the last one written. modifiedAt is stamped by writes, so simply
+  // opening a project to read it left it invisible to the boot order — and
+  // switching away from A to B flushes A's pending draft, stamping A as the
+  // newest, so a reload landed back on the project you had just left.
+  // lastActiveAt is stamped when a project BECOMES current. Entries written
+  // before this field fall back to modifiedAt, so an existing library keeps
+  // its previous ordering rather than jumping to the bottom.
+  function sortByLastActive(entries) {
+    const key = (e) => e.lastActiveAt || e.modifiedAt || e.createdAt || 0;
+    return entries.slice().sort((a, b) => key(b) - key(a));
+  }
+
   // The deterministic per-project "dirty" rule (#456, Glider-matched): a
   // draft has been written since the last manual Save. A never-saved project
   // (fresh transcription) is dirty; an opened .hyperaudio starts clean (the
   // file IS the saved state).
+  // Best-effort: a project the library has no entry for yet (a birth, before
+  // its first write) gets its stamp when that write creates the entry.
+  function markProjectActive(id) {
+    if (!opfsAvailable || id === null) return;
+    const now = Date.now();
+    updateLibrary((lib) => {
+      const entry = lib.projects.find((p) => p.id === id);
+      if (entry !== undefined) entry.lastActiveAt = now;
+    }).catch((e) => console.warn('hyperaudio-save: marking the project active failed', e));
+  }
+
   function isEntryDirty(entry) {
     return (entry.lastDraftAt || 0) > (entry.lastSavedAt || 0);
   }
@@ -1215,6 +1239,7 @@
           createdAt: Date.parse(state.created) || now,
           lastDraftAt: 0,
           lastSavedAt: 0,
+          lastActiveAt: now, // a project being written IS the current one
         };
         lib.projects.push(entry);
       }
@@ -2114,6 +2139,7 @@
     apply({ recovered: false, project, captionsVtt: files.captionsVtt, mediaFile: files.mediaFile });
     session.active = true;
     session.projectId = id;
+    markProjectActive(id);   // this is now the project you are looking at
     identityGeneration += 1; // a different document owns the session now
     session.created = project.created || nowIso();
     session.provenance = project.provenance || null;
@@ -2366,9 +2392,9 @@
       await migrateSingleSlotWork();
       const lib = await readLibrary();
       syncProjectsHint(lib); // self-heal a cleared/stale hint (#473)
-      // Most recently edited first; a corrupt head entry falls through to the
+      // Most recently ACTIVE first; a corrupt head entry falls through to the
       // next rather than abandoning the boot (the demo stays for none).
-      for (const entry of sortLibraryEntries(lib.projects)) {
+      for (const entry of sortByLastActive(lib.projects)) {
         if (await switchToProject(entry.id)) break;
       }
     } catch (e) {

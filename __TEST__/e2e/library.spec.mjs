@@ -322,11 +322,12 @@ test('deleting the CURRENT project keeps it on screen and Restore re-homes it', 
   }, after.current);
 });
 
-test('boot restores the most recently EDITED project, not the last opened', async ({ page }, testInfo) => {
+test('boot restores the project you were last ON, not the last written', async ({ page }, testInfo) => {
   await openProject(page, testInfo, 'Project A');
   await openProject(page, testInfo, 'Project B');
 
-  // go back to A and edit it — A becomes the most recently edited
+  // Edit A, then switch to B and leave it alone. A is the most recently
+  // WRITTEN (its draft flushes on the way out), B is the one being looked at.
   await row(page, 'Project A').click();
   await expect(activeRow(page)).toHaveText('Project A');
   await page.evaluate(() => {
@@ -334,25 +335,50 @@ test('boot restores the most recently EDITED project, not the last opened', asyn
     span.textContent = 'LAST-EDIT ';
     span.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  // Wait for the INDEX to carry the edit (snapshot lands first, then the
-  // entry) — boot orders by the index, so that's the durable signal.
   const idA = await page.evaluate(() => window.HyperaudioSave.library.currentId());
   await pollPage(page, async (id) => {
     const root = await navigator.storage.getDirectory();
     const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
-    let text = null;
-    try { text = await (await (await dir.getFileHandle('draft.json')).getFile()).text(); }
-    catch (e) { return false; }
-    if (text.indexOf('LAST-EDIT') === -1) return false;
-    const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
-    const edited = lib.projects.find((p) => p.id === id);
-    return lib.projects.every((p) => p.id === id || (p.modifiedAt || 0) < (edited.modifiedAt || 0));
+    try {
+      const text = await (await (await dir.getFileHandle('draft.json')).getFile()).text();
+      return text.indexOf('LAST-EDIT') !== -1;
+    } catch (e) { return false; }
   }, idA);
+
+  await row(page, 'Project B').click();
+  await expect(activeRow(page)).toHaveText('Project B');
+  await pollPage(page, async () => {
+    const root = await navigator.storage.getDirectory();
+    const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
+    const id = window.HyperaudioSave.library.currentId();
+    const b = lib.projects.find((p) => p.id === id);
+    return !!(b && b.lastActiveAt);
+  });
 
   await page.reload();
   await page.waitForSelector('#hypertranscript [data-m]');
-  await expect(page.locator('#hypertranscript')).toContainText('LAST-EDIT');
-  await expect(activeRow(page)).toHaveText('Project A');
+  await expect(activeRow(page)).toHaveText('Project B');
+});
+
+test('a library written before lastActiveAt still boots to its newest entry', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await openProject(page, testInfo, 'Project B');
+
+  // strip the field, as an existing user's library has it
+  await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const handle = await root.getFileHandle('library.json');
+    const lib = JSON.parse(await (await handle.getFile()).text());
+    lib.projects.forEach((p) => { delete p.lastActiveAt; });
+    const w = await handle.createWritable();
+    await w.write(JSON.stringify(lib));
+    await w.close();
+  });
+
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  // falls back to modifiedAt — B was opened last, so it is the newest write
+  await expect(activeRow(page)).toHaveText('Project B');
 });
 
 test('reload never flashes the demo transcript over a saved project (#473)', async ({ page }, testInfo) => {
