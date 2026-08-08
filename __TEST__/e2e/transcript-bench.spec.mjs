@@ -5,14 +5,14 @@ import { ladderWav } from './helpers.mjs';
 test('bench is inert without the flag', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript span[data-m]');
-  await expect(page.locator('[aria-label="HLE limits benchmark"]')).toHaveCount(0);
+  await expect(page.locator('[aria-label="HLE Benchmark"]')).toHaveCount(0);
 });
 
 test('bench panel appears with ?bench=1 and produces measurements', async ({ page }) => {
   test.setTimeout(240000);
   await page.goto('/index.html?bench=1');
   await page.waitForSelector('#hypertranscript span[data-m]');
-  const panel = page.locator('[aria-label="HLE limits benchmark"]');
+  const panel = page.locator('[aria-label="HLE Benchmark"]');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('local ASR');
   await panel.getByRole('button', { name: 'Run' }).click();
@@ -63,7 +63,7 @@ test('the benchmark runs in its own project and returns you to yours', async ({ 
   });
   expect(homeId).not.toBeNull();
 
-  const panel = page.locator('[aria-label="HLE limits benchmark"]');
+  const panel = page.locator('[aria-label="HLE Benchmark"]');
   await panel.getByRole('button', { name: 'Run' }).click();
   await expect(panel).toContainText('done', { timeout: 200000 });
 
@@ -96,7 +96,7 @@ test('the benchmark runs in its own project and returns you to yours', async ({ 
 test('the benchmark panel can be closed', async ({ page }) => {
   await page.goto('/index.html?bench=1');
   await page.waitForSelector('#hypertranscript span[data-m]');
-  const panel = page.locator('[aria-label="HLE limits benchmark"]');
+  const panel = page.locator('[aria-label="HLE Benchmark"]');
   await expect(panel).toBeVisible();
   await panel.getByRole('button', { name: 'Close benchmark panel' }).click();
   await expect(panel).toHaveCount(0);

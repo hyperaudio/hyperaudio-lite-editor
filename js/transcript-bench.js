@@ -152,7 +152,7 @@
   function mdOf(report) {
     const env = report.env || {};
     const lines = [
-      '## HLE limits benchmark',
+      '## HLE Benchmark',
       '',
       '- engine: ' + (env.userAgent || 'unknown'),
       '- cores: ' + (env.cores || '?')
@@ -230,9 +230,9 @@
     + 'border-radius:12px;padding:14px 16px;box-shadow:0 12px 30px rgba(0,0,0,.4);'
     + 'font:12px ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.5;');
   panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', 'HLE limits benchmark');
+  panel.setAttribute('aria-label', 'HLE Benchmark');
 
-  const title = el('div', 'font-weight:700;font-size:13px;margin-bottom:2px;', 'HLE limits benchmark');
+  const title = el('div', 'font-weight:700;font-size:13px;margin-bottom:2px;', 'HLE Benchmark');
   const closeBtn = el('button',
     'position:absolute;top:8px;right:10px;background:transparent;border:0;color:#93a29f;'
     + 'font:16px inherit;cursor:pointer;padding:2px 6px;', '✕');
