@@ -141,6 +141,35 @@
     };
   }
 
+  // One generator serves both the Copy MD button and the .md download: the
+  // human-readable table the issue tables were written in, with the full JSON
+  // in a fence at the bottom so a single file serves readers and scripts.
+  function mdOf(report) {
+    const env = report.env || {};
+    const lines = [
+      '## HLE limits benchmark',
+      '',
+      '- engine: ' + (env.userAgent || 'unknown'),
+      '- cores: ' + (env.cores || '?')
+        + (env.deviceMemoryHintGB ? ' · memory hint: ' + env.deviceMemoryHintGB + 'GB' : ''),
+      '- storage quota: ' + (env.storageQuotaGB !== null && env.storageQuotaGB !== undefined
+        ? env.storageQuotaGB + 'GB' : 'n/a'),
+      '- local ASR (WebGPU shader-f16): ' + (env.shaderF16 ? 'yes' : 'no'),
+      '',
+      '| Speech | Words | Key (ms) | Pass (ms) | Undo depth | Undo (ms) | Verdict |',
+      '|---|---|---|---|---|---|---|',
+    ];
+    (report.rows || []).forEach((row) => {
+      lines.push('| ~' + row.minutesOfSpeech + ' min | ' + row.words
+        + ' | ' + row.typingMs + ' | ' + row.sanitiseMs
+        + ' | ' + row.effectiveUndoDepth + ' | ' + row.undoMs
+        + ' | ' + verdict(row)[0] + ' |');
+    });
+    lines.push('', '<details><summary>JSON</summary>', '', '```json',
+      JSON.stringify(report, null, 2), '```', '', '</details>', '');
+    return lines.join('\n');
+  }
+
   // --- panel -----------------------------------------------------------------
 
   function el(tag, style, text) {
@@ -173,13 +202,17 @@
   const runBtn = el('button',
     'background:#24c9c4;color:#0d1312;border:0;border-radius:7px;padding:6px 14px;'
     + 'font:700 12px inherit;cursor:pointer;margin-right:8px;', 'Run');
-  const copyBtn = el('button',
+  const ghostBtn = (label) => el('button',
     'background:transparent;color:#93a29f;border:1px solid #2d3d3a;border-radius:7px;'
-    + 'padding:6px 10px;font:12px inherit;cursor:pointer;display:none;', 'Copy JSON');
+    + 'padding:6px 10px;font:12px inherit;cursor:pointer;display:none;margin-right:6px;'
+    + 'margin-top:6px;', label);
+  const copyBtn = ghostBtn('Copy JSON');
+  const copyMdBtn = ghostBtn('Copy MD');
+  const downloadBtn = ghostBtn('Download .md');
   const progress = el('div', 'margin:8px 0;color:#93a29f;', '');
   const results = el('div', 'margin-top:6px;', '');
 
-  panel.append(title, warn, envBox, runBtn, copyBtn, progress, results);
+  panel.append(title, warn, envBox, runBtn, copyBtn, copyMdBtn, downloadBtn, progress, results);
   document.body.appendChild(panel);
 
   let lastReport = null;
@@ -234,10 +267,13 @@
     runBtn.textContent = 'Run again';
     runBtn.disabled = false;
     copyBtn.style.display = 'inline-block';
+    copyMdBtn.style.display = 'inline-block';
+    downloadBtn.style.display = 'inline-block';
   });
 
-  copyBtn.addEventListener('click', () => {
-    const json = JSON.stringify(lastReport, null, 2);
+  // Shared by both copy buttons; the fallback textarea serves whichever text
+  // was last requested.
+  function copyText(text, btn, restLabel) {
     const showFallback = () => {
       // Insecure contexts (e.g. a phone hitting a LAN server over http) have no
       // clipboard API — show the JSON pre-selected for a manual copy instead.
@@ -249,19 +285,37 @@
         area.setAttribute('aria-label', 'Benchmark JSON');
         panel.appendChild(area);
       }
-      area.value = json;
+      area.value = text;
       area.focus();
       area.select();
-      copyBtn.textContent = 'Select & copy manually';
-      setTimeout(() => { copyBtn.textContent = 'Copy JSON'; }, 2500);
+      btn.textContent = 'Select & copy manually';
+      setTimeout(() => { btn.textContent = restLabel; }, 2500);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(json).then(() => {
-        copyBtn.textContent = 'Copied ✓';
-        setTimeout(() => { copyBtn.textContent = 'Copy JSON'; }, 1500);
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => { btn.textContent = restLabel; }, 1500);
       }, showFallback);
     } else {
       showFallback();
     }
+  }
+
+  copyBtn.addEventListener('click', () => {
+    copyText(JSON.stringify(lastReport, null, 2), copyBtn, 'Copy JSON');
+  });
+
+  copyMdBtn.addEventListener('click', () => {
+    copyText(mdOf(lastReport), copyMdBtn, 'Copy MD');
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    const blob = new Blob([mdOf(lastReport)], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hle-benchmark-' + stamp + '.md';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 })();
