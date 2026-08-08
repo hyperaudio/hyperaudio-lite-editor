@@ -1528,3 +1528,38 @@ label[data-a11y-wired]:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   #project-progress { transition: none; }
 }
+
+/* The deleted-project placeholder row: the undo lives where the project
+   lived. Dotted border and greyed name mark it as not-a-project; Restore and
+   the dismiss sit inside the row. Withdrawn on any navigation elsewhere. */
+.recents-row-deleted {
+  border: 1px dashed oklch(var(--bc) / 0.35);
+  border-radius: 0.5rem;
+  opacity: 0.9;
+}
+.recents-deleted-name {
+  color: oklch(var(--bc) / 0.5);
+  padding: 8px 0 8px 16px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recents-row-deleted .recents-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.recents-deleted-restore,
+.recents-deleted-dismiss {
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: oklch(var(--p));
+}
+.recents-deleted-dismiss {
+  color: oklch(var(--bc) / 0.5);
+}
