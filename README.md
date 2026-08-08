@@ -104,6 +104,14 @@ We score very highly on Google Chrome's Lighthouse audit tool.
 
 Created as a Progressive Web App, you can install it on your desktop or mobile home screen.
 
+### Benchmark your device
+
+How long a transcript can *your* device edit comfortably? Add [`?bench=1`](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html?bench=1) to the editor's URL and press **Run**: the built-in benchmark measures typing responsiveness, background processing, undo depth and latency across transcript sizes from a few minutes to several hours of speech — and whether your browser can run local transcription. It runs in its own throwaway "Benchmark" project (your work is untouched), and the results can be copied as Markdown or JSON, or downloaded as a report — ready to paste into an issue.
+
+<img width="360" alt="The benchmark panel: device details, then per-size measurements from 7 minutes (fluid) to 4.5 hours (degraded) of speech" src="images/benchmark-panel.png">
+
+Contributed in [#517](https://github.com/hyperaudio/hyperaudio-lite-editor/issues/517).
+
 ### Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to get set up, run the tests, and open a pull request. Because the editor is offered under more than one license (see below), contributors sign a short [Contributor License Agreement](./CLA.md) once, via [CLA Assistant](https://cla-assistant.io/).
