@@ -2533,6 +2533,30 @@
       }
     });
 
+    // Land the pending draft on the way out (#519): the autosave debounce is
+    // 1.5 s and nothing flushed it at teardown, so closing the tab (or
+    // switching apps on mobile) dropped the newest keystrokes — the last
+    // sentence typed, the part most likely to be noticed missing.
+    // visibilitychange→hidden fires on tab/app switches, usually well before
+    // a close; pagehide covers iOS Safari, where beforeunload often does not.
+    // Neither can await — the flush is INITIATED and in practice lands (both
+    // fire earlier in teardown than beforeunload, and OPFS writes are fast at
+    // draft sizes). flushPendingDraft is idempotent across the pair firing in
+    // one teardown: it clears the timer, writes only when a write is actually
+    // pending, and otherwise just awaits the chain — so hide→show→hide and
+    // visibilitychange-then-pagehide cannot double-write or race the chain.
+    // beforeunload stays what #449/#456 narrowed it to (the genuine-loss
+    // warning) — this is about landing the write, not warning.
+    const flushOnHide = () => {
+      if (session.active && autosavePending) {
+        flushPendingDraft().catch((e) => console.warn('hyperaudio-save: hide flush failed', e));
+      }
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushOnHide();
+    });
+    window.addEventListener('pagehide', flushOnHide);
+
     const input = document.createElement('input');
     input.type = 'file';
     input.id = 'project-open-input';

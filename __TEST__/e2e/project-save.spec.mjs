@@ -1165,3 +1165,42 @@ test('reading a large media reports a percentage while opening (#503)', async ({
 
   expect(seen.some((t) => /Reading the media… \d+%/.test(t))).toBe(true);
 });
+
+// #519 — the autosave debounce is 1.5s and nothing flushed it at teardown:
+// closing the tab dropped the newest keystrokes. The pending draft now lands
+// when the page hides (tab/app switch) and on pagehide (iOS close path).
+test('hiding the page flushes the pending draft immediately (#519)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'FLUSHED-ON-HIDE ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // hide the page well inside the 1.5s debounce window
+  const t0 = Date.now();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  // the draft must land long before the debounce alone could have fired
+  await pollPage(page, async () => {
+    try {
+      const id = window.HyperaudioSave.library.currentId();
+      const root = await navigator.storage.getDirectory();
+      const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+      const text = await (await (await dir.getFileHandle('draft.json')).getFile()).text();
+      return text.indexOf('FLUSHED-ON-HIDE') !== -1;
+    } catch (e) { return false; }
+  });
+  expect(Date.now() - t0).toBeLessThan(1300); // debounce alone fires at 1500ms+
+
+  // a second teardown event must not double-write or throw (pagehide follows
+  // visibilitychange in a real close)
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  expect(dialogs).toEqual([]);
+});
