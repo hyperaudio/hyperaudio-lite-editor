@@ -22,3 +22,30 @@ test('bench panel appears with ?bench=1 and produces measurements', async ({ pag
   const fallback = panel.locator('textarea[aria-label="Benchmark JSON"]');
   await expect(copied.or(fallback)).toBeVisible();
 });
+
+test('the benchmark runs in its own project and returns you to yours', async ({ page }) => {
+  test.setTimeout(240000);
+  await page.goto('/index.html?bench=1');
+  await page.waitForSelector('#hypertranscript span[data-m]');
+
+  // give the user a project to be returned to (a birth, as every engine does it)
+  const homeId = await page.evaluate(async () => {
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    for (let i = 0; i < 50 && window.HyperaudioSave.library.currentId() === null; i += 1) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return window.HyperaudioSave.library.currentId();
+  });
+  expect(homeId).not.toBeNull();
+
+  const panel = page.locator('[aria-label="HLE limits benchmark"]');
+  await panel.getByRole('button', { name: 'Run' }).click();
+  await expect(panel).toContainText('done', { timeout: 200000 });
+
+  const after = await page.evaluate(async () => ({
+    currentId: window.HyperaudioSave.library.currentId(),
+    names: (await window.HyperaudioSave.library.list()).map((e) => e.name),
+  }));
+  expect(after.currentId).toBe(homeId);                       // back where you were
+  expect(after.names.filter((n) => n === 'Benchmark').length).toBe(1); // ONE bench project
+});

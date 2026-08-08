@@ -64,11 +64,38 @@
     return env;
   }
 
-  async function measureSize(words) {
+  // The library-aware path (#517 follow-up): the benchmark runs in its OWN
+  // project instead of whatever the user had open. hyperaudioInit births a
+  // project (that is how every engine's transcription lands), so it is
+  // dispatched ONCE — for the first size — and the entry renamed 'Benchmark'.
+  // Later sizes swap the transcript in place and reset history explicitly:
+  // dispatching init per size would birth five junk projects per run.
+  const lib = () => (window.HyperaudioSave && window.HyperaudioSave.library) || null;
+
+  async function prepareDocument(words, first) {
     const t = document.getElementById('hypertranscript');
+    const before = lib() ? lib().currentId() : null;
     t.innerHTML = buildTranscript(words);
-    document.dispatchEvent(new CustomEvent('hyperaudioInit')); // new document → fresh baseline
+    if (first || !window.transcriptHistory) {
+      document.dispatchEvent(new CustomEvent('hyperaudioInit')); // births the Benchmark project
+      if (lib()) {
+        for (let i = 0; i < 30 && lib().currentId() === before; i += 1) await wait(100);
+        const id = lib().currentId();
+        if (id !== null && id !== before) await lib().rename(id, 'Benchmark');
+      }
+    } else {
+      // same document: fresh history baseline + player word index, no new project
+      window.transcriptHistory.reset('bench-size');
+      const inst = window.hyperaudioInstance;
+      if (inst && typeof inst.setupTranscriptWords === 'function') inst.setupTranscriptWords();
+      t.dispatchEvent(new Event('input', { bubbles: true })); // the autosave owns this content now
+    }
     await wait(200);
+  }
+
+  async function measureSize(words, first) {
+    const t = document.getElementById('hypertranscript');
+    await prepareDocument(words, first);
 
     const spans = t.querySelectorAll('span[data-m]');
     const mid = spans[Math.floor(spans.length / 2)];
@@ -140,7 +167,8 @@
 
   const title = el('div', 'font-weight:700;font-size:13px;margin-bottom:2px;', 'HLE limits benchmark');
   const warn = el('div', 'color:#e0a24a;margin-bottom:8px;',
-    'Running REPLACES the open transcript. Use a fresh tab; reload when done.');
+    'Runs in its own "Benchmark" project — your open project is untouched '
+    + 'and restored when the run completes.');
   const envBox = el('div', 'color:#93a29f;white-space:pre-wrap;margin-bottom:8px;', 'environment: …');
   const runBtn = el('button',
     'background:#24c9c4;color:#0d1312;border:0;border-radius:7px;padding:6px 14px;'
@@ -185,16 +213,24 @@
     runBtn.textContent = 'Running…';
     results.textContent = '';
     lastReport.rows = [];
+    const homeId = lib() ? lib().currentId() : null;
     for (let i = 0; i < SIZES.length; i += 1) {
       progress.textContent = 'measuring ' + SIZES[i] + ' words (' + (i + 1) + '/' + SIZES.length + ')…';
       // eslint-disable-next-line no-await-in-loop
-      const row = await measureSize(SIZES[i]);
+      const row = await measureSize(SIZES[i], i === 0);
       lastReport.rows.push(row);
       renderRow(row);
       // eslint-disable-next-line no-await-in-loop
       await wait(150);
     }
-    progress.textContent = 'done — reload the page to leave the synthetic document.';
+    if (homeId !== null && lib()) {
+      await lib().open(homeId); // put the user back where they were
+      progress.textContent = 'done — returned to your project. The Benchmark project is in Recents.';
+    } else if (lib()) {
+      progress.textContent = 'done — the Benchmark project is in Recents.';
+    } else {
+      progress.textContent = 'done — reload the page to leave the synthetic document.';
+    }
     runBtn.textContent = 'Run again';
     runBtn.disabled = false;
     copyBtn.style.display = 'inline-block';
