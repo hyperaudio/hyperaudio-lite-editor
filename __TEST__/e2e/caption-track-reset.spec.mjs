@@ -285,3 +285,32 @@ test('the guard alone defends a synchronous caption write (#515)', async ({ page
 
   expect(result).toBe(true);
 });
+
+// The caption editor's first visit after transcript edits showed PRE-EDIT
+// captions: the row cache is primed at transcription time (the engines'
+// caption pass runs the builder with captionMode false), transcript edits
+// regenerate only the track, and entering the caption view then trusted the
+// stale cache over the fresh data it had just computed. While captions are
+// machine-synced the cache must never win; once hand-edited (sync off) it is
+// authoritative again — that is what it exists for.
+test('the caption editor reflects transcript edits on first visit', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  // prime the cache exactly as a fresh transcription does
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript')));
+
+  // edit the transcript AFTER the prime
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'EDITED-WORD ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // first visit to the caption editor must carry the edit
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+    (els) => els.map((e) => e.value).join(' '));
+  expect(lines).toContain('EDITED-WORD');
+});
