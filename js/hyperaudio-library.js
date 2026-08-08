@@ -274,49 +274,33 @@
     input.addEventListener('click', (e) => e.stopPropagation());
   }
 
-  // The undo for deleting the CURRENT project: the deleted entry stays in the
-  // list as a placeholder row — dotted border, greyed name, Restore and ✕
-  // inside it — at the position it occupied. Cleared by Restore, by its ✕, or
-  // by ANY navigation to another project (the id current at delete time is
-  // remembered; the moment currentId differs, the offer is withdrawn and the
-  // captured parts released).
-  let pendingDeleted = null; // { entry, restore, homeId }
+  // The undo for deleting the CURRENT project: the document stays ON SCREEN
+  // (it is the undo's raw material), and the deleted entry stays in the list
+  // as a placeholder row — dotted border, greyed name, Restore and ✕ inside —
+  // at the position it occupied. Restore re-homes the on-screen document
+  // (edits made meanwhile included). Choosing any other project replaces the
+  // screen and withdraws the offer. The ✕ finalises: it navigates to the
+  // next project, because dismissing the undo while silently keeping an
+  // unsaved ghost on screen would recreate the invisible-data-loss state the
+  // old banner existed to warn about.
+  let pendingDeleted = null; // { entry, successorId }
 
   async function performDelete(entry) {
     // Anchor the placeholder to the row BELOW it in its own group, captured
-    // BEFORE the deletion: the panel orders by last edit, and the deleted
-    // project (necessarily current) sorts near the top by activity — so a
-    // sort-based merge would teleport the placeholder away from where the
-    // row actually was. Splicing back at the successor keeps it in place.
+    // BEFORE the deletion, so it can be spliced back exactly where the row
+    // was — the panel orders by last edit, and sorting the (necessarily
+    // current, so most recently active) deleted entry teleported it to the top.
     const before = await lib().list();
     const group = before.filter((e) => (e.starred === true) === (entry.starred === true));
     const at = group.findIndex((e) => e.id === entry.id);
     const successorId = at !== -1 && at + 1 < group.length ? group[at + 1].id : null;
     const result = await lib().remove(entry.id);
     if (!result || result.wasCurrent !== true) return;
-    if (result.navigated && result.restore) {
-      pendingDeleted = {
-        entry,
-        restore: result.restore,
-        successorId,
-        homeId: lib().currentId(), // the project delete landed us on
-      };
-      render();
-    } else {
-      // Nowhere to go (last project): the document stays on screen as before,
-      // and the fuller warning still earns its place — this state IS odd.
-      showPanelNotice('Removed from the library. The transcript is still on screen but no longer being saved.', {
-        tone: 'info',
-        kind: 'ghost',
-        sticky: true,
-        action: {
-          label: 'Restore',
-          handler: () => { lib().restoreDeleted(entry.starred === true); },
-        },
-      });
-    }
+    pendingDeleted = { entry, successorId };
+    render();
   }
 
+  /* ---- Rendering ---- */
   /* ---- Rendering ---- */
 
   let renderToken = 0;
@@ -336,8 +320,9 @@
     const currentId = api.currentId();
     if (currentId !== null) hideRestoreNotice(); // a project owns the screen again
 
-    // any navigation away from where the delete landed us withdraws the offer
-    if (pendingDeleted !== null && currentId !== pendingDeleted.homeId) {
+    // any project owning the screen withdraws the offer: a switch, an open, a
+    // new transcription, or Restore itself (which re-homes the ghost)
+    if (pendingDeleted !== null && currentId !== null) {
       pendingDeleted = null;
     }
 
@@ -404,11 +389,16 @@
       restoreBtn.addEventListener('click', () => {
         const pending = pendingDeleted;
         pendingDeleted = null;
-        if (pending !== null) pending.restore(pending.entry.starred === true);
+        if (pending !== null) api.restoreDeleted(pending.entry.starred === true);
       });
-      filePicker.querySelector('.recents-deleted-dismiss').addEventListener('click', () => {
+      filePicker.querySelector('.recents-deleted-dismiss').addEventListener('click', async () => {
         pendingDeleted = null;
-        render();
+        const remaining = await api.list();
+        if (remaining.length > 0) {
+          api.open(remaining[0].id); // finalise: replace the unsaved ghost
+        } else {
+          render(); // nothing to go to — the ghost stays, offer withdrawn
+        }
       });
     }
 

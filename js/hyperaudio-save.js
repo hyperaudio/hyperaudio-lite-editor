@@ -2292,6 +2292,11 @@
   // project leaves the document on screen (the only undo there is) but
   // nothing owns it anymore — autosave stops until the panel's Restore
   // re-homes it as a new entry.
+  // Deleting the CURRENT project keeps the document ON SCREEN — the undo's
+  // raw material — while the library entry and directory go. The panel shows
+  // a placeholder row carrying Restore (which re-homes the on-screen
+  // document) in the deleted row's place; any navigation elsewhere replaces
+  // the screen and withdraws the offer. Returns { wasCurrent }.
   async function deleteProject(id) {
     const wasCurrent = id === session.projectId;
     if (wasCurrent) {
@@ -2306,7 +2311,7 @@
     await updateLibrary((lib) => {
       lib.projects = lib.projects.filter((p) => p.id !== id);
     });
-    return wasCurrent;
+    return { wasCurrent };
   }
 
   // Undo for deleting the current project: re-home the on-screen document —

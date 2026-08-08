@@ -296,12 +296,12 @@ test('deleting the LAST project keeps it on screen and Restore re-homes it', asy
   await del.click();
   await del.click();
 
-  // gone from the library, still on screen, undo offered
+  // gone from the library, still on screen, undo offered as a placeholder row
   await expect(row(page, 'Project A')).toHaveCount(0);
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
-  await expect(page.locator('#recents-notice')).toContainText('no longer being saved');
+  await expect(page.locator('.recents-row-deleted')).toContainText('Project A');
 
-  await page.locator('#recents-notice .recents-notice-action').click();
+  await page.locator('.recents-deleted-restore').click();
   await expect(activeRow(page)).toHaveText('Project A');
   const after = await readLibraryState(page);
   expect(after.projects.length).toBe(1);
@@ -324,7 +324,7 @@ test('deleting the LAST project keeps it on screen and Restore re-homes it', asy
   }, after.current);
 });
 
-test('deleting the current project navigates to the next; Restore rebuilds it (#456 revisited)', async ({ page }, testInfo) => {
+test('deleting the current project keeps it on screen; Restore re-homes it from the placeholder', async ({ page }, testInfo) => {
   await openProject(page, testInfo, 'Project A');
   await openProject(page, testInfo, 'Project B');
   await expect(activeRow(page)).toHaveText('Project B');
@@ -334,26 +334,43 @@ test('deleting the current project navigates to the next; Restore rebuilds it (#
   await del.click();
   await del.click();
 
-  // like closing a tab: landed on the other project, no ghost, no lecture —
-  // the deleted entry stays in the list as a dotted placeholder carrying its
-  // own Restore and dismiss
-  await expect(activeRow(page)).toHaveText('Project A');
+  // the document STAYS on screen (it is the undo's raw material); nothing
+  // owns it — no row is active — and the deleted entry becomes a dotted
+  // placeholder carrying its own Restore and dismiss
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  await expect(page.locator('#file-picker .file-item.active')).toHaveCount(0);
   await expect(row(page, 'Project B')).toHaveCount(0);
   const placeholder = page.locator('.recents-row-deleted');
   await expect(placeholder).toHaveCount(1);
   await expect(placeholder).toContainText('Project B');
 
-  // the placeholder survives re-renders while we stay on the landing project
+  // the placeholder survives re-renders while nothing owns the screen
   await page.evaluate(() => document.dispatchEvent(new CustomEvent('hyperaudioLibraryChanged')));
   await expect(page.locator('.recents-row-deleted .recents-deleted-restore')).toBeVisible();
 
-  // Restore rebuilds the deleted project from its captured parts
+  // Restore re-homes the on-screen document under a fresh id
   await page.locator('.recents-row-deleted .recents-deleted-restore').click();
   await expect(activeRow(page)).toHaveText('Project B');
   const state = await readLibraryState(page);
   expect(state.projects.length).toBe(2);
   expect(state.dirs).toContain(state.current);
   await expect(page.locator('.recents-row-deleted')).toHaveCount(0); // offer consumed
+});
+
+test('the placeholder dismiss finalises: it navigates rather than leaving a silent ghost', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await openProject(page, testInfo, 'Project B');
+
+  await openKebab(page, 'Project B');
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click();
+  await expect(page.locator('.recents-row-deleted')).toHaveCount(1);
+
+  await page.locator('.recents-deleted-dismiss').click();
+  await expect(page.locator('.recents-row-deleted')).toHaveCount(0);
+  await expect(activeRow(page)).toHaveText('Project A'); // screen replaced, not ghosted
+  await expect(row(page, 'Project B')).toHaveCount(0);
 });
 
 test('navigating to another project withdraws the deleted placeholder', async ({ page }, testInfo) => {
