@@ -1016,6 +1016,14 @@ test('a caption deletion survives the save that follows it (#505)', async ({ pag
 // and packs the whole thing into a blob: seconds to minutes on real media,
 // during which the app showed nothing at all. The only prior signal was a
 // confirm dialog above 500MB, so an ordinary 100MB interview got none.
+// openFixture resolves as soon as the transcript paints, but the open keeps
+// running (draft flush, OPFS seeding). Waiting for the progress pill to clear
+// is the precise signal that openFromFile's finally has run — without it a
+// following open is legitimately refused by the #504 guard.
+const awaitOpenIdle = (page) => pollPage(page, async () =>
+  document.getElementById('project-progress') === null
+  && window.HyperaudioSave.library.currentId() !== null);
+
 const watchProgress = async (page) => {
   const seen = [];
   await page.exposeFunction('__recordProgress', (t) => { seen.push(t); });
@@ -1083,3 +1091,77 @@ test('a second export while one is running says so rather than nothing (#502)', 
   expect(result.box).toEqual({ onScreen: true, clearsPlaybar: true, visible: true });
 });
 
+
+// #504 — the open path had no in-flight guard, where export has refused
+// concurrent runs since #448. Note what this does NOT claim: two concurrent
+// opens were measured (including with slow, large media) and produced no
+// duplicate library entries and no inconsistent session state — the harm the
+// issue predicted did not reproduce. The guard earns its place by bounding the
+// concurrency explicitly rather than leaving it to be reasoned about, and by
+// telling the user why their second attempt did nothing.
+test('the in-flight open explains itself rather than doing nothing (#504)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+
+  // Two opens started back to back. What the file contains does not matter —
+  // the guard is set synchronously before the first await, so the second call
+  // takes the refusal path regardless of whether the first ultimately succeeds.
+  const text = await page.evaluate(async () => {
+    const dummy = () => new File(['not a zip'], 'x.hyperaudio');
+    const first = window.HyperaudioSave.openFromFile(dummy());
+    const second = window.HyperaudioSave.openFromFile(dummy());
+    const el = document.getElementById('project-progress');
+    const t = el ? el.textContent : null;
+    await Promise.allSettled([first, second]);
+    return t;
+  });
+
+  expect(text).toMatch(/one at a time/);
+});
+
+// #503 — the mirror of #502 on the way in. Opening a real project unzips the
+// media into memory, wraps it in a File (a second full copy) and seeds OPFS
+// with it, all before the first visible change: seconds of nothing.
+test('opening a project reports progress and clears it (#503)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);      // one open to get a File in the input
+  await awaitOpenIdle(page);
+
+  // Sample the pill from inside the page while the open runs: the record-to-node
+  // bridge is asynchronous and was losing entries against a fast open.
+  const result = await page.evaluate(async () => {
+    const seen = [];
+    const sample = () => {
+      const el = document.getElementById('project-progress');
+      if (el && seen[seen.length - 1] !== el.textContent) seen.push(el.textContent);
+    };
+    const timer = setInterval(sample, 5);
+    const file = document.getElementById('project-open-input').files[0];
+    const p = window.HyperaudioSave.openFromFile(file);
+    sample();
+    await p;
+    clearInterval(timer);
+    return { seen, pillLeft: !!document.getElementById('project-progress') };
+  });
+
+  expect(result.seen.some((t) => /Opening the project file/.test(t))).toBe(true);
+  expect(result.seen.some((t) => /Loading the project/.test(t))).toBe(true);
+  expect(result.pillLeft).toBe(false);   // cleared when the work is done
+  expect(dialogs).toEqual([]);
+});
+
+test('reading a large media reports a percentage while opening (#503)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  // big enough that JSZip streams the extraction rather than finishing in one tick
+  await openFixture(page, testInfo, dialogs, null, null, 600);
+  await awaitOpenIdle(page);
+  const seen = await watchProgress(page);
+
+  await page.evaluate(async () => {
+    const file = document.getElementById('project-open-input').files[0];
+    await window.HyperaudioSave.openFromFile(file);
+  });
+  await page.waitForTimeout(300);
+
+  expect(seen.some((t) => /Reading the media… \d+%/.test(t))).toBe(true);
+});

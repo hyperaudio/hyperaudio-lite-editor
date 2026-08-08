@@ -344,7 +344,7 @@
   // htmlText, ...} when hyperaudio.json is missing/unreadable but the HTML
   // compatibility copy can be used (spec § 4 recovery). Throws {code, message}
   // on rejection (version-major, media-kind, unreadable, entry-too-large).
-  async function unzipProject(data, JSZipImpl) {
+  async function unzipProject(data, JSZipImpl, onMediaProgress) {
     const rejection = (code, message) => {
       const err = new Error(message);
       err.code = code;
@@ -447,7 +447,10 @@
         if (comp && comp.magic && comp.magic !== '\x00\x00') {
           throw rejection('media-compressed', 'the media entry is compressed; the format requires STORE');
         }
-        mediaData = await mediaEntry.async('uint8array');
+        // Extracting the media is the long pole on the way in, and the only
+        // step that can report a real percentage (#503).
+        mediaData = await mediaEntry.async('uint8array',
+          typeof onMediaProgress === 'function' ? onMediaProgress : undefined);
         mediaEntryName = project.media.path.slice(MEDIA_DIR.length);
       }
     }
@@ -1760,19 +1763,20 @@
       return false;
     }
     exportInFlight = true;
+    const token = beginProgress();
     try {
-      return await exportProjectInner(!!(opts && opts.asSave));
+      return await exportProjectInner(!!(opts && opts.asSave), token);
     } finally {
       exportInFlight = false;
-      hideProgress();
+      hideProgress(token);
     }
   }
 
-  async function exportProjectInner(asSave) {
+  async function exportProjectInner(asSave, token) {
     const identityAtStart = identityGeneration;
     // Before the first await: the click is acknowledged even if resolving the
     // media out of OPFS takes a moment.
-    showProgress('Preparing the project file…');
+    showProgress('Preparing the project file…', 0, token);
     let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
     const remoteSrc = player !== null && /^https?:/i.test(player.src) ? player.src : null;
@@ -1785,7 +1789,7 @@
         try {
           // a full media download over the network — the one step that can
           // take longer than the packing, so it gets its own message
-          showProgress('Downloading the media…');
+          showProgress('Downloading the media…', 0, token);
           mediaFile = await fetchRemoteMediaFile(remoteSrc);
           session.mediaFile = mediaFile;
           session.mediaFileFromUrl = remoteSrc;
@@ -1828,7 +1832,7 @@
     }
     state.hasOriginal = originalJson !== null;
 
-    showProgress('Packaging the project file…');
+    showProgress('Packaging the project file…', 0, token);
     const JSZipImpl = await loadJSZip();
     let lastPercent = -1;
     const blob = await zipProject({
@@ -1842,7 +1846,7 @@
       const percent = Math.floor(meta.percent);
       if (percent === lastPercent) return;
       lastPercent = percent;
-      showProgress('Packaging the project file… ' + percent + '%');
+      showProgress('Packaging the project file… ' + percent + '%', 0, token);
     });
 
     const safeTitle = (state.texts.title || 'project')
@@ -1883,15 +1887,48 @@
     return true;
   }
 
+  // One open at a time (#504). openFromFile is await-heavy — unzip, draft
+  // flush, apply, OPFS seeding — and the file input called it directly, so a
+  // second open starting mid-flight interleaved with the first at every await
+  // point: two library entries, and session.projectId, the OPFS lock and the
+  // media write left in an order neither call controlled. The export path has
+  // refused concurrent runs since #448; this is the same guard for the way in.
+  let openInFlight = false;
+
   async function openFromFile(file) {
+    if (openInFlight) {
+      showProgress('Still opening a project — one at a time.', 2000);
+      return;
+    }
+    openInFlight = true;
+    const token = beginProgress();
+    try {
+      return await openFromFileInner(file, token);
+    } finally {
+      openInFlight = false;
+      hideProgress(token);
+    }
+  }
+
+  async function openFromFileInner(file, token) {
     // Parse and validate BEFORE the replace-confirmation: asking permission
     // to replace the current project and THEN refusing the file meant the
     // user consented to a replacement that never happened (prepare → confirm
     // → apply, the #448 ordering).
     let loaded;
     try {
+      // Before the first await: opening a real project reads the whole media
+      // into memory twice (unzip, then the File wrapper) and seeds OPFS with
+      // it, which is seconds of nothing on screen (#503).
+      showProgress('Opening the project file…', 0, token);
       const JSZipImpl = await loadJSZip();
-      loaded = await unzipProject(file, JSZipImpl);
+      let lastPercent = -1;
+      loaded = await unzipProject(file, JSZipImpl, (meta) => {
+        const percent = Math.floor(meta.percent);
+        if (percent === lastPercent) return;
+        lastPercent = percent;
+        showProgress('Reading the media… ' + percent + '%', 0, token);
+      });
     } catch (e) {
       const messages = {
         'version-major': 'This project was saved by a newer version of the editor and cannot be opened here. Please update the editor.',
@@ -1905,6 +1942,7 @@
       return;
     }
 
+    showProgress('Loading the project…', 0, token);
     // No discard dialog (#456): the outgoing project's pending draft flushes
     // to its own directory and stays in the library — opening loses nothing.
     // The dialog existed only because there was one work slot.
@@ -2633,14 +2671,25 @@
    * ----------------------------------------------------------------------- */
   let progressEl = null;
   let progressHoldUntil = 0;
+  // Operations overlap — an open can still be seeding OPFS when an export
+  // starts — and they share one pill. Without ownership the older operation's
+  // cleanup wiped the newer one's message (caught by a full-suite run, where
+  // a slow open's finally landed mid-export and cleared a held message).
+  // beginProgress hands out a token; stale tokens are ignored.
+  let progressToken = 0;
+  function beginProgress() {
+    progressToken += 1;
+    return progressToken;
+  }
 
   // holdMs pins a message for a moment against the routine progress stream.
   // Needed because packing fires onUpdate every few milliseconds: a message
   // answering something the USER just did ("still building", after a second
   // click) was overwritten before it could be read — the test caught nothing
   // because it read the text synchronously, which a human cannot do.
-  function showProgress(message, holdMs) {
+  function showProgress(message, holdMs, token) {
     if (typeof document === 'undefined') return;
+    if (token !== undefined && token !== progressToken) return; // superseded
     const now = Date.now();
     if (!holdMs && now < progressHoldUntil) return; // a held message is on screen
     if (progressEl === null) {
@@ -2654,7 +2703,8 @@
     progressHoldUntil = holdMs ? now + holdMs : 0;
   }
 
-  function hideProgress() {
+  function hideProgress(token) {
+    if (token !== undefined && token !== progressToken) return; // not ours to clear
     progressHoldUntil = 0;
     if (progressEl !== null) {
       progressEl.remove();
