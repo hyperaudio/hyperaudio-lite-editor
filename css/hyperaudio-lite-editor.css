@@ -1487,3 +1487,37 @@ label[data-a11y-wired]:focus-visible {
   background: transparent;
   opacity: 0.7;
 }
+
+/* Export progress pill (#502). Fixed above the play bar rather than in
+   #side-notices, which is an off-canvas drawer on the small-screen layout —
+   invisible on exactly the devices where building a container takes longest.
+   Right-aligned so it does not cover the transcript's left reading edge, and
+   below the corner buttons' z-index band so it never fights them. */
+#project-progress {
+  position: fixed;
+  right: 16px;
+  bottom: 64px;               /* play bar (52px) + 12px */
+  z-index: 30;
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  border-radius: 9999px;
+  background: oklch(var(--n, 0.2 0 0));
+  color: oklch(var(--nc, 0.98 0 0));
+  font-size: 0.85rem;
+  line-height: 1.4;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media screen and (max-width: 948px) {
+  #project-progress {
+    right: 12px;
+    left: 12px;
+    bottom: 60px;
+    text-align: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #project-progress { transition: none; }
+}
