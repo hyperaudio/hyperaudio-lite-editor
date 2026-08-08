@@ -69,6 +69,7 @@
     el.textContent = '';
     el.appendChild(document.createTextNode(message));
     el.dataset.hasAction = opts.action ? 'true' : 'false';
+    el.dataset.kind = opts.kind || '';
     if (opts.action) {
       const action = document.createElement('button');
       action.type = 'button';
@@ -90,13 +91,14 @@
     }
   }
 
-  // A pending Restore offers to re-home the ON-SCREEN document; once a
-  // project owns the screen again (switch, open, new transcription) that
-  // offer would save the wrong content — withdraw it. Only notices carrying
-  // an action are removed.
+  // A GHOST notice's Restore re-homes the ON-SCREEN document; once a project
+  // owns the screen again (switch, open, new transcription) that offer would
+  // save the wrong content — withdraw it. The plain undo toast restores from
+  // parts captured at delete time, so it is valid whoever owns the screen,
+  // and stays until dismissed, clicked, or replaced.
   function hideRestoreNotice() {
     const el = document.getElementById('recents-notice');
-    if (el !== null && el.dataset.hasAction === 'true') el.remove();
+    if (el !== null && el.dataset.kind === 'ghost') el.remove();
   }
 
   /* ---- Row hover popout: full name + stored summary/topics, floated to the
@@ -272,13 +274,30 @@
     input.addEventListener('click', (e) => e.stopPropagation());
   }
 
+  // The undo for deleting the CURRENT project: the deleted entry stays in the
+  // list as a placeholder row — dotted border, greyed name, Restore and ✕
+  // inside it — at the position it occupied. Cleared by Restore, by its ✕, or
+  // by ANY navigation to another project (the id current at delete time is
+  // remembered; the moment currentId differs, the offer is withdrawn and the
+  // captured parts released).
+  let pendingDeleted = null; // { entry, restore, homeId }
+
   async function performDelete(entry) {
-    const wasCurrent = await lib().remove(entry.id);
-    // Deleting the CURRENT project leaves the document on screen (the only
-    // undo there is), but nothing owns it anymore — say so, offer the undo.
-    if (wasCurrent) {
+    const result = await lib().remove(entry.id);
+    if (!result || result.wasCurrent !== true) return;
+    if (result.navigated && result.restore) {
+      pendingDeleted = {
+        entry,
+        restore: result.restore,
+        homeId: lib().currentId(), // the project delete landed us on
+      };
+      render();
+    } else {
+      // Nowhere to go (last project): the document stays on screen as before,
+      // and the fuller warning still earns its place — this state IS odd.
       showPanelNotice('Removed from the library. The transcript is still on screen but no longer being saved.', {
         tone: 'info',
+        kind: 'ghost',
         sticky: true,
         action: {
           label: 'Restore',
@@ -307,8 +326,29 @@
     const currentId = api.currentId();
     if (currentId !== null) hideRestoreNotice(); // a project owns the screen again
 
+    // any navigation away from where the delete landed us withdraws the offer
+    if (pendingDeleted !== null && currentId !== pendingDeleted.homeId) {
+      pendingDeleted = null;
+    }
+    if (pendingDeleted !== null) {
+      rows.push(Object.assign({}, pendingDeleted.entry, { deletedPlaceholder: true }));
+      rows.sort((a, b) => (b.lastActiveAt || b.modifiedAt || b.createdAt || 0)
+        - (a.lastActiveAt || a.modifiedAt || a.createdAt || 0));
+    }
+
     const entryById = {};
     const renderRow = (entry) => {
+      if (entry.deletedPlaceholder === true) {
+        const nameHtml = escapeMarkup(entry.name || 'project');
+        filePicker.insertAdjacentHTML('beforeend',
+          `<li class="recents-row recents-row-deleted">` +
+          `<span class="recents-deleted-name">${nameHtml}</span>` +
+          `<span class="recents-actions">` +
+          `<button type="button" class="recents-deleted-restore">Restore</button>` +
+          `<button type="button" class="recents-deleted-dismiss" aria-label="Dismiss">✕</button>` +
+          `</span></li>`);
+        return;
+      }
       entryById[entry.id] = entry;
       const idAttr = escapeMarkup(entry.id);
       const nameHtml = escapeMarkup(entry.name || 'project');
@@ -345,6 +385,19 @@
       // opacity 0.75 (not 0.55) so the composited grey still meets the 4.5:1
       // contrast ratio on the white card (#402)
       filePicker.insertAdjacentHTML('beforeend', '<li style="padding:8px 16px; opacity:0.75">No projects yet.</li>');
+    }
+
+    const restoreBtn = filePicker.querySelector('.recents-deleted-restore');
+    if (restoreBtn !== null) {
+      restoreBtn.addEventListener('click', () => {
+        const pending = pendingDeleted;
+        pendingDeleted = null;
+        if (pending !== null) pending.restore(pending.entry.starred === true);
+      });
+      filePicker.querySelector('.recents-deleted-dismiss').addEventListener('click', () => {
+        pendingDeleted = null;
+        render();
+      });
     }
 
     filePicker.querySelectorAll('.file-item').forEach((el) => {
