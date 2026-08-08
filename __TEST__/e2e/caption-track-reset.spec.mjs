@@ -314,3 +314,42 @@ test('the caption editor reflects transcript edits on first visit', async ({ pag
     (els) => els.map((e) => e.value).join(' '));
   expect(lines).toContain('EDITED-WORD');
 });
+
+// The layer BENEATH the stale-cache fix, found because the fix checked a flag
+// that was lying: nothing reset updateCaptionsFromTranscript on a NEW
+// transcription — it inherited the previous project's value. After any
+// project with curated captions (every opened .hyperaudio with edited
+// captions, every VTT import), a fresh transcription's edits updated neither
+// the video captions nor the caption editor.
+// (No companion test for the import routes keeping sync OFF: they set the
+// flag immediately after the synchronous init dispatch, so the override
+// winning is language semantics — a test would be testing dispatchEvent.)
+test('a new transcription turns caption sync back on', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  // the inherited state: a previous project left sync off
+  // unqualified access reaches the scripts' top-level let (a window property
+  // would be a shadow — top-level let is global-lexical, not on window)
+  await page.evaluate(() => { updateCaptionsFromTranscript = false; });
+
+  // a fresh transcription lands, exactly as every engine delivers it
+  await page.evaluate(() => {
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  expect(await page.evaluate(() => updateCaptionsFromTranscript)).toBe(true);
+
+  // edit, then first visit to the caption editor: the edit is there
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'POST-TRANSCRIBE-EDIT ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+    (els) => els.map((e) => e.value).join(' '));
+  expect(lines).toContain('POST-TRANSCRIBE-EDIT');
+});
+

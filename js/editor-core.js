@@ -232,7 +232,18 @@
   // (transcribe / JSON import / SRT-VTT import) — discard any cached caption
   // editor so the next entry rebuilds from the fresh transcript. Caption
   // edits otherwise persist; localStorage load manages its own cache.
-  window.document.addEventListener('hyperaudioInit', () => { captionCache = null; }, false);
+  window.document.addEventListener('hyperaudioInit', () => {
+    captionCache = null;
+    // A fresh transcript just landed: its machine captions ARE
+    // transcript-derived, so caption sync defaults ON. Nothing reset this
+    // before, so a new transcription INHERITED the flag from whatever was
+    // open previously — after any project with curated captions, edits to
+    // the new transcript updated neither the video captions nor the caption
+    // editor. Importers that carry curated captions (VTT/SRT) set the flag
+    // false AFTER dispatching this event, and the project-open path applies
+    // saved options without firing it at all.
+    updateCaptionsFromTranscript = true;
+  }, false);
 
   // Segmented view switch (transcript/captions): both segments stay clickable
   // and the active one is marked by the track's thumb + aria-pressed rather
