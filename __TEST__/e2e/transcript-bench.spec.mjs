@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
+import { ladderWav } from './helpers.mjs';
 
 test('bench is inert without the flag', async ({ page }) => {
   await page.goto('/index.html');
@@ -40,12 +42,18 @@ test('bench panel appears with ?bench=1 and produces measurements', async ({ pag
   expect(download.suggestedFilename()).toMatch(/^hle-benchmark-\d{4}-\d{2}-\d{2}\.md$/);
 });
 
-test('the benchmark runs in its own project and returns you to yours', async ({ page }) => {
+test('the benchmark runs in its own project and returns you to yours', async ({ page }, testInfo) => {
   test.setTimeout(240000);
   await page.goto('/index.html?bench=1');
   await page.waitForSelector('#hypertranscript span[data-m]');
 
   // give the user a project to be returned to (a birth, as every engine does it)
+  // A file captured for the user's own work — the state in which the
+  // Benchmark project used to claim this file as ITS media.
+  const wavPath = testInfo.outputPath('tone.wav');
+  fs.writeFileSync(wavPath, ladderWav(2));
+  await page.setInputFiles('#file-input', wavPath);
+
   const homeId = await page.evaluate(async () => {
     document.dispatchEvent(new CustomEvent('hyperaudioInit'));
     for (let i = 0; i < 50 && window.HyperaudioSave.library.currentId() === null; i += 1) {
@@ -80,6 +88,16 @@ test('the benchmark runs in its own project and returns you to yours', async ({ 
   });
   expect(info.summary).toContain('Device benchmark');
   expect(info.summary).toContain('undo ×');
+  expect(info.summary.split('\n').length).toBeGreaterThanOrEqual(6); // one line per size
   expect(info.transcription).toContain('device benchmark');
   expect(info.mediaKind).toBe('none');   // the ⓘ media section reads "No media"
+});
+
+test('the benchmark panel can be closed', async ({ page }) => {
+  await page.goto('/index.html?bench=1');
+  await page.waitForSelector('#hypertranscript span[data-m]');
+  const panel = page.locator('[aria-label="HLE limits benchmark"]');
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Close benchmark panel' }).click();
+  await expect(panel).toHaveCount(0);
 });
