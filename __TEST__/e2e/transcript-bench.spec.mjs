@@ -65,4 +65,21 @@ test('the benchmark runs in its own project and returns you to yours', async ({ 
   }));
   expect(after.currentId).toBe(homeId);                       // back where you were
   expect(after.names.filter((n) => n === 'Benchmark').length).toBe(1); // ONE bench project
+
+  // the Benchmark project carries its own report: switch to it and check what
+  // its ⓘ has to show — summary, transcription details, and honest media
+  const info = await page.evaluate(async () => {
+    const list = await window.HyperaudioSave.library.list();
+    const bench = list.find((e) => e.name === 'Benchmark');
+    await window.HyperaudioSave.library.open(bench.id);
+    return {
+      summary: document.getElementById('summary').textContent,
+      transcription: document.getElementById('transcription-info').textContent,
+      mediaKind: bench.media && bench.media.kind,
+    };
+  });
+  expect(info.summary).toContain('Device benchmark');
+  expect(info.summary).toContain('undo ×');
+  expect(info.transcription).toContain('device benchmark');
+  expect(info.mediaKind).toBe('none');   // the ⓘ media section reads "No media"
 });

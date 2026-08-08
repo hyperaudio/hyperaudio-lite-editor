@@ -77,6 +77,11 @@
     const before = lib() ? lib().currentId() : null;
     t.innerHTML = buildTranscript(words);
     if (first || !window.transcriptHistory) {
+      // The synthetic project has no media; without this it inherits the URL
+      // sitting in the player (the intro), and its info claims a remote
+      // source. Empty src → media.kind 'none' → the info modal says so.
+      const player = document.getElementById('hyperplayer');
+      if (player) player.removeAttribute('src');
       document.dispatchEvent(new CustomEvent('hyperaudioInit')); // births the Benchmark project
       if (lib()) {
         for (let i = 0; i < 30 && lib().currentId() === before; i += 1) await wait(100);
@@ -170,6 +175,39 @@
     return lines.join('\n');
   }
 
+  // The Benchmark project's ⓘ should tell you what it is and what it found.
+  // Two existing doors, no new storage: the run lands in the summary (the
+  // live #summary element the save persists and the info modal displays), and
+  // the run itself is recorded through setTranscriptionInfo — the same call
+  // every engine makes — so the Transcription section shows it as the thing
+  // that produced this document. Both persist with the outgoing draft flush
+  // when the user is returned to their own project.
+  function recordReportOnProject() {
+    if (!lib() || !lastReport || !lastReport.rows.length) return;
+    const summaryEl = document.getElementById('summary');
+    if (summaryEl) {
+      const linesOut = lastReport.rows.map((row) => '~' + row.minutesOfSpeech
+        + ' min (' + (row.words / 1000) + 'k): ' + verdict(row)[0]
+        + ' — key ' + row.typingMs + 'ms, pass ' + row.sanitiseMs
+        + 'ms, undo ×' + row.effectiveUndoDepth + ' @ ' + row.undoMs + 'ms');
+      summaryEl.textContent = 'Device benchmark (#517). ' + linesOut.join('; ') + '.';
+      summaryEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (typeof window.setTranscriptionInfo === 'function') {
+      const env = lastReport.env || {};
+      window.setTranscriptionInfo({
+        service: 'device benchmark',
+        model: SIZES[0] / 1000 + 'k–' + SIZES[SIZES.length - 1] / 1000 + 'k words (#517)',
+        seconds: (performance.now() - runStartedAt) / 1000,
+        device: (env.cores || '?') + ' cores'
+          + (env.deviceMemoryHintGB ? ' · ' + env.deviceMemoryHintGB + 'GB hint' : '')
+          + (env.shaderF16 ? ' · shader-f16' : ''),
+      });
+    }
+  }
+
+  let runStartedAt = 0;
+
   // --- panel -----------------------------------------------------------------
 
   function el(tag, style, text) {
@@ -253,6 +291,7 @@
     results.textContent = '';
     lastReport.rows = [];
     const homeId = lib() ? lib().currentId() : null;
+    runStartedAt = performance.now();
     for (let i = 0; i < SIZES.length; i += 1) {
       progress.textContent = 'measuring ' + SIZES[i] + ' words (' + (i + 1) + '/' + SIZES.length + ')…';
       // eslint-disable-next-line no-await-in-loop
@@ -262,6 +301,7 @@
       // eslint-disable-next-line no-await-in-loop
       await wait(150);
     }
+    recordReportOnProject();
     if (homeId !== null && lib()) {
       await lib().open(homeId); // put the user back where they were
       progress.textContent = 'done — returned to your project. The Benchmark project is in Recents.';
