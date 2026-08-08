@@ -212,7 +212,13 @@
   const progress = el('div', 'margin:8px 0;color:#93a29f;', '');
   const results = el('div', 'margin-top:6px;', '');
 
-  panel.append(title, warn, envBox, runBtn, copyBtn, copyMdBtn, downloadBtn, progress, results);
+  // Run (later 'Run again') on its own line; the three report buttons as a row
+  // of their own beneath it.
+  const runRow = el('div', 'margin-bottom:2px;');
+  runRow.appendChild(runBtn);
+  const reportRow = el('div', '');
+  reportRow.append(copyBtn, copyMdBtn, downloadBtn);
+  panel.append(title, warn, envBox, runRow, reportRow, progress, results);
   document.body.appendChild(panel);
 
   let lastReport = null;
