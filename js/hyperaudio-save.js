@@ -1435,6 +1435,15 @@
     session.created = nowIso();
     session.hasOriginal = false;
     session.mediaFileFromUrl = null;
+    // A birth with NO source in the player is a text-only document (a JSON/SRT
+    // import, the benchmark's synthetic transcript) — a File captured for a
+    // PREVIOUS project must not survive into it, or the new project's media
+    // claims someone else's file. Engines always have a src (blob: or URL) set
+    // before they dispatch hyperaudioInit, so this never touches their births.
+    {
+      const player = document.querySelector('#hyperplayer');
+      if (player === null || !player.getAttribute('src')) session.mediaFile = null;
+    }
     session.pendingReconcile = null;
     session.title = '';
     session.envelope = null; // a fresh document has no envelope to preserve

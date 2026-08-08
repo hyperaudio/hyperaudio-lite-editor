@@ -190,7 +190,7 @@
         + ' min (' + (row.words / 1000) + 'k): ' + verdict(row)[0]
         + ' — key ' + row.typingMs + 'ms, pass ' + row.sanitiseMs
         + 'ms, undo ×' + row.effectiveUndoDepth + ' @ ' + row.undoMs + 'ms');
-      summaryEl.textContent = 'Device benchmark (#517). ' + linesOut.join('; ') + '.';
+      summaryEl.textContent = 'Device benchmark (#517)\n' + linesOut.join('\n');
       summaryEl.dispatchEvent(new Event('input', { bubbles: true }));
     }
     if (typeof window.setTranscriptionInfo === 'function') {
@@ -233,6 +233,12 @@
   panel.setAttribute('aria-label', 'HLE limits benchmark');
 
   const title = el('div', 'font-weight:700;font-size:13px;margin-bottom:2px;', 'HLE limits benchmark');
+  const closeBtn = el('button',
+    'position:absolute;top:8px;right:10px;background:transparent;border:0;color:#93a29f;'
+    + 'font:16px inherit;cursor:pointer;padding:2px 6px;', '✕');
+  closeBtn.setAttribute('aria-label', 'Close benchmark panel');
+  closeBtn.addEventListener('click', () => panel.remove());
+  panel.appendChild(closeBtn);
   const warn = el('div', 'color:#e0a24a;margin-bottom:8px;',
     'Runs in its own "Benchmark" project — your open project is untouched '
     + 'and restored when the run completes.');
