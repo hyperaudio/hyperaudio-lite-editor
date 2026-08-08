@@ -283,12 +283,22 @@
   let pendingDeleted = null; // { entry, restore, homeId }
 
   async function performDelete(entry) {
+    // Anchor the placeholder to the row BELOW it in its own group, captured
+    // BEFORE the deletion: the panel orders by last edit, and the deleted
+    // project (necessarily current) sorts near the top by activity — so a
+    // sort-based merge would teleport the placeholder away from where the
+    // row actually was. Splicing back at the successor keeps it in place.
+    const before = await lib().list();
+    const group = before.filter((e) => (e.starred === true) === (entry.starred === true));
+    const at = group.findIndex((e) => e.id === entry.id);
+    const successorId = at !== -1 && at + 1 < group.length ? group[at + 1].id : null;
     const result = await lib().remove(entry.id);
     if (!result || result.wasCurrent !== true) return;
     if (result.navigated && result.restore) {
       pendingDeleted = {
         entry,
         restore: result.restore,
+        successorId,
         homeId: lib().currentId(), // the project delete landed us on
       };
       render();
@@ -330,11 +340,6 @@
     if (pendingDeleted !== null && currentId !== pendingDeleted.homeId) {
       pendingDeleted = null;
     }
-    if (pendingDeleted !== null) {
-      rows.push(Object.assign({}, pendingDeleted.entry, { deletedPlaceholder: true }));
-      rows.sort((a, b) => (b.lastActiveAt || b.modifiedAt || b.createdAt || 0)
-        - (a.lastActiveAt || a.modifiedAt || a.createdAt || 0));
-    }
 
     const entryById = {};
     const renderRow = (entry) => {
@@ -368,6 +373,13 @@
     // Ordering within each group is unchanged (last edit).
     const starredRows = rows.filter((r) => r.starred === true);
     const recentRows = rows.filter((r) => r.starred !== true);
+    if (pendingDeleted !== null) {
+      const ph = Object.assign({}, pendingDeleted.entry, { deletedPlaceholder: true });
+      const target = ph.starred === true ? starredRows : recentRows;
+      const at = pendingDeleted.successorId !== null
+        ? target.findIndex((r) => r.id === pendingDeleted.successorId) : -1;
+      if (at !== -1) target.splice(at, 0, ph); else target.push(ph);
+    }
     const panelTitle = document.getElementById('recents-title');
     if (panelTitle !== null) {
       panelTitle.style.display = starredRows.length > 0 ? 'none' : '';

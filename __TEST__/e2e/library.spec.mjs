@@ -367,6 +367,17 @@ test('navigating to another project withdraws the deleted placeholder', async ({
   await del.click();
   await expect(page.locator('.recents-row-deleted')).toHaveCount(1);
 
+  // the placeholder sits WHERE THE ROW WAS — immediately above its old
+  // successor — not teleported to the top by activity sorting
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('#file-picker .recents-row')].map((li) =>
+      li.classList.contains('recents-row-deleted')
+        ? 'PLACEHOLDER:' + li.querySelector('.recents-deleted-name').textContent
+        : li.querySelector('.file-item').textContent));
+  const at = names.findIndex((n) => n.startsWith('PLACEHOLDER:'));
+  expect(names[at]).toBe('PLACEHOLDER:Project C');
+  expect(names[at + 1]).toBe('Project B'); // its successor at delete time
+
   // one row, same footprint as a real row, controls visible without hover
   const geometry = await page.evaluate(() => {
     const ph = document.querySelector('.recents-row-deleted');
