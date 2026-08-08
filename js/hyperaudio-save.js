@@ -1255,6 +1255,11 @@
         filename: state.media.filename || '',
         durationSeconds: state.media.durationSeconds || 0,
       };
+      // The document's own timeline (last word's end): the glance duration
+      // for projects with no media — text-only imports, the benchmark —
+      // whose media.durationSeconds is honestly 0.
+      const words = (state.transcript && state.transcript.words) || [];
+      entry.docDurationSeconds = words.length ? words[words.length - 1].end : 0;
       entry.summary = state.texts.summary || '';
       entry.topics = state.texts.topics || [];
     });

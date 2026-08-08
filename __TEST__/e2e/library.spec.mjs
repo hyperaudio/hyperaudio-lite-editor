@@ -103,7 +103,9 @@ test('rows list by last edit with the current project highlighted; editing reord
   const popout = page.locator('#recents-popout');
   await expect(popout).toBeVisible();
   await expect(popout).toContainText('Project A');
-  await expect(popout).toContainText('summary of Project A');
+  // name and duration ONLY — the stored summary lives in the Info modal, not
+  // the glance (a long one, e.g. the benchmark report, swallowed the card)
+  await expect(popout).not.toContainText('summary of Project A');
   expect(await page.evaluate(() => {
     const pane = document.getElementById('recents-pane').getBoundingClientRect();
     const pop = document.getElementById('recents-popout').getBoundingClientRect();

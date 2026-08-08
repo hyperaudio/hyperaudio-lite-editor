@@ -130,23 +130,20 @@
     name.className = 'recents-popout-name';
     name.textContent = entry.name || 'project';
     popoutEl.appendChild(name);
-    if (entry.summary && entry.summary.trim() !== '') {
-      const summary = document.createElement('p');
-      summary.textContent = entry.summary;
-      popoutEl.appendChild(summary);
-    }
-    if ((entry.topics || []).length > 0) {
-      const topics = document.createElement('p');
-      topics.className = 'recents-popout-topics';
-      topics.textContent = 'Topics: ' + entry.topics.join(', ');
-      popoutEl.appendChild(topics);
-    }
+    // Name and duration only: the popout is a glance, and a stored summary
+    // (a real one, or the benchmark's report) swallowed the card. The full
+    // summary and topics live one click away in the kebab's Info / the ⓘ.
     // glance info gained a duration line when kebab-Info went away (#480):
     // the popout is now the only at-a-distance view of a background project
-    if (entry.media && entry.media.durationSeconds > 0) {
+    // media duration when there is media; the document's own timeline when
+    // there is none (text-only imports, the benchmark)
+    const glanceSeconds = (entry.media && entry.media.durationSeconds > 0)
+      ? entry.media.durationSeconds
+      : (entry.docDurationSeconds || 0);
+    if (glanceSeconds > 0) {
       const duration = document.createElement('p');
       duration.className = 'recents-popout-topics';
-      duration.textContent = 'Duration: ' + formatDuration(entry.media.durationSeconds);
+      duration.textContent = 'Duration: ' + formatDuration(glanceSeconds);
       popoutEl.appendChild(duration);
     }
     document.body.appendChild(popoutEl);

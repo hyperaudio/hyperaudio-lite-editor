@@ -1335,16 +1335,6 @@ label[data-a11y-wired]:focus-visible {
   white-space: pre-line;
 }
 
-/* The hover popout is a GLANCE — clamp the summary preview so a long one
-   (the benchmark report, a long real summary) can't swallow the card. The
-   full text lives in the ⓘ modal. */
-#recents-popout p:not(.recents-popout-name):not(.recents-popout-topics) {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  white-space: pre-line;
-}
 
 /* Row hover popout (#456): full name + stored summary/topics, floated to the
    RIGHT of the panel so it never covers the row or its kebab. Fixed to escape
