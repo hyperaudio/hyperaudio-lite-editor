@@ -994,6 +994,15 @@
     } else {
       document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
     }
+    // Defend this write against a stale caption.js straggler (#515): both the
+    // sanitise and regenerate routes funnel through here, and until now they
+    // survived only because caption.js defers its own write and registration
+    // order happened to put the right one last — safety by accident. The
+    // guard (hyperaudio-save.js) re-asserts this src/mode after any straggler
+    // when media metadata is still pending; it is a no-op once loaded.
+    if (typeof window.guardCurrentCaptionWrite === 'function') {
+      window.guardCurrentCaptionWrite();
+    }
     return subs.data;
   }
 
