@@ -357,6 +357,29 @@ test('deleting the current project keeps it on screen; Restore re-homes it from 
   await expect(page.locator('.recents-row-deleted')).toHaveCount(0); // offer consumed
 });
 
+test('a restored project reappears at its old position, not the top', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await openProject(page, testInfo, 'Project B');
+  await openProject(page, testInfo, 'Project C');
+  // list order (by last write): C, B, A. Make B current WITHOUT editing it —
+  // opening does not bump modifiedAt, so it stays mid-list.
+  await row(page, 'Project B').click();
+  await expect(activeRow(page)).toHaveText('Project B');
+
+  await openKebab(page, 'Project B');
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click();
+  await expect(page.locator('.recents-row-deleted')).toContainText('Project B');
+
+  await page.locator('.recents-deleted-restore').click();
+  await expect(activeRow(page)).toHaveText('Project B');
+
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('#file-picker .file-item')].map((el) => el.textContent));
+  expect(names).toEqual(['Project C', 'Project B', 'Project A']); // back in place
+});
+
 test('the placeholder dismiss finalises: it navigates rather than leaving a silent ghost', async ({ page }, testInfo) => {
   await openProject(page, testInfo, 'Project A');
   await openProject(page, testInfo, 'Project B');

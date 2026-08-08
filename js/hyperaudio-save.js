@@ -2316,7 +2316,7 @@
 
   // Undo for deleting the current project: re-home the on-screen document —
   // still fully held by the session — under a fresh id.
-  async function restoreCurrentAsNewProject(starred) {
+  async function restoreCurrentAsNewProject(starred, stamps) {
     if (!opfsAvailable || !session.active || session.projectId !== null) return null;
     session.projectId = newProjectId();
     const id = session.projectId;
@@ -2325,9 +2325,24 @@
     await writeMediaOnce();
     // a rebirth: the on-screen content IS the new baseline — commit it clean
     await commitInitialState(id);
+    // A restore is an UNDO, not new work: carry the original entry's ordering
+    // stamps so the row reappears where it lived (the panel orders by
+    // modifiedAt), rather than teleporting to the top as freshly written.
+    // lastActiveAt stays fresh — the restored project IS the one on screen,
+    // and a reload should return to it.
+    if (stamps && (stamps.modifiedAt || stamps.createdAt)) {
+      await updateLibrary((lib) => {
+        const entry = lib.projects.find((p) => p.id === id);
+        if (entry !== undefined) {
+          if (stamps.modifiedAt) entry.modifiedAt = stamps.modifiedAt;
+          if (stamps.createdAt) entry.createdAt = stamps.createdAt;
+        }
+      });
+    }
     sessionEdited = false;
     updateSaveIndicator();
     if (starred === true) await setProjectStarred(id, true);
+    notifyLibraryChanged(false);
     return id;
   }
 

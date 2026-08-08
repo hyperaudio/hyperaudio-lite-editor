@@ -389,7 +389,14 @@
       restoreBtn.addEventListener('click', () => {
         const pending = pendingDeleted;
         pendingDeleted = null;
-        if (pending !== null) api.restoreDeleted(pending.entry.starred === true);
+        if (pending !== null) {
+          // pass the original ordering stamps: restored rows reappear where
+          // they lived, not at the top as fresh work
+          api.restoreDeleted(pending.entry.starred === true, {
+            modifiedAt: pending.entry.modifiedAt,
+            createdAt: pending.entry.createdAt,
+          });
+        }
       });
       filePicker.querySelector('.recents-deleted-dismiss').addEventListener('click', async () => {
         pendingDeleted = null;
