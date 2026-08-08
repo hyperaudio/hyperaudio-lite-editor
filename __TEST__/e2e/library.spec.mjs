@@ -367,6 +367,21 @@ test('navigating to another project withdraws the deleted placeholder', async ({
   await del.click();
   await expect(page.locator('.recents-row-deleted')).toHaveCount(1);
 
+  // one row, same footprint as a real row, controls visible without hover
+  const geometry = await page.evaluate(() => {
+    const ph = document.querySelector('.recents-row-deleted');
+    const real = document.querySelector('.recents-row:not(.recents-row-deleted)');
+    const restore = ph.querySelector('.recents-deleted-restore');
+    return {
+      sameHeight: Math.abs(ph.getBoundingClientRect().height - real.getBoundingClientRect().height) <= 6,
+      oneLine: ph.getBoundingClientRect().height < 2 * real.getBoundingClientRect().height,
+      sameWidth: Math.abs(ph.getBoundingClientRect().width - real.getBoundingClientRect().width) <= 2,
+      restoreVisible: getComputedStyle(restore).opacity !== '0'
+        && getComputedStyle(restore.parentElement).opacity !== '0',
+    };
+  });
+  expect(geometry).toEqual({ sameHeight: true, oneLine: true, sameWidth: true, restoreVisible: true });
+
   // any navigation elsewhere withdraws the offer
   await row(page, 'Project A').click();
   await expect(activeRow(page)).toHaveText('Project A');

@@ -1530,36 +1530,41 @@ label[data-a11y-wired]:focus-visible {
 }
 
 /* The deleted-project placeholder row: the undo lives where the project
-   lived. Dotted border and greyed name mark it as not-a-project; Restore and
-   the dismiss sit inside the row. Withdrawn on any navigation elsewhere. */
-.recents-row-deleted {
+   lived. Same footprint as a normal row — one row high, long names absorbed
+   by the same ellipsis — with a dotted border and greyed name marking it as
+   not-a-project. Restore and the dismiss sit inside the row and are ALWAYS
+   visible (normal rows reveal their actions on hover; an undo offer that
+   must be hovered to be discovered is no offer). */
+#file-picker .recents-row-deleted {
   border: 1px dashed oklch(var(--bc) / 0.35);
   border-radius: 0.5rem;
-  opacity: 0.9;
 }
-.recents-deleted-name {
-  color: oklch(var(--bc) / 0.5);
-  padding: 8px 0 8px 16px;
-  flex: 1;
+#file-picker .recents-row-deleted .recents-deleted-name {
+  /* mirror .file-item exactly: the name column, ellipsized */
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 8px 8px 8px 16px;
+  color: oklch(var(--bc) / 0.5);
 }
-.recents-row-deleted .recents-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+#file-picker .recents-row-deleted .recents-actions {
+  opacity: 1; /* the undo is always visible, unlike the hover-revealed kebab */
+  flex: 0 0 auto;
 }
-.recents-deleted-restore,
-.recents-deleted-dismiss {
+#file-picker .recents-deleted-restore,
+#file-picker .recents-deleted-dismiss {
   background: transparent;
   border: 0;
   margin: 0;
   padding: 6px 8px;
   font-size: 0.85rem;
+  white-space: nowrap;
   cursor: pointer;
   color: oklch(var(--p));
 }
-.recents-deleted-dismiss {
+#file-picker .recents-deleted-dismiss {
   color: oklch(var(--bc) / 0.5);
 }
