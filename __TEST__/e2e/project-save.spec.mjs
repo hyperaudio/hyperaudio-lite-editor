@@ -875,6 +875,45 @@ test('undo back to the last save clears the dirty dot and retires the draft', as
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
 });
 
+test('undo back to the save clears the dot even after deferred caption regen (#517 perf)', async ({ page }, testInfo) => {
+  // The perf rework defers caption regeneration to a ~3s idle queue. Type,
+  // pause past that window (captions now reflect the edit), then undo: the
+  // transcript matches the save but the TRACK catches up only in the forced
+  // post-restore refresh — which runs after the restored signal. The
+  // signature comparison must happen after that refresh, or the dot stays.
+  const dialogs = [];
+  // caption sync ON — the fixture default is curated captions, whose track
+  // never changes and cannot exhibit the drift under test
+  await openFixture(page, testInfo, dialogs, (project) => {
+    project.options.captions.updateFromTranscript = true;
+  });
+  await awaitLibraryEntry(page);
+
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = t.querySelector('span[data-m]:not(.speaker)');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  // A sync-on save stores MACHINE-generated captions (the fixture's stored
+  // vtt is hand-written and regeneration can never reproduce it) — save
+  // first, as the scenario implies, so the signature baseline is honest.
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  await page.keyboard.type('ZZ');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+  await page.waitForTimeout(3800); // past the idle reconciliation window
+
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/, { timeout: 6000 });
+});
+
 test('undo does not clear the dot while a non-transcript edit is pending', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
