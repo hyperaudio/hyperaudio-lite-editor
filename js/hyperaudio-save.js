@@ -1975,7 +1975,7 @@
   }
 
   async function openFromFileInner(file, token) {
-    if (!(await confirmOverTranscription())) return; // #525: same consent as switching
+    leaveTranscriptionView(); // #525: the busy styling must not follow us
     // Parse and validate BEFORE the replace-confirmation: asking permission
     // to replace the current project and THEN refusing the file meant the
     // user consented to a replacement that never happened (prepare → confirm
@@ -2294,29 +2294,17 @@
     return true;
   }
 
-  // A transcription in flight owns the screen with loader markup and
-  // aria-busy (#525). Navigating over it needs consent — and the truth: the
-  // engine cannot be cancelled from here, so when it finishes it will land as
-  // its own new project. Clearing busy on the way through also stops the
-  // switched-to project rendering in the busy state (hidden corner buttons
-  // and timecodes) — the attribute survived the content swap.
-  async function confirmOverTranscription() {
+  // Leaving a transcription in flight needs no consent any more (#525): the
+  // in-progress Recents row shows where it lives, nothing is lost, and the
+  // way back is one click. What remains of the old dialog is its cleanup —
+  // the busy ATTRIBUTE must not follow us to the next view, and it is
+  // cleared directly rather than via setTranscriptBusy, which is the
+  // ENGINE's lifecycle signal (the wrapper above reads busy(false) without
+  // spans as an engine failure and would drop the in-progress row).
+  function leaveTranscriptionView() {
     const t = document.getElementById('hypertranscript');
-    if (t === null || t.getAttribute('aria-busy') !== 'true') return true;
-    const proceed = await projectConfirm(
-      'A transcription is still running. You can switch away — it will keep '
-      + 'going and open as a new project when it finishes. Switch now?',
-      'Switch', 'Stay');
-    if (proceed) {
-      // Clear the ATTRIBUTE directly, not via setTranscriptBusy: that call is
-      // the ENGINE's lifecycle signal, and the wrapper above reads
-      // busy(false)-without-spans as an engine failure — which would take the
-      // in-progress Recents row down with it. Here the engine is still very
-      // much running; only the styling must not follow us to the next view.
-      const t = document.getElementById('hypertranscript');
-      if (t !== null) t.removeAttribute('aria-busy');
-    }
-    return proceed;
+    if (t !== null && t.getAttribute('aria-busy') === 'true') t.removeAttribute('aria-busy');
+    return true;
   }
 
   async function switchToProject(id) {
@@ -2329,7 +2317,7 @@
       const t = document.getElementById('hypertranscript');
       if (t === null || t.getAttribute('aria-busy') !== 'true') return true;
     }
-    if (!(await confirmOverTranscription())) return false;
+    leaveTranscriptionView();
     const files = await readProjectFiles(id);
     if (files === null) return false;
     await flushPendingDraft();
