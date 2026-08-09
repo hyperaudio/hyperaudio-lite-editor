@@ -932,14 +932,6 @@
       let pendingGlobal = true;
       let lastMode = 'none';
       let lastScopeCount = 0;
-      const observer = new MutationObserver(() => {});
-      observer.observe(rootnode, {
-        subtree: true,
-        childList: true,
-        characterData: true,
-        attributes: true,
-      });
-      window.transcriptMaintenanceObserver = observer;
 
       const paragraphOf = (node) => {
         const element = node && node.nodeType === Node.ELEMENT_NODE
@@ -948,8 +940,24 @@
         return paragraph && rootnode.contains(paragraph) ? paragraph : null;
       };
 
+      // Native editing may deliver MutationObserver callbacks before its
+      // subsequent input event. Keep those records instead of letting an empty
+      // callback discard them; input remains the signal that queues work.
+      let deliveredRecords = [];
+      const observer = new MutationObserver((records) => {
+        deliveredRecords.push(...records);
+      });
+      observer.observe(rootnode, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+      });
+      window.transcriptMaintenanceObserver = observer;
+
       const captureDirtyScopes = (hint) => {
-        const records = observer.takeRecords();
+        const records = deliveredRecords.concat(observer.takeRecords());
+        deliveredRecords = [];
         if (records.length > 0) {
           records.forEach((record) => {
             const paragraph = paragraphOf(record.target);
@@ -978,6 +986,7 @@
             global ? (origin || 'sanitise') : 'sanitise-local',
           );
           observer.takeRecords(); // mutations made by maintenance are not user edits
+          deliveredRecords = [];
           pendingGlobal = false;
           dirtyScopes.clear();
           lastMode = global ? 'global' : 'local';
@@ -992,6 +1001,7 @@
           maintenance.cancel();
           runSanitise({ refreshDerived: true }, origin || 'sanitise-settle');
           observer.takeRecords();
+          deliveredRecords = [];
           pendingGlobal = false;
           dirtyScopes.clear();
           lastMode = 'global';

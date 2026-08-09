@@ -23,6 +23,8 @@
   let compositionTimer = null;
   let shortcutToken = null;
   let shortcutSerial = 0;
+  let fullSnapshotCount = 0;
+  let reusedSnapshotCount = 0;
 
   function transcript() {
     return document.getElementById('hypertranscript');
@@ -163,6 +165,7 @@
   function snapshot(origin) {
     const root = validTranscript();
     if (!root) return null;
+    fullSnapshotCount += 1;
     const clone = cleanClone(root);
     const html = clone.innerHTML;
     // The fingerprint is only ever compared for EQUALITY (the fold decisions
@@ -180,6 +183,28 @@
       origin: origin || 'unknown',
       timestamp: Date.now(),
       bytes: html.length * 2,
+    });
+  }
+
+  // Every controlled document mutation commits an "after" snapshot before the
+  // next edit can begin, so the current history entry already IS the next
+  // edit's document-level "before" state. Reuse its immutable HTML/fingerprint
+  // and refresh only the live selection. This removes one full clone + semantic
+  // walk from every key without changing entry shape or undo granularity.
+  // If history has no usable head (initialisation/identity edge cases), retain
+  // the original full-snapshot fallback.
+  function snapshotFromCurrent(origin) {
+    const root = validTranscript();
+    const current = position >= 0 ? entries[position] : null;
+    if (!root || !current) return snapshot(origin);
+    reusedSnapshotCount += 1;
+    return Object.freeze({
+      html: current.html,
+      semanticFingerprint: current.semanticFingerprint,
+      selection: captureSelection(root),
+      origin: origin || 'unknown',
+      timestamp: Date.now(),
+      bytes: current.bytes,
     });
   }
 
@@ -347,7 +372,7 @@
       gatewayBefore = null;
       return;
     }
-    gatewayBefore = snapshot(`before-${transaction.origin}`);
+    gatewayBefore = snapshotFromCurrent(`before-${transaction.origin}`);
     rememberPreEditSelection(gatewayBefore);
   });
 
@@ -386,7 +411,10 @@
       return;
     }
     if (gateway.isRestoring || gateway.isMutating || composing || event.isComposing) return;
-    pendingNative = { before: snapshot(`before-${event.inputType}`), inputType: event.inputType || 'native' };
+    pendingNative = {
+      before: snapshotFromCurrent(`before-${event.inputType}`),
+      inputType: event.inputType || 'native',
+    };
     rememberPreEditSelection(pendingNative.before);
     if (boundaryInput(pendingNative.inputType)) lastNative = null;
   }, true);
@@ -413,7 +441,7 @@
     if (!inTranscript(event.target) || captionMode()) return;
     composing = true;
     clearPending();
-    compositionBefore = snapshot('before-composition');
+    compositionBefore = snapshotFromCurrent('before-composition');
     rememberPreEditSelection(compositionBefore);
   }, true);
 
@@ -501,6 +529,12 @@
     reset,
     flushPending: clearPending,
     // Diagnostics used by bounded-history and cross-engine protocol tests.
-    inspect: () => ({ length: entries.length, position, totalBytes }),
+    inspect: () => ({
+      length: entries.length,
+      position,
+      totalBytes,
+      fullSnapshotCount,
+      reusedSnapshotCount,
+    }),
   });
 })();

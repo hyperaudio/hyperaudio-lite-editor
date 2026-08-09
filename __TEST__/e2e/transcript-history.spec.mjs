@@ -23,6 +23,28 @@ test('native typing coalesces and structural input forces a boundary', async ({ 
   expect(await page.evaluate(() => transcriptHistory.inspect())).toMatchObject({ length: 3, position: 2 });
 });
 
+test('real keyboard input reuses the current before snapshot and remains undoable', async ({ page }) => {
+  const before = await page.evaluate(() => {
+    const root = document.getElementById('hypertranscript');
+    const text = root.querySelector('span[data-m]:not(.speaker)').firstChild;
+    root.focus();
+    getSelection().setBaseAndExtent(text, 1, text, 1);
+    return {
+      text: text.nodeValue,
+      history: transcriptHistory.inspect(),
+    };
+  });
+
+  await page.keyboard.insertText('x');
+  const after = await page.evaluate(() => transcriptHistory.inspect());
+  expect(after.reusedSnapshotCount).toBe(before.history.reusedSnapshotCount + 1);
+  expect(after.fullSnapshotCount).toBe(before.history.fullSnapshotCount + 1);
+  expect(await page.evaluate(() => transcriptHistory.undo())).toBe(true);
+  expect(await page.locator('#hypertranscript span[data-m]:not(.speaker)').first().textContent())
+    .toBe(before.text);
+  expect(await page.evaluate(() => transcriptHistory.redo())).toBe(true);
+});
+
 test('semantic normalization folds into current without clearing redo', async ({ page }) => {
   const result = await page.evaluate(() => {
     let word = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');

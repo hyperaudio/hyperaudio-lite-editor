@@ -111,6 +111,27 @@ test('a real content edit sanitises only its paragraph, then settles globally', 
   expect(result.afterGlobal.reconciliation.dirty).toBe(false);
 });
 
+test('real keyboard input retains its paragraph scope across observer delivery', async ({ page }) => {
+  await page.evaluate(() => {
+    const root = document.getElementById('hypertranscript');
+    const text = root.querySelector('span[data-m]:not(.speaker)').firstChild;
+    root.focus();
+    getSelection().setBaseAndExtent(text, 1, text, 1);
+  });
+  await page.keyboard.insertText('x');
+
+  const result = await page.evaluate(() => {
+    const queued = window.hyperaudioInspectTranscriptMaintenance();
+    window.hyperaudioFlushTranscriptMaintenance('test-native-local');
+    return { queued, flushed: window.hyperaudioInspectTranscriptMaintenance() };
+  });
+
+  expect(result.queued.pendingGlobal).toBe(false);
+  expect(result.queued.dirtyScopes).toBe(1);
+  expect(result.flushed.lastMode).toBe('local');
+  expect(result.flushed.lastScopeCount).toBe(1);
+});
+
 test('a structural edit falls back to global maintenance', async ({ page }) => {
   const state = await page.evaluate(() => {
     const transcript = document.getElementById('hypertranscript');
