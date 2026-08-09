@@ -1304,10 +1304,23 @@
   // In the native wrapper the bridge receives the built container instead
   // (#449: one save path for web and native); without OPFS the explicit
   // export download is the only durable copy, so Save falls back to it.
+  function flushTranscriptMaintenanceBarrier(origin) {
+    if (typeof window.hyperaudioFlushTranscriptMaintenance !== 'function') return;
+    const state = typeof window.hyperaudioInspectTranscriptMaintenance === 'function'
+      ? window.hyperaudioInspectTranscriptMaintenance() : null;
+    if (state && !state.pendingGlobal && !state.local.dirty
+        && !state.reconciliation.dirty) return;
+    window.hyperaudioFlushTranscriptMaintenance(origin, {
+      force: true,
+      global: true,
+    });
+  }
+
   async function saveProject() {
     if (saveInFlight) return false;
     saveInFlight = true;
     try {
+      flushTranscriptMaintenanceBarrier('sanitise-save');
       const bridge = window.hyperaudioProjectBridge;
       if (bridge && typeof bridge.save === 'function') {
         return await exportProject({ asSave: true }); // the bridge intercepts the built container
@@ -1829,6 +1842,7 @@
     exportInFlight = true;
     const token = beginProgress();
     try {
+      flushTranscriptMaintenanceBarrier('sanitise-project-export');
       return await exportProjectInner(!!(opts && opts.asSave), token);
     } finally {
       exportInFlight = false;

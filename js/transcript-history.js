@@ -1,14 +1,12 @@
-/* Bounded snapshot undo/redo for the live transcript DOM (#400). */
+/* Bounded hybrid undo/redo for the live transcript DOM (#400, #517). */
 
 (function () {
   'use strict';
 
   const MAX_ENTRIES = 100;
-  // 48MB, from 12 (#510): entries are proportional to document size, so a
-  // byte cap is really a depth dial — at 12MB a one-hour interview transcript
-  // (~1.4MB per entry once the fingerprint is hashed) kept undo ~8 deep, and
-  // before the hashing, ~3. 48MB holds ~30+ entries there; MAX_ENTRIES still
-  // governs small documents. The durable fix is delta entries — #510.
+  // 48MB, raised from 12MB in #510. Full checkpoints remain proportional to
+  // document size; ordinary collapsed typing now stores paragraph deltas, so
+  // this cap mainly bounds mixed histories and large structural operations.
   const MAX_BYTES = 48 * 1024 * 1024;
   const COALESCE_MS = 500;
   const gateway = window.transcriptGateway;
@@ -23,6 +21,8 @@
   let compositionTimer = null;
   let shortcutToken = null;
   let shortcutSerial = 0;
+  let fullSnapshotCount = 0;
+  let paragraphSnapshotCount = 0;
 
   function transcript() {
     return document.getElementById('hypertranscript');
@@ -163,6 +163,7 @@
   function snapshot(origin) {
     const root = validTranscript();
     if (!root) return null;
+    fullSnapshotCount += 1;
     const clone = cleanClone(root);
     const html = clone.innerHTML;
     // The fingerprint is only ever compared for EQUALITY (the fold decisions
@@ -174,12 +175,38 @@
     // rides along as a collision guard.
     const fingerprint = fingerprintHash(semanticFingerprint(clone));
     return Object.freeze({
+      kind: 'full',
       html,
       semanticFingerprint: fingerprint,
       selection: captureSelection(root),
       origin: origin || 'unknown',
       timestamp: Date.now(),
       bytes: html.length * 2,
+    });
+  }
+
+  function paragraphBefore(origin) {
+    const root = validTranscript();
+    const selection = window.getSelection();
+    if (!root || !selection || selection.rangeCount !== 1 || !selection.isCollapsed) return null;
+    const node = selection.anchorNode;
+    const element = node && node.nodeType === Node.ELEMENT_NODE ? node : node && node.parentElement;
+    const paragraph = element && element.closest ? element.closest('p') : null;
+    if (!paragraph || !root.contains(paragraph)) return null;
+    const paragraphs = Array.from(root.querySelectorAll('p'));
+    const paragraphIndex = paragraphs.indexOf(paragraph);
+    if (paragraphIndex < 0) return null;
+    const clone = cleanClone(paragraph);
+    paragraphSnapshotCount += 1;
+    return Object.freeze({
+      kind: 'paragraph-before',
+      paragraph,
+      paragraphIndex,
+      paragraphCount: paragraphs.length,
+      html: clone.outerHTML,
+      selection: captureSelection(paragraph),
+      origin: origin || 'unknown',
+      timestamp: Date.now(),
     });
   }
 
@@ -196,10 +223,80 @@
     if (redoButton) redoButton.disabled = disabled || position < 0 || position >= entries.length - 1;
   }
 
+  function entryAfterSelection(entry) {
+    return entry.kind === 'paragraph' ? entry.afterSelection : entry.selection;
+  }
+
+  function paragraphSelectionInRoot(root, paragraphIndex, saved) {
+    if (!saved) return saved;
+    // Paragraph entries use offsets relative to their own scope. Full entries
+    // are restored against the transcript root, so promotion must add the
+    // preceding transcript text exactly once.
+    const paragraph = root.querySelectorAll('p')[paragraphIndex];
+    if (!paragraph) return null;
+    const base = pointOffset(root, paragraph, 0);
+    if (base === null) return null;
+    return {
+      anchor: base + saved.anchor,
+      focus: base + saved.focus,
+      backward: saved.backward,
+    };
+  }
+
+  function entrySelectionInRoot(root, entry, selection) {
+    return entry.kind === 'paragraph'
+      ? paragraphSelectionInRoot(root, entry.paragraphIndex, selection)
+      : selection;
+  }
+
+  function replaceParagraph(container, paragraphIndex, html) {
+    const paragraph = container.querySelectorAll('p')[paragraphIndex];
+    if (!paragraph) return false;
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const replacement = template.content.firstElementChild;
+    if (!replacement || !replacement.matches('p')) return false;
+    paragraph.replaceWith(replacement);
+    return true;
+  }
+
+  function materialize(wantedPosition) {
+    if (wantedPosition < 0 || wantedPosition >= entries.length) return null;
+    let checkpoint = wantedPosition;
+    while (checkpoint >= 0 && entries[checkpoint].kind !== 'full') checkpoint -= 1;
+    if (checkpoint < 0) return null;
+    const container = document.createElement('div');
+    container.innerHTML = entries[checkpoint].html;
+    for (let index = checkpoint + 1; index <= wantedPosition; index += 1) {
+      const entry = entries[index];
+      if (entry.kind === 'full') container.innerHTML = entry.html;
+      else if (!replaceParagraph(container, entry.paragraphIndex, entry.afterHtml)) return null;
+    }
+    return container.innerHTML;
+  }
+
+  function checkpointFrom(positionToMaterialize, source) {
+    const html = materialize(positionToMaterialize);
+    if (html === null) return null;
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    return Object.freeze({
+      kind: 'full',
+      html,
+      semanticFingerprint: fingerprintHash(semanticFingerprint(container)),
+      selection: entrySelectionInRoot(container, source, entryAfterSelection(source)),
+      origin: 'history-checkpoint',
+      timestamp: Date.now(),
+      bytes: html.length * 2,
+    });
+  }
+
   function prune() {
     while (entries.length > 1 && (entries.length > MAX_ENTRIES || totalBytes > MAX_BYTES)) {
-      totalBytes -= entries[0].bytes;
-      entries.shift();
+      const nextBaseline = checkpointFrom(1, entries[1]);
+      if (!nextBaseline) break;
+      totalBytes += nextBaseline.bytes - entries[0].bytes - entries[1].bytes;
+      entries.splice(0, 2, nextBaseline);
       position -= 1;
     }
   }
@@ -212,22 +309,8 @@
     updateControls();
   }
 
-  function rememberPreEditSelection(before) {
-    if (before && position >= 0
-        && entries[position].semanticFingerprint === before.semanticFingerprint
-        && !sameSelection(entries[position].selection, before.selection)) {
-      replaceCurrent(before);
-    }
-  }
-
   function push(next) {
     if (!next) return false;
-    const current = entries[position];
-    if (current && current.semanticFingerprint === next.semanticFingerprint) {
-      // Selection is useful even when the document did not change.
-      replaceCurrent(next);
-      return false;
-    }
     if (position < entries.length - 1) {
       entries.slice(position + 1).forEach((entry) => { totalBytes -= entry.bytes; });
       entries.length = position + 1;
@@ -238,6 +321,59 @@
     prune();
     updateControls();
     return true;
+  }
+
+  function fullEntry(before, after) {
+    return Object.freeze({
+      kind: 'full',
+      html: after.html,
+      semanticFingerprint: after.semanticFingerprint,
+      beforeSelection: before.selection,
+      selection: after.selection,
+      origin: after.origin,
+      timestamp: after.timestamp,
+      bytes: after.bytes,
+    });
+  }
+
+  function localEntry(before, origin) {
+    const root = validTranscript();
+    if (!root || !before.paragraph.isConnected) return null;
+    const paragraphs = root.querySelectorAll('p');
+    if (paragraphs.length !== before.paragraphCount
+        || paragraphs[before.paragraphIndex] !== before.paragraph) return null;
+    const clone = cleanClone(before.paragraph);
+    const afterHtml = clone.outerHTML;
+    if (afterHtml === before.html) return null;
+    return Object.freeze({
+      kind: 'paragraph',
+      paragraphIndex: before.paragraphIndex,
+      beforeHtml: before.html,
+      afterHtml,
+      beforeSelection: before.selection,
+      afterSelection: captureSelection(before.paragraph),
+      origin: origin || before.origin,
+      timestamp: Date.now(),
+      bytes: (before.html.length + afterHtml.length) * 2,
+    });
+  }
+
+  function stateSnapshot(origin) {
+    const root = validTranscript();
+    const html = materialize(position);
+    if (!root || html === null) return snapshot(origin);
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    return Object.freeze({
+      kind: 'full',
+      html,
+      semanticFingerprint: fingerprintHash(semanticFingerprint(container)),
+      selection: entrySelectionInRoot(container, entries[position],
+        entryAfterSelection(entries[position])),
+      origin: origin || 'history-state',
+      timestamp: Date.now(),
+      bytes: html.length * 2,
+    });
   }
 
   function clearPending() {
@@ -283,6 +419,40 @@
   let pasteBoundary = false;
 
   function commitNative(before, inputType, origin) {
+    if (before && before.kind === 'paragraph-before') {
+      const local = localEntry(before, origin || inputType);
+      if (local) {
+        const category = inputCategory(inputType);
+        const now = Date.now();
+        const coalesce = !pasteBoundary && lastNative
+          && lastNative.category === category
+          && now - lastNative.at <= COALESCE_MS
+          && lastNative.generation === (window.transcriptLifecycle
+            ? window.transcriptLifecycle.generation() : 0)
+          && sameSelection(lastNative.selection, local.beforeSelection)
+          && position === entries.length - 1
+          && entries[position].kind === 'paragraph'
+          && entries[position].paragraphIndex === local.paragraphIndex;
+        if (coalesce) {
+          const current = entries[position];
+          replaceCurrent(Object.freeze({
+            ...current,
+            afterHtml: local.afterHtml,
+            afterSelection: local.afterSelection,
+            timestamp: local.timestamp,
+            bytes: (current.beforeHtml.length + local.afterHtml.length) * 2,
+          }));
+        } else push(local);
+        lastNative = {
+          category,
+          at: now,
+          selection: local.afterSelection,
+          generation: window.transcriptLifecycle ? window.transcriptLifecycle.generation() : 0,
+        };
+        return;
+      }
+      before = stateSnapshot(`before-${inputType}`);
+    }
     const after = snapshot(origin || inputType);
     if (!after || !before || before.semanticFingerprint === after.semanticFingerprint) return;
     const category = inputCategory(inputType);
@@ -294,11 +464,17 @@
         ? window.transcriptLifecycle.generation() : 0)
       && sameSelection(lastNative.selection, before.selection)
       && position === entries.length - 1;
-    if (coalesce) replaceCurrent(after);
-    else push(after);
+    const entry = fullEntry(before, after);
+    if (coalesce && entries[position].kind === 'full' && position > 0) {
+      replaceCurrent(Object.freeze({
+        ...entry,
+        beforeSelection: entries[position].beforeSelection,
+      }));
+    } else push(entry);
     if (pasteBoundary) {
       // sever the trailing side too: typing right after a paste must not
-      // coalesce into the paste's entry
+      // coalesce into the paste's entry (#514 — paste arrives as insertText
+      // via the #487 handler and is indistinguishable by inputType)
       pasteBoundary = false;
       lastNative = null;
       return;
@@ -316,12 +492,29 @@
     clearPending();
     const nextPosition = position + direction;
     if (nextPosition < 0 || nextPosition >= entries.length) return false;
-    const target = entries[nextPosition];
+    const operation = direction < 0 ? entries[position] : entries[nextPosition];
     const root = transcript();
     const origin = direction < 0 ? 'undo' : 'redo';
     gateway.restoring(() => {
-      root.innerHTML = target.html;
-      restoreSelection(root, target.selection, !!(options && options.focus));
+      let selectionRoot = root;
+      let savedSelection;
+      if (operation.kind === 'paragraph') {
+        const html = direction < 0 ? operation.beforeHtml : operation.afterHtml;
+        if (replaceParagraph(root, operation.paragraphIndex, html)) {
+          selectionRoot = root.querySelectorAll('p')[operation.paragraphIndex];
+          savedSelection = direction < 0
+            ? operation.beforeSelection : operation.afterSelection;
+        } else {
+          root.innerHTML = materialize(nextPosition) || root.innerHTML;
+          savedSelection = entryAfterSelection(entries[nextPosition]);
+        }
+      } else {
+        root.innerHTML = direction < 0
+          ? (materialize(nextPosition) || root.innerHTML) : operation.html;
+        savedSelection = direction < 0 ? operation.beforeSelection : operation.selection;
+      }
+      if (options && options.focus) root.focus({ preventScroll: true });
+      restoreSelection(selectionRoot, savedSelection, false);
       root.dispatchEvent(new InputEvent('input', {
         bubbles: true,
         inputType: origin === 'undo' ? 'historyUndo' : 'historyRedo',
@@ -359,11 +552,19 @@
 
   gateway.onBeforeMutate((transaction) => {
     clearPending();
+    if (transaction.captureHistory === false) {
+      gatewayBefore = null;
+      return;
+    }
     gatewayBefore = snapshot(`before-${transaction.origin}`);
-    rememberPreEditSelection(gatewayBefore);
   });
 
   gateway.onAfterMutate((transaction) => {
+    if (transaction.captureHistory === false) {
+      gatewayBefore = null;
+      updateControls();
+      return;
+    }
     const before = gatewayBefore;
     gatewayBefore = null;
     const after = snapshot(transaction.origin);
@@ -371,11 +572,28 @@
       updateControls();
       return;
     }
-    if (transaction.foldPolicy === 'normalization' && position >= 0
-        && entries[position].semanticFingerprint === before.semanticFingerprint) {
-      replaceCurrent(after); // deliberately preserves redo
+    if (transaction.foldPolicy === 'normalization' && position >= 0) {
+      if (position === 0) replaceCurrent(after);
+      else {
+        const current = entries[position];
+        let beforeSelection = current.beforeSelection;
+        if (current.kind === 'paragraph') {
+          const previousHtml = materialize(position - 1);
+          if (previousHtml === null) beforeSelection = null;
+          else {
+            const previous = document.createElement('div');
+            previous.innerHTML = previousHtml;
+            beforeSelection = entrySelectionInRoot(previous, current,
+              current.beforeSelection);
+          }
+        }
+        replaceCurrent(Object.freeze({
+          ...fullEntry({ selection: beforeSelection }, after),
+          origin: transaction.origin,
+        }));
+      }
     } else {
-      push(after);
+      push(fullEntry(before, after));
     }
   });
 
@@ -393,8 +611,18 @@
       return;
     }
     if (gateway.isRestoring || gateway.isMutating || composing || event.isComposing) return;
-    pendingNative = { before: snapshot(`before-${event.inputType}`), inputType: event.inputType || 'native' };
-    rememberPreEditSelection(pendingNative.before);
+    const inputType = event.inputType || 'native';
+    pendingNative = {
+      // A raised pasteBoundary forces FULL capture (#514 × the delta design):
+      // paste arrives as insertText via the #487 handler and would otherwise
+      // qualify for the paragraph-local delta path, whose coalescing knows
+      // nothing of paste — the design's own contract is that paste remains a
+      // full checkpoint.
+      before: inputType === 'insertText' && !pasteBoundary
+        ? (paragraphBefore(`before-${inputType}`) || snapshot(`before-${inputType}`))
+        : snapshot(`before-${inputType}`),
+      inputType,
+    };
     if (boundaryInput(pendingNative.inputType)) lastNative = null;
   }, true);
 
@@ -418,7 +646,7 @@
     }
     const pending = pendingNative;
     pendingNative = null;
-    commitNative(pending ? pending.before : entries[position],
+    commitNative(pending ? pending.before : stateSnapshot(`before-${event.inputType || 'native'}`),
       pending ? pending.inputType : (event.inputType || 'native'), event.inputType || 'native');
   }, true);
 
@@ -427,7 +655,6 @@
     composing = true;
     clearPending();
     compositionBefore = snapshot('before-composition');
-    rememberPreEditSelection(compositionBefore);
   }, true);
 
   document.addEventListener('compositionend', (event) => {
@@ -514,6 +741,16 @@
     reset,
     flushPending: clearPending,
     // Diagnostics used by bounded-history and cross-engine protocol tests.
-    inspect: () => ({ length: entries.length, position, totalBytes }),
+    inspect: () => ({
+      length: entries.length,
+      position,
+      totalBytes,
+      fullSnapshotCount,
+      paragraphSnapshotCount,
+      // Compatibility alias for point-1 benchmark reports.
+      reusedSnapshotCount: paragraphSnapshotCount,
+      localEntries: entries.filter((entry) => entry.kind === 'paragraph').length,
+      fullEntries: entries.filter((entry) => entry.kind === 'full').length,
+    }),
   });
 })();

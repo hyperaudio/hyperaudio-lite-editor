@@ -4,7 +4,7 @@
  * synthetic timed transcripts at several sizes in the live editor and
  * measures, on THIS device and THIS browser:
  *
- *   - typing cost per keystroke (includes history's per-key pre-snapshot);
+ *   - typing cost per keystroke (includes history capture and commit);
  *   - the sanitise pass (runs on a 1 s debounce while typing);
  *   - snapshot weight → the undo depth actually available at that size;
  *   - undo latency;
@@ -102,6 +102,16 @@
     const t = document.getElementById('hypertranscript');
     await prepareDocument(words, first);
 
+    // Document replacement is a global-dirty event. Settle it outside every
+    // timed sample so the pass below measures steady-state paragraph editing,
+    // not benchmark setup or project birth.
+    if (typeof window.hyperaudioFlushTranscriptMaintenance === 'function') {
+      window.hyperaudioFlushTranscriptMaintenance('benchmark-prepare', {
+        force: true,
+        global: true,
+      });
+    }
+
     const spans = t.querySelectorAll('span[data-m]');
     const mid = spans[Math.floor(spans.length / 2)];
     t.focus();
@@ -109,16 +119,47 @@
 
     const typing = [];
     for (let i = 0; i < 5; i += 1) {
+      // execCommand does not consistently emit beforeinput in headless
+      // browsers. Drive the same observable transaction as a real collapsed
+      // insertText edit so the benchmark measures the production fast path.
       const t0 = performance.now();
-      document.execCommand('insertText', false, 'x');
+      mid.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true,
+        inputType: 'insertText',
+        data: 'x',
+      }));
+      const selection = window.getSelection();
+      const node = selection.anchorNode;
+      const offset = selection.anchorOffset;
+      node.nodeValue = node.nodeValue.slice(0, offset) + 'x' + node.nodeValue.slice(offset);
+      selection.collapse(node, offset + 1);
+      mid.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'insertText',
+        data: 'x',
+      }));
       typing.push(performance.now() - t0);
       await wait(600); // outside the coalesce window → each keystroke is a full commit
     }
 
     const sanitise = [];
+    if (window.transcriptReconciliation
+        && typeof window.transcriptReconciliation.cancel === 'function') {
+      window.transcriptReconciliation.cancel();
+    }
     for (let i = 0; i < 3; i += 1) {
+      // Measure the pass that really runs during editing. On editors with
+      // scoped maintenance this requests the current paragraph and suppresses
+      // the longer settle reconciliation; older builds fall back to the
+      // history-restore hook, which was the only exposed sanitise barrier.
+      if (typeof window.hyperaudioRequestTranscriptMaintenance === 'function') {
+        window.hyperaudioRequestTranscriptMaintenance(mid.closest('p'),
+          'benchmark-sanitise', { reconcile: false });
+      }
       const t0 = performance.now();
-      if (typeof window.hyperaudioNormalizeAfterHistoryRestore === 'function') {
+      if (typeof window.hyperaudioFlushTranscriptMaintenance === 'function') {
+        window.hyperaudioFlushTranscriptMaintenance('benchmark-sanitise');
+      } else if (typeof window.hyperaudioNormalizeAfterHistoryRestore === 'function') {
         window.hyperaudioNormalizeAfterHistoryRestore();
       }
       sanitise.push(performance.now() - t0);
