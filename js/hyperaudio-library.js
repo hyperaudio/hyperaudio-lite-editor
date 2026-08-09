@@ -330,11 +330,21 @@
     // the newest thing happening — with a live badge. Clicking it hands the
     // screen back to the transcription; the engines' progress resumes there.
     const pending = api.pendingTranscription ? api.pendingTranscription() : null;
+    // While the loader is what's on screen, the transcribing row is the
+    // selection — from the moment the engine starts until the user moves
+    // away, and again whenever they return. The project rows' own active
+    // marking stands down for exactly that window (the session may still
+    // point at the previous project before the birth, and its row showing
+    // active while the user watches the loader would be a lie).
+    const viewingPending = pending !== null && (() => {
+      const t = document.getElementById('hypertranscript');
+      return t !== null && t.getAttribute('aria-busy') === 'true';
+    })();
     if (pending !== null) {
       const nameHtml = escapeMarkup(pending.name);
       filePicker.insertAdjacentHTML('beforeend',
         `<li class="recents-row recents-row-transcribing">` +
-        `<a class="file-item recents-transcribing-item">${nameHtml}` +
+        `<a class="file-item recents-transcribing-item${viewingPending ? ' active' : ''}">${nameHtml}` +
         `<span class="recents-transcribing-badge">transcribing…</span></a></li>`);
       filePicker.querySelector('.recents-transcribing-item')
         .addEventListener('click', (event) => {
@@ -427,7 +437,7 @@
     }
 
     filePicker.querySelectorAll('.file-item[data-id]').forEach((el) => {
-      el.classList.toggle('active', el.getAttribute('data-id') === currentId);
+      el.classList.toggle('active', !viewingPending && el.getAttribute('data-id') === currentId);
       el.addEventListener('click', (event) => {
         // a rename input lives inside the row's <a>; its clicks are not loads
         if (event.target.classList && event.target.classList.contains('recents-rename-input')) return;

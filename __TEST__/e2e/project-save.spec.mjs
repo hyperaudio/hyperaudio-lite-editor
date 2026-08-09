@@ -1282,21 +1282,29 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   const row = page.locator('.recents-row-transcribing');
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('brand-new-recording.wav'); // named after ITS file
+  // the transcribing row IS the selection while the loader owns the screen —
+  // and the previous project's row stands down
+  await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/);
+  await expect(page.locator('#file-picker .file-item[data-id].active')).toHaveCount(0);
 
   // the engine progresses past the initial message, as its interval does
   await page.evaluate(() => {
     document.querySelector('#hypertranscript .transcribing-msg').textContent = 'Transcribing… (0m 42s)';
   });
 
-  // switch away to the existing project — immediate, the row stays
+  // switch away to the existing project — immediate, the row stays but the
+  // selection moves to the project actually on screen
   await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
   await expect(row).toHaveCount(1);
+  await expect(row.locator('.recents-transcribing-item')).not.toHaveClass(/active/);
+  await expect(page.locator('#file-picker .file-item[data-id].active')).toHaveCount(1);
 
   // click the row: back to the live loader AT THE DEPARTURE-TIME message —
   // not the stale 'Preparing model' captured when the engine started
   await row.locator('.recents-transcribing-item').click();
   await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (0m 42s)');
+  await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/); // selected again on return
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript').textContent.includes('Preparing model'))).toBe(false);
 
