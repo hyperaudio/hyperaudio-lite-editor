@@ -133,7 +133,8 @@ test('real project preserves editing, local maintenance, undo and redo', async (
       maintenanceAfterKey,
       history,
       fullSnapshots: history.fullSnapshotCount - probe.historyBefore.fullSnapshotCount,
-      reusedSnapshots: history.reusedSnapshotCount - probe.historyBefore.reusedSnapshotCount,
+      paragraphSnapshots: (history.paragraphSnapshotCount ?? history.reusedSnapshotCount)
+        - (probe.historyBefore.paragraphSnapshotCount ?? probe.historyBefore.reusedSnapshotCount),
       undone,
       redone,
     };
@@ -153,5 +154,11 @@ test('real project preserves editing, local maintenance, undo and redo', async (
   expect(report.redone).toBe(true);
   expect(report.afterUndo).toBe(report.original);
   expect(report.afterRedo).not.toBe(report.original);
-  if ('reusedSnapshotCount' in report.history) expect(report.reusedSnapshots).toBeGreaterThan(0);
+  if ('paragraphSnapshotCount' in report.history || 'reusedSnapshotCount' in report.history) {
+    expect(report.paragraphSnapshots).toBeGreaterThan(0);
+  }
+  if ('localEntries' in report.history) {
+    expect(report.fullSnapshots).toBe(0);
+    expect(report.history.localEntries).toBeGreaterThan(0);
+  }
 });

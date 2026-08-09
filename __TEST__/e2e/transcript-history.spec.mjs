@@ -37,12 +37,84 @@ test('real keyboard input reuses the current before snapshot and remains undoabl
 
   await page.keyboard.insertText('x');
   const after = await page.evaluate(() => transcriptHistory.inspect());
-  expect(after.reusedSnapshotCount).toBe(before.history.reusedSnapshotCount + 1);
-  expect(after.fullSnapshotCount).toBe(before.history.fullSnapshotCount + 1);
+  expect(after.paragraphSnapshotCount).toBe(before.history.paragraphSnapshotCount + 1);
+  expect(after.fullSnapshotCount).toBe(before.history.fullSnapshotCount);
+  expect(after).toMatchObject({ localEntries: 1, fullEntries: 1 });
   expect(await page.evaluate(() => transcriptHistory.undo())).toBe(true);
   expect(await page.locator('#hypertranscript span[data-m]:not(.speaker)').first().textContent())
     .toBe(before.text);
   expect(await page.evaluate(() => transcriptHistory.redo())).toBe(true);
+});
+
+test('local and full entries undo in order without losing either state', async ({ page }) => {
+  const original = await page.evaluate(() => {
+    const root = document.getElementById('hypertranscript');
+    const words = root.querySelectorAll('span[data-m]:not(.speaker)');
+    root.focus();
+    getSelection().setBaseAndExtent(words[0].firstChild, 1, words[0].firstChild, 1);
+    return {
+      text: words[0].textContent,
+      duration: words[1].getAttribute('data-d'),
+    };
+  });
+  await page.keyboard.insertText('A');
+  await page.evaluate(() => {
+    const word = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)')[1];
+    transcriptGateway.mutate(() => word.setAttribute('data-d', '9876'), { origin: 'mixed-full' });
+    const first = document.querySelector('#hypertranscript span[data-m]:not(.speaker)').firstChild;
+    getSelection().setBaseAndExtent(first, 2, first, 2);
+  });
+  await page.keyboard.insertText('B');
+
+  expect(await page.evaluate(() => transcriptHistory.inspect())).toMatchObject({
+    length: 4, localEntries: 2, fullEntries: 2,
+  });
+  await page.evaluate(() => transcriptHistory.undo());
+  expect(await page.evaluate(() => ({
+    text: document.querySelector('#hypertranscript span[data-m]:not(.speaker)').textContent,
+    duration: document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)')[1]
+      .getAttribute('data-d'),
+  }))).toEqual({
+    text: original.text.slice(0, 1) + 'A' + original.text.slice(1),
+    duration: '9876',
+  });
+  await page.evaluate(() => transcriptHistory.undo());
+  expect(await page.evaluate(() => ({
+    text: document.querySelector('#hypertranscript span[data-m]:not(.speaker)').textContent,
+    duration: document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)')[1]
+      .getAttribute('data-d'),
+  }))).toEqual({
+    text: original.text.slice(0, 1) + 'A' + original.text.slice(1),
+    duration: original.duration,
+  });
+  await page.evaluate(() => transcriptHistory.undo());
+  expect(await page.locator('#hypertranscript span[data-m]:not(.speaker)').first().textContent())
+    .toBe(original.text);
+});
+
+test('local history pruning leaves a full undoable checkpoint', async ({ page }) => {
+  const state = await page.evaluate(() => {
+    const root = document.getElementById('hypertranscript');
+    for (let index = 0; index < 120; index += 1) {
+      const word = root.querySelector('span[data-m]:not(.speaker)');
+      const text = word.firstChild;
+      root.focus();
+      getSelection().setBaseAndExtent(text, text.length, text, text.length);
+      word.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true, inputType: 'insertText', data: 'x',
+      }));
+      text.nodeValue += 'x';
+      word.dispatchEvent(new InputEvent('input', {
+        bubbles: true, inputType: 'insertText', data: 'x',
+      }));
+      word.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    }
+    return transcriptHistory.inspect();
+  });
+
+  expect(state).toMatchObject({ length: 100, position: 99, fullEntries: 1, localEntries: 99 });
+  expect(await page.evaluate(() => transcriptHistory.undo())).toBe(true);
+  expect(await page.evaluate(() => transcriptHistory.inspect().position)).toBe(98);
 });
 
 test('semantic normalization folds into current without clearing redo', async ({ page }) => {
