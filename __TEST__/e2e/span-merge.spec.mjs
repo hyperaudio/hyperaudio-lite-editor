@@ -541,3 +541,55 @@ test('a caret legitimately at a paragraph END is not pushed into the next (#530 
   });
   expect(after.paraIndex).toBe(after.splitAt - 1); // stays at the END of the paragraph above
 });
+
+// #511 on the PARAGRAPH-LOCAL pass (#517 perf): the scoped pass hands a <p>
+// to normalizeTranscriptSpans, whose focus check compared against that root —
+// focus sits on the contenteditable host, so the caret guard silently never
+// ran on local passes. A fresh page's FIRST pass is always global (pendingGlobal
+// starts true), which is why every earlier test missed it: the pass must be
+// primed once so the next one is local.
+test('the caret survives the PRIMED paragraph-local pass (#511 × #517)', async ({ page }) => {
+  // prime: one edit + pass, so the next pass takes the local path
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'audio');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 1);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('P');
+  await page.keyboard.press('Shift');
+  await page.waitForTimeout(1600); // first pass: global, primes pendingGlobal=false
+
+  // now the #511 scenario again — this pass is paragraph-local
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'makes');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, span.firstChild.nodeValue.length);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('scooby dooby doo ');
+  await page.keyboard.press('Shift');
+  await page.waitForTimeout(1600);
+
+  const r = await page.evaluate(() => {
+    const sel = window.getSelection();
+    return {
+      anchorText: sel.anchorNode && sel.anchorNode.nodeValue,
+      atEnd: sel.anchorNode && sel.anchorOffset === sel.anchorNode.nodeValue.length,
+      spans: [...document.querySelectorAll('#hypertranscript span[data-m]')]
+        .map((s) => s.textContent.trim()).filter((t) => /^(scooby|dooby|doo)$/.test(t)),
+    };
+  });
+  expect(r.spans).toEqual(['scooby', 'dooby', 'doo']); // the local split still works
+  expect(r.anchorText).toBe('doo ');
+  expect(r.atEnd).toBe(true);
+});

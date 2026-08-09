@@ -578,7 +578,16 @@
     // text nodes rather than rewriting them), so offsets measured here stay
     // valid for the restore. Only when the transcript has focus — on blur
     // there is nothing to preserve.
-    const hasFocus = document.activeElement === root;
+    // root may be a single <p> on the paragraph-local pass (#517 perf), but
+    // focus always sits on the contenteditable HOST — comparing against root
+    // made hasFocus permanently false on the scoped path, which silently
+    // disabled this whole guard and resurrected #511 (mutations ran, caret
+    // never saved, never restored). saveCaretOffset's own containment check
+    // still returns null when the caret is outside THIS scope, so a pass over
+    // a paragraph the caret isn't in stays a no-op for selection.
+    const host = root.matches && root.matches('p')
+      ? (root.closest('#hypertranscript') || root) : root;
+    const hasFocus = document.activeElement === host;
     const caret = hasFocus ? saveCaretOffset(root) : null;
     // nbsp -> normal space (#339); flagged, because rewriting the caret's own
     // node is precisely the mutation that needs the restore afterwards
