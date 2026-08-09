@@ -426,7 +426,7 @@
       });
     }
 
-    filePicker.querySelectorAll('.file-item').forEach((el) => {
+    filePicker.querySelectorAll('.file-item[data-id]').forEach((el) => {
       el.classList.toggle('active', el.getAttribute('data-id') === currentId);
       el.addEventListener('click', (event) => {
         // a rename input lives inside the row's <a>; its clicks are not loads
