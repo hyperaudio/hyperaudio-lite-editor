@@ -1590,3 +1590,15 @@ label[data-a11y-wired]:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   #file-picker .recents-transcribing-badge { animation: none; }
 }
+
+/* One transcription at a time (#525): the engines share one transcript
+   element, one player and one busy flag — starting a second while one runs
+   produced interleaved errors. The entry points grey out while the
+   transcript is busy (same :has pattern as the corner buttons); the modal's
+   own submit labels need no gating because starting closes the modal and
+   reopening goes through these. Batch transcription is its own feature. */
+html:has(#hypertranscript[aria-busy="true"]) #new-transcription-btn,
+html:has(#hypertranscript[aria-busy="true"]) #upload-transcribe-btn {
+  pointer-events: none;
+  opacity: 0.4;
+}
