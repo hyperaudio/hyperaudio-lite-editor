@@ -444,3 +444,152 @@ test('the caret survives a pass where only the nbsp rewrite fires (#511)', async
   expect(r.anchorText).toContain('maX'); // still in the edited word's node
   expect(r.offset).toBe(3); // right after the typed X
 });
+
+// #530 — after Enter mid-paragraph, the debounced sanitise pass sometimes
+// yanked the caret from the start of the new paragraph back to the end of the
+// previous one: both positions have the SAME absolute character offset (the
+// split leaves the blocks adjacent, so Range.toString() emits nothing between
+// them), and resolveCharOffset greedily took the earlier side. The save now
+// records the caret's containing block and restore honours it — in both
+// directions.
+test('the caret stays at the start of the new paragraph after Enter + pause (#530)', async ({ page }) => {
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'makes');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2); // MID-TEXT: the split leaves 'ma' | 'kes'
+    r.collapse(true);               // hard-adjacent across the block boundary
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  const parasBefore = await page.locator('#hypertranscript p').count();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction((n) =>
+    document.querySelectorAll('#hypertranscript p').length === n + 1, parasBefore);
+
+  // give the debounced pass something to normalise WITHOUT touching the caret
+  // (typing would move it off the boundary — the repro requires Enter, pause)
+  await page.evaluate(() => {
+    const spans = document.querySelectorAll('#hypertranscript span[data-m]');
+    spans[0].textContent = spans[0].textContent.replace(' ', ' ');
+  });
+  await page.keyboard.press('Shift'); // a keyup, to arm the sanitise timer
+  await page.waitForTimeout(1600);
+
+  const after = await page.evaluate(() => {
+    const sel = window.getSelection();
+    const paras = [...document.querySelectorAll('#hypertranscript p')];
+    const el = sel.anchorNode.nodeType === Node.ELEMENT_NODE
+      ? sel.anchorNode : sel.anchorNode.parentElement;
+    return {
+      paraIndex: paras.indexOf(el.closest('p')),
+      splitAt: paras.findIndex((p) => p.textContent.trim().startsWith('kes')),
+    };
+  });
+  expect(after.paraIndex).toBe(after.splitAt); // the NEW paragraph, not the one above
+});
+
+test('a caret legitimately at a paragraph END is not pushed into the next (#530 guard)', async ({ page }) => {
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'makes');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2); // MID-TEXT: the split leaves 'ma' | 'kes'
+    r.collapse(true);               // hard-adjacent across the block boundary
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  const parasBefore = await page.locator('#hypertranscript p').count();
+  await page.keyboard.press('Enter'); // adjacent blocks: the ambiguous DOM shape
+  await page.waitForFunction((n) =>
+    document.querySelectorAll('#hypertranscript p').length === n + 1, parasBefore);
+
+  // NOW place the caret at the END of the first paragraph — the same absolute
+  // offset as the new paragraph's start; the block record must keep it there
+  await page.evaluate(() => {
+    const paras = [...document.querySelectorAll('#hypertranscript p')];
+    const idx = paras.findIndex((p) => p.textContent.trim().startsWith('kes'));
+    const prev = paras[idx - 1];
+    const walker = document.createTreeWalker(prev, NodeFilter.SHOW_TEXT);
+    let lastText = null; let n;
+    while ((n = walker.nextNode())) lastText = n;
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(lastText, lastText.nodeValue.length);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    const spans = document.querySelectorAll('#hypertranscript span[data-m]');
+    spans[1].textContent = spans[1].textContent.replace(' ', ' ');
+  });
+  await page.keyboard.press('Shift');
+  await page.waitForTimeout(1600);
+
+  const after = await page.evaluate(() => {
+    const sel = window.getSelection();
+    const paras = [...document.querySelectorAll('#hypertranscript p')];
+    const el = sel.anchorNode.nodeType === Node.ELEMENT_NODE
+      ? sel.anchorNode : sel.anchorNode.parentElement;
+    return {
+      paraIndex: paras.indexOf(el.closest('p')),
+      splitAt: paras.findIndex((p) => p.textContent.trim().startsWith('kes')),
+    };
+  });
+  expect(after.paraIndex).toBe(after.splitAt - 1); // stays at the END of the paragraph above
+});
+
+// #511 on the PARAGRAPH-LOCAL pass (#517 perf): the scoped pass hands a <p>
+// to normalizeTranscriptSpans, whose focus check compared against that root —
+// focus sits on the contenteditable host, so the caret guard silently never
+// ran on local passes. A fresh page's FIRST pass is always global (pendingGlobal
+// starts true), which is why every earlier test missed it: the pass must be
+// primed once so the next one is local.
+test('the caret survives the PRIMED paragraph-local pass (#511 × #517)', async ({ page }) => {
+  // prime: one edit + pass, so the next pass takes the local path
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'audio');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 1);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('P');
+  await page.keyboard.press('Shift');
+  await page.waitForTimeout(1600); // first pass: global, primes pendingGlobal=false
+
+  // now the #511 scenario again — this pass is paragraph-local
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const span = [...t.querySelectorAll('span[data-m]')].find((s) => s.textContent.trim() === 'makes');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, span.firstChild.nodeValue.length);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.type('scooby dooby doo ');
+  await page.keyboard.press('Shift');
+  await page.waitForTimeout(1600);
+
+  const r = await page.evaluate(() => {
+    const sel = window.getSelection();
+    return {
+      anchorText: sel.anchorNode && sel.anchorNode.nodeValue,
+      atEnd: sel.anchorNode && sel.anchorOffset === sel.anchorNode.nodeValue.length,
+      spans: [...document.querySelectorAll('#hypertranscript span[data-m]')]
+        .map((s) => s.textContent.trim()).filter((t) => /^(scooby|dooby|doo)$/.test(t)),
+    };
+  });
+  expect(r.spans).toEqual(['scooby', 'dooby', 'doo']); // the local split still works
+  expect(r.anchorText).toBe('doo ');
+  expect(r.atEnd).toBe(true);
+});

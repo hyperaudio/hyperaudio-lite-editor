@@ -62,9 +62,13 @@
   let captionMode = false; // used to detect whether we need to sanitise amongst other things
   let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
 
-  function mutateTranscript(fn, origin, foldPolicy) {
+  function mutateTranscript(fn, origin, foldPolicy, captureHistory) {
     if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
-      return window.transcriptGateway.mutate(fn, { origin, foldPolicy });
+      return window.transcriptGateway.mutate(fn, {
+        origin,
+        foldPolicy,
+        captureHistory: captureHistory !== false,
+      });
     }
     return fn();
   }
@@ -287,6 +291,12 @@
       hyperaudio();
       transcriptRequiresInit = false;
     }
+    if (window.transcriptMaintenance) {
+      window.transcriptMaintenance.schedule('sanitise');
+    }
+    if (window.transcriptReconciliation) {
+      window.transcriptReconciliation.schedule('sanitise-settle');
+    }
     reflectViewSwitch();
   });
 
@@ -306,7 +316,15 @@
   // pass simply happens on the next keyup/blur.
   let imeComposing = false;
   document.addEventListener('compositionstart', () => { imeComposing = true; });
-  document.addEventListener('compositionend', () => { imeComposing = false; });
+  document.addEventListener('compositionend', () => {
+    imeComposing = false;
+    if (window.transcriptMaintenance) {
+      window.transcriptMaintenance.schedule('sanitise');
+    }
+    if (window.transcriptReconciliation) {
+      window.transcriptReconciliation.schedule('sanitise-settle');
+    }
+  });
 
   // Estimate syllables from contiguous vowel groups (Latin-script heuristic);
   // floored at 1 so every part carries weight.
@@ -361,21 +379,53 @@
       pre.setEnd(container, offset);
       return pre.toString().length;
     };
+    // The caret's containing block, because an absolute offset is AMBIGUOUS
+    // exactly at a paragraph boundary (#530): right after Enter, 'start of
+    // the new <p>' and 'end of the previous <p>' are the same character
+    // count — Range.toString() emits nothing between blocks the split left
+    // adjacent. Recording which <p> held the caret lets restore pick the
+    // right side; without it the debounced pass yanked a freshly-placed
+    // caret back to the end of the paragraph above.
+    const blockOf = (container) => {
+      const el = container.nodeType === Node.ELEMENT_NODE ? container : container.parentElement;
+      const block = el !== null ? el.closest('p') : null;
+      return block !== null ? Array.prototype.indexOf.call(root.querySelectorAll('p'), block) : -1;
+    };
     return {
       start: measure(range.startContainer, range.startOffset),
+      startBlock: blockOf(range.startContainer),
       end: range.collapsed ? null : measure(range.endContainer, range.endOffset),
+      endBlock: range.collapsed ? null : blockOf(range.endContainer),
     };
   }
 
   // Resolve an absolute character offset back to a (text node, offset) pair;
   // clamps past-the-end to the final position.
-  function resolveCharOffset(root, chars) {
+  function resolveCharOffset(root, chars, preferredBlock) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const paragraphs = root.querySelectorAll('p');
+    const blockOf = (n) => {
+      const block = n.parentElement !== null ? n.parentElement.closest('p') : null;
+      return block !== null ? Array.prototype.indexOf.call(paragraphs, block) : -1;
+    };
     let node;
     let last = null;
     let remaining = chars;
     while ((node = walker.nextNode())) {
       if (remaining <= node.nodeValue.length) {
+        // Exactly at this node's end, the same offset also describes the
+        // start of the NEXT text node — a different position when a block
+        // boundary sits between them (#530). The saved block says which side
+        // the caret was really on; only cross the boundary when it says so.
+        if (remaining === node.nodeValue.length
+            && preferredBlock !== undefined && preferredBlock !== -1
+            && blockOf(node) !== preferredBlock) {
+          let ahead = walker.nextNode();
+          while (ahead !== null && ahead.nodeValue.length === 0) ahead = walker.nextNode();
+          if (ahead !== null && blockOf(ahead) === preferredBlock) {
+            return { node: ahead, offset: 0 };
+          }
+        }
         return { node, offset: remaining };
       }
       remaining -= node.nodeValue.length;
@@ -385,13 +435,13 @@
   }
 
   function restoreCaretOffset(root, saved) {
-    const start = resolveCharOffset(root, saved.start);
+    const start = resolveCharOffset(root, saved.start, saved.startBlock);
     if (start === null) return;
     const sel = window.getSelection();
     const range = document.createRange();
     range.setStart(start.node, start.offset);
     if (saved.end !== null) {
-      const end = resolveCharOffset(root, saved.end);
+      const end = resolveCharOffset(root, saved.end, saved.endBlock);
       if (end !== null) range.setEnd(end.node, end.offset);
     } else {
       range.collapse(true);
@@ -410,8 +460,18 @@
   // Returns whether any span was UNWRAPPED — the one scrub action that moves
   // the caret's text node, so callers know the selection may need restoring
   // (#511). The style strip touches attributes only and cannot move a caret.
+  function hasUnsupportedTranscriptStyle(span) {
+    return Array.from(span.style).some((property) => {
+      if (property === 'display' && span.classList.contains('speaker')) return false;
+      if (property === 'text-decoration'
+          && span.style.textDecoration.includes('line-through')) return false;
+      return true;
+    });
+  }
+
   function scrubEditingArtifacts(root) {
     root.querySelectorAll('span[style]').forEach((span) => {
+      if (!hasUnsupportedTranscriptStyle(span)) return;
       const display = span.classList.contains('speaker') ? span.style.display : '';
       const struck = (span.style.textDecoration || '').includes('line-through');
       span.removeAttribute('style');
@@ -518,7 +578,16 @@
     // text nodes rather than rewriting them), so offsets measured here stay
     // valid for the restore. Only when the transcript has focus — on blur
     // there is nothing to preserve.
-    const hasFocus = document.activeElement === root;
+    // root may be a single <p> on the paragraph-local pass (#517 perf), but
+    // focus always sits on the contenteditable HOST — comparing against root
+    // made hasFocus permanently false on the scoped path, which silently
+    // disabled this whole guard and resurrected #511 (mutations ran, caret
+    // never saved, never restored). saveCaretOffset's own containment check
+    // still returns null when the caret is outside THIS scope, so a pass over
+    // a paragraph the caret isn't in stays a no-op for selection.
+    const host = root.matches && root.matches('p')
+      ? (root.closest('#hypertranscript') || root) : root;
+    const hasFocus = document.activeElement === host;
     const caret = hasFocus ? saveCaretOffset(root) : null;
     // nbsp -> normal space (#339); flagged, because rewriting the caret's own
     // node is precisely the mutation that needs the restore afterwards
@@ -633,10 +702,15 @@
     if (transcriptEl !== null && transcriptEl.dataset.autoscrollPause !== '1') {
       transcriptEl.dataset.autoscrollPause = '1';
       let typingResume = null;
-      transcriptEl.addEventListener('input', () => {
+      transcriptEl.addEventListener('input', (event) => {
         const hla = window.hyperaudioInstance;
         if (hla && typeof hla.pauseAutoscroll === 'function') {
           hla.pauseAutoscroll();
+        }
+        if (typeof window.hyperaudioRequestTranscriptMaintenance === 'function') {
+          window.hyperaudioRequestTranscriptMaintenance(event, 'sanitise');
+        } else if (window.transcriptMaintenance) {
+          window.transcriptMaintenance.markDirty('sanitise');
         }
         clearTimeout(typingResume);
         typingResume = setTimeout(() => {
@@ -651,26 +725,66 @@
       // and the debounced sanitise pass runs it too so it also fires while
       // editing without a blur (e.g. clicking words to seek). See normalize-
       // TranscriptSpans above and the sanitise() call below.
-      transcriptEl.addEventListener('blur', () => mutateTranscript(
-        () => normalizeTranscriptSpans(transcriptEl),
-        'normalize-blur',
-        'normalization',
-      ));
+      transcriptEl.addEventListener('blur', () => {
+        if (typeof window.hyperaudioFlushTranscriptMaintenance === 'function'
+            && window.hyperaudioFlushTranscriptMaintenance('sanitise-blur', {
+              force: true,
+              global: true,
+            })) return;
+        mutateTranscript(
+          () => normalizeTranscriptSpans(transcriptEl),
+          'normalize-blur',
+          'normalization',
+        );
+      });
     }
 
     const sanitisationCheck = function () {
-
-      let time = 0;
-      resetTimer();
-      window.onload = resetTimer;
-      document.onkeyup = resetTimer;
-      document.ontouchend = resetTimer;
-
       let rootnode = document.querySelector("#hypertranscript");
       let sourceMedia = document.querySelector("#hyperplayer").src;
       let track = document.querySelector('#hyperplayer-vtt');
 
-      function sanitise() {
+      // Conservative preflight for the exact transcript mutations performed
+      // below. A clean paragraph still crosses the gateway (for audit/view
+      // classification), but can explicitly skip history's two whole-document
+      // snapshots. Any uncertain or repairable shape keeps normal history.
+      function scopeNeedsSanitise(scope) {
+        if (!scope || scope.textContent.indexOf(' ') !== -1) return true;
+        if (scope.querySelector('span:not([data-m]):not(.speaker)')) return true;
+        if (Array.from(scope.querySelectorAll('span[style]'))
+          .some((span) => hasUnsupportedTranscriptStyle(span))) return true;
+
+        const spans = scope.querySelectorAll('span[data-m]');
+        for (let i = 0; i < spans.length; i += 1) {
+          const span = spans[i];
+          const text = span.textContent;
+          if (!span.classList.contains('speaker') && !isSpeakerText(span)) {
+            if (/\S\s+\S/.test(text)) return true;
+            if (text.length > 0 && !/\s$/.test(text)) {
+              const next = span.nextElementSibling;
+              if (next && next.hasAttribute('data-m')
+                  && !next.classList.contains('speaker') && !isSpeakerText(next)
+                  && onlyWhitespaceBetween(span, next)) return true;
+            }
+          }
+          if (text.includes('[') && text.includes(']')
+              && (!text.trim().startsWith('[') || !text.trim().endsWith(']'))
+              && / *\[[^\]]*]/.test(text)) return true;
+        }
+
+        const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const node = walker.currentNode;
+          if (node.parentElement.tagName === 'SPAN'
+              || node.textContent.replaceAll('\n', '').trim().length === 0) continue;
+          if ((node.previousSibling && node.previousSibling.tagName === 'SPAN')
+              || node.nextSibling !== null) return true;
+        }
+        return false;
+      }
+
+      function sanitise(options) {
+        const opts = options || {};
         let d = new Date();
         let starttime = d.getTime();
 
@@ -681,11 +795,18 @@
           return;
         }
 
+        const requestedScopes = Array.isArray(opts.scopes) ? opts.scopes : [];
+        const localScopes = requestedScopes.filter((scope) => scope && scope.isConnected
+          && rootnode.contains(scope) && scope.matches('p'));
+        const roots = localScopes.length === requestedScopes.length && localScopes.length > 0
+          ? localScopes : [rootnode];
+        const refreshDerived = opts.refreshDerived !== false || roots[0] === rootnode;
+
         // Repair split/merged/reflowed word spans on the debounced pass too, not
         // just on blur — editing while clicking words to seek never fires a blur,
         // so this keeps the spans and the player's word index correct mid-edit
         // (#394). Self-contained: it re-indexes when the span set changes.
-        normalizeTranscriptSpans(rootnode);
+        roots.forEach((scope) => normalizeTranscriptSpans(scope));
 
         // check that transcript has the focus
 
@@ -699,9 +820,10 @@
         }
 
 
-        let walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
+        roots.forEach((scope) => {
+          let walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, null, false);
 
-        while (walker.nextNode()) {
+          while (walker.nextNode()) {
 
           if (walker.currentNode.textContent.replaceAll('\n', '').trim().length > 0
               && walker.currentNode.parentElement.tagName !== "SPAN") {
@@ -721,13 +843,16 @@
             //walker.currentNode.parentNode.removeChild(walker.currentNode);
             walker.currentNode.textContent = "";
           }
-        }
+          }
+        });
 
         // look for speakers and break them out into their own spans
 
-        walker = document.createTreeWalker(rootnode, NodeFilter.SHOW_TEXT, null, false);
+        let speakerChanged = false;
+        roots.forEach((scope) => {
+          const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, null, false);
 
-        while (walker.nextNode()) {
+          while (walker.nextNode()) {
           if (walker.currentNode.textContent.replaceAll('\n', '').replaceAll('  ', ' ').trim().length > 0
               && walker.currentNode.parentElement.tagName === "SPAN" && walker.currentNode.textContent.includes('[') && walker.currentNode.textContent.includes(']')) {
 
@@ -759,6 +884,7 @@
               if (span.textContent.includes('[') && span.textContent.includes(']')) {
                 span.classList.add("speaker");
                 closedSpeaker = false;
+                speakerChanged = true;
               }
 
               // add the classes of the current node
@@ -790,6 +916,20 @@
               }
             }
           }
+          }
+        });
+
+        // The fast pass deliberately stops before transcript-wide derived
+        // products. They are refreshed by the settle queue or synchronously at
+        // an observation barrier (blur/history/export). Speaker extraction is
+        // the rare local operation that changes the word-node set, so keep the
+        // player index live even before reconciliation.
+        if (!refreshDerived) {
+          if (speakerChanged && hyperaudioInstance
+              && typeof hyperaudioInstance.setupTranscriptWords === 'function') {
+            hyperaudioInstance.setupTranscriptWords();
+          }
+          return;
         }
 
         // Canonical serialization (transcript-serializer.js): one span per
@@ -827,26 +967,180 @@
         //console.log("sanitising took "+(d.getTime() - starttime)+"ms");
       }
 
-      function resetTimer() {
-        clearTimeout(time);
-        if (captionMode !== true) {
-          time = setTimeout(() => mutateTranscript(
-            sanitise,
-            'sanitise',
-            'normalization',
-          ), 1000);
-        }
+      function runSanitise(options, origin) {
+        const opts = options || {};
+        const requested = Array.isArray(opts.scopes) ? opts.scopes : [];
+        const validLocal = requested.filter((scope) => scope && scope.isConnected
+          && rootnode.contains(scope) && scope.matches('p'));
+        const scopes = validLocal.length === requested.length && validLocal.length > 0
+          ? validLocal : [rootnode];
+        const captureHistory = scopes.some((scope) => scopeNeedsSanitise(scope));
+        return mutateTranscript(
+          () => sanitise(opts),
+          origin || 'sanitise',
+          'normalization',
+          captureHistory,
+        );
       }
+
+      // Fast maintenance is paragraph-local; a second, longer idle window owns
+      // the global derived work (canonical download + captions). Mutation
+      // records identify the paragraph touched by contenteditable without
+      // trusting InputEvent.target, which is normally the transcript host.
+      if (window.transcriptMaintenance) window.transcriptMaintenance.destroy();
+      if (window.transcriptReconciliation) window.transcriptReconciliation.destroy();
+      if (window.transcriptMaintenanceObserver) window.transcriptMaintenanceObserver.disconnect();
+
+      const dirtyScopes = new Set();
+      let pendingGlobal = true;
+      let lastMode = 'none';
+      let lastScopeCount = 0;
+
+      const paragraphOf = (node) => {
+        const element = node && node.nodeType === Node.ELEMENT_NODE
+          ? node : node && node.parentElement;
+        const paragraph = element && element.closest ? element.closest('p') : null;
+        return paragraph && rootnode.contains(paragraph) ? paragraph : null;
+      };
+
+      // Native editing may deliver MutationObserver callbacks before its
+      // subsequent input event. Keep those records instead of letting an empty
+      // callback discard them; input remains the signal that queues work.
+      let deliveredRecords = [];
+      const observer = new MutationObserver((records) => {
+        deliveredRecords.push(...records);
+      });
+      observer.observe(rootnode, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+      });
+      window.transcriptMaintenanceObserver = observer;
+
+      const captureDirtyScopes = (hint) => {
+        const records = deliveredRecords.concat(observer.takeRecords());
+        deliveredRecords = [];
+        if (records.length > 0) {
+          records.forEach((record) => {
+            const paragraph = paragraphOf(record.target);
+            if (paragraph) dirtyScopes.add(paragraph);
+            else pendingGlobal = true;
+          });
+          return;
+        }
+        const direct = hint && hint.target ? null : paragraphOf(hint);
+        if (direct) dirtyScopes.add(direct);
+        else pendingGlobal = true;
+      };
+
+      let reconciliation;
+      const maintenance = window.createTranscriptMaintenanceQueue({
+        delay: 1000,
+        canRun: () => captionMode !== true && imeComposing !== true,
+        run: (origin) => {
+          const scopes = Array.from(dirtyScopes);
+          const scopesAreLocal = scopes.length > 0 && scopes.every((scope) => scope
+            && scope.isConnected && rootnode.contains(scope) && scope.matches('p'));
+          const global = pendingGlobal || !scopesAreLocal
+            || /(?:blur|history|global|initial)/.test(origin || '');
+          runSanitise(
+            { scopes: global ? null : scopes, refreshDerived: global },
+            global ? (origin || 'sanitise') : 'sanitise-local',
+          );
+          observer.takeRecords(); // mutations made by maintenance are not user edits
+          deliveredRecords = [];
+          pendingGlobal = false;
+          dirtyScopes.clear();
+          lastMode = global ? 'global' : 'local';
+          lastScopeCount = global ? 0 : scopes.length;
+          if (global && reconciliation) reconciliation.cancel();
+        },
+      });
+      reconciliation = window.createTranscriptMaintenanceQueue({
+        delay: 3000,
+        canRun: () => captionMode !== true && imeComposing !== true,
+        run: (origin) => {
+          maintenance.cancel();
+          runSanitise({ refreshDerived: true }, origin || 'sanitise-settle');
+          observer.takeRecords();
+          deliveredRecords = [];
+          pendingGlobal = false;
+          dirtyScopes.clear();
+          lastMode = 'global';
+          lastScopeCount = 0;
+        },
+      });
+      window.transcriptMaintenance = maintenance;
+      window.transcriptReconciliation = reconciliation;
+
+      window.hyperaudioRequestTranscriptMaintenance = function (hint, reason, options) {
+        captureDirtyScopes(hint);
+        const queued = maintenance.markDirty(reason || 'sanitise');
+        if (!(options && options.reconcile === false)) {
+          reconciliation.markDirty('sanitise-settle');
+        }
+        return queued;
+      };
+
+      window.hyperaudioFlushTranscriptMaintenance = function (origin, options) {
+        if (options && options.global) pendingGlobal = true;
+        return maintenance.flush(origin || 'sanitise', {
+          force: !!(options && options.force),
+        });
+      };
+
+      window.hyperaudioInspectTranscriptMaintenance = function () {
+        return {
+          local: maintenance.inspect(),
+          reconciliation: reconciliation.inspect(),
+          pendingGlobal,
+          dirtyScopes: dirtyScopes.size,
+          lastMode,
+          lastScopeCount,
+        };
+      };
+
+      ['download-html', 'download-vtt', 'download-srt', 'download-vtt-words',
+        'download-hypertranscript'].forEach((id) => {
+        const link = document.getElementById(id);
+        if (!link || link.dataset.maintenanceBarrier === '1') return;
+        link.dataset.maintenanceBarrier = '1';
+        link.addEventListener('click', () => {
+          const state = window.hyperaudioInspectTranscriptMaintenance();
+          if (!state.pendingGlobal && !state.local.dirty
+              && !state.reconciliation.dirty) return;
+          window.hyperaudioFlushTranscriptMaintenance('sanitise-export', {
+            force: true,
+            global: true,
+          });
+        }, true);
+      });
+
+      // Preserve the original first canonicalisation. Afterwards, unrelated
+      // key/touch activity cannot create work: it can only postpone work that
+      // a transcript input (or an explicit producer) already marked dirty.
+      maintenance.markDirty('sanitise-initial');
+      window.onload = () => {
+        pendingGlobal = true;
+        maintenance.markDirty('sanitise-initial');
+      };
+      document.onkeyup = () => {
+        maintenance.schedule('sanitise');
+        reconciliation.schedule('sanitise-settle');
+      };
+      document.ontouchend = () => {
+        maintenance.schedule('sanitise');
+        reconciliation.schedule('sanitise-settle');
+      };
 
       // History restore replaces the transcript DOM synchronously. Cancel any
       // timer belonging to the pre-restore DOM and run exactly one fresh pass;
       // its explicit fold policy lets history amend the restored entry without
       // consuming redo or creating a visible step.
       window.hyperaudioNormalizeAfterHistoryRestore = function () {
-        clearTimeout(time);
-        if (captionMode === true || imeComposing === true) return false;
-        mutateTranscript(sanitise, 'history-restore-normalize', 'normalization');
-        return true;
+        pendingGlobal = true;
+        return maintenance.flush('history-restore-normalize', { force: true });
       };
 
       //longpress to set playhead on mobile

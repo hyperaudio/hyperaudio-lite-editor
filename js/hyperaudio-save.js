@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.2.5 — last changed in release 1.2.5
+ * @version 1.3.0 — last changed in release 1.3.0
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -694,18 +694,24 @@
   // a draft was restored, so the saved state isn't what's on screen); unknown
   // stays dirty, which is the previous behaviour.
   let savedSignature = null;
-  // `modified` is stamped at every gather, so it would defeat any comparison;
-  // captions ride outside the project json and must be part of the identity —
-  // undoing the transcript back while a caption edit is pending is NOT clean.
-  function signatureOfParts(json, vtt) {
-    const project = JSON.parse(json);
+  // `modified` is stamped at every gather, so it would defeat any comparison.
+  // Captions ride outside the project json: with sync OFF they are curated
+  // content and part of the identity — undoing the transcript back while a
+  // caption edit is pending is NOT clean. With sync ON the vtt is a pure
+  // derivative of the transcript, regenerated on a deferred schedule (#517),
+  // so comparing it would only race the regen queue — the transcript json
+  // already carries the same information.
+  function signatureFor(project, vtt) {
     project.modified = '';
-    return JSON.stringify(project) + '\u001f' + (vtt || '');
+    const syncOn = !!(project.options && project.options.captions
+      && project.options.captions.updateFromTranscript !== false);
+    return JSON.stringify(project) + '\u001f' + (syncOn ? '' : (vtt || ''));
+  }
+  function signatureOfParts(json, vtt) {
+    return signatureFor(JSON.parse(json), vtt);
   }
   function stateSignature() {
-    const project = buildProjectJson(gather());
-    project.modified = '';
-    return JSON.stringify(project) + '\u001f' + (getCaptionsVtt() || '');
+    return signatureFor(buildProjectJson(gather()), getCaptionsVtt() || '');
   }
 
   // History and other same-document features must not infer identity from a
@@ -1304,10 +1310,23 @@
   // In the native wrapper the bridge receives the built container instead
   // (#449: one save path for web and native); without OPFS the explicit
   // export download is the only durable copy, so Save falls back to it.
+  function flushTranscriptMaintenanceBarrier(origin) {
+    if (typeof window.hyperaudioFlushTranscriptMaintenance !== 'function') return;
+    const state = typeof window.hyperaudioInspectTranscriptMaintenance === 'function'
+      ? window.hyperaudioInspectTranscriptMaintenance() : null;
+    if (state && !state.pendingGlobal && !state.local.dirty
+        && !state.reconciliation.dirty) return;
+    window.hyperaudioFlushTranscriptMaintenance(origin, {
+      force: true,
+      global: true,
+    });
+  }
+
   async function saveProject() {
     if (saveInFlight) return false;
     saveInFlight = true;
     try {
+      flushTranscriptMaintenanceBarrier('sanitise-save');
       const bridge = window.hyperaudioProjectBridge;
       if (bridge && typeof bridge.save === 'function') {
         return await exportProject({ asSave: true }); // the bridge intercepts the built container
@@ -1829,6 +1848,7 @@
     exportInFlight = true;
     const token = beginProgress();
     try {
+      flushTranscriptMaintenanceBarrier('sanitise-project-export');
       return await exportProjectInner(!!(opts && opts.asSave), token);
     } finally {
       exportInFlight = false;
@@ -2270,6 +2290,12 @@
             // transcribe entry points grey on this class, so the gate holds
             // while the engine runs in the background too.
             document.documentElement.classList.add('ha-transcribing');
+            // The player already holds the transcription's media, but the
+            // caption <track> still holds the PREVIOUS project's vtt — left
+            // alone, playing the transcribing video shows the old captions.
+            // The one door also arms the late-write guard, so caption.js
+            // can't re-apply the stale vtt on the new media's loadedmetadata.
+            applyCaptionTrack('', { mode: 'disabled' });
             notifyLibraryChanged(false);
           } else if (busy === false && pendingTranscription !== null) {
             // success is announced by hyperaudioInit (the birth clears the row
@@ -2345,6 +2371,7 @@
         t.innerHTML = pendingTranscription.loaderHtml;
       }
       t.setAttribute('aria-busy', 'true');
+      t.setAttribute('contenteditable', 'false'); // the loader is not for typing in
       // The transcription's own media on the player too — without this, the
       // pending view kept showing whatever project was on screen before.
       const player = document.getElementById('hyperplayer');
@@ -2352,6 +2379,9 @@
           && player.src !== pendingIdentity.playerSrc) {
         player.src = pendingIdentity.playerSrc;
       }
+      // ... and the project we came FROM applied its captions at open; the
+      // transcribing media has none yet.
+      applyCaptionTrack('', { mode: 'disabled' });
     } finally {
       suppressCapture = false;
     }
@@ -2381,6 +2411,10 @@
         pendingTranscription.fragment = fragment;
       }
       t.removeAttribute('aria-busy');
+      // busy(true) also turned editing OFF, and that must not follow us to
+      // the project either: left as-is, every transcript opened while a
+      // transcription runs has no caret and takes no edits.
+      t.setAttribute('contenteditable', 'true');
     }
     return true;
   }
@@ -2920,9 +2954,25 @@
     // and the project genuinely differs from the save. Restores that DON'T
     // land on the save re-dirty through the synthetic input the history
     // module dispatches, like any other edit.
-    document.addEventListener('hyperaudioTranscriptRestored', () => {
+    let restoreRecheckTimer = null;
+    const attemptCleanAfterRestore = () => {
       if (!session.active || savedSignature === null || !sessionEdited) return;
       if (stateSignature() !== savedSignature) return;
+      cleanAfterRestore();
+    };
+    document.addEventListener('hyperaudioTranscriptRestored', () => {
+      // Two attempts: now, and once more after the idle reconciliation
+      // window. The perf rework (#517) defers caption regeneration to a ~3s
+      // idle queue, so a restore that lands the TRANSCRIPT exactly on the
+      // saved state can still carry the pre-undo captions on the track when
+      // this event fires — the signature legitimately mismatches until the
+      // deferred pass catches the track up. The recheck re-runs the same
+      // guards fresh: an edit landing meanwhile keeps the dot on.
+      clearTimeout(restoreRecheckTimer);
+      attemptCleanAfterRestore();
+      restoreRecheckTimer = setTimeout(attemptCleanAfterRestore, 3400);
+    });
+    function cleanAfterRestore() {
       sessionEdited = false;
       clearTimeout(autosaveTimer);
       autosaveTimer = null;
@@ -2946,7 +2996,7 @@
           notifyLibraryChanged(false);
         }).catch((e) => console.warn('hyperaudio-save: draft retirement failed', e));
       }
-    });
+    }
     ['#remove-gaps-enabled', '#remove-gaps-threshold', '#remove-gaps-buffer', '#show-speakers', '#show-timecodes']
       .forEach((selector) => {
         const el = document.querySelector(selector);
