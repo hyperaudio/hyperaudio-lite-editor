@@ -7,5 +7,11 @@
     .querySelector("#regenerate-captions")
     .addEventListener("click", function () {
       captionCache = null;
+      // Regenerating IS choosing transcript-derived captions: sync resumes
+      // until the next hand edit flips it off again. Before this, regenerated
+      // captions stayed marked "curated" and stopped following the transcript
+      // — a one-shot rebuild rather than the re-subscription the button's own
+      // confirm dialog implies.
+      updateCaptionsFromTranscript = true;
       hyperaudioGenerateCaptionsFromTranscript();
     });

@@ -23,7 +23,15 @@
 
       holder.innerHTML = '<div class="modal-action"><label id="regenerate-float-btn" for="regenerate-captions-modal" class="fixed top-20 right-8 btn btn-outline btn-primary" >Regenerate <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
 
-      if (captionCache === null ) {
+      // The cache exists to preserve HAND-EDITED captions across view
+      // switches. While captions are machine-synced from the transcript it
+      // must never be trusted: it is primed at transcription time (the
+      // engines' caption pass runs this builder with captionMode false), and
+      // transcript edits then regenerate the TRACK but not these rows — so
+      // the first visit to the caption editor showed pre-edit captions. Any
+      // hand edit flips updateCaptionsFromTranscript false, and from then on
+      // the cache is authoritative again.
+      if (captionCache === null || updateCaptionsFromTranscript === true) {
         let newDiv = document.createElement('div');
 
         // Set an id for the new div
@@ -314,6 +322,11 @@
       video.addEventListener('play', reflectPlayState);
       video.addEventListener('pause', reflectPlayState);
       video.addEventListener('ended', reflectPlayState);
+      // Swapping src (every project switch) stops playback WITHOUT a pause
+      // event — the load algorithm fires 'emptied' instead. Without this, a
+      // switch away from a playing video left the pause button showing over
+      // a video that wasn't playing.
+      video.addEventListener('emptied', reflectPlayState);
 
       const reflectVolume = () => {
         const silent = video.muted || video.volume === 0;

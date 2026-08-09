@@ -409,13 +409,22 @@
       && !/^deleteContent(?:Backward|Forward)$/.test(inputType);
   }
 
+  // Paste is a forced boundary (the design contract), but it arrives as
+  // execCommand('insertText') — the #487 paste path — which is
+  // indistinguishable from typing by inputType alone, so it coalesced into an
+  // adjacent typing entry within the 500ms window (#514). The capture-phase
+  // paste listener below raises this flag before the editor's own paste
+  // handler runs; the commit it produces is then forced to its own entry, and
+  // the chain is severed on BOTH sides so following typing starts fresh too.
+  let pasteBoundary = false;
+
   function commitNative(before, inputType, origin) {
     if (before && before.kind === 'paragraph-before') {
       const local = localEntry(before, origin || inputType);
       if (local) {
         const category = inputCategory(inputType);
         const now = Date.now();
-        const coalesce = lastNative
+        const coalesce = !pasteBoundary && lastNative
           && lastNative.category === category
           && now - lastNative.at <= COALESCE_MS
           && lastNative.generation === (window.transcriptLifecycle
@@ -448,7 +457,7 @@
     if (!after || !before || before.semanticFingerprint === after.semanticFingerprint) return;
     const category = inputCategory(inputType);
     const now = Date.now();
-    const coalesce = !boundaryInput(inputType) && lastNative
+    const coalesce = !pasteBoundary && !boundaryInput(inputType) && lastNative
       && lastNative.category === category
       && now - lastNative.at <= COALESCE_MS
       && lastNative.generation === (window.transcriptLifecycle
@@ -462,6 +471,14 @@
         beforeSelection: entries[position].beforeSelection,
       }));
     } else push(entry);
+    if (pasteBoundary) {
+      // sever the trailing side too: typing right after a paste must not
+      // coalesce into the paste's entry (#514 — paste arrives as insertText
+      // via the #487 handler and is indistinguishable by inputType)
+      pasteBoundary = false;
+      lastNative = null;
+      return;
+    }
     lastNative = {
       category,
       at: now,
@@ -596,12 +613,23 @@
     if (gateway.isRestoring || gateway.isMutating || composing || event.isComposing) return;
     const inputType = event.inputType || 'native';
     pendingNative = {
-      before: inputType === 'insertText'
+      // A raised pasteBoundary forces FULL capture (#514 × the delta design):
+      // paste arrives as insertText via the #487 handler and would otherwise
+      // qualify for the paragraph-local delta path, whose coalescing knows
+      // nothing of paste — the design's own contract is that paste remains a
+      // full checkpoint.
+      before: inputType === 'insertText' && !pasteBoundary
         ? (paragraphBefore(`before-${inputType}`) || snapshot(`before-${inputType}`))
         : snapshot(`before-${inputType}`),
       inputType,
     };
     if (boundaryInput(pendingNative.inputType)) lastNative = null;
+  }, true);
+
+  document.addEventListener('paste', (event) => {
+    if (!inTranscript(event.target) || captionMode()) return;
+    pasteBoundary = true;
+    lastNative = null; // the paste cannot join the entry before it
   }, true);
 
   document.addEventListener('input', (event) => {

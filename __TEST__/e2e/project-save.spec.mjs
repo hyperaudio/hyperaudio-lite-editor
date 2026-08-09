@@ -1103,13 +1103,19 @@ test('the in-flight open explains itself rather than doing nothing (#504)', asyn
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
 
-  // Two opens started back to back. What the file contains does not matter —
-  // the guard is set synchronously before the first await, so the second call
-  // takes the refusal path regardless of whether the first ultimately succeeds.
+  // Two opens started back to back. The first must GENUINELY still be in
+  // flight when the second arrives — an instantly-failing dummy could finish
+  // first under CPU contention and the refusal never fire (it did, in full-
+  // suite runs on a loaded machine). A real container with long media keeps
+  // the first open busy well past the second call.
+  const bigPath = testInfo.outputPath('big.hyperaudio');
+  fs.writeFileSync(bigPath, await buildFixture(null, null, 600));
+  await page.setInputFiles('#project-open-input', bigPath); // lands a File we can reuse
+  await awaitOpenIdle(page);
   const text = await page.evaluate(async () => {
-    const dummy = () => new File(['not a zip'], 'x.hyperaudio');
-    const first = window.HyperaudioSave.openFromFile(dummy());
-    const second = window.HyperaudioSave.openFromFile(dummy());
+    const file = document.getElementById('project-open-input').files[0];
+    const first = window.HyperaudioSave.openFromFile(file);
+    const second = window.HyperaudioSave.openFromFile(file);
     const el = document.getElementById('project-progress');
     const t = el ? el.textContent : null;
     await Promise.allSettled([first, second]);
@@ -1164,4 +1170,334 @@ test('reading a large media reports a percentage while opening (#503)', async ({
   await page.waitForTimeout(300);
 
   expect(seen.some((t) => /Reading the media… \d+%/.test(t))).toBe(true);
+});
+
+// #519 — the autosave debounce is 1.5s and nothing flushed it at teardown:
+// closing the tab dropped the newest keystrokes. The pending draft now lands
+// when the page hides (tab/app switch) and on pagehide (iOS close path).
+test('hiding the page flushes the pending draft immediately (#519)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+    span.textContent = 'FLUSHED-ON-HIDE ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // hide the page well inside the 1.5s debounce window
+  const t0 = Date.now();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  // the draft must land long before the debounce alone could have fired
+  await pollPage(page, async () => {
+    try {
+      const id = window.HyperaudioSave.library.currentId();
+      const root = await navigator.storage.getDirectory();
+      const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+      const text = await (await (await dir.getFileHandle('draft.json')).getFile()).text();
+      return text.indexOf('FLUSHED-ON-HIDE') !== -1;
+    } catch (e) { return false; }
+  });
+  expect(Date.now() - t0).toBeLessThan(1300); // debounce alone fires at 1500ms+
+
+  // a second teardown event must not double-write or throw (pagehide follows
+  // visibilitychange in a real close)
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  expect(dialogs).toEqual([]);
+});
+
+// #525 — a transcription in flight owns the screen with loader markup and
+// aria-busy, and three things went wrong around it: switching "back" to the
+// project the session still points at was a silent no-op (the user stared at
+// the loader with no way out), switching to another project carried the busy
+// state with it, and re-picking the same media file fired no change event so
+// a retry after interruption did nothing.
+const startFakeTranscription = (page) => page.evaluate(() => {
+  document.querySelector('#hypertranscript').innerHTML =
+    '<div class="vertically-centre"><center>Transcribing…</center></div>';
+  setTranscriptBusy(true);
+});
+
+test('switching back to your project mid-transcription rescues it from the loader (#525)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  await startFakeTranscription(page);
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…');
+
+  // click your own project's row: previously a silent no-op, now an
+  // immediate switch — no consent dialog (#525: the in-progress row is the
+  // way back, so leaving needs no ceremony)
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti'); // the project is back
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBeNull(); // busy cleared
+});
+
+
+test('the engine file inputs clear on click so the same file can be re-picked (#525)', async ({ page }, testInfo) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const wavPath = testInfo.outputPath('tone.wav');
+  const fsm = await import('node:fs');
+  fsm.writeFileSync(wavPath, ladderWav(1));
+  await page.setInputFiles('#file-input', wavPath);
+  expect(await page.evaluate(() => document.querySelector('#file-input').files.length)).toBe(1);
+
+  // the user clicks the input again to re-pick the SAME file: the value must
+  // clear so the browser fires change for the identical selection
+  await page.evaluate(() => document.querySelector('#file-input')
+    .dispatchEvent(new MouseEvent('click')));
+  expect(await page.evaluate(() => document.querySelector('#file-input').value)).toBe('');
+});
+
+// #525 follow-up — the transcription is a first-class Recents citizen from the
+// moment it starts: an in-progress row appears (virtual, in-memory — a reload
+// kills the engine, so nothing persists to get stuck), clicking it hands the
+// screen back to the live loader, completion replaces it with the real project
+// entry, and an engine error takes the row away with it.
+test('a transcription appears in Recents while it runs, and resolves on completion (#525)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  // the user picks a NEW file to transcribe (the capture listener records it)
+  const newWav = testInfo.outputPath('brand-new-recording.wav');
+  (await import('node:fs')).writeFileSync(newWav, ladderWav(1));
+  await page.setInputFiles('#file-input', newWav);
+
+  // an engine starts, exactly as they all do: its own media on the player,
+  // loader markup, then busy(true)
+  await page.evaluate(() => {
+    const player = document.getElementById('hyperplayer');
+    player.src = URL.createObjectURL(new Blob([new Uint8Array(4)], { type: 'audio/wav' }));
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Preparing model…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  const engineSrc = await page.evaluate(() => document.getElementById('hyperplayer').src);
+  const row = page.locator('.recents-row-transcribing');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('brand-new-recording.wav'); // named after ITS file
+  await expect(row.locator('.recents-transcribing-spinner')).toBeVisible(); // wordless in-progress signal
+  // same footprint as a real row
+  const widths = await page.evaluate(() => ({
+    pending: document.querySelector('.recents-row-transcribing').getBoundingClientRect().width,
+    real: document.querySelector('.recents-row:not(.recents-row-transcribing)').getBoundingClientRect().width,
+  }));
+  expect(Math.abs(widths.pending - widths.real)).toBeLessThanOrEqual(2);
+  // the transcribing row IS the selection while the loader owns the screen —
+  // and the previous project's row stands down
+  await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/);
+  await expect(page.locator('#file-picker .file-item[data-id].active')).toHaveCount(0);
+
+  // the engine progresses past the initial message, as its interval does
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript .transcribing-msg').textContent = 'Transcribing… (0m 42s)';
+  });
+
+  // switch away to the existing project — immediate, the row stays but the
+  // selection moves to the project actually on screen
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  await expect(row).toHaveCount(1);
+  await expect(row.locator('.recents-transcribing-item')).not.toHaveClass(/active/);
+  await expect(page.locator('#file-picker .file-item[data-id].active')).toHaveCount(1);
+
+  // click the row: back to the live loader AT THE DEPARTURE-TIME message —
+  // not the stale 'Preparing model' captured when the engine started
+  await row.locator('.recents-transcribing-item').click();
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (0m 42s)');
+  await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/); // selected again on return
+  // and the player carries the TRANSCRIPTION's media, not the previous project's
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').src)).toBe(engineSrc);
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').textContent.includes('Preparing model'))).toBe(false);
+
+  // SECOND hop: progress advances, leave from the PENDING view this time,
+  // return again — the snapshot must track every departure, not just the first
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript .transcribing-msg').textContent = 'Transcribing… (1m 30s)';
+  });
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  await row.locator('.recents-transcribing-item').click();
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (1m 30s)');
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').textContent.includes('0m 42s'))).toBe(false);
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript .transcribing-msg') !== null)).toBe(true);
+
+  // completion: transcript lands, busy false, init births — the virtual row
+  // resolves into the real project entry
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">DONE </span></p></section></article>';
+    setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
+  await pollPage(page, async () =>
+    (await window.HyperaudioSave.library.list()).length === 2); // fixture + birth
+
+  // The birth carries the TRANSCRIPTION's identity, not the project the user
+  // happened to be viewing: its name and media are the new recording's, and
+  // the player is back on the transcription's own source.
+  const born = await page.evaluate(async () => {
+    const list = await window.HyperaudioSave.library.list();
+    const entry = list.find((e) => e.name !== 'E2E Project');
+    return { name: entry.name, mediaFile: entry.media && entry.media.filename,
+      playerSrc: document.getElementById('hyperplayer').src };
+  });
+  expect(born.name).toBe('brand-new-recording.wav');
+  expect(born.mediaFile).toBe('brand-new-recording.wav');
+  expect(born.playerSrc).toBe(engineSrc);
+});
+
+test('a phantom engine error does not let the birth steal another project\'s identity (#529 × #525)', async ({ page }, testInfo) => {
+  // The measured Parakeet failure mode: handleError fires (error markup +
+  // busy(false)) — then the worker recovers and completes anyway. The row
+  // dies with the error signal, correctly; the transcription's identity must
+  // not, or the recovered birth is named after and paired with whatever
+  // project the user was viewing.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  const newWav = testInfo.outputPath('phantom-recording.wav');
+  (await import('node:fs')).writeFileSync(newWav, ladderWav(1));
+  await page.setInputFiles('#file-input', newWav);
+  await page.evaluate(() => {
+    const player = document.getElementById('hyperplayer');
+    player.src = URL.createObjectURL(new Blob([new Uint8Array(4)], { type: 'audio/wav' }));
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Preparing model…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  const engineSrc = await page.evaluate(() => document.getElementById('hyperplayer').src);
+
+  // the user is viewing another project when the phantom error hits
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center>Sorry. Transcription failed.</center></div>';
+    setTranscriptBusy(false); // handleError's signal — the row goes
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
+
+  // ...and then the worker recovers and completes
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">RECOVERED </span></p></section></article>';
+    setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await pollPage(page, async () => (await window.HyperaudioSave.library.list()).length === 2);
+
+  const born = await page.evaluate(async () => {
+    const list = await window.HyperaudioSave.library.list();
+    const entry = list.find((e) => e.name !== 'E2E Project');
+    return { name: entry.name, mediaFile: entry.media && entry.media.filename,
+      playerSrc: document.getElementById('hyperplayer').src };
+  });
+  expect(born.name).toBe('phantom-recording.wav');      // not the fixture's name
+  expect(born.mediaFile).toBe('phantom-recording.wav'); // not the fixture's media
+  expect(born.playerSrc).toBe(engineSrc);               // not the fixture's video
+});
+
+test('an engine error takes the in-progress row with it (#525)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(1);
+
+  // the engines' error path: error markup, busy(false), no init ever
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center>Sorry. An unexpected error has occurred.</center></div>';
+    setTranscriptBusy(false);
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
+});
+
+// #525 — one transcription at a time: the engines share one transcript
+// element and one busy flag, so a second start mid-run interleaved into
+// errors. The entry points grey out while busy.
+test('the NEW button is inert while a transcription runs — even from another project (#525)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  const newBtn = page.locator('#new-transcription-btn');
+  await expect(newBtn).toHaveCSS('pointer-events', 'none');
+  // and the modal genuinely cannot be opened through it
+  await newBtn.click({ force: true }).catch(() => {});
+  expect(await page.evaluate(() => document.getElementById('transcribe-modal').checked)).toBe(false);
+
+  // the hole this test exists for: switch AWAY (which clears the view's busy
+  // attribute) — the engine still runs, so the gate must hold
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBeNull();
+  await expect(newBtn).toHaveCSS('pointer-events', 'none'); // STILL gated
+
+  // engine ends: the door reopens
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML = '<p>err</p>';
+    setTranscriptBusy(false);
+  });
+  await expect(newBtn).not.toHaveCSS('pointer-events', 'none');
+  await newBtn.click();
+  expect(await page.evaluate(() => document.getElementById('transcribe-modal').checked)).toBe(true);
+});
+
+// Swapping the player's src (every project switch) stops playback without a
+// pause event; the playbar synced only on play/pause/ended, so switching away
+// from a playing video showed the pause button over a video that wasn't
+// playing. 'emptied' is the event the load algorithm actually fires.
+test('the play button state survives a project switch away from a playing video', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const firstId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  const p2 = testInfo.outputPath('second.hyperaudio');
+  (await import('node:fs')).writeFileSync(p2, await buildFixture());
+  await page.setInputFiles('#project-open-input', p2);
+  await pollPage(page, async (prev) => window.HyperaudioSave.library.currentId() !== prev
+    && document.getElementById('project-progress') === null, firstId);
+
+  // play the second project's media (muted, so headless allows it)
+  await page.evaluate(async () => {
+    const v = document.getElementById('hyperplayer');
+    v.muted = true;
+    await v.play();
+  });
+  await expect(page.locator('#playbar-play-icon')).toBeHidden(); // pause icon showing
+
+  // switch to the first project: not playing there — the button must say so
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), firstId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').paused)).toBe(true);
+  await expect(page.locator('#playbar-play-icon')).toBeVisible(); // play icon back
 });

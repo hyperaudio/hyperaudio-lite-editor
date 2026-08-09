@@ -350,3 +350,55 @@ test.describe('touch devices', () => {
     expect(await page.evaluate(() => transcriptHistory.canRedo())).toBe(true);
   });
 });
+
+// #514 — paste arrived as execCommand('insertText') (the #487 paste path),
+// indistinguishable from typing by inputType, so it coalesced into an adjacent
+// typing entry inside the 500ms window. One ⌘Z then removed both the typed and
+// the pasted text. Paste is a forced boundary in the design contract; this
+// drives the REAL paste path (ClipboardEvent → editor-core's handler →
+// execCommand) and asserts the granularity.
+test('paste is its own undo entry, severed from typing on both sides (#514)', async ({ page }) => {
+  const word = page.locator('#hypertranscript span[data-m]:not(.speaker)').first();
+  await word.click();
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    const span = t.querySelector('span[data-m]:not(.speaker)');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+
+  await page.keyboard.type('AB');
+  const afterTyping = await page.evaluate(() => transcriptHistory.inspect().length);
+
+  // the real paste path, within the coalesce window
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'PASTED');
+    document.querySelector('#hypertranscript')
+      .dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  const afterPaste = await page.evaluate(() => transcriptHistory.inspect().length);
+  expect(afterPaste).toBe(afterTyping + 1); // its own entry, not coalesced
+
+  // typing right after the paste starts fresh too
+  await page.keyboard.type('CD');
+  const afterMore = await page.evaluate(() => transcriptHistory.inspect().length);
+  expect(afterMore).toBe(afterPaste + 1);
+
+  // granularity end to end: three undos peel CD, then PASTED, then AB
+  const text = () => page.evaluate(() =>
+    document.querySelector('#hypertranscript span[data-m]:not(.speaker)').textContent);
+  expect(await text()).toContain('PASTED');
+  await page.keyboard.press('Meta+z');
+  expect(await text()).not.toContain('CD');
+  expect(await text()).toContain('PASTED');
+  await page.keyboard.press('Meta+z');
+  expect(await text()).not.toContain('PASTED');
+  expect(await text()).toContain('AB');
+  await page.keyboard.press('Meta+z');
+  expect(await text()).not.toContain('AB');
+});

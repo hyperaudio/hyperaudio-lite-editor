@@ -47,6 +47,7 @@ class ImportJson extends HTMLElement {
         if (hypertranscript === null) {
           alert("Currently you can only import JSON from the Transcript View.");
         } else {
+          if (typeof window.clearPendingTranscription === 'function') window.clearPendingTranscription();
           hypertranscript.innerHTML = jsonToHtml(jsonData);
           const mediaUrl = jsonData.sections && jsonData.sections[0] && jsonData.sections[0].mediaUrl;
           if (mediaUrl) {
@@ -232,12 +233,16 @@ class ImportSrt extends HTMLElement {
       // leaves the previous document's cue pixels painted on the paused video.
       applyCaptionTrack(vttUrl, { mode: 'showing' });
 
-      // Preserve original format
+      // an errored transcription's surviving identity must not claim this import
+      if (typeof window.clearPendingTranscription === 'function') window.clearPendingTranscription();
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+
+      // Preserve original format — AFTER the init dispatch, which now
+      // defaults caption sync ON for fresh transcripts; imported captions
+      // are curated, so the override must land last.
       updateCaptionsFromTranscript = false;
       populateCaptionEditorFromVtt(vttData);
       //captionCache = vttData;
-
-      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
     });
     
     reader.readAsText(file);
@@ -357,12 +362,16 @@ class ImportVtt extends HTMLElement {
       // Through the caption door (#356/#287) — see the SRT import above.
       applyCaptionTrack(vttUrl, { mode: 'showing' });
 
-      // Preserve original format
+      // an errored transcription's surviving identity must not claim this import
+      if (typeof window.clearPendingTranscription === 'function') window.clearPendingTranscription();
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+
+      // Preserve original format — AFTER the init dispatch, which now
+      // defaults caption sync ON for fresh transcripts; imported captions
+      // are curated, so the override must land last.
       updateCaptionsFromTranscript = false;
       populateCaptionEditorFromVtt(vttData);
       //captionCache = vttData;
-
-      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
     });
     
     reader.readAsText(file);

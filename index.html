@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 1.2.3 (last changed in release 1.2.3) -->
+<!--  Hyperaudio Lite Editor - Version 1.2.5 (last changed in release 1.2.5) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="1.2.3">
+  <meta name="version" content="1.2.5">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -124,7 +124,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.2.3">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.2.5.2">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -569,7 +569,7 @@ If you are creating an open source application under a license compatible with t
           <label id="export-media-btn" for="export-modal" class="btn btn-square btn-primary tooltip" data-tip="Export media" style="margin-right:4px" aria-label="Export media">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
           </label>
-          <label for="transcribe-modal" class="btn btn-primary gap-2">
+          <label id="new-transcription-btn" for="transcribe-modal" class="btn btn-primary gap-2">
             <span id="transcribe-label">NEW</span>
             <span id="transcribe-label-mobile">NEW</span>
             <svg id="transcribe-logo" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sticker"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><path d="M10 16s.8 1 2 1c1.3 0 2-1 2-1"></path><path d="M8 13h0"></path><path d="M16 13h0"></path></svg>
@@ -1041,8 +1041,8 @@ If you are creating an open source application under a license compatible with t
   <script src="js/transcript-serializer.js?v=1.1.8"></script>
   <script src="js/transcript-lifecycle.js?v=1.2.0"></script>
   <script src="js/transcript-gateway.js?v=1.2.0"></script>
-  <script src="js/transcript-maintenance.js?v=1.2.3"></script>
-  <script src="js/editor-core.js?v=1.2.0"></script>
+  <script src="js/transcript-maintenance.js?v=1.2.6"></script>
+  <script src="js/editor-core.js?v=1.2.6"></script>
 
 
   <import-deepgram-json></import-deepgram-json>
@@ -1050,9 +1050,9 @@ If you are creating an open source application under a license compatible with t
   <import-vtt></import-vtt>
   
 
-  <script src="js/editor-file-menu.js?v=1.0.0"></script>
+  <script src="js/editor-file-menu.js?v=1.2.5"></script>
 
-  <script src="./js/hyperaudio-lite-editor-export.js?v=1.1.9" type="module"> </script>
+  <script src="./js/hyperaudio-lite-editor-export.js?v=1.2.5" type="module"> </script>
   <!-- end of localstorage additions -->
 
   <!-- caption editor additions -->
@@ -1079,9 +1079,9 @@ If you are creating an open source application under a license compatible with t
     }
 
   </style>
-  <script src="js/editor-main.js?v=1.2.1"></script>
+  <script src="js/editor-main.js?v=1.2.5"></script>
   <script src="js/find-replace.js?v=1.2.0"></script>
-  <script src="js/transcript-history.js?v=1.2.0"></script>
+  <script src="js/transcript-history.js?v=1.2.4"></script>
   <!-- device limits benchmark — inert without ?bench=1 in the URL -->
   <script src="js/transcript-bench.js?v=1.2.3"></script>
   <script src="js/stream-stretch.js?v=0.8.6"></script>
@@ -1101,8 +1101,8 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=1.2.0"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=1.2.3"></script>
-  <script src="js/hyperaudio-library.js?v=1.2.3"></script>
+  <script src="js/hyperaudio-save.js?v=1.2.5.6"></script>
+  <script src="js/hyperaudio-library.js?v=1.2.5.3"></script>
   <!-- transcript document exports: TXT / Markdown (#467) -->
   <script src="js/transcript-doc-export.js?v=1.1.1"></script>
 

@@ -287,7 +287,7 @@ test('delete is a two-step arm inside the menu; a non-current project just goes'
   expect(state.dirs.length).toBe(1); // the directory went with the entry
 });
 
-test('deleting the CURRENT project keeps it on screen and Restore re-homes it', async ({ page }, testInfo) => {
+test('deleting the LAST project keeps it on screen and Restore re-homes it', async ({ page }, testInfo) => {
   await openProject(page, testInfo, 'Project A');
   const before = await readLibraryState(page);
 
@@ -296,12 +296,12 @@ test('deleting the CURRENT project keeps it on screen and Restore re-homes it', 
   await del.click();
   await del.click();
 
-  // gone from the library, still on screen, undo offered
+  // gone from the library, still on screen, undo offered as a placeholder row
   await expect(row(page, 'Project A')).toHaveCount(0);
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
-  await expect(page.locator('#recents-notice')).toContainText('no longer being saved');
+  await expect(page.locator('.recents-row-deleted')).toContainText('Project A');
 
-  await page.locator('#recents-notice .recents-notice-action').click();
+  await page.locator('.recents-deleted-restore').click();
   await expect(activeRow(page)).toHaveText('Project A');
   const after = await readLibraryState(page);
   expect(after.projects.length).toBe(1);
@@ -322,6 +322,122 @@ test('deleting the CURRENT project keeps it on screen and Restore re-homes it', 
       return text.indexOf('RESTORED') !== -1;
     } catch (e) { return false; }
   }, after.current);
+});
+
+test('deleting the current project keeps it on screen; Restore re-homes it from the placeholder', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await openProject(page, testInfo, 'Project B');
+  await expect(activeRow(page)).toHaveText('Project B');
+
+  await openKebab(page, 'Project B');
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click();
+
+  // the document STAYS on screen (it is the undo's raw material); nothing
+  // owns it — no row is active — and the deleted entry becomes a dotted
+  // placeholder carrying its own Restore and dismiss
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  await expect(page.locator('#file-picker .file-item.active')).toHaveCount(0);
+  await expect(row(page, 'Project B')).toHaveCount(0);
+  const placeholder = page.locator('.recents-row-deleted');
+  await expect(placeholder).toHaveCount(1);
+  await expect(placeholder).toContainText('Project B');
+
+  // the placeholder survives re-renders while nothing owns the screen
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('hyperaudioLibraryChanged')));
+  await expect(page.locator('.recents-row-deleted .recents-deleted-restore')).toBeVisible();
+
+  // Restore re-homes the on-screen document under a fresh id
+  await page.locator('.recents-row-deleted .recents-deleted-restore').click();
+  await expect(activeRow(page)).toHaveText('Project B');
+  const state = await readLibraryState(page);
+  expect(state.projects.length).toBe(2);
+  expect(state.dirs).toContain(state.current);
+  await expect(page.locator('.recents-row-deleted')).toHaveCount(0); // offer consumed
+});
+
+test('a restored project reappears at its old position, not the top', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await openProject(page, testInfo, 'Project B');
+  await openProject(page, testInfo, 'Project C');
+  // list order (by last write): C, B, A. Make B current WITHOUT editing it —
+  // opening does not bump modifiedAt, so it stays mid-list.
+  await row(page, 'Project B').click();
+  await expect(activeRow(page)).toHaveText('Project B');
+
+  await openKebab(page, 'Project B');
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click();
+  await expect(page.locator('.recents-row-deleted')).toContainText('Project B');
+
+  await page.locator('.recents-deleted-restore').click();
+  await expect(activeRow(page)).toHaveText('Project B');
+
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('#file-picker .file-item')].map((el) => el.textContent));
+  expect(names).toEqual(['Project C', 'Project B', 'Project A']); // back in place
+});
+
+test('the placeholder dismiss finalises: it navigates rather than leaving a silent ghost', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await openProject(page, testInfo, 'Project B');
+
+  await openKebab(page, 'Project B');
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click();
+  await expect(page.locator('.recents-row-deleted')).toHaveCount(1);
+
+  await page.locator('.recents-deleted-dismiss').click();
+  await expect(page.locator('.recents-row-deleted')).toHaveCount(0);
+  await expect(activeRow(page)).toHaveText('Project A'); // screen replaced, not ghosted
+  await expect(row(page, 'Project B')).toHaveCount(0);
+});
+
+test('navigating to another project withdraws the deleted placeholder', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await openProject(page, testInfo, 'Project B');
+  await openProject(page, testInfo, 'Project C');
+
+  await openKebab(page, 'Project C'); // current
+  const del = page.locator('#recents-menu .recents-menu-delete');
+  await del.click();
+  await del.click();
+  await expect(page.locator('.recents-row-deleted')).toHaveCount(1);
+
+  // the placeholder sits WHERE THE ROW WAS — immediately above its old
+  // successor — not teleported to the top by activity sorting
+  const names = await page.evaluate(() =>
+    [...document.querySelectorAll('#file-picker .recents-row')].map((li) =>
+      li.classList.contains('recents-row-deleted')
+        ? 'PLACEHOLDER:' + li.querySelector('.recents-deleted-name').textContent
+        : li.querySelector('.file-item').textContent));
+  const at = names.findIndex((n) => n.startsWith('PLACEHOLDER:'));
+  expect(names[at]).toBe('PLACEHOLDER:Project C');
+  expect(names[at + 1]).toBe('Project B'); // its successor at delete time
+
+  // one row, same footprint as a real row, controls visible without hover
+  const geometry = await page.evaluate(() => {
+    const ph = document.querySelector('.recents-row-deleted');
+    const real = document.querySelector('.recents-row:not(.recents-row-deleted)');
+    const restore = ph.querySelector('.recents-deleted-restore');
+    return {
+      sameHeight: Math.abs(ph.getBoundingClientRect().height - real.getBoundingClientRect().height) <= 6,
+      oneLine: ph.getBoundingClientRect().height < 2 * real.getBoundingClientRect().height,
+      sameWidth: Math.abs(ph.getBoundingClientRect().width - real.getBoundingClientRect().width) <= 2,
+      restoreVisible: getComputedStyle(restore).opacity !== '0'
+        && getComputedStyle(restore.parentElement).opacity !== '0',
+    };
+  });
+  expect(geometry).toEqual({ sameHeight: true, oneLine: true, sameWidth: true, restoreVisible: true });
+
+  // any navigation elsewhere withdraws the offer
+  await row(page, 'Project A').click();
+  await expect(activeRow(page)).toHaveText('Project A');
+  await expect(page.locator('.recents-row-deleted')).toHaveCount(0);
+  await expect(row(page, 'Project C')).toHaveCount(0); // gone for good
 });
 
 test('boot restores the project you were last ON, not the last written', async ({ page }, testInfo) => {

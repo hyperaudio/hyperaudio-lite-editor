@@ -2,6 +2,18 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import { ladderWav } from './helpers.mjs';
 
+// The benchmark runs in its own project (#517 follow-up), which needs OPFS.
+// Playwright's WebKit ships the OPFS API surface without a working backend
+// (navigator.storage.getDirectory() throws UnknownError — see #510), so the
+// library-dependent tests skip there. Real Safari has working OPFS; this is
+// a harness limitation, not a product one.
+const skipWithoutOpfs = async (page) => {
+  const works = await page.evaluate(async () => {
+    try { await navigator.storage.getDirectory(); return true; } catch (e) { return false; }
+  });
+  test.skip(!works, 'OPFS non-functional in this harness (Playwright WebKit)');
+};
+
 test('bench is inert without the flag', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript span[data-m]');
@@ -12,6 +24,7 @@ test('bench panel appears with ?bench=1 and produces measurements', async ({ pag
   test.setTimeout(240000);
   await page.goto('/index.html?bench=1');
   await page.waitForSelector('#hypertranscript span[data-m]');
+  await skipWithoutOpfs(page);
   const panel = page.locator('[aria-label="HLE Benchmark"]');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('local ASR');
@@ -46,8 +59,8 @@ test('the benchmark runs in its own project and returns you to yours', async ({ 
   test.setTimeout(240000);
   await page.goto('/index.html?bench=1');
   await page.waitForSelector('#hypertranscript span[data-m]');
+  await skipWithoutOpfs(page);
 
-  // give the user a project to be returned to (a birth, as every engine does it)
   // A file captured for the user's own work — the state in which the
   // Benchmark project used to claim this file as ITS media.
   const wavPath = testInfo.outputPath('tone.wav');

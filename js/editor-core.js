@@ -33,6 +33,17 @@
   // While a transcription is in flight the transcript container holds loader
   // markup, not a transcript – typing into it would be silently destroyed
   // when the result lands. Transcription modules call this around their work.
+  // Re-picking the SAME file fires no change event unless the input's value
+  // is cleared first — so retrying a transcription after an interruption (or
+  // transcribing the same file twice) was a silent no-op (#525). Clearing on
+  // click makes every pick fire. Wired centrally for the engines' file
+  // inputs; the same trick the project-open input has always used.
+  ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file']
+    .forEach((selector) => {
+      const el = document.querySelector(selector);
+      if (el !== null) el.addEventListener('click', () => { el.value = ''; });
+    });
+
   function setTranscriptBusy(busy) {
     const transcript = document.getElementById("hypertranscript");
     if (transcript === null) {
@@ -236,7 +247,18 @@
   // (transcribe / JSON import / SRT-VTT import) — discard any cached caption
   // editor so the next entry rebuilds from the fresh transcript. Caption
   // edits otherwise persist; localStorage load manages its own cache.
-  window.document.addEventListener('hyperaudioInit', () => { captionCache = null; }, false);
+  window.document.addEventListener('hyperaudioInit', () => {
+    captionCache = null;
+    // A fresh transcript just landed: its machine captions ARE
+    // transcript-derived, so caption sync defaults ON. Nothing reset this
+    // before, so a new transcription INHERITED the flag from whatever was
+    // open previously — after any project with curated captions, edits to
+    // the new transcript updated neither the video captions nor the caption
+    // editor. Importers that carry curated captions (VTT/SRT) set the flag
+    // false AFTER dispatching this event, and the project-open path applies
+    // saved options without firing it at all.
+    updateCaptionsFromTranscript = true;
+  }, false);
 
   // Segmented view switch (transcript/captions): both segments stay clickable
   // and the active one is marked by the track's thumb + aria-pressed rather
@@ -357,21 +379,53 @@
       pre.setEnd(container, offset);
       return pre.toString().length;
     };
+    // The caret's containing block, because an absolute offset is AMBIGUOUS
+    // exactly at a paragraph boundary (#530): right after Enter, 'start of
+    // the new <p>' and 'end of the previous <p>' are the same character
+    // count — Range.toString() emits nothing between blocks the split left
+    // adjacent. Recording which <p> held the caret lets restore pick the
+    // right side; without it the debounced pass yanked a freshly-placed
+    // caret back to the end of the paragraph above.
+    const blockOf = (container) => {
+      const el = container.nodeType === Node.ELEMENT_NODE ? container : container.parentElement;
+      const block = el !== null ? el.closest('p') : null;
+      return block !== null ? Array.prototype.indexOf.call(root.querySelectorAll('p'), block) : -1;
+    };
     return {
       start: measure(range.startContainer, range.startOffset),
+      startBlock: blockOf(range.startContainer),
       end: range.collapsed ? null : measure(range.endContainer, range.endOffset),
+      endBlock: range.collapsed ? null : blockOf(range.endContainer),
     };
   }
 
   // Resolve an absolute character offset back to a (text node, offset) pair;
   // clamps past-the-end to the final position.
-  function resolveCharOffset(root, chars) {
+  function resolveCharOffset(root, chars, preferredBlock) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const paragraphs = root.querySelectorAll('p');
+    const blockOf = (n) => {
+      const block = n.parentElement !== null ? n.parentElement.closest('p') : null;
+      return block !== null ? Array.prototype.indexOf.call(paragraphs, block) : -1;
+    };
     let node;
     let last = null;
     let remaining = chars;
     while ((node = walker.nextNode())) {
       if (remaining <= node.nodeValue.length) {
+        // Exactly at this node's end, the same offset also describes the
+        // start of the NEXT text node — a different position when a block
+        // boundary sits between them (#530). The saved block says which side
+        // the caret was really on; only cross the boundary when it says so.
+        if (remaining === node.nodeValue.length
+            && preferredBlock !== undefined && preferredBlock !== -1
+            && blockOf(node) !== preferredBlock) {
+          let ahead = walker.nextNode();
+          while (ahead !== null && ahead.nodeValue.length === 0) ahead = walker.nextNode();
+          if (ahead !== null && blockOf(ahead) === preferredBlock) {
+            return { node: ahead, offset: 0 };
+          }
+        }
         return { node, offset: remaining };
       }
       remaining -= node.nodeValue.length;
@@ -381,13 +435,13 @@
   }
 
   function restoreCaretOffset(root, saved) {
-    const start = resolveCharOffset(root, saved.start);
+    const start = resolveCharOffset(root, saved.start, saved.startBlock);
     if (start === null) return;
     const sel = window.getSelection();
     const range = document.createRange();
     range.setStart(start.node, start.offset);
     if (saved.end !== null) {
-      const end = resolveCharOffset(root, saved.end);
+      const end = resolveCharOffset(root, saved.end, saved.endBlock);
       if (end !== null) range.setEnd(end.node, end.offset);
     } else {
       range.collapse(true);
@@ -1246,6 +1300,15 @@
       document.querySelector('#hyperplayer').textTracks[0].mode = "hidden";
     } else {
       document.querySelector('#hyperplayer').textTracks[0].mode = "showing";
+    }
+    // Defend this write against a stale caption.js straggler (#515): both the
+    // sanitise and regenerate routes funnel through here, and until now they
+    // survived only because caption.js defers its own write and registration
+    // order happened to put the right one last — safety by accident. The
+    // guard (hyperaudio-save.js) re-asserts this src/mode after any straggler
+    // when media metadata is still pending; it is a no-op once loaded.
+    if (typeof window.guardCurrentCaptionWrite === 'function') {
+      window.guardCurrentCaptionWrite();
     }
     return subs.data;
   }
