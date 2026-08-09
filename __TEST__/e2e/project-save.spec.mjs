@@ -1226,33 +1226,16 @@ test('switching back to your project mid-transcription rescues it from the loade
   await startFakeTranscription(page);
   await expect(page.locator('#hypertranscript')).toContainText('Transcribing…');
 
-  // click your own project's row: previously a silent no-op
-  const openPromise = page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
-  await awaitModal(page);
-  await page.click('#project-dialog-confirm');
-  await openPromise;
+  // click your own project's row: previously a silent no-op, now an
+  // immediate switch — no consent dialog (#525: the in-progress row is the
+  // way back, so leaving needs no ceremony)
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
 
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti'); // the project is back
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBeNull(); // busy cleared
 });
 
-test('staying puts keeps the transcription untouched (#525)', async ({ page }, testInfo) => {
-  const dialogs = [];
-  await openFixture(page, testInfo, dialogs);
-  await awaitLibraryEntry(page);
-  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
-
-  await startFakeTranscription(page);
-  const openPromise = page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
-  await awaitModal(page);
-  await page.click('#project-dialog-cancel');
-  expect(await openPromise).toBe(false);
-
-  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…'); // untouched
-  expect(await page.evaluate(() =>
-    document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBe('true');
-});
 
 test('the engine file inputs clear on click so the same file can be re-picked (#525)', async ({ page }, testInfo) => {
   await page.goto('/index.html');
@@ -1291,11 +1274,8 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('transcribing…');
 
-  // switch away to the existing project (consent), the row stays
-  const openPromise = page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
-  await awaitModal(page);
-  await page.click('#project-dialog-confirm');
-  await openPromise;
+  // switch away to the existing project — immediate, the row stays
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
   await expect(row).toHaveCount(1);
 
