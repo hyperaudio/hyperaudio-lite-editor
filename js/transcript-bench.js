@@ -102,6 +102,16 @@
     const t = document.getElementById('hypertranscript');
     await prepareDocument(words, first);
 
+    // Document replacement is a global-dirty event. Settle it outside every
+    // timed sample so the pass below measures steady-state paragraph editing,
+    // not benchmark setup or project birth.
+    if (typeof window.hyperaudioFlushTranscriptMaintenance === 'function') {
+      window.hyperaudioFlushTranscriptMaintenance('benchmark-prepare', {
+        force: true,
+        global: true,
+      });
+    }
+
     const spans = t.querySelectorAll('span[data-m]');
     const mid = spans[Math.floor(spans.length / 2)];
     t.focus();
@@ -116,9 +126,23 @@
     }
 
     const sanitise = [];
+    if (window.transcriptReconciliation
+        && typeof window.transcriptReconciliation.cancel === 'function') {
+      window.transcriptReconciliation.cancel();
+    }
     for (let i = 0; i < 3; i += 1) {
+      // Measure the pass that really runs during editing. On editors with
+      // scoped maintenance this requests the current paragraph and suppresses
+      // the longer settle reconciliation; older builds fall back to the
+      // history-restore hook, which was the only exposed sanitise barrier.
+      if (typeof window.hyperaudioRequestTranscriptMaintenance === 'function') {
+        window.hyperaudioRequestTranscriptMaintenance(mid.closest('p'),
+          'benchmark-sanitise', { reconcile: false });
+      }
       const t0 = performance.now();
-      if (typeof window.hyperaudioNormalizeAfterHistoryRestore === 'function') {
+      if (typeof window.hyperaudioFlushTranscriptMaintenance === 'function') {
+        window.hyperaudioFlushTranscriptMaintenance('benchmark-sanitise');
+      } else if (typeof window.hyperaudioNormalizeAfterHistoryRestore === 'function') {
         window.hyperaudioNormalizeAfterHistoryRestore();
       }
       sanitise.push(performance.now() - t0);

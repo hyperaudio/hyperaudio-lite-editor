@@ -110,6 +110,7 @@
       id: ++transactionId,
       origin: opts.origin || 'unknown',
       foldPolicy: opts.foldPolicy || null,
+      captureHistory: opts.captureHistory !== false,
     });
     currentTransaction = transaction;
     mutationDepth = 1;
@@ -130,6 +131,7 @@
         id: transaction.id,
         origin: transaction.origin,
         foldPolicy: transaction.foldPolicy,
+        captureHistory: transaction.captureHistory,
         error,
       }));
     }

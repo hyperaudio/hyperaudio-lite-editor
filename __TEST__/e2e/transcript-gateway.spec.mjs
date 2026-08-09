@@ -50,7 +50,7 @@ test('outer transaction owns nesting, returns values, and clears state after err
   });
 });
 
-test('blur normalization and debounced sanitise cross the gateway', async ({ page }) => {
+test('blur flushes queued sanitise through the gateway without a delayed duplicate', async ({ page }) => {
   const origins = await page.evaluate(async () => {
     const seen = [];
     const off = transcriptGateway.onBeforeMutate((tx) => seen.push(tx.origin));
@@ -65,8 +65,7 @@ test('blur normalization and debounced sanitise cross the gateway', async ({ pag
     return seen;
   });
 
-  expect(origins).toContain('normalize-blur');
-  expect(origins).toContain('sanitise');
+  expect(origins.filter((origin) => /sanitise/.test(origin))).toEqual(['sanitise-blur']);
 });
 
 test('Replace One, Replace All, and strike have explicit transaction origins', async ({ page }) => {

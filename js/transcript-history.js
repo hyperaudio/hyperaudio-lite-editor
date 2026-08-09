@@ -343,11 +343,20 @@
 
   gateway.onBeforeMutate((transaction) => {
     clearPending();
+    if (transaction.captureHistory === false) {
+      gatewayBefore = null;
+      return;
+    }
     gatewayBefore = snapshot(`before-${transaction.origin}`);
     rememberPreEditSelection(gatewayBefore);
   });
 
   gateway.onAfterMutate((transaction) => {
+    if (transaction.captureHistory === false) {
+      gatewayBefore = null;
+      updateControls();
+      return;
+    }
     const before = gatewayBefore;
     gatewayBefore = null;
     const after = snapshot(transaction.origin);
