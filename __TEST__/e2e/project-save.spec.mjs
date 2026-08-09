@@ -914,6 +914,46 @@ test('undo back to the save clears the dot even after deferred caption regen (#5
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/, { timeout: 6000 });
 });
 
+test('multi-step undo back to the save clears the dot promptly (sync-on)', async ({ page }, testInfo) => {
+  // Two typed runs, each folded by the local pass, then undo both. At the
+  // final undo the transcript matches the save but the caption track still
+  // holds the INTERMEDIATE vtt (undo #1's post-restore refresh built it;
+  // undo #2's regen is deferred). With sync on the vtt is a pure derivative
+  // of the transcript, so the signature must not compare it — otherwise the
+  // dot lingers ~3.4s until the recheck. Prompt means within 1s, well under
+  // that recheck window, so this test has teeth against the race.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs, (project) => {
+    project.options.captions.updateFromTranscript = true;
+  });
+  await awaitLibraryEntry(page);
+
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = t.querySelector('span[data-m]:not(.speaker)');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  await page.keyboard.type('XX yy');
+  await page.waitForTimeout(1700); // run 1 folds into its history entry
+  await page.keyboard.type('zz ww');
+  await page.waitForTimeout(1700); // run 2 folds
+
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/); // one run still applied
+  await page.waitForTimeout(500);
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/, { timeout: 1000 });
+});
+
 test('undo does not clear the dot while a non-transcript edit is pending', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);

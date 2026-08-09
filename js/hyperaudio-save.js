@@ -694,18 +694,24 @@
   // a draft was restored, so the saved state isn't what's on screen); unknown
   // stays dirty, which is the previous behaviour.
   let savedSignature = null;
-  // `modified` is stamped at every gather, so it would defeat any comparison;
-  // captions ride outside the project json and must be part of the identity —
-  // undoing the transcript back while a caption edit is pending is NOT clean.
-  function signatureOfParts(json, vtt) {
-    const project = JSON.parse(json);
+  // `modified` is stamped at every gather, so it would defeat any comparison.
+  // Captions ride outside the project json: with sync OFF they are curated
+  // content and part of the identity — undoing the transcript back while a
+  // caption edit is pending is NOT clean. With sync ON the vtt is a pure
+  // derivative of the transcript, regenerated on a deferred schedule (#517),
+  // so comparing it would only race the regen queue — the transcript json
+  // already carries the same information.
+  function signatureFor(project, vtt) {
     project.modified = '';
-    return JSON.stringify(project) + '\u001f' + (vtt || '');
+    const syncOn = !!(project.options && project.options.captions
+      && project.options.captions.updateFromTranscript !== false);
+    return JSON.stringify(project) + '\u001f' + (syncOn ? '' : (vtt || ''));
+  }
+  function signatureOfParts(json, vtt) {
+    return signatureFor(JSON.parse(json), vtt);
   }
   function stateSignature() {
-    const project = buildProjectJson(gather());
-    project.modified = '';
-    return JSON.stringify(project) + '\u001f' + (getCaptionsVtt() || '');
+    return signatureFor(buildProjectJson(gather()), getCaptionsVtt() || '');
   }
 
   // History and other same-document features must not infer identity from a
