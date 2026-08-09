@@ -2310,7 +2310,18 @@
   // spans as an engine failure and would drop the in-progress row).
   function leaveTranscriptionView() {
     const t = document.getElementById('hypertranscript');
-    if (t !== null && t.getAttribute('aria-busy') === 'true') t.removeAttribute('aria-busy');
+    if (t !== null && t.getAttribute('aria-busy') === 'true') {
+      // Refresh the pending snapshot on the way out: it was captured at
+      // busy(true) — the 'Preparing model' stage — so switching back showed
+      // that stale first message for a beat until the engine's next interval
+      // tick repainted. Departure-time capture means the return shows the
+      // message (and elapsed time) as of when you left, corrected within a
+      // second by the engine's own clock.
+      if (pendingTranscription !== null && t.querySelector('.transcribing-msg') !== null) {
+        pendingTranscription.loaderHtml = t.innerHTML;
+      }
+      t.removeAttribute('aria-busy');
+    }
     return true;
   }
 
