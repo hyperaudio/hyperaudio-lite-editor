@@ -1267,22 +1267,29 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   // an engine starts, exactly as they all do: loader markup, then busy(true)
   await page.evaluate(() => {
     document.querySelector('#hypertranscript').innerHTML =
-      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Preparing model…</span></center></div>';
     setTranscriptBusy(true);
   });
   const row = page.locator('.recents-row-transcribing');
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('transcribing…');
 
+  // the engine progresses past the initial message, as its interval does
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript .transcribing-msg').textContent = 'Transcribing… (0m 42s)';
+  });
+
   // switch away to the existing project — immediate, the row stays
   await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
   await expect(row).toHaveCount(1);
 
-  // click the row: back to the live loader, and the engines' null-guarded
-  // progress lookup finds its element again
+  // click the row: back to the live loader AT THE DEPARTURE-TIME message —
+  // not the stale 'Preparing model' captured when the engine started
   await row.locator('.recents-transcribing-item').click();
-  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…');
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (0m 42s)');
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').textContent.includes('Preparing model'))).toBe(false);
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript .transcribing-msg') !== null)).toBe(true);
 
