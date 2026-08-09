@@ -1337,3 +1337,31 @@ test('an engine error takes the in-progress row with it (#525)', async ({ page }
   });
   await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
 });
+
+// #525 — one transcription at a time: the engines share one transcript
+// element and one busy flag, so a second start mid-run interleaved into
+// errors. The entry points grey out while busy.
+test('the NEW button is inert while a transcription runs (#525)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  const newBtn = page.locator('#new-transcription-btn');
+  await expect(newBtn).toHaveCSS('pointer-events', 'none');
+  // and the modal genuinely cannot be opened through it
+  await newBtn.click({ force: true }).catch(() => {});
+  expect(await page.evaluate(() => document.getElementById('transcribe-modal').checked)).toBe(false);
+
+  // engine ends: the door reopens
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML = '<p>err</p>';
+    setTranscriptBusy(false);
+  });
+  await expect(newBtn).not.toHaveCSS('pointer-events', 'none');
+  await newBtn.click();
+  expect(await page.evaluate(() => document.getElementById('transcribe-modal').checked)).toBe(true);
+});
