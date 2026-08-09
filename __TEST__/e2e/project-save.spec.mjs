@@ -1103,13 +1103,19 @@ test('the in-flight open explains itself rather than doing nothing (#504)', asyn
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
 
-  // Two opens started back to back. What the file contains does not matter —
-  // the guard is set synchronously before the first await, so the second call
-  // takes the refusal path regardless of whether the first ultimately succeeds.
+  // Two opens started back to back. The first must GENUINELY still be in
+  // flight when the second arrives — an instantly-failing dummy could finish
+  // first under CPU contention and the refusal never fire (it did, in full-
+  // suite runs on a loaded machine). A real container with long media keeps
+  // the first open busy well past the second call.
+  const bigPath = testInfo.outputPath('big.hyperaudio');
+  fs.writeFileSync(bigPath, await buildFixture(null, null, 600));
+  await page.setInputFiles('#project-open-input', bigPath); // lands a File we can reuse
+  await awaitOpenIdle(page);
   const text = await page.evaluate(async () => {
-    const dummy = () => new File(['not a zip'], 'x.hyperaudio');
-    const first = window.HyperaudioSave.openFromFile(dummy());
-    const second = window.HyperaudioSave.openFromFile(dummy());
+    const file = document.getElementById('project-open-input').files[0];
+    const first = window.HyperaudioSave.openFromFile(file);
+    const second = window.HyperaudioSave.openFromFile(file);
     const el = document.getElementById('project-progress');
     const t = el ? el.textContent : null;
     await Promise.allSettled([first, second]);
