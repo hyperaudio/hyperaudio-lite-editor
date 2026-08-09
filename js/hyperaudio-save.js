@@ -2218,7 +2218,15 @@
    * birth (hyperaudioInit); busy(false) with no timed spans in the transcript
    * is a failure or cancellation, and the row leaves with the engine.
    * ----------------------------------------------------------------------- */
-  let pendingTranscription = null; // { name, loaderHtml }
+  let pendingTranscription = null; // { name, loaderHtml } — the row and the view
+  // The transcription's IDENTITY (file, URL marker, player src) lives longer
+  // than the row: Parakeet's worker can report a phantom error (#529) — which
+  // takes the row down, correctly, since the engine SAYS it died — and then
+  // recover and complete anyway. If the identity died with the row, that
+  // recovered birth stole the name, media and video of whatever project the
+  // user was viewing. The identity survives until a birth consumes it, a new
+  // transcription replaces it, or a user-initiated import clears it.
+  let pendingIdentity = null; // { file, fromUrl, playerSrc }
 
   function pendingTranscriptionInfo() {
     return pendingTranscription === null ? null : { name: pendingTranscription.name };
@@ -2251,9 +2259,8 @@
             // after the OTHER file and, worse, paired the transcript with the
             // other project's media. Captured here, restored at the birth.
             const player = document.getElementById('hyperplayer');
-            pendingTranscription = {
-              name: mediaDisplayName(),
-              loaderHtml: t.innerHTML,
+            pendingTranscription = { name: mediaDisplayName(), loaderHtml: t.innerHTML };
+            pendingIdentity = {
               file: session.mediaFile,
               fromUrl: session.mediaFileFromUrl,
               playerSrc: player !== null ? player.src : '',
@@ -2283,19 +2290,35 @@
   // Registered at module load, BEFORE wireCapture registers onNewTranscript —
   // so the pending identity is restored before the birth gathers it.
   document.addEventListener('hyperaudioInit', () => {
-    if (pendingTranscription !== null) {
-      session.mediaFile = pendingTranscription.file;
-      session.mediaFileFromUrl = pendingTranscription.fromUrl;
+    if (pendingIdentity !== null) {
+      session.mediaFile = pendingIdentity.file;
+      session.mediaFileFromUrl = pendingIdentity.fromUrl;
       const player = document.getElementById('hyperplayer');
-      if (player !== null && pendingTranscription.playerSrc
-          && player.src !== pendingTranscription.playerSrc) {
-        player.src = pendingTranscription.playerSrc; // the transcription's own media back on the player
+      if (player !== null && pendingIdentity.playerSrc
+          && player.src !== pendingIdentity.playerSrc) {
+        player.src = pendingIdentity.playerSrc; // the transcription's own media back on the player
       }
+      pendingIdentity = null;
+    }
+    if (pendingTranscription !== null) {
       pendingTranscription = null;
       document.documentElement.classList.remove('ha-transcribing');
       notifyLibraryChanged(false);
     }
   });
+
+  // User-initiated content imports (SRT/VTT/JSON) also dispatch
+  // hyperaudioInit; a surviving identity from an errored transcription must
+  // not hijack THEIR media. The import paths call this before dispatching.
+  function clearPendingTranscription() {
+    pendingIdentity = null;
+    if (pendingTranscription !== null) {
+      pendingTranscription = null;
+      document.documentElement.classList.remove('ha-transcribing');
+      notifyLibraryChanged(false);
+    }
+  }
+  window.clearPendingTranscription = clearPendingTranscription;
 
   // Clicking the in-progress row: hand the screen back to the transcription.
   // The current project's pending edits flush to its own draft first; the

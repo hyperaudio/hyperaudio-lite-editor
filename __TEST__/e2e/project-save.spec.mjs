@@ -1348,6 +1348,58 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   expect(born.playerSrc).toBe(engineSrc);
 });
 
+test('a phantom engine error does not let the birth steal another project\'s identity (#529 × #525)', async ({ page }, testInfo) => {
+  // The measured Parakeet failure mode: handleError fires (error markup +
+  // busy(false)) — then the worker recovers and completes anyway. The row
+  // dies with the error signal, correctly; the transcription's identity must
+  // not, or the recovered birth is named after and paired with whatever
+  // project the user was viewing.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  const newWav = testInfo.outputPath('phantom-recording.wav');
+  (await import('node:fs')).writeFileSync(newWav, ladderWav(1));
+  await page.setInputFiles('#file-input', newWav);
+  await page.evaluate(() => {
+    const player = document.getElementById('hyperplayer');
+    player.src = URL.createObjectURL(new Blob([new Uint8Array(4)], { type: 'audio/wav' }));
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Preparing model…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  const engineSrc = await page.evaluate(() => document.getElementById('hyperplayer').src);
+
+  // the user is viewing another project when the phantom error hits
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center>Sorry. Transcription failed.</center></div>';
+    setTranscriptBusy(false); // handleError's signal — the row goes
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
+
+  // ...and then the worker recovers and completes
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">RECOVERED </span></p></section></article>';
+    setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await pollPage(page, async () => (await window.HyperaudioSave.library.list()).length === 2);
+
+  const born = await page.evaluate(async () => {
+    const list = await window.HyperaudioSave.library.list();
+    const entry = list.find((e) => e.name !== 'E2E Project');
+    return { name: entry.name, mediaFile: entry.media && entry.media.filename,
+      playerSrc: document.getElementById('hyperplayer').src };
+  });
+  expect(born.name).toBe('phantom-recording.wav');      // not the fixture's name
+  expect(born.mediaFile).toBe('phantom-recording.wav'); // not the fixture's media
+  expect(born.playerSrc).toBe(engineSrc);               // not the fixture's video
+});
+
 test('an engine error takes the in-progress row with it (#525)', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
