@@ -1568,3 +1568,41 @@ label[data-a11y-wired]:focus-visible {
 #file-picker .recents-deleted-dismiss {
   color: oklch(var(--bc) / 0.5);
 }
+
+/* The in-progress transcription row (#525): the same anatomy and widths as a
+   normal row, with a spinner in the kebab's slot as the wordless "something
+   is happening" signal — always visible, where a kebab reveals on hover. */
+#file-picker .recents-row-transcribing .recents-actions {
+  opacity: 1;
+  align-items: center;
+  /* the kebab is a 2rem square button; give the spinner the same footprint
+     so the name column ends where every other row's does */
+  width: 2rem;
+  justify-content: center;
+}
+#file-picker .recents-transcribing-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid oklch(var(--p) / 0.25);
+  border-top-color: oklch(var(--p));
+  border-radius: 50%;
+  animation: ha-transcribing-spin 0.8s linear infinite;
+}
+@keyframes ha-transcribing-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #file-picker .recents-transcribing-spinner { animation: none; }
+}
+
+/* One transcription at a time (#525): the engines share one transcript
+   element, one player and one busy flag — starting a second while one runs
+   produced interleaved errors. The entry points grey out while the
+   transcript is busy (same :has pattern as the corner buttons); the modal's
+   own submit labels need no gating because starting closes the modal and
+   reopening goes through these. Batch transcription is its own feature. */
+html.ha-transcribing #new-transcription-btn,
+html.ha-transcribing #upload-transcribe-btn {
+  pointer-events: none;
+  opacity: 0.4;
+}

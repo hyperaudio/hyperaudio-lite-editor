@@ -326,6 +326,38 @@
       pendingDeleted = null;
     }
 
+    // The in-progress transcription (#525): a virtual row at the top — it is
+    // the newest thing happening — with a live badge. Clicking it hands the
+    // screen back to the transcription; the engines' progress resumes there.
+    const pending = api.pendingTranscription ? api.pendingTranscription() : null;
+    // While the loader is what's on screen, the transcribing row is the
+    // selection — from the moment the engine starts until the user moves
+    // away, and again whenever they return. The project rows' own active
+    // marking stands down for exactly that window (the session may still
+    // point at the previous project before the birth, and its row showing
+    // active while the user watches the loader would be a lie).
+    const viewingPending = pending !== null && (() => {
+      const t = document.getElementById('hypertranscript');
+      return t !== null && t.getAttribute('aria-busy') === 'true';
+    })();
+    if (pending !== null) {
+      const nameHtml = escapeMarkup(pending.name);
+      // Same anatomy as a normal row — name column plus the actions slot —
+      // so the widths line up; a spinner sits where the kebab would, saying
+      // 'in progress' without words.
+      filePicker.insertAdjacentHTML('beforeend',
+        `<li class="recents-row recents-row-transcribing">` +
+        `<a class="file-item recents-transcribing-item${viewingPending ? ' active' : ''}">${nameHtml}</a>` +
+        `<span class="recents-actions">` +
+        `<span class="recents-transcribing-spinner" role="img" aria-label="Transcribing"></span>` +
+        `</span></li>`);
+      filePicker.querySelector('.recents-transcribing-item')
+        .addEventListener('click', (event) => {
+          event.preventDefault();
+          api.openPendingTranscription();
+        });
+    }
+
     const entryById = {};
     const renderRow = (entry) => {
       if (entry.deletedPlaceholder === true) {
@@ -409,8 +441,8 @@
       });
     }
 
-    filePicker.querySelectorAll('.file-item').forEach((el) => {
-      el.classList.toggle('active', el.getAttribute('data-id') === currentId);
+    filePicker.querySelectorAll('.file-item[data-id]').forEach((el) => {
+      el.classList.toggle('active', !viewingPending && el.getAttribute('data-id') === currentId);
       el.addEventListener('click', (event) => {
         // a rename input lives inside the row's <a>; its clicks are not loads
         if (event.target.classList && event.target.classList.contains('recents-rename-input')) return;

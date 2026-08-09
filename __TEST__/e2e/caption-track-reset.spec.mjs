@@ -353,3 +353,33 @@ test('a new transcription turns caption sync back on', async ({ page }) => {
   expect(lines).toContain('POST-TRANSCRIBE-EDIT');
 });
 
+
+// Regenerate means "give me transcript-derived captions": sync resumes until
+// the next hand edit. Before, regenerated captions stayed marked curated and
+// silently stopped following further transcript edits.
+test('Regenerate turns caption sync back on until the next caption edit', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  // curated state: a caption was hand-edited at some point
+  await page.evaluate(() => { updateCaptionsFromTranscript = false; });
+
+  // the caption view's Regenerate confirm
+  await page.click('#caption-editor-btn');
+  await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+  // entering with sync off raises the "Captions have been edited" notice,
+  // which sits over the first rows and intercepts clicks (#506)
+  const alertBox = page.locator('#captionsource-alert');
+  if (await alertBox.isVisible()) await page.click('#captionsource-alert-ok');
+  // the real flow: the floating Regenerate opens the confirm modal, Confirm
+  // fires the handler and closes it (both are modal-toggle labels)
+  await page.click('#regenerate-float-btn');
+  await page.click('#regenerate-captions');
+  await expect(page.locator('#regenerate-captions-modal')).not.toBeChecked();
+  expect(await page.evaluate(() => updateCaptionsFromTranscript)).toBe(true);
+
+  // and a hand edit flips it right back off
+  await page.locator('#captions-display .caption input.line1').first().click();
+  await page.keyboard.type('X');
+  expect(await page.evaluate(() => updateCaptionsFromTranscript)).toBe(false);
+});

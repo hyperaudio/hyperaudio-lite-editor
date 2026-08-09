@@ -33,6 +33,17 @@
   // While a transcription is in flight the transcript container holds loader
   // markup, not a transcript – typing into it would be silently destroyed
   // when the result lands. Transcription modules call this around their work.
+  // Re-picking the SAME file fires no change event unless the input's value
+  // is cleared first — so retrying a transcription after an interruption (or
+  // transcribing the same file twice) was a silent no-op (#525). Clearing on
+  // click makes every pick fire. Wired centrally for the engines' file
+  // inputs; the same trick the project-open input has always used.
+  ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file']
+    .forEach((selector) => {
+      const el = document.querySelector(selector);
+      if (el !== null) el.addEventListener('click', () => { el.value = ''; });
+    });
+
   function setTranscriptBusy(busy) {
     const transcript = document.getElementById("hypertranscript");
     if (transcript === null) {

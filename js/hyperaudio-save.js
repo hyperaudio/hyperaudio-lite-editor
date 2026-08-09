@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.2.4 — last changed in release 1.2.4
+ * @version 1.2.5 — last changed in release 1.2.5
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1975,6 +1975,7 @@
   }
 
   async function openFromFileInner(file, token) {
+    leaveTranscriptionView(); // #525: the busy styling must not follow us
     // Parse and validate BEFORE the replace-confirmation: asking permission
     // to replace the current project and THEN refusing the file meant the
     // user consented to a replacement that never happened (prepare → confirm
@@ -2202,9 +2203,199 @@
   // incoming one (draft first — its unsaved edits come back, still dirty),
   // move the per-project lock. Returns false (editor untouched) when the
   // target can't be read.
+  /* --------------------------------------------------------------------------
+   * Pending transcription as a first-class Recents citizen (#525). From the
+   * moment an engine starts, the transcription appears as an in-progress row
+   * (virtual — in memory only, so a reload, which kills the engine anyway,
+   * leaves no stuck entry). Clicking it switches back to the live loader:
+   * the local engines update progress via a null-guarded
+   * '#hypertranscript .transcribing-msg' lookup, so re-rendering the captured
+   * loader markup lets their message and elapsed time resume painting.
+   *
+   * Detection is the engines' own signal: they call setTranscriptBusy(true)
+   * right after writing their loader, and (false) on completion or error —
+   * wrapped here the same way setTranscriptionInfo is. Completion is the
+   * birth (hyperaudioInit); busy(false) with no timed spans in the transcript
+   * is a failure or cancellation, and the row leaves with the engine.
+   * ----------------------------------------------------------------------- */
+  let pendingTranscription = null; // { name, loaderHtml } — the row and the view
+  // The transcription's IDENTITY (file, URL marker, player src) lives longer
+  // than the row: Parakeet's worker can report a phantom error (#529) — which
+  // takes the row down, correctly, since the engine SAYS it died — and then
+  // recover and complete anyway. If the identity died with the row, that
+  // recovered birth stole the name, media and video of whatever project the
+  // user was viewing. The identity survives until a birth consumes it, a new
+  // transcription replaces it, or a user-initiated import clears it.
+  let pendingIdentity = null; // { file, fromUrl, playerSrc }
+
+  function pendingTranscriptionInfo() {
+    return pendingTranscription === null ? null : { name: pendingTranscription.name };
+  }
+
+  function mediaDisplayName() {
+    if (session.mediaFile !== null && session.mediaFile.name) return session.mediaFile.name;
+    const player = document.getElementById('hyperplayer');
+    const src = player !== null ? player.src : '';
+    if (/^https?:/i.test(src)) {
+      try {
+        const leaf = decodeURIComponent(new URL(src).pathname.split('/').pop() || '');
+        if (leaf !== '') return leaf;
+      } catch (e) { /* fall through */ }
+    }
+    return 'Transcription';
+  }
+
+  {
+    const originalSetBusy = window.setTranscriptBusy;
+    if (typeof originalSetBusy === 'function') {
+      window.setTranscriptBusy = function (busy) {
+        try {
+          const t = document.getElementById('hypertranscript');
+          if (busy === true && t !== null) {
+            // Carry the transcription's own IDENTITY, not just its loader:
+            // switching away replaces session.mediaFile and the player src
+            // with the other project's, and the birth reads both — so a
+            // completion while viewing another project named the new project
+            // after the OTHER file and, worse, paired the transcript with the
+            // other project's media. Captured here, restored at the birth.
+            const player = document.getElementById('hyperplayer');
+            pendingTranscription = { name: mediaDisplayName(), loaderHtml: t.innerHTML };
+            pendingIdentity = {
+              file: session.mediaFile,
+              fromUrl: session.mediaFileFromUrl,
+              playerSrc: player !== null ? player.src : '',
+            };
+            // ENGINE state, distinct from the transcript's aria-busy VIEW
+            // state (which switching away deliberately clears): the NEW /
+            // transcribe entry points grey on this class, so the gate holds
+            // while the engine runs in the background too.
+            document.documentElement.classList.add('ha-transcribing');
+            notifyLibraryChanged(false);
+          } else if (busy === false && pendingTranscription !== null) {
+            // success is announced by hyperaudioInit (the birth clears the row
+            // there); busy(false) with no timed spans means the engine ended
+            // without a transcript — an error, and the row goes with it
+            if (t === null || t.querySelector('span[data-m]') === null) {
+              pendingTranscription = null;
+              document.documentElement.classList.remove('ha-transcribing');
+              notifyLibraryChanged(false);
+            }
+          }
+        } catch (e) { /* observing only — never break the engine's call */ }
+        return originalSetBusy.apply(this, arguments);
+      };
+    }
+  }
+
+  // Registered at module load, BEFORE wireCapture registers onNewTranscript —
+  // so the pending identity is restored before the birth gathers it.
+  document.addEventListener('hyperaudioInit', () => {
+    if (pendingIdentity !== null) {
+      session.mediaFile = pendingIdentity.file;
+      session.mediaFileFromUrl = pendingIdentity.fromUrl;
+      const player = document.getElementById('hyperplayer');
+      if (player !== null && pendingIdentity.playerSrc
+          && player.src !== pendingIdentity.playerSrc) {
+        player.src = pendingIdentity.playerSrc; // the transcription's own media back on the player
+      }
+      pendingIdentity = null;
+    }
+    if (pendingTranscription !== null) {
+      pendingTranscription = null;
+      document.documentElement.classList.remove('ha-transcribing');
+      notifyLibraryChanged(false);
+    }
+  });
+
+  // User-initiated content imports (SRT/VTT/JSON) also dispatch
+  // hyperaudioInit; a surviving identity from an errored transcription must
+  // not hijack THEIR media. The import paths call this before dispatching.
+  function clearPendingTranscription() {
+    pendingIdentity = null;
+    if (pendingTranscription !== null) {
+      pendingTranscription = null;
+      document.documentElement.classList.remove('ha-transcribing');
+      notifyLibraryChanged(false);
+    }
+  }
+  window.clearPendingTranscription = clearPendingTranscription;
+
+  // Clicking the in-progress row: hand the screen back to the transcription.
+  // The current project's pending edits flush to its own draft first; the
+  // loader is re-rendered and the engines' progress painting resumes into it.
+  // No project owns the screen while watching (projectId null), exactly as
+  // during the original loader phase.
+  async function switchToPendingTranscription() {
+    if (pendingTranscription === null) return false;
+    const t = document.getElementById('hypertranscript');
+    if (t === null) return false;
+    if (t.getAttribute('aria-busy') === 'true') return true; // already watching
+    await flushPendingDraft();
+    releaseProjectLock();
+    session.projectId = null;
+    sessionEdited = false;
+    updateSaveIndicator();
+    suppressCapture = true;
+    try {
+      t.textContent = '';
+      if (pendingTranscription.fragment) {
+        t.appendChild(pendingTranscription.fragment); // the SAME nodes, state intact
+        pendingTranscription.fragment = null;
+      } else {
+        t.innerHTML = pendingTranscription.loaderHtml;
+      }
+      t.setAttribute('aria-busy', 'true');
+      // The transcription's own media on the player too — without this, the
+      // pending view kept showing whatever project was on screen before.
+      const player = document.getElementById('hyperplayer');
+      if (player !== null && pendingIdentity !== null && pendingIdentity.playerSrc
+          && player.src !== pendingIdentity.playerSrc) {
+        player.src = pendingIdentity.playerSrc;
+      }
+    } finally {
+      suppressCapture = false;
+    }
+    notifyLibraryChanged(false);
+    return true;
+  }
+
+  // Leaving a transcription in flight needs no consent any more (#525): the
+  // in-progress Recents row shows where it lives, nothing is lost, and the
+  // way back is one click. What remains of the old dialog is its cleanup —
+  // the busy ATTRIBUTE must not follow us to the next view, and it is
+  // cleared directly rather than via setTranscriptBusy, which is the
+  // ENGINE's lifecycle signal (the wrapper above reads busy(false) without
+  // spans as an engine failure and would drop the in-progress row).
+  function leaveTranscriptionView() {
+    const t = document.getElementById('hypertranscript');
+    if (t !== null && t.getAttribute('aria-busy') === 'true') {
+      // Move the loader's LIVE NODES aside rather than snapshotting HTML: a
+      // string copy goes stale the moment the engine repaints (the
+      // 'Preparing model' flash was exactly that), and element identity is
+      // what the engines' null-guarded '.transcribing-msg' lookups key on —
+      // the same nodes coming back means whatever state they carried comes
+      // back with them, with nothing to age.
+      if (pendingTranscription !== null && t.querySelector('.transcribing-msg') !== null) {
+        const fragment = document.createDocumentFragment();
+        while (t.firstChild) fragment.appendChild(t.firstChild);
+        pendingTranscription.fragment = fragment;
+      }
+      t.removeAttribute('aria-busy');
+    }
+    return true;
+  }
+
   async function switchToProject(id) {
     if (!opfsAvailable) return false;
-    if (id === session.projectId) return true;
+    if (id === session.projectId) {
+      // Normally a no-op — but mid-transcription the SCREEN holds the loader
+      // while the session still points at this project (no birth has happened
+      // yet), and the no-op stranded the user staring at it with no way back
+      // (#525). When busy, fall through and re-apply the project from disk.
+      const t = document.getElementById('hypertranscript');
+      if (t === null || t.getAttribute('aria-busy') !== 'true') return true;
+    }
+    leaveTranscriptionView();
     const files = await readProjectFiles(id);
     if (files === null) return false;
     await flushPendingDraft();
@@ -2945,6 +3136,8 @@
       duplicate: duplicateProject,
       remove: deleteProject,
       restoreDeleted: restoreCurrentAsNewProject,
+      pendingTranscription: pendingTranscriptionInfo,
+      openPendingTranscription: switchToPendingTranscription,
     },
   };
 
