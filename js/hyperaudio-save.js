@@ -2244,7 +2244,20 @@
         try {
           const t = document.getElementById('hypertranscript');
           if (busy === true && t !== null) {
-            pendingTranscription = { name: mediaDisplayName(), loaderHtml: t.innerHTML };
+            // Carry the transcription's own IDENTITY, not just its loader:
+            // switching away replaces session.mediaFile and the player src
+            // with the other project's, and the birth reads both — so a
+            // completion while viewing another project named the new project
+            // after the OTHER file and, worse, paired the transcript with the
+            // other project's media. Captured here, restored at the birth.
+            const player = document.getElementById('hyperplayer');
+            pendingTranscription = {
+              name: mediaDisplayName(),
+              loaderHtml: t.innerHTML,
+              file: session.mediaFile,
+              fromUrl: session.mediaFileFromUrl,
+              playerSrc: player !== null ? player.src : '',
+            };
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /
             // transcribe entry points grey on this class, so the gate holds
@@ -2267,8 +2280,17 @@
     }
   }
 
+  // Registered at module load, BEFORE wireCapture registers onNewTranscript —
+  // so the pending identity is restored before the birth gathers it.
   document.addEventListener('hyperaudioInit', () => {
     if (pendingTranscription !== null) {
+      session.mediaFile = pendingTranscription.file;
+      session.mediaFileFromUrl = pendingTranscription.fromUrl;
+      const player = document.getElementById('hyperplayer');
+      if (player !== null && pendingTranscription.playerSrc
+          && player.src !== pendingTranscription.playerSrc) {
+        player.src = pendingTranscription.playerSrc; // the transcription's own media back on the player
+      }
       pendingTranscription = null;
       document.documentElement.classList.remove('ha-transcribing');
       notifyLibraryChanged(false);
