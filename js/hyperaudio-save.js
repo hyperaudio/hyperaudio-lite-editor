@@ -2345,6 +2345,13 @@
         t.innerHTML = pendingTranscription.loaderHtml;
       }
       t.setAttribute('aria-busy', 'true');
+      // The transcription's own media on the player too — without this, the
+      // pending view kept showing whatever project was on screen before.
+      const player = document.getElementById('hyperplayer');
+      if (player !== null && pendingIdentity !== null && pendingIdentity.playerSrc
+          && player.src !== pendingIdentity.playerSrc) {
+        player.src = pendingIdentity.playerSrc;
+      }
     } finally {
       suppressCapture = false;
     }
