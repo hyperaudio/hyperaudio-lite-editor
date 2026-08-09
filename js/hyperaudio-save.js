@@ -2290,6 +2290,12 @@
             // transcribe entry points grey on this class, so the gate holds
             // while the engine runs in the background too.
             document.documentElement.classList.add('ha-transcribing');
+            // The player already holds the transcription's media, but the
+            // caption <track> still holds the PREVIOUS project's vtt — left
+            // alone, playing the transcribing video shows the old captions.
+            // The one door also arms the late-write guard, so caption.js
+            // can't re-apply the stale vtt on the new media's loadedmetadata.
+            applyCaptionTrack('', { mode: 'disabled' });
             notifyLibraryChanged(false);
           } else if (busy === false && pendingTranscription !== null) {
             // success is announced by hyperaudioInit (the birth clears the row
@@ -2372,6 +2378,9 @@
           && player.src !== pendingIdentity.playerSrc) {
         player.src = pendingIdentity.playerSrc;
       }
+      // ... and the project we came FROM applied its captions at open; the
+      // transcribing media has none yet.
+      applyCaptionTrack('', { mode: 'disabled' });
     } finally {
       suppressCapture = false;
     }

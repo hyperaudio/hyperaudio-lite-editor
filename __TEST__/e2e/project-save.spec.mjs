@@ -1442,6 +1442,60 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   expect(born.playerSrc).toBe(engineSrc);
 });
 
+test('a transcription in flight does not play the previous project\'s captions (#525)', async ({ page }, testInfo) => {
+  // The player gets the transcription's media at engine start, but the
+  // caption <track> kept the previous project's vtt — playing the
+  // transcribing video showed the old captions. Both doors into the pending
+  // view must clear the track; the birth's own caption pass restores it.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  // WebKit's automatic track selection may flip a fresh subtitles track back
+  // to 'showing' from inside the browser (no JS setter involved), so mode is
+  // not assertable — what matters is that the track holds NO cue data.
+  const trackHasVtt = () => page.evaluate(() => {
+    const track = document.getElementById('hyperplayer-vtt');
+    return track !== null && track.src.startsWith('data:');
+  });
+  expect(await trackHasVtt()).toBe(true); // the fixture's captions are on
+
+  // engine start: its own media on the player, loader, busy(true)
+  const newWav = testInfo.outputPath('captionless-recording.wav');
+  (await import('node:fs')).writeFileSync(newWav, ladderWav(1));
+  await page.setInputFiles('#file-input', newWav);
+  await page.evaluate(() => {
+    const player = document.getElementById('hyperplayer');
+    player.src = URL.createObjectURL(new Blob([new Uint8Array(4)], { type: 'audio/wav' }));
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  expect(await trackHasVtt()).toBe(false); // door 1: engine start clears the track
+
+  // away to the project (its captions return), then back to the pending view
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  expect(await trackHasVtt()).toBe(true);
+  await page.locator('.recents-transcribing-item').click();
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…');
+  expect(await trackHasVtt()).toBe(false); // door 2: the way back clears it too
+
+  // completion: the birth generates the NEW transcript's captions, exactly
+  // as the engines do (init, then the generate dispatch)
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">DONE </span></p></section></article>';
+    setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  await pollPage(page, async () => {
+    const track = document.getElementById('hyperplayer-vtt');
+    return track !== null && track.src.startsWith('data:');
+  });
+});
+
 test('a phantom engine error does not let the birth steal another project\'s identity (#529 × #525)', async ({ page }, testInfo) => {
   // The measured Parakeet failure mode: handleError fires (error markup +
   // busy(false)) — then the worker recovers and completes anyway. The row
