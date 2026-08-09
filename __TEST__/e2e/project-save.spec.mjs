@@ -1269,3 +1269,71 @@ test('the engine file inputs clear on click so the same file can be re-picked (#
     .dispatchEvent(new MouseEvent('click')));
   expect(await page.evaluate(() => document.querySelector('#file-input').value)).toBe('');
 });
+
+// #525 follow-up — the transcription is a first-class Recents citizen from the
+// moment it starts: an in-progress row appears (virtual, in-memory — a reload
+// kills the engine, so nothing persists to get stuck), clicking it hands the
+// screen back to the live loader, completion replaces it with the real project
+// entry, and an engine error takes the row away with it.
+test('a transcription appears in Recents while it runs, and resolves on completion (#525)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  // an engine starts, exactly as they all do: loader markup, then busy(true)
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  const row = page.locator('.recents-row-transcribing');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText('transcribing…');
+
+  // switch away to the existing project (consent), the row stays
+  const openPromise = page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await awaitModal(page);
+  await page.click('#project-dialog-confirm');
+  await openPromise;
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  await expect(row).toHaveCount(1);
+
+  // click the row: back to the live loader, and the engines' null-guarded
+  // progress lookup finds its element again
+  await row.locator('.recents-transcribing-item').click();
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…');
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript .transcribing-msg') !== null)).toBe(true);
+
+  // completion: transcript lands, busy false, init births — the virtual row
+  // resolves into the real project entry
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">DONE </span></p></section></article>';
+    setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
+  await pollPage(page, async () =>
+    (await window.HyperaudioSave.library.list()).length === 2); // fixture + birth
+});
+
+test('an engine error takes the in-progress row with it (#525)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(1);
+
+  // the engines' error path: error markup, busy(false), no init ever
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center>Sorry. An unexpected error has occurred.</center></div>';
+    setTranscriptBusy(false);
+  });
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
+});

@@ -2203,6 +2203,97 @@
   // incoming one (draft first — its unsaved edits come back, still dirty),
   // move the per-project lock. Returns false (editor untouched) when the
   // target can't be read.
+  /* --------------------------------------------------------------------------
+   * Pending transcription as a first-class Recents citizen (#525). From the
+   * moment an engine starts, the transcription appears as an in-progress row
+   * (virtual — in memory only, so a reload, which kills the engine anyway,
+   * leaves no stuck entry). Clicking it switches back to the live loader:
+   * the local engines update progress via a null-guarded
+   * '#hypertranscript .transcribing-msg' lookup, so re-rendering the captured
+   * loader markup lets their message and elapsed time resume painting.
+   *
+   * Detection is the engines' own signal: they call setTranscriptBusy(true)
+   * right after writing their loader, and (false) on completion or error —
+   * wrapped here the same way setTranscriptionInfo is. Completion is the
+   * birth (hyperaudioInit); busy(false) with no timed spans in the transcript
+   * is a failure or cancellation, and the row leaves with the engine.
+   * ----------------------------------------------------------------------- */
+  let pendingTranscription = null; // { name, loaderHtml }
+
+  function pendingTranscriptionInfo() {
+    return pendingTranscription === null ? null : { name: pendingTranscription.name };
+  }
+
+  function mediaDisplayName() {
+    if (session.mediaFile !== null && session.mediaFile.name) return session.mediaFile.name;
+    const player = document.getElementById('hyperplayer');
+    const src = player !== null ? player.src : '';
+    if (/^https?:/i.test(src)) {
+      try {
+        const leaf = decodeURIComponent(new URL(src).pathname.split('/').pop() || '');
+        if (leaf !== '') return leaf;
+      } catch (e) { /* fall through */ }
+    }
+    return 'Transcription';
+  }
+
+  {
+    const originalSetBusy = window.setTranscriptBusy;
+    if (typeof originalSetBusy === 'function') {
+      window.setTranscriptBusy = function (busy) {
+        try {
+          const t = document.getElementById('hypertranscript');
+          if (busy === true && t !== null) {
+            pendingTranscription = { name: mediaDisplayName(), loaderHtml: t.innerHTML };
+            notifyLibraryChanged(false);
+          } else if (busy === false && pendingTranscription !== null) {
+            // success is announced by hyperaudioInit (the birth clears the row
+            // there); busy(false) with no timed spans means the engine ended
+            // without a transcript — an error, and the row goes with it
+            if (t === null || t.querySelector('span[data-m]') === null) {
+              pendingTranscription = null;
+              notifyLibraryChanged(false);
+            }
+          }
+        } catch (e) { /* observing only — never break the engine's call */ }
+        return originalSetBusy.apply(this, arguments);
+      };
+    }
+  }
+
+  document.addEventListener('hyperaudioInit', () => {
+    if (pendingTranscription !== null) {
+      pendingTranscription = null;
+      notifyLibraryChanged(false);
+    }
+  });
+
+  // Clicking the in-progress row: hand the screen back to the transcription.
+  // The current project's pending edits flush to its own draft first; the
+  // loader is re-rendered and the engines' progress painting resumes into it.
+  // No project owns the screen while watching (projectId null), exactly as
+  // during the original loader phase.
+  async function switchToPendingTranscription() {
+    if (pendingTranscription === null) return false;
+    const t = document.getElementById('hypertranscript');
+    if (t === null) return false;
+    if (t.getAttribute('aria-busy') === 'true') return true; // already watching
+    await flushPendingDraft();
+    releaseProjectLock();
+    session.projectId = null;
+    sessionEdited = false;
+    updateSaveIndicator();
+    suppressCapture = true;
+    try {
+      t.innerHTML = pendingTranscription.loaderHtml;
+      t.setAttribute('aria-busy', 'true');
+    } finally {
+      suppressCapture = false;
+    }
+    notifyLibraryChanged(false);
+    return true;
+  }
+
   // A transcription in flight owns the screen with loader markup and
   // aria-busy (#525). Navigating over it needs consent — and the truth: the
   // engine cannot be cancelled from here, so when it finishes it will land as
@@ -2216,7 +2307,15 @@
       'A transcription is still running. You can switch away — it will keep '
       + 'going and open as a new project when it finishes. Switch now?',
       'Switch', 'Stay');
-    if (proceed && typeof setTranscriptBusy === 'function') setTranscriptBusy(false);
+    if (proceed) {
+      // Clear the ATTRIBUTE directly, not via setTranscriptBusy: that call is
+      // the ENGINE's lifecycle signal, and the wrapper above reads
+      // busy(false)-without-spans as an engine failure — which would take the
+      // in-progress Recents row down with it. Here the engine is still very
+      // much running; only the styling must not follow us to the next view.
+      const t = document.getElementById('hypertranscript');
+      if (t !== null) t.removeAttribute('aria-busy');
+    }
     return proceed;
   }
 
@@ -2971,6 +3070,8 @@
       duplicate: duplicateProject,
       remove: deleteProject,
       restoreDeleted: restoreCurrentAsNewProject,
+      pendingTranscription: pendingTranscriptionInfo,
+      openPendingTranscription: switchToPendingTranscription,
     },
   };
 

@@ -1568,3 +1568,25 @@ label[data-a11y-wired]:focus-visible {
 #file-picker .recents-deleted-dismiss {
   color: oklch(var(--bc) / 0.5);
 }
+
+/* The in-progress transcription row (#525): visibly alive, not a normal
+   project. The pulsing badge is the "something is happening" signal. */
+#file-picker .recents-row-transcribing .file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+#file-picker .recents-transcribing-badge {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: oklch(var(--p));
+  animation: ha-transcribing-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ha-transcribing-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #file-picker .recents-transcribing-badge { animation: none; }
+}

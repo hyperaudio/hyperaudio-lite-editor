@@ -326,6 +326,23 @@
       pendingDeleted = null;
     }
 
+    // The in-progress transcription (#525): a virtual row at the top — it is
+    // the newest thing happening — with a live badge. Clicking it hands the
+    // screen back to the transcription; the engines' progress resumes there.
+    const pending = api.pendingTranscription ? api.pendingTranscription() : null;
+    if (pending !== null) {
+      const nameHtml = escapeMarkup(pending.name);
+      filePicker.insertAdjacentHTML('beforeend',
+        `<li class="recents-row recents-row-transcribing">` +
+        `<a class="file-item recents-transcribing-item">${nameHtml}` +
+        `<span class="recents-transcribing-badge">transcribing…</span></a></li>`);
+      filePicker.querySelector('.recents-transcribing-item')
+        .addEventListener('click', (event) => {
+          event.preventDefault();
+          api.openPendingTranscription();
+        });
+    }
+
     const entryById = {};
     const renderRow = (entry) => {
       if (entry.deletedPlaceholder === true) {
