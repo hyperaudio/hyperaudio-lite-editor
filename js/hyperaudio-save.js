@@ -2371,6 +2371,7 @@
         t.innerHTML = pendingTranscription.loaderHtml;
       }
       t.setAttribute('aria-busy', 'true');
+      t.setAttribute('contenteditable', 'false'); // the loader is not for typing in
       // The transcription's own media on the player too — without this, the
       // pending view kept showing whatever project was on screen before.
       const player = document.getElementById('hyperplayer');
@@ -2410,6 +2411,10 @@
         pendingTranscription.fragment = fragment;
       }
       t.removeAttribute('aria-busy');
+      // busy(true) also turned editing OFF, and that must not follow us to
+      // the project either: left as-is, every transcript opened while a
+      // transcription runs has no caret and takes no edits.
+      t.setAttribute('contenteditable', 'true');
     }
     return true;
   }

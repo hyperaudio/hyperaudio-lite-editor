@@ -1319,6 +1319,9 @@ test('switching back to your project mid-transcription rescues it from the loade
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti'); // the project is back
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBeNull(); // busy cleared
+  // ...and EDITABLE: busy(true) turned contenteditable off, and until that
+  // was undone here every transcript opened mid-transcription had no caret
+  await expect(page.locator('#hypertranscript')).toHaveAttribute('contenteditable', 'true');
 });
 
 
@@ -1397,6 +1400,9 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   await row.locator('.recents-transcribing-item').click();
   await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (0m 42s)');
   await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/); // selected again on return
+  // the loader view is not for typing in — the leave path restored
+  // contenteditable for the project, the way back must take it away again
+  await expect(page.locator('#hypertranscript')).toHaveAttribute('contenteditable', 'false');
   // and the player carries the TRANSCRIPTION's media, not the previous project's
   expect(await page.evaluate(() => document.getElementById('hyperplayer').src)).toBe(engineSrc);
   expect(await page.evaluate(() =>
