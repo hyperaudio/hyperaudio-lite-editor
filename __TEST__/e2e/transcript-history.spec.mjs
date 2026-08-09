@@ -96,7 +96,8 @@ test('local history pruning leaves a full undoable checkpoint', async ({ page })
   const state = await page.evaluate(() => {
     const root = document.getElementById('hypertranscript');
     for (let index = 0; index < 120; index += 1) {
-      const word = root.querySelector('span[data-m]:not(.speaker)');
+      const word = root.querySelectorAll('p')[1]
+        .querySelector('span[data-m]:not(.speaker)');
       const text = word.firstChild;
       root.focus();
       getSelection().setBaseAndExtent(text, text.length, text, text.length);
@@ -112,9 +113,33 @@ test('local history pruning leaves a full undoable checkpoint', async ({ page })
     return transcriptHistory.inspect();
   });
 
-  expect(state).toMatchObject({ length: 100, position: 99, fullEntries: 1, localEntries: 99 });
-  expect(await page.evaluate(() => transcriptHistory.undo())).toBe(true);
-  expect(await page.evaluate(() => transcriptHistory.inspect().position)).toBe(98);
+  expect(state).toMatchObject({
+    length: 100, position: 99, fullEntries: 1, localEntries: 99,
+  });
+  const checkpointCaret = await page.evaluate(() => {
+    const selectionOffset = () => {
+      const root = document.getElementById('hypertranscript');
+      const selection = getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(root);
+      range.setEnd(selection.anchorNode, selection.anchorOffset);
+      return range.toString().length;
+    };
+    while (transcriptHistory.inspect().position > 0) transcriptHistory.undo();
+    let word = document.querySelectorAll('#hypertranscript p')[1]
+      .querySelector('span[data-m]:not(.speaker)');
+    const beforeFallback = selectionOffset();
+    word.setAttribute('data-d', '779');
+    word.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'formatBold' }));
+    transcriptHistory.undo();
+    return {
+      position: transcriptHistory.inspect().position,
+      beforeFallback,
+      afterFallback: selectionOffset(),
+    };
+  });
+  expect(checkpointCaret.position).toBe(0);
+  expect(checkpointCaret.afterFallback).toBe(checkpointCaret.beforeFallback);
 });
 
 test('semantic normalization folds into current without clearing redo', async ({ page }) => {
@@ -135,6 +160,68 @@ test('semantic normalization folds into current without clearing redo', async ({
   expect(result.beforeFold).toMatchObject({ length: 3, position: 1 });
   expect(result.afterFold).toMatchObject({ length: 3, position: 1 });
   expect(result.redo).toBe(true);
+});
+
+test('normalization fold promotes a local caret to transcript coordinates', async ({ page }) => {
+  const target = await page.evaluate(() => {
+    const root = document.getElementById('hypertranscript');
+    const paragraph = root.querySelectorAll('p')[1];
+    const word = paragraph.querySelector('span[data-m]:not(.speaker)');
+    root.focus();
+    getSelection().setBaseAndExtent(word.firstChild, 1, word.firstChild, 1);
+    return word.textContent;
+  });
+
+  await page.keyboard.insertText('X');
+  await page.evaluate(() => {
+    const word = document.querySelectorAll('#hypertranscript p')[1]
+      .querySelector('span[data-m]:not(.speaker)');
+    transcriptGateway.mutate(() => word.setAttribute('data-d', '777'), {
+      origin: 'test-local-normalize', foldPolicy: 'normalization',
+    });
+    transcriptHistory.undo();
+  });
+
+  const restored = await page.evaluate(() => {
+    const paragraph = document.querySelectorAll('#hypertranscript p')[1];
+    const word = paragraph.querySelector('span[data-m]:not(.speaker)');
+    const selection = getSelection();
+    return {
+      text: word.textContent,
+      inTargetWord: selection.anchorNode === word.firstChild,
+      offset: selection.anchorOffset,
+    };
+  });
+  expect(restored).toEqual({ text: target, inTargetWord: true, offset: 1 });
+});
+
+test('full fallback promotes the current local caret to transcript coordinates', async ({ page }) => {
+  await page.evaluate(() => {
+    const root = document.getElementById('hypertranscript');
+    const paragraph = root.querySelectorAll('p')[1];
+    const word = paragraph.querySelector('span[data-m]:not(.speaker)');
+    root.focus();
+    getSelection().setBaseAndExtent(word.firstChild, 1, word.firstChild, 1);
+  });
+  await page.keyboard.insertText('X');
+  await page.evaluate(() => {
+    const word = document.querySelectorAll('#hypertranscript p')[1]
+      .querySelector('span[data-m]:not(.speaker)');
+    word.setAttribute('data-d', '778');
+    word.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'formatBold' }));
+    transcriptHistory.undo();
+  });
+
+  const restored = await page.evaluate(() => {
+    const word = document.querySelectorAll('#hypertranscript p')[1]
+      .querySelector('span[data-m]:not(.speaker)');
+    const selection = getSelection();
+    return {
+      inTargetWord: selection.anchorNode === word.firstChild,
+      offset: selection.anchorOffset,
+    };
+  });
+  expect(restored).toEqual({ inTargetWord: true, offset: 2 });
 });
 
 test('keydown fallback and keydown-beforeinput execute exactly once', async ({ page, browserName }) => {

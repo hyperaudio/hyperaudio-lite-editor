@@ -227,6 +227,28 @@
     return entry.kind === 'paragraph' ? entry.afterSelection : entry.selection;
   }
 
+  function paragraphSelectionInRoot(root, paragraphIndex, saved) {
+    if (!saved) return saved;
+    // Paragraph entries use offsets relative to their own scope. Full entries
+    // are restored against the transcript root, so promotion must add the
+    // preceding transcript text exactly once.
+    const paragraph = root.querySelectorAll('p')[paragraphIndex];
+    if (!paragraph) return null;
+    const base = pointOffset(root, paragraph, 0);
+    if (base === null) return null;
+    return {
+      anchor: base + saved.anchor,
+      focus: base + saved.focus,
+      backward: saved.backward,
+    };
+  }
+
+  function entrySelectionInRoot(root, entry, selection) {
+    return entry.kind === 'paragraph'
+      ? paragraphSelectionInRoot(root, entry.paragraphIndex, selection)
+      : selection;
+  }
+
   function replaceParagraph(container, paragraphIndex, html) {
     const paragraph = container.querySelectorAll('p')[paragraphIndex];
     if (!paragraph) return false;
@@ -262,7 +284,7 @@
       kind: 'full',
       html,
       semanticFingerprint: fingerprintHash(semanticFingerprint(container)),
-      selection: entryAfterSelection(source),
+      selection: entrySelectionInRoot(container, source, entryAfterSelection(source)),
       origin: 'history-checkpoint',
       timestamp: Date.now(),
       bytes: html.length * 2,
@@ -346,7 +368,8 @@
       kind: 'full',
       html,
       semanticFingerprint: fingerprintHash(semanticFingerprint(container)),
-      selection: entryAfterSelection(entries[position]),
+      selection: entrySelectionInRoot(container, entries[position],
+        entryAfterSelection(entries[position])),
       origin: origin || 'history-state',
       timestamp: Date.now(),
       bytes: html.length * 2,
@@ -536,8 +559,19 @@
       if (position === 0) replaceCurrent(after);
       else {
         const current = entries[position];
+        let beforeSelection = current.beforeSelection;
+        if (current.kind === 'paragraph') {
+          const previousHtml = materialize(position - 1);
+          if (previousHtml === null) beforeSelection = null;
+          else {
+            const previous = document.createElement('div');
+            previous.innerHTML = previousHtml;
+            beforeSelection = entrySelectionInRoot(previous, current,
+              current.beforeSelection);
+          }
+        }
         replaceCurrent(Object.freeze({
-          ...fullEntry({ selection: current.beforeSelection }, after),
+          ...fullEntry({ selection: beforeSelection }, after),
           origin: transaction.origin,
         }));
       }
