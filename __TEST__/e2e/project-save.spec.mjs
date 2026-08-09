@@ -1299,6 +1299,18 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (0m 42s)');
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript').textContent.includes('Preparing model'))).toBe(false);
+
+  // SECOND hop: progress advances, leave from the PENDING view this time,
+  // return again — the snapshot must track every departure, not just the first
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript .transcribing-msg').textContent = 'Transcribing… (1m 30s)';
+  });
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  await row.locator('.recents-transcribing-item').click();
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (1m 30s)');
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').textContent.includes('0m 42s'))).toBe(false);
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript .transcribing-msg') !== null)).toBe(true);
 

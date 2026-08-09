@@ -2314,7 +2314,13 @@
     updateSaveIndicator();
     suppressCapture = true;
     try {
-      t.innerHTML = pendingTranscription.loaderHtml;
+      t.textContent = '';
+      if (pendingTranscription.fragment) {
+        t.appendChild(pendingTranscription.fragment); // the SAME nodes, state intact
+        pendingTranscription.fragment = null;
+      } else {
+        t.innerHTML = pendingTranscription.loaderHtml;
+      }
       t.setAttribute('aria-busy', 'true');
     } finally {
       suppressCapture = false;
@@ -2333,14 +2339,16 @@
   function leaveTranscriptionView() {
     const t = document.getElementById('hypertranscript');
     if (t !== null && t.getAttribute('aria-busy') === 'true') {
-      // Refresh the pending snapshot on the way out: it was captured at
-      // busy(true) — the 'Preparing model' stage — so switching back showed
-      // that stale first message for a beat until the engine's next interval
-      // tick repainted. Departure-time capture means the return shows the
-      // message (and elapsed time) as of when you left, corrected within a
-      // second by the engine's own clock.
+      // Move the loader's LIVE NODES aside rather than snapshotting HTML: a
+      // string copy goes stale the moment the engine repaints (the
+      // 'Preparing model' flash was exactly that), and element identity is
+      // what the engines' null-guarded '.transcribing-msg' lookups key on —
+      // the same nodes coming back means whatever state they carried comes
+      // back with them, with nothing to age.
       if (pendingTranscription !== null && t.querySelector('.transcribing-msg') !== null) {
-        pendingTranscription.loaderHtml = t.innerHTML;
+        const fragment = document.createDocumentFragment();
+        while (t.firstChild) fragment.appendChild(t.firstChild);
+        pendingTranscription.fragment = fragment;
       }
       t.removeAttribute('aria-busy');
     }
