@@ -1282,6 +1282,13 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   const row = page.locator('.recents-row-transcribing');
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('brand-new-recording.wav'); // named after ITS file
+  await expect(row.locator('.recents-transcribing-spinner')).toBeVisible(); // wordless in-progress signal
+  // same footprint as a real row
+  const widths = await page.evaluate(() => ({
+    pending: document.querySelector('.recents-row-transcribing').getBoundingClientRect().width,
+    real: document.querySelector('.recents-row:not(.recents-row-transcribing)').getBoundingClientRect().width,
+  }));
+  expect(Math.abs(widths.pending - widths.real)).toBeLessThanOrEqual(2);
   // the transcribing row IS the selection while the loader owns the screen —
   // and the previous project's row stands down
   await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/);

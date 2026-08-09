@@ -342,10 +342,15 @@
     })();
     if (pending !== null) {
       const nameHtml = escapeMarkup(pending.name);
+      // Same anatomy as a normal row — name column plus the actions slot —
+      // so the widths line up; a spinner sits where the kebab would, saying
+      // 'in progress' without words.
       filePicker.insertAdjacentHTML('beforeend',
         `<li class="recents-row recents-row-transcribing">` +
-        `<a class="file-item recents-transcribing-item${viewingPending ? ' active' : ''}">${nameHtml}` +
-        `<span class="recents-transcribing-badge">transcribing…</span></a></li>`);
+        `<a class="file-item recents-transcribing-item${viewingPending ? ' active' : ''}">${nameHtml}</a>` +
+        `<span class="recents-actions">` +
+        `<span class="recents-transcribing-spinner" role="img" aria-label="Transcribing"></span>` +
+        `</span></li>`);
       filePicker.querySelector('.recents-transcribing-item')
         .addEventListener('click', (event) => {
           event.preventDefault();
