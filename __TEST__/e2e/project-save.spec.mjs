@@ -1264,15 +1264,24 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   await awaitLibraryEntry(page);
   const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
 
-  // an engine starts, exactly as they all do: loader markup, then busy(true)
+  // the user picks a NEW file to transcribe (the capture listener records it)
+  const newWav = testInfo.outputPath('brand-new-recording.wav');
+  (await import('node:fs')).writeFileSync(newWav, ladderWav(1));
+  await page.setInputFiles('#file-input', newWav);
+
+  // an engine starts, exactly as they all do: its own media on the player,
+  // loader markup, then busy(true)
   await page.evaluate(() => {
+    const player = document.getElementById('hyperplayer');
+    player.src = URL.createObjectURL(new Blob([new Uint8Array(4)], { type: 'audio/wav' }));
     document.querySelector('#hypertranscript').innerHTML =
       '<div class="vertically-centre"><center><span class="transcribing-msg">Preparing model…</span></center></div>';
     setTranscriptBusy(true);
   });
+  const engineSrc = await page.evaluate(() => document.getElementById('hyperplayer').src);
   const row = page.locator('.recents-row-transcribing');
   await expect(row).toHaveCount(1);
-  await expect(row).toContainText('transcribing…');
+  await expect(row).toContainText('brand-new-recording.wav'); // named after ITS file
 
   // the engine progresses past the initial message, as its interval does
   await page.evaluate(() => {
@@ -1304,6 +1313,19 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
   await pollPage(page, async () =>
     (await window.HyperaudioSave.library.list()).length === 2); // fixture + birth
+
+  // The birth carries the TRANSCRIPTION's identity, not the project the user
+  // happened to be viewing: its name and media are the new recording's, and
+  // the player is back on the transcription's own source.
+  const born = await page.evaluate(async () => {
+    const list = await window.HyperaudioSave.library.list();
+    const entry = list.find((e) => e.name !== 'E2E Project');
+    return { name: entry.name, mediaFile: entry.media && entry.media.filename,
+      playerSrc: document.getElementById('hyperplayer').src };
+  });
+  expect(born.name).toBe('brand-new-recording.wav');
+  expect(born.mediaFile).toBe('brand-new-recording.wav');
+  expect(born.playerSrc).toBe(engineSrc);
 });
 
 test('an engine error takes the in-progress row with it (#525)', async ({ page }) => {
