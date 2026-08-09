@@ -361,21 +361,53 @@
       pre.setEnd(container, offset);
       return pre.toString().length;
     };
+    // The caret's containing block, because an absolute offset is AMBIGUOUS
+    // exactly at a paragraph boundary (#530): right after Enter, 'start of
+    // the new <p>' and 'end of the previous <p>' are the same character
+    // count — Range.toString() emits nothing between blocks the split left
+    // adjacent. Recording which <p> held the caret lets restore pick the
+    // right side; without it the debounced pass yanked a freshly-placed
+    // caret back to the end of the paragraph above.
+    const blockOf = (container) => {
+      const el = container.nodeType === Node.ELEMENT_NODE ? container : container.parentElement;
+      const block = el !== null ? el.closest('p') : null;
+      return block !== null ? Array.prototype.indexOf.call(root.querySelectorAll('p'), block) : -1;
+    };
     return {
       start: measure(range.startContainer, range.startOffset),
+      startBlock: blockOf(range.startContainer),
       end: range.collapsed ? null : measure(range.endContainer, range.endOffset),
+      endBlock: range.collapsed ? null : blockOf(range.endContainer),
     };
   }
 
   // Resolve an absolute character offset back to a (text node, offset) pair;
   // clamps past-the-end to the final position.
-  function resolveCharOffset(root, chars) {
+  function resolveCharOffset(root, chars, preferredBlock) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const paragraphs = root.querySelectorAll('p');
+    const blockOf = (n) => {
+      const block = n.parentElement !== null ? n.parentElement.closest('p') : null;
+      return block !== null ? Array.prototype.indexOf.call(paragraphs, block) : -1;
+    };
     let node;
     let last = null;
     let remaining = chars;
     while ((node = walker.nextNode())) {
       if (remaining <= node.nodeValue.length) {
+        // Exactly at this node's end, the same offset also describes the
+        // start of the NEXT text node — a different position when a block
+        // boundary sits between them (#530). The saved block says which side
+        // the caret was really on; only cross the boundary when it says so.
+        if (remaining === node.nodeValue.length
+            && preferredBlock !== undefined && preferredBlock !== -1
+            && blockOf(node) !== preferredBlock) {
+          let ahead = walker.nextNode();
+          while (ahead !== null && ahead.nodeValue.length === 0) ahead = walker.nextNode();
+          if (ahead !== null && blockOf(ahead) === preferredBlock) {
+            return { node: ahead, offset: 0 };
+          }
+        }
         return { node, offset: remaining };
       }
       remaining -= node.nodeValue.length;
@@ -385,13 +417,13 @@
   }
 
   function restoreCaretOffset(root, saved) {
-    const start = resolveCharOffset(root, saved.start);
+    const start = resolveCharOffset(root, saved.start, saved.startBlock);
     if (start === null) return;
     const sel = window.getSelection();
     const range = document.createRange();
     range.setStart(start.node, start.offset);
     if (saved.end !== null) {
-      const end = resolveCharOffset(root, saved.end);
+      const end = resolveCharOffset(root, saved.end, saved.endBlock);
       if (end !== null) range.setEnd(end.node, end.offset);
     } else {
       range.collapse(true);
