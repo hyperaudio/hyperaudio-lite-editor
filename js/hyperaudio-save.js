@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.2.4 — last changed in release 1.2.4
+ * @version 1.2.5 — last changed in release 1.2.5
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1975,6 +1975,7 @@
   }
 
   async function openFromFileInner(file, token) {
+    if (!(await confirmOverTranscription())) return; // #525: same consent as switching
     // Parse and validate BEFORE the replace-confirmation: asking permission
     // to replace the current project and THEN refusing the file meant the
     // user consented to a replacement that never happened (prepare → confirm
@@ -2202,9 +2203,34 @@
   // incoming one (draft first — its unsaved edits come back, still dirty),
   // move the per-project lock. Returns false (editor untouched) when the
   // target can't be read.
+  // A transcription in flight owns the screen with loader markup and
+  // aria-busy (#525). Navigating over it needs consent — and the truth: the
+  // engine cannot be cancelled from here, so when it finishes it will land as
+  // its own new project. Clearing busy on the way through also stops the
+  // switched-to project rendering in the busy state (hidden corner buttons
+  // and timecodes) — the attribute survived the content swap.
+  async function confirmOverTranscription() {
+    const t = document.getElementById('hypertranscript');
+    if (t === null || t.getAttribute('aria-busy') !== 'true') return true;
+    const proceed = await projectConfirm(
+      'A transcription is still running. You can switch away — it will keep '
+      + 'going and open as a new project when it finishes. Switch now?',
+      'Switch', 'Stay');
+    if (proceed && typeof setTranscriptBusy === 'function') setTranscriptBusy(false);
+    return proceed;
+  }
+
   async function switchToProject(id) {
     if (!opfsAvailable) return false;
-    if (id === session.projectId) return true;
+    if (id === session.projectId) {
+      // Normally a no-op — but mid-transcription the SCREEN holds the loader
+      // while the session still points at this project (no birth has happened
+      // yet), and the no-op stranded the user staring at it with no way back
+      // (#525). When busy, fall through and re-apply the project from disk.
+      const t = document.getElementById('hypertranscript');
+      if (t === null || t.getAttribute('aria-busy') !== 'true') return true;
+    }
+    if (!(await confirmOverTranscription())) return false;
     const files = await readProjectFiles(id);
     if (files === null) return false;
     await flushPendingDraft();

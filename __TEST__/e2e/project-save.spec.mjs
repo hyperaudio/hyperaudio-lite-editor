@@ -1204,3 +1204,68 @@ test('hiding the page flushes the pending draft immediately (#519)', async ({ pa
   await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
   expect(dialogs).toEqual([]);
 });
+
+// #525 — a transcription in flight owns the screen with loader markup and
+// aria-busy, and three things went wrong around it: switching "back" to the
+// project the session still points at was a silent no-op (the user stared at
+// the loader with no way out), switching to another project carried the busy
+// state with it, and re-picking the same media file fired no change event so
+// a retry after interruption did nothing.
+const startFakeTranscription = (page) => page.evaluate(() => {
+  document.querySelector('#hypertranscript').innerHTML =
+    '<div class="vertically-centre"><center>Transcribing…</center></div>';
+  setTranscriptBusy(true);
+});
+
+test('switching back to your project mid-transcription rescues it from the loader (#525)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  await startFakeTranscription(page);
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…');
+
+  // click your own project's row: previously a silent no-op
+  const openPromise = page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await awaitModal(page);
+  await page.click('#project-dialog-confirm');
+  await openPromise;
+
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti'); // the project is back
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBeNull(); // busy cleared
+});
+
+test('staying puts keeps the transcription untouched (#525)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  await startFakeTranscription(page);
+  const openPromise = page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await awaitModal(page);
+  await page.click('#project-dialog-cancel');
+  expect(await openPromise).toBe(false);
+
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…'); // untouched
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBe('true');
+});
+
+test('the engine file inputs clear on click so the same file can be re-picked (#525)', async ({ page }, testInfo) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const wavPath = testInfo.outputPath('tone.wav');
+  const fsm = await import('node:fs');
+  fsm.writeFileSync(wavPath, ladderWav(1));
+  await page.setInputFiles('#file-input', wavPath);
+  expect(await page.evaluate(() => document.querySelector('#file-input').files.length)).toBe(1);
+
+  // the user clicks the input again to re-pick the SAME file: the value must
+  // clear so the browser fires change for the identical selection
+  await page.evaluate(() => document.querySelector('#file-input')
+    .dispatchEvent(new MouseEvent('click')));
+  expect(await page.evaluate(() => document.querySelector('#file-input').value)).toBe('');
+});
