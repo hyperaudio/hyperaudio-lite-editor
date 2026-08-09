@@ -2934,9 +2934,25 @@
     // and the project genuinely differs from the save. Restores that DON'T
     // land on the save re-dirty through the synthetic input the history
     // module dispatches, like any other edit.
-    document.addEventListener('hyperaudioTranscriptRestored', () => {
+    let restoreRecheckTimer = null;
+    const attemptCleanAfterRestore = () => {
       if (!session.active || savedSignature === null || !sessionEdited) return;
       if (stateSignature() !== savedSignature) return;
+      cleanAfterRestore();
+    };
+    document.addEventListener('hyperaudioTranscriptRestored', () => {
+      // Two attempts: now, and once more after the idle reconciliation
+      // window. The perf rework (#517) defers caption regeneration to a ~3s
+      // idle queue, so a restore that lands the TRANSCRIPT exactly on the
+      // saved state can still carry the pre-undo captions on the track when
+      // this event fires — the signature legitimately mismatches until the
+      // deferred pass catches the track up. The recheck re-runs the same
+      // guards fresh: an edit landing meanwhile keeps the dot on.
+      clearTimeout(restoreRecheckTimer);
+      attemptCleanAfterRestore();
+      restoreRecheckTimer = setTimeout(attemptCleanAfterRestore, 3400);
+    });
+    function cleanAfterRestore() {
       sessionEdited = false;
       clearTimeout(autosaveTimer);
       autosaveTimer = null;
@@ -2960,7 +2976,7 @@
           notifyLibraryChanged(false);
         }).catch((e) => console.warn('hyperaudio-save: draft retirement failed', e));
       }
-    });
+    }
     ['#remove-gaps-enabled', '#remove-gaps-threshold', '#remove-gaps-buffer', '#show-speakers', '#show-timecodes']
       .forEach((selector) => {
         const el = document.querySelector(selector);
