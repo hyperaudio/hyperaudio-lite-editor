@@ -1597,8 +1597,8 @@ label[data-a11y-wired]:focus-visible {
    transcript is busy (same :has pattern as the corner buttons); the modal's
    own submit labels need no gating because starting closes the modal and
    reopening goes through these. Batch transcription is its own feature. */
-html:has(#hypertranscript[aria-busy="true"]) #new-transcription-btn,
-html:has(#hypertranscript[aria-busy="true"]) #upload-transcribe-btn {
+html.ha-transcribing #new-transcription-btn,
+html.ha-transcribing #upload-transcribe-btn {
   pointer-events: none;
   opacity: 0.4;
 }

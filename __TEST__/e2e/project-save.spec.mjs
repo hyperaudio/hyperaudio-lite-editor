@@ -1321,9 +1321,11 @@ test('an engine error takes the in-progress row with it (#525)', async ({ page }
 // #525 — one transcription at a time: the engines share one transcript
 // element and one busy flag, so a second start mid-run interleaved into
 // errors. The entry points grey out while busy.
-test('the NEW button is inert while a transcription runs (#525)', async ({ page }) => {
-  await page.goto('/index.html');
-  await page.waitForSelector('#hypertranscript [data-m]');
+test('the NEW button is inert while a transcription runs — even from another project (#525)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
 
   await page.evaluate(() => {
     document.querySelector('#hypertranscript').innerHTML =
@@ -1335,6 +1337,14 @@ test('the NEW button is inert while a transcription runs (#525)', async ({ page 
   // and the modal genuinely cannot be opened through it
   await newBtn.click({ force: true }).catch(() => {});
   expect(await page.evaluate(() => document.getElementById('transcribe-modal').checked)).toBe(false);
+
+  // the hole this test exists for: switch AWAY (which clears the view's busy
+  // attribute) — the engine still runs, so the gate must hold
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBeNull();
+  await expect(newBtn).toHaveCSS('pointer-events', 'none'); // STILL gated
 
   // engine ends: the door reopens
   await page.evaluate(() => {

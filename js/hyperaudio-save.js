@@ -2245,6 +2245,11 @@
           const t = document.getElementById('hypertranscript');
           if (busy === true && t !== null) {
             pendingTranscription = { name: mediaDisplayName(), loaderHtml: t.innerHTML };
+            // ENGINE state, distinct from the transcript's aria-busy VIEW
+            // state (which switching away deliberately clears): the NEW /
+            // transcribe entry points grey on this class, so the gate holds
+            // while the engine runs in the background too.
+            document.documentElement.classList.add('ha-transcribing');
             notifyLibraryChanged(false);
           } else if (busy === false && pendingTranscription !== null) {
             // success is announced by hyperaudioInit (the birth clears the row
@@ -2252,6 +2257,7 @@
             // without a transcript — an error, and the row goes with it
             if (t === null || t.querySelector('span[data-m]') === null) {
               pendingTranscription = null;
+              document.documentElement.classList.remove('ha-transcribing');
               notifyLibraryChanged(false);
             }
           }
@@ -2264,6 +2270,7 @@
   document.addEventListener('hyperaudioInit', () => {
     if (pendingTranscription !== null) {
       pendingTranscription = null;
+      document.documentElement.classList.remove('ha-transcribing');
       notifyLibraryChanged(false);
     }
   });
