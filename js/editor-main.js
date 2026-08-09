@@ -322,6 +322,11 @@
       video.addEventListener('play', reflectPlayState);
       video.addEventListener('pause', reflectPlayState);
       video.addEventListener('ended', reflectPlayState);
+      // Swapping src (every project switch) stops playback WITHOUT a pause
+      // event — the load algorithm fires 'emptied' instead. Without this, a
+      // switch away from a playing video left the pause button showing over
+      // a video that wasn't playing.
+      video.addEventListener('emptied', reflectPlayState);
 
       const reflectVolume = () => {
         const silent = video.muted || video.volume === 0;
