@@ -1312,6 +1312,8 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   await row.locator('.recents-transcribing-item').click();
   await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (0m 42s)');
   await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/); // selected again on return
+  // and the player carries the TRANSCRIPTION's media, not the previous project's
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').src)).toBe(engineSrc);
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript').textContent.includes('Preparing model'))).toBe(false);
 
