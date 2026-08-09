@@ -1456,3 +1456,33 @@ test('the NEW button is inert while a transcription runs — even from another p
   await newBtn.click();
   expect(await page.evaluate(() => document.getElementById('transcribe-modal').checked)).toBe(true);
 });
+
+// Swapping the player's src (every project switch) stops playback without a
+// pause event; the playbar synced only on play/pause/ended, so switching away
+// from a playing video showed the pause button over a video that wasn't
+// playing. 'emptied' is the event the load algorithm actually fires.
+test('the play button state survives a project switch away from a playing video', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const firstId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  const p2 = testInfo.outputPath('second.hyperaudio');
+  (await import('node:fs')).writeFileSync(p2, await buildFixture());
+  await page.setInputFiles('#project-open-input', p2);
+  await pollPage(page, async (prev) => window.HyperaudioSave.library.currentId() !== prev
+    && document.getElementById('project-progress') === null, firstId);
+
+  // play the second project's media (muted, so headless allows it)
+  await page.evaluate(async () => {
+    const v = document.getElementById('hyperplayer');
+    v.muted = true;
+    await v.play();
+  });
+  await expect(page.locator('#playbar-play-icon')).toBeHidden(); // pause icon showing
+
+  // switch to the first project: not playing there — the button must say so
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), firstId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').paused)).toBe(true);
+  await expect(page.locator('#playbar-play-icon')).toBeVisible(); // play icon back
+});
