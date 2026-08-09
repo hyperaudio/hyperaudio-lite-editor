@@ -694,18 +694,24 @@
   // a draft was restored, so the saved state isn't what's on screen); unknown
   // stays dirty, which is the previous behaviour.
   let savedSignature = null;
-  // `modified` is stamped at every gather, so it would defeat any comparison;
-  // captions ride outside the project json and must be part of the identity —
-  // undoing the transcript back while a caption edit is pending is NOT clean.
-  function signatureOfParts(json, vtt) {
-    const project = JSON.parse(json);
+  // `modified` is stamped at every gather, so it would defeat any comparison.
+  // Captions ride outside the project json: with sync OFF they are curated
+  // content and part of the identity — undoing the transcript back while a
+  // caption edit is pending is NOT clean. With sync ON the vtt is a pure
+  // derivative of the transcript, regenerated on a deferred schedule (#517),
+  // so comparing it would only race the regen queue — the transcript json
+  // already carries the same information.
+  function signatureFor(project, vtt) {
     project.modified = '';
-    return JSON.stringify(project) + '\u001f' + (vtt || '');
+    const syncOn = !!(project.options && project.options.captions
+      && project.options.captions.updateFromTranscript !== false);
+    return JSON.stringify(project) + '\u001f' + (syncOn ? '' : (vtt || ''));
+  }
+  function signatureOfParts(json, vtt) {
+    return signatureFor(JSON.parse(json), vtt);
   }
   function stateSignature() {
-    const project = buildProjectJson(gather());
-    project.modified = '';
-    return JSON.stringify(project) + '\u001f' + (getCaptionsVtt() || '');
+    return signatureFor(buildProjectJson(gather()), getCaptionsVtt() || '');
   }
 
   // History and other same-document features must not infer identity from a
@@ -2284,6 +2290,12 @@
             // transcribe entry points grey on this class, so the gate holds
             // while the engine runs in the background too.
             document.documentElement.classList.add('ha-transcribing');
+            // The player already holds the transcription's media, but the
+            // caption <track> still holds the PREVIOUS project's vtt — left
+            // alone, playing the transcribing video shows the old captions.
+            // The one door also arms the late-write guard, so caption.js
+            // can't re-apply the stale vtt on the new media's loadedmetadata.
+            applyCaptionTrack('', { mode: 'disabled' });
             notifyLibraryChanged(false);
           } else if (busy === false && pendingTranscription !== null) {
             // success is announced by hyperaudioInit (the birth clears the row
@@ -2359,6 +2371,7 @@
         t.innerHTML = pendingTranscription.loaderHtml;
       }
       t.setAttribute('aria-busy', 'true');
+      t.setAttribute('contenteditable', 'false'); // the loader is not for typing in
       // The transcription's own media on the player too — without this, the
       // pending view kept showing whatever project was on screen before.
       const player = document.getElementById('hyperplayer');
@@ -2366,6 +2379,9 @@
           && player.src !== pendingIdentity.playerSrc) {
         player.src = pendingIdentity.playerSrc;
       }
+      // ... and the project we came FROM applied its captions at open; the
+      // transcribing media has none yet.
+      applyCaptionTrack('', { mode: 'disabled' });
     } finally {
       suppressCapture = false;
     }
@@ -2395,6 +2411,10 @@
         pendingTranscription.fragment = fragment;
       }
       t.removeAttribute('aria-busy');
+      // busy(true) also turned editing OFF, and that must not follow us to
+      // the project either: left as-is, every transcript opened while a
+      // transcription runs has no caret and takes no edits.
+      t.setAttribute('contenteditable', 'true');
     }
     return true;
   }

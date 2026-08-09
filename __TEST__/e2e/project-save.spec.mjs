@@ -914,6 +914,46 @@ test('undo back to the save clears the dot even after deferred caption regen (#5
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/, { timeout: 6000 });
 });
 
+test('multi-step undo back to the save clears the dot promptly (sync-on)', async ({ page }, testInfo) => {
+  // Two typed runs, each folded by the local pass, then undo both. At the
+  // final undo the transcript matches the save but the caption track still
+  // holds the INTERMEDIATE vtt (undo #1's post-restore refresh built it;
+  // undo #2's regen is deferred). With sync on the vtt is a pure derivative
+  // of the transcript, so the signature must not compare it — otherwise the
+  // dot lingers ~3.4s until the recheck. Prompt means within 1s, well under
+  // that recheck window, so this test has teeth against the race.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs, (project) => {
+    project.options.captions.updateFromTranscript = true;
+  });
+  await awaitLibraryEntry(page);
+
+  await page.evaluate(() => {
+    const t = document.querySelector('#hypertranscript');
+    t.focus();
+    const span = t.querySelector('span[data-m]:not(.speaker)');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  });
+  await page.keyboard.press('Control+s');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
+
+  await page.keyboard.type('XX yy');
+  await page.waitForTimeout(1700); // run 1 folds into its history entry
+  await page.keyboard.type('zz ww');
+  await page.waitForTimeout(1700); // run 2 folds
+
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/); // one run still applied
+  await page.waitForTimeout(500);
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/, { timeout: 1000 });
+});
+
 test('undo does not clear the dot while a non-transcript edit is pending', async ({ page }, testInfo) => {
   const dialogs = [];
   await openFixture(page, testInfo, dialogs);
@@ -1279,6 +1319,9 @@ test('switching back to your project mid-transcription rescues it from the loade
   await expect(page.locator('#hypertranscript')).toContainText('Benvenuti'); // the project is back
   expect(await page.evaluate(() =>
     document.querySelector('#hypertranscript').getAttribute('aria-busy'))).toBeNull(); // busy cleared
+  // ...and EDITABLE: busy(true) turned contenteditable off, and until that
+  // was undone here every transcript opened mid-transcription had no caret
+  await expect(page.locator('#hypertranscript')).toHaveAttribute('contenteditable', 'true');
 });
 
 
@@ -1357,6 +1400,9 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   await row.locator('.recents-transcribing-item').click();
   await expect(page.locator('#hypertranscript')).toContainText('Transcribing… (0m 42s)');
   await expect(row.locator('.recents-transcribing-item')).toHaveClass(/active/); // selected again on return
+  // the loader view is not for typing in — the leave path restored
+  // contenteditable for the project, the way back must take it away again
+  await expect(page.locator('#hypertranscript')).toHaveAttribute('contenteditable', 'false');
   // and the player carries the TRANSCRIPTION's media, not the previous project's
   expect(await page.evaluate(() => document.getElementById('hyperplayer').src)).toBe(engineSrc);
   expect(await page.evaluate(() =>
@@ -1400,6 +1446,60 @@ test('a transcription appears in Recents while it runs, and resolves on completi
   expect(born.name).toBe('brand-new-recording.wav');
   expect(born.mediaFile).toBe('brand-new-recording.wav');
   expect(born.playerSrc).toBe(engineSrc);
+});
+
+test('a transcription in flight does not play the previous project\'s captions (#525)', async ({ page }, testInfo) => {
+  // The player gets the transcription's media at engine start, but the
+  // caption <track> kept the previous project's vtt — playing the
+  // transcribing video showed the old captions. Both doors into the pending
+  // view must clear the track; the birth's own caption pass restores it.
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const homeId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  // WebKit's automatic track selection may flip a fresh subtitles track back
+  // to 'showing' from inside the browser (no JS setter involved), so mode is
+  // not assertable — what matters is that the track holds NO cue data.
+  const trackHasVtt = () => page.evaluate(() => {
+    const track = document.getElementById('hyperplayer-vtt');
+    return track !== null && track.src.startsWith('data:');
+  });
+  expect(await trackHasVtt()).toBe(true); // the fixture's captions are on
+
+  // engine start: its own media on the player, loader, busy(true)
+  const newWav = testInfo.outputPath('captionless-recording.wav');
+  (await import('node:fs')).writeFileSync(newWav, ladderWav(1));
+  await page.setInputFiles('#file-input', newWav);
+  await page.evaluate(() => {
+    const player = document.getElementById('hyperplayer');
+    player.src = URL.createObjectURL(new Blob([new Uint8Array(4)], { type: 'audio/wav' }));
+    document.querySelector('#hypertranscript').innerHTML =
+      '<div class="vertically-centre"><center><span class="transcribing-msg">Transcribing…</span></center></div>';
+    setTranscriptBusy(true);
+  });
+  expect(await trackHasVtt()).toBe(false); // door 1: engine start clears the track
+
+  // away to the project (its captions return), then back to the pending view
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+  expect(await trackHasVtt()).toBe(true);
+  await page.locator('.recents-transcribing-item').click();
+  await expect(page.locator('#hypertranscript')).toContainText('Transcribing…');
+  expect(await trackHasVtt()).toBe(false); // door 2: the way back clears it too
+
+  // completion: the birth generates the NEW transcript's captions, exactly
+  // as the engines do (init, then the generate dispatch)
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      '<article><section><p><span data-m="0" data-d="500">DONE </span></p></section></article>';
+    setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  await pollPage(page, async () => {
+    const track = document.getElementById('hyperplayer-vtt');
+    return track !== null && track.src.startsWith('data:');
+  });
 });
 
 test('a phantom engine error does not let the birth steal another project\'s identity (#529 × #525)', async ({ page }, testInfo) => {
