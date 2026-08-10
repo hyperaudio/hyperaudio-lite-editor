@@ -1606,3 +1606,25 @@ html.ha-transcribing #upload-transcribe-btn {
   pointer-events: none;
   opacity: 0.4;
 }
+
+/* Warning dress for the shared dialog (#506): reserved for state-divergence
+   warnings ("captions have been edited") — an amber left border and a tinted
+   title band on the standard modal chassis. Bold enough that the warning
+   registers, without the full-bleed cyan alert this replaces. --wa is
+   DaisyUI's per-theme warning colour (v4: OKLCH components, so oklch() not
+   hsl()), so both themes get a fitting amber. */
+#project-dialog .modal-box.modal-warning {
+  border-left: 6px solid oklch(var(--wa));
+}
+#project-dialog .project-dialog-title {
+  background: oklch(var(--wa) / 0.18);
+  color: inherit;
+  font-weight: 700;
+  /* bleed the band to the box edges (modal-box padding is 1.5rem) */
+  margin: -1.5rem -1.5rem 1rem -1.5rem;
+  padding: 0.9rem 3rem 0.9rem 1.5rem; /* right clears the ✕ button */
+  border-radius: 1rem 1rem 0 0; /* match --rounded-box on the top corners */
+}
+#project-dialog .modal-box.modal-warning .project-dialog-title {
+  border-radius: 0.6rem 1rem 0 0; /* inner top-left sits against the border */
+}
