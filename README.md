@@ -58,7 +58,6 @@ Skip silences during playback and in export, with a simple on/off switch and adv
 
 <img alt="Gap removal — basic" src="docs/images/gap-removal-basic.png" width="640">
 
-<img alt="Gap removal — advanced settings" src="docs/images/gap-removal-advanced.png" width="520">
 
 ### Caption editor
 
@@ -107,8 +106,6 @@ Edit in the usual way – add punctuation, create and merge paragraphs etc. Plac
 ### Lightweight, Performant and Installable
 
 We score very highly on Google Chrome's Lighthouse audit tool.
-
-<img width="739" alt="Chrome Lighthouse showing maximum accessibility, performance and best practice scores" src="https://user-images.githubusercontent.com/208756/232544023-a3f29e3b-5238-4c06-8404-27ab008012a2.png">
 
 Created as a Progressive Web App, you can install it on your desktop or mobile home screen.
 
