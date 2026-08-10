@@ -192,3 +192,23 @@ test.describe('touch devices', () => {
     await expect(redo).toBeHidden();
   });
 });
+
+// #539 — the FILE dropdown must out-stack the docked play bar. .main-panel is
+// a stacking context (inline z-index, now 40), so its old z of 2 pinned the
+// whole navbar — dropdown included — beneath the bar (z 3): on short viewports
+// the open menu's lower entries rendered behind it and clicks fell through to
+// the seek slider. trial:true runs Playwright's full hit-target check.
+test.describe('short viewport', () => {
+  test.use({ viewport: { width: 1200, height: 520 } });
+  test('the FILE menu paints over the docked play bar and takes the click (#539)', async ({ page }) => {
+    await page.click('.dropdown label');
+    await page.click('#file-export-submenu summary');
+    await page.click('#file-download-submenu summary');
+    // the deepest item must actually reach the play-bar zone, or this asserts nothing
+    const item = page.locator('#download-vtt');
+    const itemBox = await item.boundingBox();
+    const barBox = await page.locator('#playbar').boundingBox();
+    expect(itemBox.y + itemBox.height).toBeGreaterThan(barBox.y);
+    await page.click('#download-vtt', { trial: true });
+  });
+});

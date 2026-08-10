@@ -140,6 +140,15 @@ dialog::backdrop {
   transition: left 0.5s ease;
 }
 
+/* The navbar's rung in the z-ladder is 40, inline on .main-panel (#539): it
+   is a stacking context, so NOTHING inside it — the FILE dropdown above all —
+   can out-stack a sibling with a higher z. At its old z of 2 the docked play
+   bar (z 3) covered the open menu's lower entries on short viewports and
+   swallowed their clicks. 40 slots the navbar deliberately: above the play
+   bar (3) and corner floats (20-30), below the drawer (45) and the mobile
+   band's 60. Ladder: tooltips 100, navbar 60 (mobile) / 40, drawer 45/44,
+   corner floats 20-30, playbar 3. */
+
 /* Docked play bar: play/pause + full-width seek, spanning the transcript area.
    Tracks the sidebar collapse the same way .transcript-holder does (left 400<->0). */
 #playbar {
@@ -399,7 +408,7 @@ dialog::backdrop {
 
   /* Lift the navbar above the pinned player and transcript so its tooltips (which
      drop below the buttons, over the video) are not covered. Beats the inline
-     z-index:2 on .main-panel. */
+     z-index:40 on .main-panel (#539). */
   .main-panel { z-index: 60 !important; }
 
   /* Recents: off-canvas drawer, toggled by #sidebar-toggle (see responsive.js) */
