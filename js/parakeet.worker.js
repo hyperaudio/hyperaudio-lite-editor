@@ -1,13 +1,32 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 1.1.2 — last changed in release 1.1.2
+ * @version 1.3.2 — last changed in release 1.3.2
  * @license MIT
  */
 
 import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort.all.min.mjs";
 ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
 ort.env.wasm.numThreads = self.crossOriginIsolated ? (self.navigator?.hardwareConcurrency || 4) : 1;
+
+// The request's try/catch (the INFERENCE_REQUEST handler) is the ONE
+// authority on fatality: it posts {type:"error"} when a request truly dies.
+// ort's async internals can throw OUTSIDE that scope — the #529 field case
+// was a TypeError from the jsep runtime surfacing as an uncaught worker
+// error WHILE the planned GPU→int8 fallback carried on to a successful
+// transcript. Propagated to the page, that painted the fatal "reload"
+// screen and killed the in-progress Recents row for a request that was
+// recovering. Uncaught errors are therefore logged and suppressed here; a
+// worker that fails to even PARSE never installs these listeners, so a
+// genuinely broken worker still reaches the page's onerror.
+self.addEventListener("error", (e) => {
+  e.preventDefault();
+  console.warn("Parakeet: uncaught worker error (suppressed — the active request reports its own outcome):", e?.message || e);
+});
+self.addEventListener("unhandledrejection", (e) => {
+  e.preventDefault();
+  console.warn("Parakeet: unhandled rejection in worker (suppressed):", e?.reason?.message || e?.reason || e);
+});
 
 const SAMPLE_RATE = 16000;
 const WINDOW_S = 300;        // 5-minute windows to bound memory
@@ -29,6 +48,23 @@ const MODELS = {
   encoderFp16: `${HF}/ako101/parakeet-tdt-0.6b-v3-sherpa-onnx-fp16/resolve/main/encoder.fp16.onnx`,
 };
 const CACHE_NAME = "parakeet-models-v1";
+// Sidecar cache key carrying the byte count the download actually delivered
+// (#477). Never fetched — it only exists as a Cache Storage key.
+const LEN_SUFFIX = ".expected-length";
+
+// Drop a model's cache entry (and its length sidecar). Returns whether an
+// entry existed — the self-heal path uses that to tell "cached bytes were
+// bad" from "there was nothing cached to blame".
+async function evictCached(url) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const existed = await cache.delete(url);
+    await cache.delete(url + LEN_SUFFIX);
+    return existed;
+  } catch (_) {
+    return false;
+  }
+}
 
 let sessions = null;        // { mel, encoder, decoder, vocab, device }
 let sessionsForceGpu = null; // the forceGpu flag the current sessions were built with
@@ -130,22 +166,41 @@ async function hasGpuAdapter() {
 const MAX_DOWNLOAD_ATTEMPTS = 5;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Returns { bytes, fromCache } — provenance feeds the self-heal decision in
+// createSessionWithHeal (#477): only bytes that came from cache implicate the
+// cache when session creation fails.
 async function fetchModel(url, onProgress) {
   const name = url.split("/").pop();
   const cache = await caches.open(CACHE_NAME);
   const hit = await cache.match(url);
   if (hit) {
-    console.log(`Parakeet: ${name} — from cache`);
-    onProgress(url, 1, 1);
-    return new Uint8Array(await hit.arrayBuffer());
+    // Validate before trusting (#477): a truncated or unreadable entry — an
+    // interrupted first download, artifacts of earlier code versions — used
+    // to be served as-is and fail EVERY subsequent run, unrecoverable short
+    // of the user clearing browser storage by hand.
+    try {
+      const buf = await hit.arrayBuffer();
+      const sidecar = await cache.match(url + LEN_SUFFIX);
+      const expected = (sidecar && Number(await sidecar.text()))
+        || Number(hit.headers.get("content-length")) || null;
+      if (expected !== null && buf.byteLength !== expected) {
+        throw new Error(`${buf.byteLength} bytes where ${expected} were expected`);
+      }
+      console.log(`Parakeet: ${name} — from cache`);
+      onProgress(url, 1, 1);
+      return { bytes: new Uint8Array(buf), fromCache: true };
+    } catch (e) {
+      console.warn(`Parakeet: corrupt cached ${name} (${e?.message || e}) — cache entry evicted, re-downloading`);
+      await evictCached(url);
+    }
   }
   console.log(`Parakeet: downloading ${name}…`);
   if (await streamDownloadToCache(cache, url, onProgress)) {
     const stored = await cache.match(url);
-    if (stored) return new Uint8Array(await stored.arrayBuffer());
+    if (stored) return { bytes: new Uint8Array(await stored.arrayBuffer()), fromCache: false };
   }
   console.warn("Cache Storage unavailable — downloading model to memory for this session.");
-  return downloadToMemory(url, onProgress);
+  return { bytes: await downloadToMemory(url, onProgress), fromCache: false };
 }
 
 // Common request setup: bypass the browser HTTP cache (we keep our own copy in
@@ -190,9 +245,14 @@ async function streamDownloadToCache(cache, url, onProgress) {
         headers: total ? { "content-length": String(total) } : {},
       });
       await cache.put(url, body);
+      // cache.put resolved, so the stream is fully consumed and `loaded` is
+      // the delivered byte count — the sidecar the read-time validation
+      // compares against (#477). Content-length can be absent or wrong
+      // through HF's redirects; what we counted is the truth.
+      try { await cache.put(url + LEN_SUFFIX, new Response(String(loaded))); } catch (_) {}
       return true;
     } catch (e) {
-      try { await cache.delete(url); } catch (_) {}   // drop any partial entry
+      try { await evictCached(url); } catch (_) {}   // drop any partial entry
       if (e?.name === "QuotaExceededError" || /quota|internal error/i.test(e?.message || "")) {
         return false;   // cache can't hold it — let the caller use memory
       }
@@ -273,25 +333,33 @@ async function loadSessions(forceGpu) {
   // progress callback: counting them would make the bar race to 100% and then
   // reset to ~0 once the encoder's far larger content-length enters the total.
   const noProgress = () => {};
-  const [melBytes, decBytes, vocabBytes] = await Promise.all([
+  const [melFetched, decFetched, vocabFetched] = await Promise.all([
     fetchModel(MODELS.mel, noProgress),
     fetchModel(MODELS.decoder, noProgress),
     fetchModel(MODELS.vocab, noProgress),
   ]);
-  const mel = await ort.InferenceSession.create(melBytes, { executionProviders: ["wasm"] });
-  const decoder = await ort.InferenceSession.create(decBytes, { executionProviders: ["wasm"] });
-  const vocab = new TextDecoder().decode(vocabBytes).split("\n").map((l) => l.slice(0, l.lastIndexOf(" ")));
+  const mel = await createSessionWithHeal(MODELS.mel, melFetched, { executionProviders: ["wasm"] });
+  const decoder = await createSessionWithHeal(MODELS.decoder, decFetched, { executionProviders: ["wasm"] });
+  const vocab = new TextDecoder().decode(vocabFetched.bytes).split("\n").map((l) => l.slice(0, l.lastIndexOf(" ")));
 
   let encoder, device, dtype;
   if (useWebGpu) {
     try {
-      const encBytes = await fetchModel(MODELS.encoderFp16, onProgress);
+      const encFetched = await fetchModel(MODELS.encoderFp16, onProgress);
       self.postMessage({ type: "progress", phase: "prepare", kind: "GPU" });
-      encoder = await ort.InferenceSession.create(encBytes, { executionProviders: ["webgpu"] });
+      // create-failure heals the cache (#477); a warm-up failure is a
+      // CAPABILITY problem (#459) and falls through to int8 as before —
+      // healing there would re-download 1.2 GB to hit the same wall.
+      encoder = await createSessionWithHeal(MODELS.encoderFp16, encFetched,
+        { executionProviders: ["webgpu"] }, onProgress);
       await warmUp(encoder);
       device = "webgpu"; dtype = "fp16";
     } catch (e) {
       console.warn("WebGPU encoder unavailable, falling back to WASM/int8:", e?.message || e);
+      // Non-fatal by definition — the int8 path is about to run (#529). Tell
+      // the page so the loader says so, instead of it inferring doom from
+      // stray uncaught errors the dying GPU path may have emitted.
+      self.postMessage({ type: "fallback", message: "GPU unavailable — retrying on the CPU" });
       encoder = null;
     }
   }
@@ -299,15 +367,33 @@ async function loadSessions(forceGpu) {
     // Fresh CPU-labelled progress so a GPU→CPU fallback reads as a distinct
     // "Downloading CPU model…" pass rather than continuing the GPU one.
     const onProgressCpu = makeDownloadProgress("CPU");
-    const encBytes = await fetchModel(MODELS.encoderInt8, onProgressCpu);
+    const encFetched = await fetchModel(MODELS.encoderInt8, onProgressCpu);
     self.postMessage({ type: "progress", phase: "prepare", kind: "CPU" });
-    encoder = await ort.InferenceSession.create(encBytes, { executionProviders: ["wasm"] });
+    encoder = await createSessionWithHeal(MODELS.encoderInt8, encFetched,
+      { executionProviders: ["wasm"] }, onProgressCpu);
     device = "wasm"; dtype = "int8";
   }
 
   console.log(`Parakeet ready on ${device} (${dtype})`);
   self.postMessage({ type: "device", device, dtype });
   return { mel, encoder, decoder, vocab, device };
+}
+
+// Session creation that heals a poisoned cache (#477): if create throws on
+// bytes that CAME FROM the cache, the entry is evicted and fetched fresh from
+// the network for one more attempt — corruption with a plausible length
+// passes the read-time check and lands here. Bytes that were just downloaded
+// implicate the network or the model itself, not the cache: no retry.
+async function createSessionWithHeal(url, fetched, opts, onProgress) {
+  try {
+    return await ort.InferenceSession.create(fetched.bytes, opts);
+  } catch (e) {
+    if (!fetched.fromCache) throw e;
+    console.warn(`Parakeet: session creation failed on cached ${url.split("/").pop()} — cache entry evicted, retrying from network (${e?.message || e})`);
+    await evictCached(url);
+    const fresh = await fetchModel(url, onProgress || (() => {}));
+    return await ort.InferenceSession.create(fresh.bytes, opts);
+  }
 }
 
 // Push a short silent clip through the encoder so WebGPU shader compilation

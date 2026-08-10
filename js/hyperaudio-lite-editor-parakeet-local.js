@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.1.2 — last changed in release 1.1.2
+ * @version 1.3.2 — last changed in release 1.3.2
  * @license MIT
  */
 
@@ -61,7 +61,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.1.2";
+  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.2";
 
   // On Chrome (Chromium) Parakeet runs fp16 on the GPU (WebGPU) – fast, and the
   // default. Firefox's WebGPU underperforms here and Safari's can exhaust memory
@@ -180,6 +180,12 @@ function loadParakeetClient(modal, workerBaseUrl) {
           videoPlayer.currentTime = 0;
           parakeetParseData(data.output);
           break;
+        case "fallback":
+          // The worker is switching engines, not dying (#529): keep the
+          // loader and the in-progress row; the CPU pass's own progress
+          // messages follow this line.
+          updateLoadingMessage(data.message || "Retrying on the CPU…");
+          break;
         case "error":
           handleError(data.message);
           break;
@@ -187,6 +193,10 @@ function loadParakeetClient(modal, workerBaseUrl) {
     };
 
     worker.onerror = (event) => {
+      // Since #529 the worker suppresses its own uncaught runtime errors
+      // (the request's try/catch reports real failures via {type:"error"}),
+      // so reaching here means the worker script itself failed to load or
+      // parse — that IS fatal, nothing will ever answer.
       console.error(event);
       handleError(event.message || "The transcription worker crashed.");
     };
