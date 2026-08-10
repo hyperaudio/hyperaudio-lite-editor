@@ -34,6 +34,12 @@ Paste an existing transcript and align it to the media to recover word‑level t
 
 <img alt="Align previously transcribed content" src="docs/images/align-previously-transcribed-content.png" width="640">
 
+### Your work lives in a project library
+
+Every transcript is a project: edits autosave continuously, recent projects sit one click away in the sidebar, and each can be renamed, starred, duplicated, exported or deleted from its row menu.
+
+<img alt="The project library in the sidebar" src="docs/images/project-library.png" width="300">
+
 ### Edit, correct, search and replace
 
 Edit in the usual way — fix words, add punctuation, split and merge paragraphs. Find and replace across the whole transcript, with the active match highlighted.
@@ -78,9 +84,11 @@ Export edited media (WAV / MP3 / MP4 / WebM) with cuts, gap‑skips and playback
 
 ### A view that adapts to you
 
-Collapse the video, pop it out picture‑in‑picture, or work on a phone — the layout adapts.
+Collapse the video, pop it out picture‑in‑picture, or work on a phone — the layout adapts. Toggle paragraph timecodes on when you need them.
 
 <img alt="Flexible view" src="docs/images/flexible-view.png" width="700">
+
+<img alt="Paragraph timecodes toggled on" src="docs/images/toggle-timecodes.png" width="500">
 
 <img alt="Picture‑in‑picture" src="docs/images/picture-in-picture.png" width="500"> <img alt="Mobile compatible" src="docs/images/mobile-compatible.png" width="300">
 
