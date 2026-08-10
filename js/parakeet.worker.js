@@ -9,6 +9,25 @@ import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/o
 ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
 ort.env.wasm.numThreads = self.crossOriginIsolated ? (self.navigator?.hardwareConcurrency || 4) : 1;
 
+// The request's try/catch (the INFERENCE_REQUEST handler) is the ONE
+// authority on fatality: it posts {type:"error"} when a request truly dies.
+// ort's async internals can throw OUTSIDE that scope — the #529 field case
+// was a TypeError from the jsep runtime surfacing as an uncaught worker
+// error WHILE the planned GPU→int8 fallback carried on to a successful
+// transcript. Propagated to the page, that painted the fatal "reload"
+// screen and killed the in-progress Recents row for a request that was
+// recovering. Uncaught errors are therefore logged and suppressed here; a
+// worker that fails to even PARSE never installs these listeners, so a
+// genuinely broken worker still reaches the page's onerror.
+self.addEventListener("error", (e) => {
+  e.preventDefault();
+  console.warn("Parakeet: uncaught worker error (suppressed — the active request reports its own outcome):", e?.message || e);
+});
+self.addEventListener("unhandledrejection", (e) => {
+  e.preventDefault();
+  console.warn("Parakeet: unhandled rejection in worker (suppressed):", e?.reason?.message || e?.reason || e);
+});
+
 const SAMPLE_RATE = 16000;
 const WINDOW_S = 300;        // 5-minute windows to bound memory
 const OVERLAP_S = 10;        // each seam transcribed by both windows
@@ -337,6 +356,10 @@ async function loadSessions(forceGpu) {
       device = "webgpu"; dtype = "fp16";
     } catch (e) {
       console.warn("WebGPU encoder unavailable, falling back to WASM/int8:", e?.message || e);
+      // Non-fatal by definition — the int8 path is about to run (#529). Tell
+      // the page so the loader says so, instead of it inferring doom from
+      // stray uncaught errors the dying GPU path may have emitted.
+      self.postMessage({ type: "fallback", message: "GPU unavailable — retrying on the CPU" });
       encoder = null;
     }
   }
