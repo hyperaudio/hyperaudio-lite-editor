@@ -318,6 +318,9 @@ test('edit tracking survives the caption-mode round trip (#448 delegation)', asy
   // the round trip that REPLACES #hypertranscript — direct listeners died here
   await page.click('#caption-editor-btn');
   await page.waitForTimeout(400);
+  // curated captions raise the divergence notice on entry (#506) — dismiss
+  const divergence = page.locator('#project-dialog.modal-open');
+  if (await divergence.isVisible()) await page.click('#project-dialog-confirm');
   await page.click('#transcript-editor-btn');
   await page.waitForTimeout(400);
 
@@ -1018,9 +1021,9 @@ const enterCaptionMode = async (page) => {
   // been edited" notice, and it sits OVER the first caption rows, intercepting
   // clicks — dismiss it the way a user must (see #506, which is about that
   // notice's design).
-  const alertBox = page.locator('#captionsource-alert');
-  if (await alertBox.isVisible()) await page.click('#captionsource-alert-ok');
-  await expect(alertBox).toBeHidden();
+  const divergence = page.locator('#project-dialog.modal-open');
+  if (await divergence.isVisible()) await page.click('#project-dialog-confirm');
+  await expect(divergence).toBeHidden();
 };
 
 for (const action of ['insert', 'merge', 'delete']) {

@@ -160,9 +160,10 @@
 
       populateCaptionEditor(data);
 
-      if (updateCaptionsFromTranscript === false && localStorage.getItem("noCaptionAlert") !== "true") {
-        document.querySelector('#captionsource-alert').style.visibility = 'visible';
-      }
+      // (Until #506 this function raised the divergence notice — so opening
+      // any curated project, including at boot, threw an alert. The notice
+      // now raises on caption-editor ENTRY (editor-core), where it's
+      // relevant; a real modal at open would block the whole app.)
     }
 
     const cap2 = caption();
