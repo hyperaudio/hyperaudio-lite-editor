@@ -124,7 +124,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.0.2">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.0.3">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -149,9 +149,11 @@ If you are creating an open source application under a license compatible with t
           <span class="label-text" style="font-size:0.85rem; opacity:0.85">Remember key on this device</span>
         </label>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-        <input id="deepgram-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or</span>
         <input id="deepgram-file" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
+        <details class="url-source">
+          <summary class="label-text">Transcribe from a URL instead</summary>
+          <input id="deepgram-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        </details>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
   
         <label class="label-text" for="language-model">Model</label>
@@ -186,9 +188,11 @@ If you are creating an open source application under a license compatible with t
           <span class="label-text" style="font-size:0.85rem; opacity:0.85">Remember key on this device</span>
         </label>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-        <input id="assemblyai-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or</span>
         <input id="assemblyai-file" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
+        <details class="url-source">
+          <summary class="label-text">Transcribe from a URL instead</summary>
+          <input id="assemblyai-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        </details>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
 
         <label class="label-text" for="assemblyai-model">Model</label>
@@ -219,9 +223,11 @@ If you are creating an open source application under a license compatible with t
         </label>
         <span class="label-text" style="font-size:0.8rem; opacity:0.7">Create a free token at huggingface.co/settings/tokens</span>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
-        <input id="parakeet-hf-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
-        <span class="label-text">or</span>
         <input id="parakeet-hf-file" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
+        <details class="url-source">
+          <summary class="label-text">Transcribe from a URL instead</summary>
+          <input id="parakeet-hf-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        </details>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
 
         <label class="label-text" for="parakeet-hf-language">Language</label>
@@ -236,10 +242,12 @@ If you are creating an open source application under a license compatible with t
   <template id="whisper-client-template">
     <form>
       <div class="mb-3">
-        <input id="media" type="text" placeholder="Media or HLS (.m3u8) URL" class="input input-bordered w-full max-w-xs" />
-        <span style="display:block; padding:6px 0 0; font-size:80%; opacity:0.7" class="label-text">The source must allow cross-origin access (CORS).</span>
-        <span style="display:block; padding:16px" class="label-text">or</span>
         <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
+        <details class="url-source" style="margin-top:1rem">
+          <summary class="label-text">Transcribe from a URL instead</summary>
+          <input id="media" type="text" placeholder="Media or HLS (.m3u8) URL" class="input input-bordered w-full max-w-xs" />
+          <span style="display:block; padding:6px 0 0; font-size:80%; opacity:0.7" class="label-text">The source must allow cross-origin access (CORS).</span>
+        </details>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
       </div>
       <div class="mb-3">
@@ -301,10 +309,12 @@ If you are creating an open source application under a license compatible with t
   <template id="parakeet-local-template">
     <form>
       <div class="mb-3">
-        <input id="parakeet-media" type="text" placeholder="Media or HLS (.m3u8) URL" class="input input-bordered w-full max-w-xs" />
-        <span style="display:block; padding:6px 0 0; font-size:80%; opacity:0.7" class="label-text">The source must allow cross-origin access (CORS).</span>
-        <span style="display:block; padding:16px" class="label-text">or</span>
         <input id="parakeet-file-input" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
+        <details class="url-source" style="margin-top:1rem">
+          <summary class="label-text">Transcribe from a URL instead</summary>
+          <input id="parakeet-media" type="text" placeholder="Media or HLS (.m3u8) URL" class="input input-bordered w-full max-w-xs" />
+          <span style="display:block; padding:6px 0 0; font-size:80%; opacity:0.7" class="label-text">The source must allow cross-origin access (CORS).</span>
+        </details>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
       </div>
       <div class="form-text" style="font-size: 90%;">

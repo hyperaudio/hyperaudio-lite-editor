@@ -1637,3 +1637,12 @@ html.ha-transcribing #upload-transcribe-btn {
 #project-dialog .modal-box.modal-warning .project-dialog-title {
   border-radius: 0.6rem 1rem 0 0; /* inner top-left sits against the border */
 }
+
+/* Transcribe modal: the URL source is the rare path (and the sharp one — CORS),
+   so it sits behind a plain-disclosure reveal under the file picker instead of
+   competing with it. Native <details>: no JS, and the engines' listeners on
+   the inputs inside are untouched. */
+.url-source summary { cursor: pointer; font-size: 0.85rem; opacity: 0.7; user-select: none; width: fit-content; }
+.url-source summary:hover { opacity: 1; }
+.url-source[open] summary { margin-bottom: 10px; }
+.url-source { margin-top: 4px; }
