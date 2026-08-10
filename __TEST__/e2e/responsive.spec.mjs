@@ -105,6 +105,23 @@ test.describe('touch devices', () => {
   test.use({ isMobile: true, hasTouch: true });
 
   test('undo/redo float on the card edge, clear of the copy button and the text', async ({ page }) => {
+    // Since #524 a button with nothing to do is hidden, so earn both first:
+    // an edit makes undo available, undoing it makes redo available.
+    await page.evaluate(() => {
+      const t = document.querySelector('#hypertranscript');
+      t.focus();
+      const span = t.querySelector('span[data-m]');
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.setStart(span.firstChild, 1);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    });
+    await page.keyboard.type('X');
+    await page.waitForTimeout(1700); // fold boundary: the next run is its own entry
+    await page.keyboard.type('Y');
+    await page.click('#transcript-undo'); // one entry back: both directions live
     const boxes = await page.evaluate(() => {
       const box = (s) => {
         const el = document.querySelector(s);
@@ -132,5 +149,46 @@ test.describe('touch devices', () => {
     // ↶ ↷ 📋 in a row, no overlaps
     expect(boxes.undo.right).toBeLessThanOrEqual(boxes.redo.left);
     if (boxes.copy !== null) expect(boxes.redo.right).toBeLessThanOrEqual(boxes.copy.left);
+  });
+
+  // #524 — a disabled button earns no corner space: it disappears rather than
+  // greying. Slots stay fixed — a slid-in neighbour would land under the
+  // finger mid-undo-run; a vanished button leaves the finger over nothing.
+  test('only actionable undo/redo buttons occupy the corner (#524)', async ({ page }) => {
+    const undo = page.locator('#transcript-undo');
+    const redo = page.locator('#transcript-redo');
+    // a fresh page has nothing to undo or redo: a clean two-button corner
+    await expect(undo).toBeHidden();
+    await expect(redo).toBeHidden();
+
+    await page.evaluate(() => {
+      const t = document.querySelector('#hypertranscript');
+      t.focus();
+      const span = t.querySelector('span[data-m]');
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.setStart(span.firstChild, 1);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    });
+    await page.keyboard.type('X');
+    await expect(undo).toBeVisible();  // something to undo now
+    await expect(redo).toBeHidden();   // still nothing to redo
+
+    await page.click('#transcript-undo');
+    await expect(redo).toBeVisible();  // the undo made redo actionable
+    const redoSlot = await redo.boundingBox();
+
+    // undo history exhausted: ↶ vanishes, ↷ HOLDS ITS SLOT (no sliding)
+    await expect(undo).toBeHidden({ timeout: 6000 });
+    const redoSlotAfter = await redo.boundingBox();
+    expect(Math.abs(redoSlotAfter.x - redoSlot.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(redoSlotAfter.y - redoSlot.y)).toBeLessThanOrEqual(1);
+
+    // and redoing brings ↶ back while ↷ empties and vanishes
+    await page.click('#transcript-redo');
+    await expect(undo).toBeVisible();
+    await expect(redo).toBeHidden();
   });
 });

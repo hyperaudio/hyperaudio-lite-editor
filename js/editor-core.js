@@ -73,18 +73,8 @@
     return fn();
   }
 
-  let alertOkBtn = document.querySelector('#captionsource-alert-ok');
-
-  alertOkBtn.addEventListener('click', function() {
-    document.querySelector('#captionsource-alert').style.visibility = "hidden";
-  });
-
-  let alertCancelBtn = document.querySelector('#captionsource-alert-cancel');
-
-  alertCancelBtn.addEventListener('click', function() {
-    document.querySelector('#captionsource-alert').style.visibility = "hidden";
-    localStorage.setItem("noCaptionAlert", "true");
-  });
+  // (The #captionsource-alert wiring lived here until #506 — the divergence
+  // warning now rides the shared dialog chassis, raised from editor-main.)
 
   let editableDiv = document.querySelector('#hypertranscript');
 
@@ -281,6 +271,27 @@
     captionMode = true;
     hyperaudioGenerateCaptionsFromTranscript();
     reflectViewSwitch();
+    // The divergence warning (#506), raised where it's relevant: entering the
+    // caption editor while the captions are curated. It rides the shared
+    // dialog chassis — the old absolute-positioned alert silently ate clicks
+    // on the caption rows underneath it. Only the explicit button press
+    // persists the "don't tell me again" choice; OK/✕/Escape acknowledge.
+    if (updateCaptionsFromTranscript === false
+        && localStorage.getItem('noCaptionAlert') !== 'true'
+        && window.HyperaudioSave && typeof window.HyperaudioSave.dialog === 'function') {
+      window.HyperaudioSave.dialog(
+        'These captions may differ from the transcript. You can re-generate captions from the transcript below.',
+        {
+          title: 'Captions have been edited',
+          warning: true,
+          confirmLabel: 'OK',
+          cancelLabel: "Don't tell me again",
+          dismissResult: true,
+        }
+      ).then((result) => {
+        if (result === false) localStorage.setItem('noCaptionAlert', 'true');
+      });
+    }
   });
 
   transcriptViewBtn.addEventListener('click', () => {

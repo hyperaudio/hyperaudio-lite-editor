@@ -369,8 +369,8 @@ test('Regenerate turns caption sync back on until the next caption edit', async 
   await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
   // entering with sync off raises the "Captions have been edited" notice,
   // which sits over the first rows and intercepts clicks (#506)
-  const alertBox = page.locator('#captionsource-alert');
-  if (await alertBox.isVisible()) await page.click('#captionsource-alert-ok');
+  const divergence = page.locator('#project-dialog.modal-open');
+  if (await divergence.isVisible()) await page.click('#project-dialog-confirm');
   // the real flow: the floating Regenerate opens the confirm modal, Confirm
   // fires the handler and closes it (both are modal-toggle labels)
   await page.click('#regenerate-float-btn');
@@ -382,4 +382,61 @@ test('Regenerate turns caption sync back on until the next caption edit', async 
   await page.locator('#captions-display .caption input.line1').first().click();
   await page.keyboard.type('X');
   expect(await page.evaluate(() => updateCaptionsFromTranscript)).toBe(false);
+});
+
+// #506 — the divergence notice rides the shared dialog chassis: a real modal
+// in the warning dress, raised on caption-editor ENTRY when captions are
+// curated (raising at project open blocked the whole app behind a backdrop,
+// boot included). The old absolute-positioned alert silently ate clicks on
+// the caption rows beneath it, and its loud pink button was the one with
+// lasting consequences. Now only the explicit button press persists the
+// "don't tell me again" choice; OK and ✕/Escape just acknowledge.
+test('the caption divergence notice is a house-style warning modal (#506)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(() => { updateCaptionsFromTranscript = false; });
+
+  const enterCaptions = async () => {
+    await page.click('#caption-editor-btn');
+    await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
+  };
+  const leaveCaptions = () => page.click('#transcript-editor-btn');
+
+  await enterCaptions();
+  const dialog = page.locator('#project-dialog.modal-open');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.modal-box')).toHaveClass(/modal-warning/);
+  await expect(dialog.locator('#project-dialog-title')).toContainText('Captions have been edited');
+
+  // OK acknowledges without persisting: the notice returns next entry
+  await page.click('#project-dialog-confirm');
+  await expect(dialog).not.toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('noCaptionAlert'))).toBeNull();
+  await leaveCaptions();
+  await enterCaptions();
+  await expect(dialog).toBeVisible();
+
+  // Escape is a shrug, not a choice — nothing persists either
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('noCaptionAlert'))).toBeNull();
+
+  // the explicit button is the only thing that persists the choice
+  await leaveCaptions();
+  await enterCaptions();
+  await expect(dialog).toBeVisible();
+  await page.click('#project-dialog-cancel');
+  await expect(dialog).not.toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('noCaptionAlert'))).toBe('true');
+  await leaveCaptions();
+  await enterCaptions();
+  await page.waitForTimeout(400);
+  await expect(dialog).not.toBeVisible();
+
+  // ...and the warning dress does not leak onto ordinary dialogs
+  await page.evaluate(() => { window.HyperaudioSave.dialog('plain', { cancel: false }); });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.modal-box')).not.toHaveClass(/modal-warning/);
+  await expect(dialog.locator('#project-dialog-title')).toBeHidden();
+  await page.click('#project-dialog-confirm');
 });

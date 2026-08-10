@@ -716,6 +716,15 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
   #transcript-undo { right: 92px; }   /* copy at 12px on this band */
   #transcript-redo { right: 52px; }
 }
+/* Only show what can act (#524): a disabled ↶/↷ earns no corner space on a
+   phone — it disappears instead of greying. Slots stay FIXED (no sliding
+   into the neighbour's spot): during a rapid undo-tap run, a slid-in redo
+   would land exactly under the finger the moment redo becomes available.
+   A vanished button leaves the finger over nothing, which is harmless —
+   and the common nothing-to-undo state gets its clean two-button corner
+   back. The history module sets [disabled]; this just honours it. */
+#transcript-undo[disabled],
+#transcript-redo[disabled] { display: none; }
 /* Desktop: the keyboard owns undo. Hidden entirely — the top bar stays clear
    and the corner cluster stays two buttons on the devices that don't need
    these. Must stay LAST in this block so it wins over the float rules. */
@@ -1606,3 +1615,34 @@ html.ha-transcribing #upload-transcribe-btn {
   pointer-events: none;
   opacity: 0.4;
 }
+
+/* Warning dress for the shared dialog (#506): reserved for state-divergence
+   warnings ("captions have been edited") — an amber left border and a tinted
+   title band on the standard modal chassis. Bold enough that the warning
+   registers, without the full-bleed cyan alert this replaces. --wa is
+   DaisyUI's per-theme warning colour (v4: OKLCH components, so oklch() not
+   hsl()), so both themes get a fitting amber. */
+#project-dialog .modal-box.modal-warning {
+  border-left: 6px solid oklch(var(--wa));
+}
+#project-dialog .project-dialog-title {
+  background: oklch(var(--wa) / 0.18);
+  color: inherit;
+  font-weight: 700;
+  /* bleed the band to the box edges (modal-box padding is 1.5rem) */
+  margin: -1.5rem -1.5rem 1rem -1.5rem;
+  padding: 0.9rem 3rem 0.9rem 1.5rem; /* right clears the ✕ button */
+  border-radius: 1rem 1rem 0 0; /* match --rounded-box on the top corners */
+}
+#project-dialog .modal-box.modal-warning .project-dialog-title {
+  border-radius: 0.6rem 1rem 0 0; /* inner top-left sits against the border */
+}
+
+/* Transcribe modal: the URL source is the rare path (and the sharp one — CORS),
+   so it sits behind a plain-disclosure reveal under the file picker instead of
+   competing with it. Native <details>: no JS, and the engines' listeners on
+   the inputs inside are untouched. */
+.url-source summary { cursor: pointer; font-size: 0.85rem; opacity: 0.7; user-select: none; width: fit-content; }
+.url-source summary:hover { opacity: 1; }
+.url-source[open] summary { margin-bottom: 10px; }
+.url-source { margin-top: 4px; }

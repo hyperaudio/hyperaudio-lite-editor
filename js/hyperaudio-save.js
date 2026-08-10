@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.0 — last changed in release 1.3.0
+ * @version 1.3.1 — last changed in release 1.3.1
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1534,6 +1534,7 @@
     dialogEl.setAttribute('aria-modal', 'true');
     dialogEl.innerHTML = '<div class="modal-box" style="position:relative">'
       + '<button type="button" id="project-dialog-close" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</button>'
+      + '<div id="project-dialog-title" class="project-dialog-title" style="display:none"><span aria-hidden="true">⚠</span> <span id="project-dialog-title-text"></span></div>'
       + '<div id="project-dialog-message" style="line-height:1.6; margin-top:22px; padding-right:30px"></div>'
       + '<div class="modal-action">'
       + '<button type="button" id="project-dialog-cancel" class="btn btn-ghost">Cancel</button>'
@@ -1546,7 +1547,16 @@
   function projectDialog(message, opts) {
     opts = opts || {};
     const el = ensureDialog();
+    // The warning dress (#506): amber left border + tinted title band,
+    // reserved for state-divergence warnings — bold enough to register,
+    // on the same modal chassis as everything else.
+    const box = el.querySelector('.modal-box');
+    box.classList.toggle('modal-warning', opts.warning === true);
+    const title = el.querySelector('#project-dialog-title');
+    title.style.display = opts.title ? '' : 'none';
+    el.querySelector('#project-dialog-title-text').textContent = opts.title || '';
     const msg = el.querySelector('#project-dialog-message');
+    msg.style.marginTop = opts.title ? '0' : '22px';
     msg.textContent = '';
     String(message).split('\n\n').forEach((para, i) => {
       const pEl = document.createElement('p');
@@ -1584,11 +1594,16 @@
       const onOk = () => done(true);
       const onCancel = () => done(false);
       const onExtra = () => done('extra');
-      const onClose = () => done(opts.cancel === false); // dismissing an OK-alert acknowledges it
+      // Dismissing an OK-alert acknowledges it. dismissResult overrides for
+      // dialogs where the cancel button is a lasting choice ("don't tell me
+      // again") that a shrugged-off ✕/Escape must NOT silently make.
+      const dismissed = () => done(opts.dismissResult !== undefined
+        ? opts.dismissResult : opts.cancel === false);
+      const onClose = () => dismissed();
       const onKey = (e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
-          done(opts.cancel === false);
+          dismissed();
         }
       };
       confirmBtn.addEventListener('click', onOk);
@@ -3172,6 +3187,10 @@
     autosaveNow: writeDraft,
     isDirty,
     opfsAvailable,
+    // The one dialog chassis (#451/#506): other modules raise their notices
+    // through this rather than growing their own markup — the caption
+    // divergence warning (editor-main) is the first outside caller.
+    dialog: projectDialog,
     // The project library (#456) — everything the side panel
     // (hyperaudio-library.js) needs; re-renders ride the
     // 'hyperaudioLibraryChanged' document event.
