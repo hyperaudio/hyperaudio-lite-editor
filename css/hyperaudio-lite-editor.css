@@ -716,6 +716,15 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
   #transcript-undo { right: 92px; }   /* copy at 12px on this band */
   #transcript-redo { right: 52px; }
 }
+/* Only show what can act (#524): a disabled ↶/↷ earns no corner space on a
+   phone — it disappears instead of greying. Slots stay FIXED (no sliding
+   into the neighbour's spot): during a rapid undo-tap run, a slid-in redo
+   would land exactly under the finger the moment redo becomes available.
+   A vanished button leaves the finger over nothing, which is harmless —
+   and the common nothing-to-undo state gets its clean two-button corner
+   back. The history module sets [disabled]; this just honours it. */
+#transcript-undo[disabled],
+#transcript-redo[disabled] { display: none; }
 /* Desktop: the keyboard owns undo. Hidden entirely — the top bar stays clear
    and the corner cluster stays two buttons on the devices that don't need
    these. Must stay LAST in this block so it wins over the float rules. */

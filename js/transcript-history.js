@@ -709,19 +709,21 @@
     const undo = document.createElement('button');
     undo.id = 'transcript-undo';
     undo.type = 'button';
-    undo.className = 'btn btn-square btn-outline tooltip';
+    undo.className = 'btn btn-square btn-ghost tooltip';
     undo.dataset.tip = 'Undo';
     undo.setAttribute('aria-label', 'Undo transcript edit');
     undo.style.marginRight = '4px';
-    undo.textContent = '↶';
+    // House icon style (#524 follow-up): the same Lucide stroke family as the
+    // corner ⓘ/copy buttons, not a typographic glyph.
+    undo.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>';
     const redo = document.createElement('button');
     redo.id = 'transcript-redo';
     redo.type = 'button';
-    redo.className = 'btn btn-square btn-outline tooltip';
+    redo.className = 'btn btn-square btn-ghost tooltip';
     redo.dataset.tip = 'Redo';
     redo.setAttribute('aria-label', 'Redo transcript edit');
     redo.style.marginRight = '4px';
-    redo.textContent = '↷';
+    redo.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></svg>';
     strike.parentNode.insertBefore(redo, strike);
     strike.parentNode.insertBefore(undo, redo);
     undo.addEventListener('click', () => restore(-1, { focus: true }));
