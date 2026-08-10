@@ -1,7 +1,7 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 1.1.2 — last changed in release 1.1.2
+ * @version 1.3.2 — last changed in release 1.3.2
  * @license MIT
  */
 
