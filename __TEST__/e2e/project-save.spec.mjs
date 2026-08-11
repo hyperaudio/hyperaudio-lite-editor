@@ -1557,6 +1557,29 @@ test('a phantom engine error does not let the birth steal another project\'s ide
   expect(born.playerSrc).toBe(engineSrc);               // not the fixture's video
 });
 
+test('the in-progress row sits atop Recents, below the Starred group (#554)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await page.evaluate(async () => {
+    const lib = window.HyperaudioSave.library;
+    const original = lib.currentId();
+    await lib.duplicate(original);   // an unstarred neighbour for the Recents group
+    await lib.setStarred(original, true);
+  });
+  await expect(page.locator('#file-picker .recents-group-heading h2').first()).toHaveText('Starred');
+
+  await startFakeTranscription(page);
+  const shape = () => page.evaluate(() =>
+    [...document.querySelectorAll('#file-picker > li')].map((li) =>
+      li.classList.contains('recents-group-heading') ? 'H:' + li.textContent.trim()
+        : li.classList.contains('recents-row-transcribing') ? 'pending'
+          : li.classList.contains('recents-row') ? 'row' : 'other:' + li.textContent.trim().slice(0, 20)));
+  // births are unstarred: the pending row belongs at the TOP OF RECENTS —
+  // below the whole Starred group, above the unstarred rows
+  expect(await shape()).toEqual(['H:Starred', 'row', 'H:Recents', 'pending', 'row']);
+});
+
 test('an engine error takes the in-progress row with it (#525)', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
