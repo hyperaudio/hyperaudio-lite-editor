@@ -66,7 +66,10 @@
   // side — the embedder owns that URL's stability across renames, moves and
   // relaunches (spec § 7.2).
   function embedderLinkSchemes() {
-    return Array.isArray(window.hyperaudioLinkSchemes) ? window.hyperaudioLinkSchemes : [];
+    // Reached from the pure layer (validateProjectJson) — globalThis, not
+    // window, so the node context (module.exports of `pure`) stays clean.
+    const declared = globalThis.hyperaudioLinkSchemes;
+    return Array.isArray(declared) ? declared : [];
   }
   function isEmbedderLinkUrl(src) {
     return typeof src === 'string' && embedderLinkSchemes().some((s) => src.startsWith(s));
