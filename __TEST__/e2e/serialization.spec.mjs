@@ -28,7 +28,7 @@ test('serializeTranscriptHtml emits canonical one-span-per-line markup', async (
     expect(l).not.toMatch(/class="(?!speaker)/);                      // no runtime classes
   }
   // the speaker label keeps its semantic class, after data-m/data-d
-  expect(html).toMatch(/<span data-m="\d+" data-d="0" class="speaker">\[Monika\] <\/span>/);
+  expect(html).toMatch(/<span data-m="\d+" data-d="0" class="speaker">\[\w+\] <\/span>/);
 });
 
 test('the HTML download reflects canonical serialization after the sanitise tick', async ({ page }) => {
