@@ -1097,6 +1097,19 @@
         : buildTranscriptDomFromJson(loaded.project.transcript);
       const transcriptEl = document.querySelector('#hypertranscript');
       transcriptEl.replaceChildren(article);
+      // If the transcript was being edited at switch time, the HOST keeps
+      // focus across the content swap and the selection collapses to host
+      // offset 0 — a stray caret rendered on a phantom line above the first
+      // paragraph. Opening a project is not an edit: drop focus, and clear
+      // the stale host-anchored selection too or a later programmatic focus
+      // resurrects the caret at the same phantom spot. The caret appears
+      // where the user next clicks.
+      if (document.activeElement === transcriptEl) transcriptEl.blur();
+      const staleSel = window.getSelection();
+      if (staleSel !== null && staleSel.anchorNode !== null
+          && (staleSel.anchorNode === transcriptEl || transcriptEl.contains(staleSel.anchorNode))) {
+        staleSel.removeAllRanges();
+      }
 
       // Media: original file via an object URL; a "link" descriptor plays the
       // remote URL directly (degraded is declared by the caller's messaging).

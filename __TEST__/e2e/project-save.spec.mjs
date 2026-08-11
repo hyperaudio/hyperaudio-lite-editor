@@ -1643,3 +1643,40 @@ test('the play button state survives a project switch away from a playing video'
   expect(await page.evaluate(() => document.getElementById('hyperplayer').paused)).toBe(true);
   await expect(page.locator('#playbar-play-icon')).toBeVisible(); // play icon back
 });
+
+// Switching projects while the transcript is focused left the HOST focused
+// across the content swap, with the selection collapsed to host offset 0 —
+// a stray caret rendered on a phantom line above the first paragraph.
+// Opening a project is not an edit: apply() drops focus.
+test('a project switch does not leave a stray caret above the transcript', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  const result = await page.evaluate(async () => {
+    const HS = window.HyperaudioSave;
+    const a = HS.library.currentId();
+    await HS.library.duplicate(a);
+    const b = (await HS.library.list()).find((e) => e.id !== a).id;
+
+    // the user is editing project A: caret inside the first word
+    const t = document.getElementById('hypertranscript');
+    t.focus();
+    const span = t.querySelector('span[data-m]:not(.speaker)');
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(span.firstChild, 2);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+
+    await HS.library.open(b);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return {
+      hostStillFocused: document.activeElement === t,
+      selectionOnHost: window.getSelection().anchorNode === t,
+    };
+  });
+  expect(result.hostStillFocused).toBe(false);
+  expect(result.selectionOnHost).toBe(false);
+});
