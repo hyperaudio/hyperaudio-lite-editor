@@ -104,3 +104,34 @@ test('the transcription worker is lazy, retired after idle, and recreated on dem
   await page.evaluate(() => document.getElementById('parakeet-form-submit-btn').click());
   await expect.poll(parakeetWorkers, { timeout: 10000 }).toBe(1);
 });
+
+// #552 — the same lifecycle, ported to the Whisper client: lazy stand-up,
+// retirement after the idle tier, recreation on demand. Whisper's worker
+// imports transformers.js rather than onnxruntime, so its stub differs.
+test('the Whisper worker is lazy, retired after idle, and recreated on demand (#552)', async ({ page, context }, testInfo) => {
+  await context.route('**/@huggingface/transformers**', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript',
+    body: 'export const pipeline = async () => { throw new Error("stub refuses"); };',
+  }));
+  await page.addInitScript(() => { window.WHISPER_WORKER_IDLE_MS = 800; });
+  const consoles = [];
+  page.on('console', (m) => consoles.push(m.text()));
+
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const whisperWorkers = () => page.workers().filter((w) => w.url().includes('whisper.worker')).length;
+  expect(whisperWorkers()).toBe(0); // lazy now, no longer eager at boot
+
+  const wavPath = testInfo.outputPath('tone.wav');
+  (await import('node:fs')).writeFileSync(wavPath, ladderWav(2));
+  await page.setInputFiles('#file-input', wavPath);
+  await page.evaluate(() => document.getElementById('form-submit-btn').click());
+  await expect(page.locator('#hypertranscript')).toContainText('Transcription failed', { timeout: 30000 });
+  expect(whisperWorkers()).toBe(1); // alive while the tier runs
+
+  await expect.poll(whisperWorkers, { timeout: 5000 }).toBe(0); // retired
+  expect(consoles.find((t) => t.includes('idle worker retired'))).toBeTruthy();
+
+  await page.evaluate(() => document.getElementById('form-submit-btn').click());
+  await expect.poll(whisperWorkers, { timeout: 10000 }).toBe(1); // stood back up
+});
