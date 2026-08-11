@@ -562,8 +562,9 @@ minor bump:
 
 ### 7.2.1 `kind: "link"` (since 1.1)
 
-- `url` **MUST** be an http(s) URL; `path` is `null`; the container has no
-  `media/` entry.
+- `url` **MUST** be an http(s) URL — or, in a host application that has
+  declared its own media scheme(s) (below), a URL in a declared scheme;
+  `path` is `null`; the container has no `media/` entry.
 - The file is **not self-contained**, and readers state so openly on open.
 - Writers **SHOULD** prefer embedding over linking: attempt to download the
   remote media and save it as `kind: "original"` (whether this works is the
@@ -571,6 +572,16 @@ minor bump:
 - Readers open a link project by playing the URL directly (playback does not
   require CORS). If the URL is unreachable, § 7.3 applies — degraded mode
   with reconciliation is the recommended behaviour.
+
+**Embedder-declared schemes.** An application embedding the editor MAY declare
+the URL scheme(s) it serves media over (`window.hyperaudioLinkSchemes`), and a
+link URL in a declared scheme is then valid wherever http(s) is. The embedder
+owns that URL's stability: it must keep resolving across file renames, moves,
+and application relaunches — every miss surfaces to the user as a § 7.3
+reconciliation offer they didn't earn. Embedder-scheme links are expected in
+*working copies*; for interchange, writers embed (`kind: "original"`) as § 7.2.1
+already prefers, so shared files stay openable everywhere. In a plain browser
+no scheme is declared and nothing changes.
 
 ### 7.2.2 `kind: "none"` (since 1.2)
 

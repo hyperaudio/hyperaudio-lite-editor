@@ -57,6 +57,24 @@
   };
   const MEDIA_DIR = 'media/';
 
+  // Embedder link schemes (#449's bridge, extended to media): a native
+  // wrapper that serves media over its own URL scheme declares those schemes
+  // here, and kind-"link" media accepts them wherever http(s) is accepted.
+  // Embedder-scheme links are the embedder's responsibility: they are never
+  // cached into the OPFS working copy (see exportProjectInner), so the
+  // project stays kind "link" and the media bytes live only on the native
+  // side — the embedder owns that URL's stability across renames, moves and
+  // relaunches (spec § 7.2).
+  function embedderLinkSchemes() {
+    return Array.isArray(window.hyperaudioLinkSchemes) ? window.hyperaudioLinkSchemes : [];
+  }
+  function isEmbedderLinkUrl(src) {
+    return typeof src === 'string' && embedderLinkSchemes().some((s) => src.startsWith(s));
+  }
+  function isLinkUrl(src) {
+    return typeof src === 'string' && (/^https?:/i.test(src) || isEmbedderLinkUrl(src));
+  }
+
   // Reader security (spec § 10): cap on text entries before/after inflating
   // (anti zip-bomb — an hour of speech is hundreds of KB, 50 MB is generous).
   const TEXT_ENTRY_MAX_BYTES = 50 * 1024 * 1024;
@@ -178,7 +196,7 @@
         fail('media-path', `media.path "${media.path}" violates the media/<filename> pattern`);
       }
     } else if (media.kind === 'link') {
-      if (typeof media.url !== 'string' || !/^https?:/i.test(media.url)) {
+      if (!isLinkUrl(media.url)) { // http(s) or a declared embedder scheme
         fail('media', 'media.kind "link" requires an http(s) url');
       }
     } else if (media.kind === 'none') {
@@ -833,7 +851,7 @@
     const duration = player && Number.isFinite(player.duration)
       ? Math.round(player.duration * 1000) / 1000 : 0;
     const src = player !== null ? player.src : '';
-    if (/^https?:/i.test(src)) {
+    if (isLinkUrl(src)) { // http(s) or a declared embedder scheme
       // The player is on a remote URL (URL-mode transcription): a File captured
       // for a PREVIOUS project is stale — the URL wins. The exception is a file
       // fetched from this very URL (opportunistic embed, § 7.2): that IS this
@@ -850,7 +868,11 @@
           sizeBytes: session.mediaFile.size,
         };
       }
-      return { kind: 'link', path: null, url: src, filename: '', mimeType: '', durationSeconds: duration, sizeBytes: 0 };
+      // Name link media from its URL leaf — otherwise a link-kind birth
+      // falls through gather()'s title chain (title field → session.title →
+      // media.filename → 'project') and every URL-mode transcription is
+      // christened "project".
+      return { kind: 'link', path: null, url: src, filename: mediaDisplayName2(src) || '', mimeType: '', durationSeconds: duration, sizeBytes: 0 };
     }
     if (session.mediaFile !== null) {
       const safeName = sanitizeMediaFilename(session.mediaFile.name);
@@ -882,7 +904,7 @@
     const src = player !== null ? player.src : '';
     // A remote URL in the player means URL-mode: any previously captured File
     // belongs to an older project and must not be saved as this one's media.
-    if (!src || /^https?:/i.test(src)) return null;
+    if (!src || isLinkUrl(src)) return null;
     if (session.mediaFile !== null) return session.mediaFile;
     try {
       const blob = await (await fetch(src)).blob();
@@ -1878,9 +1900,34 @@
     showProgress('Preparing the project file…', 0, token);
     let mediaFile = await resolveMediaFile();
     const player = document.querySelector('#hyperplayer');
+    // Media on an embedder scheme exports self-contained — the bytes are
+    // fetched through the embedder's scheme handler for THIS archive only.
+    // Deliberately no session.mediaFile / session.mediaFileFromUrl caching
+    // and no writeMediaOnce(): the OPFS working copy must stay kind "link"
+    // (the media's one durable copy lives on the embedder's side).
+    const embedderSrc = player !== null && isEmbedderLinkUrl(player.src) ? player.src : null;
     const remoteSrc = player !== null && /^https?:/i.test(player.src) ? player.src : null;
     let saveAsLink = false;
+    let embedderMedia = null;
+    let deferEmbedToBridge = null;
 
+    if (mediaFile === null && embedderSrc !== null) {
+      const embedBridge = window.hyperaudioProjectBridge;
+      if (embedBridge && typeof embedBridge.save === 'function') {
+        // With a bridge registered, do NOT pull the media through the page —
+        // a full-file fetch through the embedder's scheme handler contends
+        // with the player's own streaming and starves playback right after a
+        // save. The container is built link-kind with no media entry; the
+        // bridge embeds the bytes natively (it has the file) and flips the
+        // descriptor to "original" before the archive lands.
+        deferEmbedToBridge = embedderSrc;
+        saveAsLink = true; // container carries the link; the bridge upgrades it
+      } else {
+        showProgress('Reading the media…', 0, token);
+        mediaFile = await fetchRemoteMediaFile(embedderSrc);
+        embedderMedia = mediaFile;
+      }
+    }
     if (mediaFile === null && remoteSrc !== null) {
       if (session.mediaFile !== null && session.mediaFileFromUrl === remoteSrc) {
         mediaFile = session.mediaFile; // already embedded by a previous save of this project
@@ -1920,6 +1967,22 @@
 
     const editAtGather = editGeneration;
     const state = gather();
+    // In-page fallback (no bridge): the gathered descriptor says "link"
+    // (the session cache was never touched), but this archive carries the
+    // bytes — so the CONTAINER's descriptor becomes a normal self-contained
+    // "original". The working copy keeps gathering "link".
+    if (embedderMedia !== null && state.media && state.media.kind === 'link') {
+      const safeName = sanitizeMediaFilename(embedderMedia.name);
+      state.media = {
+        kind: 'original',
+        path: MEDIA_DIR + safeName,
+        url: null,
+        filename: safeName,
+        mimeType: embedderMedia.type || '',
+        durationSeconds: state.media.durationSeconds,
+        sizeBytes: embedderMedia.size,
+      };
+    }
     // The origin travels in every save (spec § 5): the in-memory copy is the
     // primary source (also covers browsers without OPFS); work/ carries it
     // across reloads.
@@ -1962,7 +2025,11 @@
     if (bridge && typeof bridge.save === 'function') {
       let handled = false;
       try {
-        handled = (await bridge.save(blob, suggestedName)) !== false;
+        // The third argument tells the bridge which media to embed natively
+        // (see deferEmbedToBridge above). Bridges that don't understand it
+        // simply ignore the extra argument.
+        handled = (await bridge.save(blob, suggestedName,
+          deferEmbedToBridge !== null ? { embedMediaFromUrl: deferEmbedToBridge } : undefined)) !== false;
       } catch (e) {
         console.warn('hyperaudio-save: bridge save failed, falling back to download', e);
       }
@@ -2126,6 +2193,21 @@
   let reconcileInput = null;
 
   async function offerMediaReconciliation(desc) {
+    // Embedder-scheme links reconcile on the embedder's side. The in-page
+    // re-attach cannot run in every embedded WebView (a programmatic
+    // file-input click is blocked in WKWebView), and attaching in-page would
+    // writeMediaOnce() the bytes into OPFS — embedder media deliberately
+    // lives outside the browser. The embedder re-points its scheme handler
+    // and reloads the player instead.
+    if (isEmbedderLinkUrl(desc.url) && typeof window.hyperaudioMediaReconcileHandler === 'function') {
+      window.hyperaudioMediaReconcileHandler({
+        url: desc.url,
+        filename: desc.filename || '',
+        sizeBytes: desc.sizeBytes || 0,
+        durationSeconds: desc.durationSeconds || 0,
+      });
+      return;
+    }
     const why = desc.url
       ? 'The media URL this project points to cannot be played (offline, moved, or gone).'
       : 'The media file is missing from the project container.';
@@ -2271,7 +2353,7 @@
     if (session.mediaFile !== null && session.mediaFile.name) return session.mediaFile.name;
     const player = document.getElementById('hyperplayer');
     const src = player !== null ? player.src : '';
-    if (/^https?:/i.test(src)) {
+    if (isLinkUrl(src)) { // http(s) or a declared embedder scheme
       try {
         const leaf = decodeURIComponent(new URL(src).pathname.split('/').pop() || '');
         if (leaf !== '') return leaf;
@@ -2360,6 +2442,38 @@
     }
   }
   window.clearPendingTranscription = clearPendingTranscription;
+
+  // An engine that only obtains its media AFTER starting (URL modes that
+  // download or resolve first) reports the media src once known. The pending
+  // identity and (when the pending view owns the screen) the player follow,
+  // exactly as if the src had been on the player before setTranscriptBusy(true).
+  window.hyperaudioUpdatePendingMediaSrc = function (url) {
+    if (pendingIdentity === null) return false;
+    // Canonical (percent-encoded, resolved) form — player.src always reads
+    // back canonical, and a raw-vs-canonical mismatch means needless media
+    // reloads later (identity restore compares against player.src).
+    let canon = url || '';
+    try { canon = url ? new URL(url, window.location.href).href : ''; } catch (e) { /* keep raw */ }
+    pendingIdentity.playerSrc = canon;
+    if (pendingTranscription !== null) {
+      pendingTranscription.name = mediaDisplayName2(canon) || pendingTranscription.name;
+    }
+    const t = document.getElementById('hypertranscript');
+    const player = document.getElementById('hyperplayer');
+    if (player !== null && canon && t !== null && t.getAttribute('aria-busy') === 'true'
+        && player.src !== canon) {
+      player.src = canon;
+    }
+    notifyLibraryChanged(false);
+    return true;
+  };
+  // Name helper for the late-media case: leaf of the reported URL.
+  function mediaDisplayName2(url) {
+    try {
+      const leaf = decodeURIComponent(new URL(url).pathname.split('/').pop() || '');
+      return leaf !== '' ? leaf : null;
+    } catch (e) { return null; }
+  }
 
   // Clicking the in-progress row: hand the screen back to the transcription.
   // The current project's pending edits flush to its own draft first; the
