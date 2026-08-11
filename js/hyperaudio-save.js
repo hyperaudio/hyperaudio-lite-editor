@@ -1327,8 +1327,15 @@
     saveInFlight = true;
     try {
       flushTranscriptMaintenanceBarrier('sanitise-save');
+      // With a bridge registered AND OPFS available, the bridge COMPOSES with
+      // the silent commit instead of replacing it: the commit runs below and
+      // the finished container is additionally handed to the bridge at the
+      // end. The bridge-only short-circuit remains for OPFS-less contexts,
+      // where the handed-over container IS the save. (#449 predates the
+      // project library; as shipped, registering the bridge silently
+      // disabled the library's own saved.json/draft semantics.)
       const bridge = window.hyperaudioProjectBridge;
-      if (bridge && typeof bridge.save === 'function') {
+      if (bridge && typeof bridge.save === 'function' && !opfsAvailable) {
         return await exportProject({ asSave: true }); // the bridge intercepts the built container
       }
       if (!opfsAvailable) {
@@ -1368,6 +1375,16 @@
       if (identityGeneration === identityAtStart && editGeneration === editAtGather) {
         sessionEdited = false;
         updateSaveIndicator();
+      }
+      // The commit succeeded — now also hand the finished container to the
+      // bridge (see the note above). Failures here are the bridge's to
+      // report; the commit already stands.
+      if (bridge && typeof bridge.save === 'function') {
+        try {
+          await exportProject({ asSave: true });
+        } catch (e) {
+          console.warn('hyperaudio-save: bridge save failed after commit', e);
+        }
       }
       return true;
     } finally {
