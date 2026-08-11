@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.1.2 — last changed in release 1.1.2
+ * @version 1.3.3 — last changed in release 1.3.3
  * @license MIT
  */
 

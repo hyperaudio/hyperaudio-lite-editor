@@ -1570,6 +1570,8 @@ test('the in-progress row sits atop Recents, below the Starred group (#554)', as
   await expect(page.locator('#file-picker .recents-group-heading h2').first()).toHaveText('Starred');
 
   await startFakeTranscription(page);
+  // the row arrives with the panel re-render — await it before reading shape
+  await expect(page.locator('.recents-row-transcribing')).toHaveCount(1);
   const shape = () => page.evaluate(() =>
     [...document.querySelectorAll('#file-picker > li')].map((li) =>
       li.classList.contains('recents-group-heading') ? 'H:' + li.textContent.trim()
