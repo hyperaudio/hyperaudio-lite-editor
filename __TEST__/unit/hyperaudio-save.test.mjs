@@ -130,6 +130,22 @@ test('validateProjectJson: link kind needs an http(s) url, and nothing else', ()
   assert.ok(save.validateProjectJson(p).errors.some((e) => e.code === 'media'));
 });
 
+test('validateProjectJson: a declared embedder scheme is accepted for link urls', () => {
+  const p = save.buildProjectJson(sampleState());
+  p.media = { kind: 'link', path: null, url: 'app-media://token/file.mp4', filename: 'file.mp4', mimeType: '', durationSeconds: 62.5, sizeBytes: 0 };
+  // Undeclared: rejected exactly as before.
+  assert.ok(save.validateProjectJson(p).errors.some((e) => e.code === 'media'));
+  globalThis.hyperaudioLinkSchemes = ['app-media:'];
+  try {
+    assert.deepEqual(save.validateProjectJson(p), { ok: true, errors: [] });
+    // Declaring one scheme does not open the door to others.
+    p.media.url = 'other-scheme://x/y';
+    assert.ok(save.validateProjectJson(p).errors.some((e) => e.code === 'media'));
+  } finally {
+    delete globalThis.hyperaudioLinkSchemes;
+  }
+});
+
 /* ---------- converter: struck round-trip (writer side) ---------- */
 
 test('jsonToHTML: struck word carries the line-through style, others do not', () => {
