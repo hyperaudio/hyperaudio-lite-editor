@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.1.2 — last changed in release 1.1.2
+ * @version 1.3.3 — last changed in release 1.3.3
  * @license MIT
  */
 
@@ -109,7 +109,25 @@ function loadWhisperClient(modal, workerBaseUrl) {
     }
   }
 
-  let webWorker = createWorker();
+  // The worker is created on demand and RETIRED when idle (#552, the #550
+  // pattern ported from the Parakeet client): wasm linear memory never
+  // shrinks once grown, so a live worker pins its ort heap for the tab's
+  // lifetime. Ten idle minutes after a request settles it is terminated;
+  // downloaded models stay in the browser cache, so the next transcription
+  // pays session rebuild, not re-download.
+  let webWorker = null;
+  let workerIdleTimer = null;
+  const WORKER_IDLE_TERMINATE_MS = window.WHISPER_WORKER_IDLE_MS || 10 * 60 * 1000;
+
+  function scheduleWorkerRetirement() {
+    clearTimeout(workerIdleTimer);
+    workerIdleTimer = setTimeout(() => {
+      if (webWorker === null) return;
+      webWorker.terminate();
+      webWorker = null;
+      console.log("Whisper: idle worker retired — wasm memory returned; the next transcription reloads the model");
+    }, WORKER_IDLE_TERMINATE_MS);
+  }
 
   // the button is a styled <label>, so "disabled" is the btn-disabled class
   // (pointer-events: none) plus a guard in the handler
@@ -153,6 +171,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
           lastDeviceLabel = data.device === "webgpu" ? "GPU (WebGPU)" : "CPU";
           break;
         case "result":
+          scheduleWorkerRetirement();
           stopProgressClock();
           if (pendingInfo !== null && typeof setTranscriptionInfo === "function") {
             setTranscriptionInfo({ ...pendingInfo, device: lastDeviceLabel, seconds: data.output.seconds });
@@ -160,6 +179,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
           handleInferenceDone(data);
           break;
         case "error":
+          scheduleWorkerRetirement();
           handleError(data.message);
           break;
       }
@@ -167,6 +187,10 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     worker.onerror = (event) => {
       console.error(event);
+      // a worker that can't even load has nothing worth keeping — retire it
+      // now so a retry starts from a fresh one
+      worker.terminate();
+      if (webWorker === worker) webWorker = null;
       handleError(event.message || "The transcription worker crashed.");
     };
 
@@ -275,6 +299,11 @@ function loadWhisperClient(modal, workerBaseUrl) {
   }
 
   async function handleFormSubmission() {
+
+    // a request is starting: hold retirement, and stand the worker up if the
+    // previous one was retired (#552)
+    clearTimeout(workerIdleTimer);
+    if (webWorker === null) webWorker = createWorker();
 
     // If the user is in caption mode, switch back to transcript view so the
     // transcribing loader is visible and the result lands in the right place.

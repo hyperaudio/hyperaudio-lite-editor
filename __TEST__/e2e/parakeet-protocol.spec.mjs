@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { ladderWav } from './helpers.mjs';
 
 // #529 — the worker's error protocol: only the request's own try/catch may
 // declare a request dead ({type:"error"}). In the field, ort's jsep runtime
@@ -65,4 +66,72 @@ test('an uncaught worker error is suppressed; the request errors through its own
   expect(result.onerrorEvents).toEqual([]);
   // the suppression is loud in the console, not silent
   expect(consoles.find((t) => t.includes('uncaught worker error (suppressed'))).toBeTruthy();
+});
+
+// #550 — the worker is created on demand and retired when idle. Wasm memory
+// never shrinks once grown, so a live worker retains the ort heap forever —
+// Safari's memory watchdog was reloading tabs left overnight. The tier is
+// overridable so the test can wait it out.
+test('the transcription worker is lazy, retired after idle, and recreated on demand (#550)', async ({ page, context }, testInfo) => {
+  await context.route('**/ort.all.min.mjs', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript',
+    body: 'export const env = { wasm: {} };\nexport const InferenceSession = { create: async () => { throw new Error("stub refuses"); } };',
+  }));
+  await context.route('https://huggingface.co/**', (route) => route.fulfill({
+    status: 200, contentType: 'application/octet-stream', body: Buffer.alloc(12, 7),
+  }));
+  await page.addInitScript(() => { window.PARAKEET_WORKER_IDLE_MS = 800; });
+  const consoles = [];
+  page.on('console', (m) => consoles.push(m.text()));
+
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  // other engines (Whisper) still create their workers eagerly — count ours
+  const parakeetWorkers = () => page.workers().filter((w) => w.url().includes('parakeet.worker')).length;
+  expect(parakeetWorkers()).toBe(0); // lazy: no worker until a transcription asks
+
+  const wavPath = testInfo.outputPath('tone.wav');
+  (await import('node:fs')).writeFileSync(wavPath, ladderWav(2));
+  await page.setInputFiles('#parakeet-file-input', wavPath);
+  await page.evaluate(() => document.getElementById('parakeet-form-submit-btn').click());
+  await expect(page.locator('#hypertranscript')).toContainText('Transcription failed', { timeout: 30000 });
+  expect(parakeetWorkers()).toBe(1); // alive while the tier runs
+
+  await expect.poll(parakeetWorkers, { timeout: 5000 }).toBe(0); // retired
+  expect(consoles.find((t) => t.includes('idle worker retired'))).toBeTruthy();
+
+  // a new request stands a fresh worker up
+  await page.evaluate(() => document.getElementById('parakeet-form-submit-btn').click());
+  await expect.poll(parakeetWorkers, { timeout: 10000 }).toBe(1);
+});
+
+// #552 — the same lifecycle, ported to the Whisper client: lazy stand-up,
+// retirement after the idle tier, recreation on demand. Whisper's worker
+// imports transformers.js rather than onnxruntime, so its stub differs.
+test('the Whisper worker is lazy, retired after idle, and recreated on demand (#552)', async ({ page, context }, testInfo) => {
+  await context.route('**/@huggingface/transformers**', (route) => route.fulfill({
+    status: 200, contentType: 'text/javascript',
+    body: 'export const pipeline = async () => { throw new Error("stub refuses"); };',
+  }));
+  await page.addInitScript(() => { window.WHISPER_WORKER_IDLE_MS = 800; });
+  const consoles = [];
+  page.on('console', (m) => consoles.push(m.text()));
+
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const whisperWorkers = () => page.workers().filter((w) => w.url().includes('whisper.worker')).length;
+  expect(whisperWorkers()).toBe(0); // lazy now, no longer eager at boot
+
+  const wavPath = testInfo.outputPath('tone.wav');
+  (await import('node:fs')).writeFileSync(wavPath, ladderWav(2));
+  await page.setInputFiles('#file-input', wavPath);
+  await page.evaluate(() => document.getElementById('form-submit-btn').click());
+  await expect(page.locator('#hypertranscript')).toContainText('Transcription failed', { timeout: 30000 });
+  expect(whisperWorkers()).toBe(1); // alive while the tier runs
+
+  await expect.poll(whisperWorkers, { timeout: 5000 }).toBe(0); // retired
+  expect(consoles.find((t) => t.includes('idle worker retired'))).toBeTruthy();
+
+  await page.evaluate(() => document.getElementById('form-submit-btn').click());
+  await expect.poll(whisperWorkers, { timeout: 10000 }).toBe(1); // stood back up
 });

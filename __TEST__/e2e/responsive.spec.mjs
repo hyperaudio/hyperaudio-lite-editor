@@ -212,3 +212,18 @@ test.describe('short viewport', () => {
     await page.click('#download-vtt', { trial: true });
   });
 });
+
+// #546 — edge-adjacent buttons must left-anchor their tooltip bubbles: the
+// shared .tooltip::before centres under the button (left 50% + translate),
+// which ran "Picture-in-picture" half off the viewport's left edge. Without
+// the override these compute to "50%" and a matrix transform.
+test('left-edge player controls anchor their tooltips on-screen (#546)', async ({ page }) => {
+  const anchored = await page.evaluate(() => ['pip-btn', 'audio-only-btn'].map((id) => {
+    const cs = getComputedStyle(document.getElementById(id), '::before');
+    return { id, left: cs.left, transform: cs.transform };
+  }));
+  for (const tip of anchored) {
+    expect(tip.left, tip.id).toBe('0px');
+    expect(tip.transform, tip.id).toBe('none');
+  }
+});

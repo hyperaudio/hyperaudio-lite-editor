@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.1.6 — last changed in release 1.1.6
+ * @version 1.3.3 — last changed in release 1.3.3
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -340,7 +340,11 @@
       const t = document.getElementById('hypertranscript');
       return t !== null && t.getAttribute('aria-busy') === 'true';
     })();
-    if (pending !== null) {
+    // Rendered atop the RECENTS group below (#554) — births are unstarred,
+    // so that is where the finished project will land; rendered up here it
+    // floated above the Starred heading whenever anything was starred.
+    const renderPendingRow = () => {
+      if (pending === null) return;
       const nameHtml = escapeMarkup(pending.name);
       // Same anatomy as a normal row — name column plus the actions slot —
       // so the widths line up; a spinner sits where the kebab would, saying
@@ -356,7 +360,7 @@
           event.preventDefault();
           api.openPendingTranscription();
         });
-    }
+    };
 
     const entryById = {};
     const renderRow = (entry) => {
@@ -404,13 +408,14 @@
     if (starredRows.length > 0) {
       filePicker.insertAdjacentHTML('beforeend', '<li class="recents-group-heading"><h2>Starred</h2></li>');
       starredRows.forEach(renderRow);
-      if (recentRows.length > 0) {
+      if (recentRows.length > 0 || pending !== null) {
         filePicker.insertAdjacentHTML('beforeend', '<li class="recents-group-heading"><h2>Recents</h2></li>');
       }
     }
+    renderPendingRow();
     recentRows.forEach(renderRow);
 
-    if (rows.length === 0) {
+    if (rows.length === 0 && pending === null) {
       // opacity 0.75 (not 0.55) so the composited grey still meets the 4.5:1
       // contrast ratio on the white card (#402)
       filePicker.insertAdjacentHTML('beforeend', '<li style="padding:8px 16px; opacity:0.75">No projects yet.</li>');

@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 1.3.2 (last changed in release 1.3.2) -->
+<!--  Hyperaudio Lite Editor - Version 1.3.3 (last changed in release 1.3.3) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,7 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="1.3.2">
+  <meta name="version" content="1.3.3">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -46,8 +46,8 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=0.8.1"></script>
   <script src="js/hyperaudio-lite-editor-parakeet.js?v=0.8.2"></script>
   <script src="js/transcribe-prefs.js?v=0.8.2"></script>
-  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.1.2"></script>
-  <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.2"></script>
+  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.3"></script>
+  <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.3"></script>
   <script src="js/word-alignment.js"></script>
   <script src="js/html-json-converter.js?v=1.1.9"></script>
   <script src="js/transcript-to-ionosphere.js?v=1.1.1"></script>
@@ -124,7 +124,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.2">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.3">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -365,7 +365,7 @@ If you are creating an open source application under a license compatible with t
         <div id="player-pane" class="top-bar-item" style="flex-shrink:0;">
           <!-- example src -->
           <div id="player-frame" style="position:relative;">
-            <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/audio/HLE_Intro_3.mp3" type="audio/mpeg" poster="images/poster.png" style="width:100%; border-radius:0.5rem; display:block;">
+            <video id="hyperplayer" class="hyperaudio-player" src="https://lab.hyperaud.io/audio/HLEintroAudio.mp3" type="audio/mpeg" poster="images/poster.png" style="width:100%; border-radius:0.5rem; display:block;">
               <track id="hyperplayer-vtt" label="preview" kind="subtitles" src="">
             </video>
             <button id="media-play-overlay" type="button" aria-label="Play / pause" onclick="togglePlay()">
@@ -596,181 +596,184 @@ If you are creating an open source application under a license compatible with t
         <article>
           <section>
             <p>
-              <span class="speaker" data-d="0" data-m="0">[Monika] </span>
-              <span data-m="0" data-d="80">The </span>
-              <span data-m="320" data-d="800">Hyperaudio </span>
-              <span data-m="1280" data-d="240">Lite </span>
-              <span data-m="1760" data-d="320">Editor </span>
-              <span data-m="2320" data-d="240">makes </span>
+              <span data-m="320" data-d="0" class="speaker">[Mark] </span>
+              <span data-m="320" data-d="80">The </span>
+              <span data-m="560" data-d="880">Hyperaudio </span>
+              <span data-m="1520" data-d="240">Lite </span>
+              <span data-m="1840" data-d="320">Editor </span>
+              <span data-m="2400" data-d="160">makes </span>
               <span data-m="2640" data-d="320">audio </span>
-              <span data-m="3040" data-d="80">and </span>
-              <span data-m="3280" data-d="80">video </span>
+              <span data-m="2960" data-d="80">and </span>
+              <span data-m="3200" data-d="80">video </span>
               <span data-m="3520" data-d="80">more </span>
-              <span data-m="3680" data-d="560">accessible </span>
-              <span data-m="4320" data-d="80">by </span>
-              <span data-m="4480" data-d="400">creating </span>
-              <span data-m="5040" data-d="400">captions </span>
+              <span data-m="3840" data-d="560">accessible </span>
+              <span data-m="4560" data-d="80">by </span>
+              <span data-m="4800" data-d="400">creating </span>
+              <span data-m="5360" data-d="320">captions </span>
               <span data-m="5840" data-d="80">and </span>
-              <span data-m="6160" data-d="560">interactive </span>
-              <span data-m="6880" data-d="880">transcripts. </span>
+              <span data-m="6080" data-d="560">interactive </span>
+              <span data-m="6720" data-d="880">transcripts. </span>
             </p>
             <p>
-              <span data-m="8320" data-d="80">The </span>
-              <span data-m="8640" data-d="80">first </span>
-              <span data-m="8960" data-d="400">step </span>
-              <span data-m="9520" data-d="80">is </span>
-              <span data-m="9840" data-d="80">to </span>
-              <span data-m="10000" data-d="560">transcribe </span>
-              <span data-m="10720" data-d="80">your </span>
-              <span data-m="11040" data-d="400">content. </span>
+              <span data-m="8160" data-d="80">The </span>
+              <span data-m="8480" data-d="80">first </span>
+              <span data-m="8800" data-d="160">step </span>
+              <span data-m="9040" data-d="80">is </span>
+              <span data-m="9280" data-d="80">to </span>
+              <span data-m="9440" data-d="480">transcribe </span>
+              <span data-m="10080" data-d="80">your </span>
+              <span data-m="10320" data-d="400">content. </span>
             </p>
             <p>
-              <span data-m="12080" data-d="400">Choose </span>
-              <span data-m="12640" data-d="80">from </span>
-              <span data-m="12800" data-d="320">several </span>
-              <span data-m="13200" data-d="800">speech-to-text </span>
-              <span data-m="14320" data-d="400">engines. </span>
-              <span data-m="15200" data-d="80">On </span>
-              <span data-m="15440" data-d="320">device </span>
-              <span data-m="15840" data-d="240">there's </span>
-              <span data-m="16080" data-d="80">a </span>
-              <span data-m="16160" data-d="560">Parakeet </span>
-              <span data-m="16800" data-d="80">and </span>
-              <span data-m="16880" data-d="320">Whisper </span>
-              <span data-m="17440" data-d="80">model, </span>
-              <span data-m="18000" data-d="80">or </span>
-              <span data-m="18400" data-d="80">for </span>
-              <span data-m="18560" data-d="400">faster </span>
-              <span data-m="19040" data-d="400">processing </span>
-              <span data-m="19520" data-d="80">and </span>
-              <span data-m="19760" data-d="240">longer </span>
-              <span data-m="20160" data-d="400">content, </span>
-              <span data-m="20800" data-d="80">you </span>
-              <span data-m="21040" data-d="80">can </span>
-              <span data-m="21200" data-d="320">connect </span>
-              <span data-m="21520" data-d="80">to </span>
-              <span data-m="21760" data-d="880">AssemblyAI, </span>
-              <span data-m="22880" data-d="720">Deepgram, </span>
-              <span data-m="23920" data-d="80">or </span>
-              <span data-m="24080" data-d="80">to </span>
-              <span data-m="24240" data-d="720">Parakeet </span>
-              <span data-m="25120" data-d="80">in </span>
-              <span data-m="25360" data-d="80">the </span>
-              <span data-m="25520" data-d="560">cloud. </span>
+              <span data-m="11360" data-d="400">Choose </span>
+              <span data-m="11840" data-d="80">from </span>
+              <span data-m="12000" data-d="320">several </span>
+              <span data-m="12320" data-d="320">speech </span>
+              <span data-m="12800" data-d="80">to </span>
+              <span data-m="12960" data-d="240">text </span>
+              <span data-m="13280" data-d="320">engines. </span>
+              <span data-m="13920" data-d="80">On </span>
+              <span data-m="14160" data-d="240">device </span>
+              <span data-m="14480" data-d="320">there's </span>
+              <span data-m="14720" data-d="80">a </span>
+              <span data-m="14880" data-d="560">Parakeet </span>
+              <span data-m="15520" data-d="80">and </span>
+              <span data-m="15600" data-d="320">Whisper </span>
+              <span data-m="16160" data-d="80">model, </span>
+              <span data-m="16480" data-d="80">or </span>
+              <span data-m="16720" data-d="80">for </span>
+              <span data-m="16880" data-d="320">faster </span>
+              <span data-m="17280" data-d="400">processing </span>
+              <span data-m="17760" data-d="80">and </span>
+              <span data-m="17920" data-d="320">longer </span>
+              <span data-m="18320" data-d="320">content, </span>
+              <span data-m="18800" data-d="80">you </span>
+              <span data-m="18960" data-d="80">can </span>
+              <span data-m="19040" data-d="320">connect </span>
+              <span data-m="19360" data-d="80">to </span>
+              <span data-m="19600" data-d="480">Assembly </span>
+              <span data-m="20160" data-d="240">AI, </span>
+              <span data-m="20640" data-d="560">Deepgram, </span>
+              <span data-m="21440" data-d="80">or </span>
+              <span data-m="21600" data-d="80">to </span>
+              <span data-m="21760" data-d="560">Parakeet </span>
+              <span data-m="22560" data-d="80">in </span>
+              <span data-m="22640" data-d="80">the </span>
+              <span data-m="22800" data-d="560">cloud. </span>
             </p>
             <p>
-              <span data-m="26960" data-d="400">Once </span>
-              <span data-m="27520" data-d="640">transcribed, </span>
-              <span data-m="28400" data-d="80">you </span>
-              <span data-m="28560" data-d="80">can </span>
-              <span data-m="28800" data-d="320">correct </span>
-              <span data-m="29200" data-d="80">the </span>
-              <span data-m="29360" data-d="560">transcript </span>
-              <span data-m="30000" data-d="80">and </span>
-              <span data-m="30240" data-d="80">add </span>
-              <span data-m="30560" data-d="320">speaker </span>
-              <span data-m="31040" data-d="400">names. </span>
-              <span data-m="31840" data-d="240">Just </span>
-              <span data-m="32240" data-d="320">edit </span>
-              <span data-m="32640" data-d="80">the </span>
-              <span data-m="32800" data-d="560">transcript </span>
-              <span data-m="33520" data-d="80">like </span>
-              <span data-m="33760" data-d="80">you </span>
-              <span data-m="34000" data-d="80">would </span>
-              <span data-m="34320" data-d="80">any </span>
-              <span data-m="34560" data-d="80">other </span>
-              <span data-m="34800" data-d="240">text </span>
-              <span data-m="35200" data-d="80">and </span>
-              <span data-m="35440" data-d="80">we'll </span>
-              <span data-m="35760" data-d="80">look </span>
-              <span data-m="36000" data-d="160">after </span>
-              <span data-m="36240" data-d="80">the </span>
-              <span data-m="36480" data-d="400">timings. </span>
+              <span data-m="24320" data-d="400">Once </span>
+              <span data-m="24880" data-d="560">transcribed, </span>
+              <span data-m="25520" data-d="80">you </span>
+              <span data-m="25680" data-d="80">can </span>
+              <span data-m="25760" data-d="400">correct </span>
+              <span data-m="26160" data-d="80">the </span>
+              <span data-m="26240" data-d="400">transcript </span>
+              <span data-m="26720" data-d="80">and </span>
+              <span data-m="26880" data-d="80">add </span>
+              <span data-m="27120" data-d="320">speaker </span>
+              <span data-m="27520" data-d="240">names. </span>
+              <span data-m="28000" data-d="240">Just </span>
+              <span data-m="28320" data-d="240">edit </span>
+              <span data-m="28640" data-d="80">the </span>
+              <span data-m="28720" data-d="400">transcript </span>
+              <span data-m="29200" data-d="80">like </span>
+              <span data-m="29360" data-d="80">you </span>
+              <span data-m="29520" data-d="80">would </span>
+              <span data-m="29680" data-d="80">any </span>
+              <span data-m="29920" data-d="80">other </span>
+              <span data-m="30080" data-d="160">text </span>
+              <span data-m="30320" data-d="80">and </span>
+              <span data-m="30480" data-d="320">we'll </span>
+              <span data-m="30800" data-d="80">look </span>
+              <span data-m="30960" data-d="160">after </span>
+              <span data-m="31200" data-d="80">the </span>
+              <span data-m="31440" data-d="400">timings. </span>
             </p>
             <p>
-              <span data-m="37440" data-d="560">Tidy </span>
-              <span data-m="38080" data-d="80">up </span>
-              <span data-m="38240" data-d="80">your </span>
-              <span data-m="38480" data-d="320">content, </span>
-              <span data-m="39120" data-d="320">strike </span>
-              <span data-m="39520" data-d="80">out </span>
-              <span data-m="39760" data-d="320">filler </span>
-              <span data-m="40400" data-d="320">words </span>
-              <span data-m="41040" data-d="80">or </span>
-              <span data-m="41360" data-d="80">any </span>
-              <span data-m="41680" data-d="640">unwanted </span>
-              <span data-m="42480" data-d="320">text </span>
-              <span data-m="42960" data-d="80">and </span>
-              <span data-m="43200" data-d="400">remove </span>
-              <span data-m="43680" data-d="400">gaps </span>
-              <span data-m="44160" data-d="80">and </span>
-              <span data-m="44400" data-d="720">silences, </span>
-              <span data-m="45600" data-d="80">all </span>
-              <span data-m="45840" data-d="240">while </span>
-              <span data-m="46160" data-d="80">the </span>
-              <span data-m="46400" data-d="400">timings </span>
-              <span data-m="46880" data-d="320">stay </span>
-              <span data-m="47280" data-d="400">perfectly </span>
-              <span data-m="47840" data-d="80">in </span>
-              <span data-m="48160" data-d="400">sync. </span>
+              <span data-m="32960" data-d="560">Tidy </span>
+              <span data-m="33600" data-d="80">up </span>
+              <span data-m="33760" data-d="80">your </span>
+              <span data-m="33920" data-d="240">content, </span>
+              <span data-m="34320" data-d="320">strike </span>
+              <span data-m="34640" data-d="80">out </span>
+              <span data-m="34800" data-d="240">filler </span>
+              <span data-m="35280" data-d="240">words </span>
+              <span data-m="35600" data-d="80">or </span>
+              <span data-m="35680" data-d="80">any </span>
+              <span data-m="35840" data-d="400">unwanted </span>
+              <span data-m="36320" data-d="160">text </span>
+              <span data-m="36560" data-d="80">and </span>
+              <span data-m="36720" data-d="240">remove </span>
+              <span data-m="37040" data-d="320">gaps </span>
+              <span data-m="37440" data-d="80">and </span>
+              <span data-m="37600" data-d="560">silences, </span>
+              <span data-m="38400" data-d="80">all </span>
+              <span data-m="38640" data-d="160">while </span>
+              <span data-m="38880" data-d="80">the </span>
+              <span data-m="39040" data-d="320">timings </span>
+              <span data-m="39440" data-d="240">stay </span>
+              <span data-m="39760" data-d="400">perfectly </span>
+              <span data-m="40240" data-d="80">in </span>
+              <span data-m="40480" data-d="400">sync. </span>
             </p>
             <p>
-              <span data-m="49040" data-d="240">When </span>
-              <span data-m="49360" data-d="320">you're </span>
-              <span data-m="49680" data-d="320">happy </span>
-              <span data-m="50000" data-d="80">with </span>
-              <span data-m="50240" data-d="80">your </span>
-              <span data-m="50400" data-d="560">transcript, </span>
-              <span data-m="51280" data-d="240">check </span>
-              <span data-m="51680" data-d="80">your </span>
-              <span data-m="51920" data-d="320">captions </span>
-              <span data-m="52400" data-d="80">and </span>
-              <span data-m="52720" data-d="320">tweak </span>
-              <span data-m="53120" data-d="80">them </span>
-              <span data-m="53280" data-d="80">right </span>
-              <span data-m="53520" data-d="80">in </span>
-              <span data-m="53680" data-d="80">the </span>
-              <span data-m="53920" data-d="400">editor. </span>
+              <span data-m="41680" data-d="240">When </span>
+              <span data-m="42000" data-d="320">you're </span>
+              <span data-m="42320" data-d="240">happy </span>
+              <span data-m="42560" data-d="80">with </span>
+              <span data-m="42720" data-d="80">your </span>
+              <span data-m="42880" data-d="480">transcript, </span>
+              <span data-m="43600" data-d="160">check </span>
+              <span data-m="43840" data-d="80">your </span>
+              <span data-m="44000" data-d="240">captions </span>
+              <span data-m="44400" data-d="80">and </span>
+              <span data-m="44560" data-d="320">tweak </span>
+              <span data-m="45040" data-d="80">them </span>
+              <span data-m="45280" data-d="80">right </span>
+              <span data-m="45520" data-d="80">in </span>
+              <span data-m="45760" data-d="80">the </span>
+              <span data-m="46000" data-d="400">editor. </span>
             </p>
             <p>
-              <span data-m="55280" data-d="400">Finally, </span>
-              <span data-m="56400" data-d="400">export </span>
-              <span data-m="57040" data-d="80">in </span>
-              <span data-m="57280" data-d="80">a </span>
-              <span data-m="57360" data-d="240">number </span>
-              <span data-m="57680" data-d="80">of </span>
-              <span data-m="57920" data-d="400">formats </span>
-              <span data-m="58560" data-d="80">to </span>
-              <span data-m="58800" data-d="560">associate </span>
-              <span data-m="59440" data-d="80">with </span>
-              <span data-m="59600" data-d="80">your </span>
-              <span data-m="59760" data-d="800">audiovisual </span>
-              <span data-m="60720" data-d="400">media. </span>
-              <span data-m="61840" data-d="240">Burn </span>
-              <span data-m="62240" data-d="80">in </span>
-              <span data-m="62560" data-d="480">captions </span>
-              <span data-m="63360" data-d="320">ready </span>
-              <span data-m="63840" data-d="80">for </span>
-              <span data-m="64080" data-d="80">social </span>
-              <span data-m="64400" data-d="320">media </span>
-              <span data-m="64960" data-d="80">use </span>
-              <span data-m="65520" data-d="80">or </span>
-              <span data-m="65760" data-d="80">use </span>
-              <span data-m="66000" data-d="80">the </span>
-              <span data-m="66240" data-d="720">Hyperaudio </span>
-              <span data-m="67120" data-d="240">Lite </span>
-              <span data-m="67440" data-d="400">library </span>
-              <span data-m="68080" data-d="80">or </span>
-              <span data-m="68240" data-d="560">WordPress </span>
-              <span data-m="68880" data-d="320">plugin </span>
-              <span data-m="69520" data-d="80">to </span>
-              <span data-m="69840" data-d="400">embed </span>
-              <span data-m="70480" data-d="560">interactive </span>
-              <span data-m="71200" data-d="720">transcripts </span>
-              <span data-m="72080" data-d="480">directly </span>
-              <span data-m="72720" data-d="80">into </span>
-              <span data-m="73040" data-d="80">your </span>
-              <span data-m="73280" data-d="720">website. </span>
+              <span data-m="47840" data-d="400">Finally, </span>
+              <span data-m="48720" data-d="320">export </span>
+              <span data-m="49200" data-d="80">in </span>
+              <span data-m="49360" data-d="80">a </span>
+              <span data-m="49440" data-d="160">number </span>
+              <span data-m="49600" data-d="80">of </span>
+              <span data-m="49680" data-d="320">formats </span>
+              <span data-m="50080" data-d="80">to </span>
+              <span data-m="50320" data-d="320">associate </span>
+              <span data-m="50720" data-d="80">with </span>
+              <span data-m="50880" data-d="80">your </span>
+              <span data-m="51040" data-d="720">audiovisual </span>
+              <span data-m="51760" data-d="320">media, </span>
+              <span data-m="52320" data-d="240">burn </span>
+              <span data-m="52560" data-d="240">in </span>
+              <span data-m="52880" data-d="240">captions </span>
+              <span data-m="53360" data-d="240">ready </span>
+              <span data-m="53600" data-d="80">for </span>
+              <span data-m="53840" data-d="80">social </span>
+              <span data-m="54080" data-d="240">media </span>
+              <span data-m="54480" data-d="80">use, </span>
+              <span data-m="54720" data-d="80">or </span>
+              <span data-m="54960" data-d="80">use </span>
+              <span data-m="55120" data-d="80">the </span>
+              <span data-m="55280" data-d="720">Hyperaudio </span>
+              <span data-m="56160" data-d="240">Lite </span>
+              <span data-m="56480" data-d="240">Library </span>
+              <span data-m="56880" data-d="80">or </span>
+              <span data-m="57120" data-d="480">WordPress </span>
+              <span data-m="57680" data-d="320">plugin </span>
+              <span data-m="58320" data-d="80">to </span>
+              <span data-m="58480" data-d="480">embed </span>
+              <span data-m="59120" data-d="560">interactive </span>
+              <span data-m="59760" data-d="560">transcripts </span>
+              <span data-m="60400" data-d="480">directly </span>
+              <span data-m="61040" data-d="80">into </span>
+              <span data-m="61280" data-d="80">your </span>
+              <span data-m="61600" data-d="720">website. </span>
             </p>
           </section>
         </article>
@@ -1101,8 +1104,8 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=1.2.0"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=1.3.1"></script>
-  <script src="js/hyperaudio-library.js?v=1.2.5.3"></script>
+  <script src="js/hyperaudio-save.js?v=1.3.3"></script>
+  <script src="js/hyperaudio-library.js?v=1.3.3"></script>
   <!-- transcript document exports: TXT / Markdown (#467) -->
   <script src="js/transcript-doc-export.js?v=1.1.1"></script>
 

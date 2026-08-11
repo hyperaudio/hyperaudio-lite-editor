@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.2 — last changed in release 1.3.2
+ * @version 1.3.3 — last changed in release 1.3.3
  * @license MIT
  */
 
@@ -115,7 +115,28 @@ function loadParakeetClient(modal, workerBaseUrl) {
     }
   }
 
-  let webWorker = createWorker();
+  // The worker is created on demand and RETIRED when idle (#550). Wasm
+  // linear memory never shrinks once grown: after one transcription the ort
+  // heap (hundreds of MB to GB-class) stays resident in a live worker even
+  // with its sessions released (#463's first tier) — Safari's memory
+  // watchdog was reloading tabs left overnight over it. Ten idle minutes
+  // after a request settles, the worker is terminated outright; the models
+  // stay in Cache Storage, so the next transcription pays a few seconds of
+  // session rebuild, not a re-download. (The test override keeps the tier
+  // waitable in e2e.)
+  let webWorker = null;
+  let workerIdleTimer = null;
+  const WORKER_IDLE_TERMINATE_MS = window.PARAKEET_WORKER_IDLE_MS || 10 * 60 * 1000;
+
+  function scheduleWorkerRetirement() {
+    clearTimeout(workerIdleTimer);
+    workerIdleTimer = setTimeout(() => {
+      if (webWorker === null) return;
+      webWorker.terminate();
+      webWorker = null;
+      console.log("Parakeet: idle worker retired — wasm memory returned; the next transcription rebuilds sessions from the model cache");
+    }, WORKER_IDLE_TERMINATE_MS);
+  }
 
   // the button is a styled <label>, so "disabled" is the btn-disabled class
   // (pointer-events: none) plus a guard in the handler
@@ -170,6 +191,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
           }
           break;
         case "result":
+          scheduleWorkerRetirement();
           stopProgressClock();
           if (typeof setTranscriptBusy === "function") {
             setTranscriptBusy(false);
@@ -187,6 +209,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
           updateLoadingMessage(data.message || "Retrying on the CPU…");
           break;
         case "error":
+          scheduleWorkerRetirement();
           handleError(data.message);
           break;
       }
@@ -198,6 +221,10 @@ function loadParakeetClient(modal, workerBaseUrl) {
       // so reaching here means the worker script itself failed to load or
       // parse — that IS fatal, nothing will ever answer.
       console.error(event);
+      // a worker that can't even load has nothing worth keeping — retire it
+      // now so a retry starts from a fresh one
+      worker.terminate();
+      if (webWorker === worker) webWorker = null;
       handleError(event.message || "The transcription worker crashed.");
     };
 
@@ -252,6 +279,11 @@ function loadParakeetClient(modal, workerBaseUrl) {
   }
 
   async function handleFormSubmission() {
+
+    // a request is starting: hold retirement, and stand the worker up if the
+    // previous one was retired (#550)
+    clearTimeout(workerIdleTimer);
+    if (webWorker === null) webWorker = createWorker();
 
     // If the user is in caption mode, switch back to transcript view so the
     // transcribing loader is visible and the result lands in the right place.
