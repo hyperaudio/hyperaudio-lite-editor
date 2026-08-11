@@ -591,6 +591,16 @@ dialog::backdrop {
   transform: none;
 }
 
+/* The player controls' first buttons sit at the sidebar's left edge too
+   (#546): "Picture-in-picture" is one of the longest tips in the app and a
+   centred bubble ran half off-screen. Same treatment; the arrow stays
+   centred under the button. */
+#pip-btn.tooltip::before,
+#audio-only-btn.tooltip::before {
+  left: 0;
+  transform: none;
+}
+
 /* Boot-restore anti-flash (#473): while the inline head script's class is
    up, the demo transcript is invisible but keeps its layout — the card shows
    briefly empty instead of showing the wrong transcript. Removed by
