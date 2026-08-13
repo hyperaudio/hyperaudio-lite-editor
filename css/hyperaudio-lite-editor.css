@@ -852,6 +852,9 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
   white-space: nowrap;
 }
 .replace-spacer { flex: 1; }
+/* The panel's explicit exit, set a little apart from the actions it follows */
+#replace-close { margin-left: 4px; opacity: 0.6; }
+#replace-close:hover { opacity: 1; }
 /* Outranks both the general hit above and upstream's .search-mark on specificity
    rather than on source order, so reordering this sheet cannot silently lose the
    active-match colour. */
