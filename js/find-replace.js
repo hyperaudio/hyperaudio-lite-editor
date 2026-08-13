@@ -1,7 +1,7 @@
 /**
  * find-replace.js
  * (C) The Hyperaudio Project
- * @version 1.3.4 — last changed in release 1.3.4
+ * @version 1.3.5 — last changed in release 1.3.5
  * @license MIT
  *
  * Find & replace for the transcript (#25). "Find" reuses the vendored
@@ -36,16 +36,28 @@
   const replaceOneBtn = document.getElementById('replace-one');
   const replaceAllBtn = document.getElementById('replace-all');
   const clearBtn = document.getElementById('search-clear');
+  const closeBtn = document.getElementById('replace-close');
 
   if (searchBox === null || toggle === null || panel === null) return;
 
   let matches = [];       // groups of marks: one group per phrase occurrence
   let activeIndex = -1;
 
-  // How many spans searchPhrase marks per hit — the query's word count.
+  // How many spans searchPhrase marks per hit. This must count the needles
+  // the VENDORED search derives, not raw whitespace tokens: it strips
+  // punctuation from each word and drops any that empties, so a query like
+  // "big - pharma" yields two needles, not three. Counting tokens instead
+  // grouped the marks in threes and misaligned every match after the first.
+  // (Mirrors SEARCH_PUNCT in hyperaudio-lite-extension.js, which is vendored
+  // and must not be imported from.)
+  const QUERY_PUNCT = /[.,\-\/#!$%\^&\*;:{}=_`~()\?\s]/g;
   const queryWordCount = () => {
-    const words = searchBox.value.trim().split(/\s+/).filter(Boolean);
-    return Math.max(1, words.length);
+    const needles = searchBox.value
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => w.replace(QUERY_PUNCT, ''))
+      .filter(Boolean);
+    return Math.max(1, needles.length);
   };
 
   const isOpen = () => !panel.hasAttribute('hidden');
@@ -76,7 +88,15 @@
     const flat = Array.from(document.querySelectorAll('#hypertranscript mark.search-mark'));
     const per = queryWordCount();
     matches = [];
-    for (let i = 0; i < flat.length; i += per) matches.push(flat.slice(i, i + per));
+    for (let i = 0; i < flat.length; ) {
+      if (flat[i].hasAttribute(WHOLE)) {
+        matches.push([flat[i]]); // the whole phrase in one span: a match by itself
+        i += 1;
+      } else {
+        matches.push(flat.slice(i, i + per));
+        i += per;
+      }
+    }
     if (matches.length === 0) {
       activeIndex = -1;
     } else if (!keepIndex || activeIndex < 0) {
@@ -87,11 +107,76 @@
     renderActive();
   };
 
+  // The vendored search walks ONE needle per consecutive span, so a phrase
+  // whose words all sit inside a single span never matches — which is every
+  // multi-word speaker label ("[Teon Brooks] " is one span), making speaker
+  // renames impossible (#568). This supplementary pass marks those
+  // whole-in-one-span occurrences the vendored pass cannot see. The mark
+  // carries data-whole-phrase so collectMatches treats it as a COMPLETE
+  // match rather than chunking it by needle count.
+  const WHOLE = 'data-whole-phrase';
+  const markWholePhraseSpans = () => {
+    const needles = searchBox.value
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => w.replace(QUERY_PUNCT, ''))
+      .filter(Boolean);
+    if (needles.length < 2) return; // single needles are the vendored pass's job
+    const joined = needles.join('');
+    document.querySelectorAll('#hypertranscript [data-m]').forEach((span) => {
+      if (span.querySelector('mark.search-mark') !== null) return; // already marked
+      const raw = span.textContent;
+      const normalised = raw.toLowerCase().replace(QUERY_PUNCT, '');
+      if (!normalised.includes(joined)) return;
+      // Walk the raw text consuming the needle characters, skipping the
+      // punctuation and spaces between them, so the mark covers the phrase
+      // exactly as written — "[Teon Brooks]" including its space.
+      let start = -1;
+      let ni = 0;
+      for (let i = 0; i < raw.length && ni < joined.length; i += 1) {
+        const ch = raw[i].toLowerCase();
+        if (ch === joined[ni]) {
+          if (ni === 0) start = i;
+          ni += 1;
+        } else if (QUERY_PUNCT.test(ch)) {
+          QUERY_PUNCT.lastIndex = 0; // the /g regex is stateful in .test()
+          if (ni > 0) continue;      // punctuation inside the phrase is skipped
+        } else {
+          QUERY_PUNCT.lastIndex = 0;
+          ni = 0;
+          start = -1;
+        }
+        QUERY_PUNCT.lastIndex = 0;
+      }
+      if (ni < joined.length || start < 0) return;
+      let end = start;
+      let consumed = 0;
+      while (end < raw.length && consumed < joined.length) {
+        const ch = raw[end].toLowerCase();
+        if (ch === joined[consumed]) consumed += 1;
+        end += 1;
+      }
+      const before = raw.slice(0, start);
+      const hit = raw.slice(start, end);
+      const after = raw.slice(end);
+      span.textContent = '';
+      if (before) span.append(before);
+      const mark = document.createElement('mark');
+      mark.className = 'search-mark';
+      mark.setAttribute(WHOLE, '');
+      mark.textContent = hit;
+      span.append(mark);
+      if (after) span.append(after);
+      span.classList.add('search-match');
+    });
+  };
+
   // Run the existing search, then pick up its marks.
   const runSearch = (keepIndex) => {
     if (typeof searchPhrase === 'function') {
       searchPhrase(searchBox.value);
     }
+    markWholePhraseSpans();
     collectMatches(keepIndex);
   };
 
@@ -321,10 +406,21 @@
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) closePanel(); });
 
-  // The extension already runs searchPhrase on search-box keyup; collect after
-  // it so the match list and active highlight stay in sync while typing.
-  searchBox.addEventListener('keyup', () => { if (isOpen()) collectMatches(false); });
+  // The extension already runs searchPhrase on search-box keyup — which
+  // CLEARS every mark and re-applies only what it can see — so the
+  // single-span pass has to run again after it, not just collect (#568).
+  searchBox.addEventListener('keyup', () => {
+    // The single-span pass belongs to SEARCH, not to the replace panel:
+    // plain searching is the common case and must find the same phrases.
+    // (Only the match bookkeeping below is panel-only.)
+    markWholePhraseSpans();
+    if (isOpen()) collectMatches(false);
+  });
 
+  // An explicit way out. Clicking away still closes the panel, but since
+  // transcript clicks deliberately keep it open (#559) most of the screen no
+  // longer dismisses it — so the exit has to be visible.
+  if (closeBtn) closeBtn.addEventListener('click', () => { closePanel(); searchBox.focus(); });
   if (prevBtn) prevBtn.addEventListener('click', () => step(-1));
   if (nextBtn) nextBtn.addEventListener('click', () => step(1));
   if (replaceOneBtn) replaceOneBtn.addEventListener('click', replaceOne);

@@ -232,3 +232,93 @@ test('a hand correction keeps your place in the matches (#559)', async ({ page }
   await expect(page.locator('#replace-panel')).toBeVisible();
   await expect(page.locator('#find-match-count')).toHaveText('4 / 4');
 });
+
+// The group size must follow the VENDORED search's needles, not raw
+// whitespace tokens: it strips punctuation per word and drops any that
+// empties. "big , pharma" is two needles — grouping by three misaligned
+// every match after the first.
+test('a query with a punctuation-only token still groups correctly (#557)', async ({ page }) => {
+  await page.evaluate(() => {
+    const spans = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+    spans[0].textContent = 'big '; spans[1].textContent = 'pharma ';
+    spans[4].textContent = 'big '; spans[5].textContent = 'pharma ';
+  });
+  await page.evaluate(() => {
+    const sb = document.querySelector('#search-box');
+    sb.value = 'big , pharma';           // three tokens, two needles
+    sb.dispatchEvent(new KeyboardEvent('keyup'));
+    document.getElementById('find-replace-toggle').click();
+    document.getElementById('replace-box').value = 'Big Pharma';
+  });
+  await expect(page.locator('#find-match-count')).toHaveText('1 / 2');
+  await page.click('#replace-all');
+  const words = await page.evaluate(() =>
+    [...document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)')]
+      .slice(0, 6).map((s) => s.textContent.trim()));
+  expect([words[0], words[1]]).toEqual(['Big', 'Pharma']);
+  expect([words[4], words[5]]).toEqual(['Big', 'Pharma']);
+});
+
+// #568 — the vendored search walks one needle per consecutive span, so a
+// phrase living wholly inside ONE span never matched: every multi-word
+// speaker label, making speaker renames impossible.
+const plantLabel = (page, openPanel = true) => page.evaluate((open) => {
+  document.querySelector('#hypertranscript span.speaker').textContent = '[Teon Brooks] ';
+  if (open) document.getElementById('find-replace-toggle').click();
+}, openPanel);
+
+// Searching is the common case and does NOT involve the replace panel: the
+// pass must run for plain search too. (It was panel-gated at first, and
+// every test opened the panel — so nothing caught it.)
+test('a multi-word phrase inside one span matches with the panel CLOSED (#568)', async ({ page }) => {
+  await plantLabel(page, false);
+  for (const query of ['[Teon Brooks]', 'Teon Brooks']) {
+    const marks = await search(page, query);
+    expect(marks, query).toEqual([query.startsWith('[') ? '[Teon Brooks]' : 'Teon Brooks']);
+  }
+  expect(await page.evaluate(() =>
+    document.getElementById('replace-panel').hasAttribute('hidden'))).toBe(true); // never opened
+});
+
+test('a multi-word phrase inside one span matches, brackets and all (#568)', async ({ page }) => {
+  await plantLabel(page);
+  for (const query of ['[Teon Brooks]', 'Teon Brooks', 'teon brooks']) {
+    const marks = await search(page, query);
+    expect(marks, query).toEqual([query.startsWith('[') ? '[Teon Brooks]' : 'Teon Brooks']);
+  }
+  await expect(page.locator('#find-match-count')).toHaveText('1 / 1');
+});
+
+test('a speaker label can be renamed through replace (#568)', async ({ page }) => {
+  await plantLabel(page);
+  await search(page, '[Teon Brooks]');
+  await page.evaluate(() => { document.getElementById('replace-box').value = '[Teon]'; });
+  await page.click('#replace-one');
+  expect(await page.evaluate(() =>
+    document.querySelector('#hypertranscript span.speaker').textContent.trim())).toBe('[Teon]');
+});
+
+test('the single-span pass leaves ordinary cross-span phrases alone (#568)', async ({ page }) => {
+  await page.evaluate(() => {
+    const spans = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+    spans[0].textContent = 'big '; spans[1].textContent = 'pharma ';
+    document.getElementById('find-replace-toggle').click();
+  });
+  const marks = await search(page, 'big pharma');
+  expect(marks).toEqual(['big', 'pharma']); // still two marks, one per span
+  await expect(page.locator('#find-match-count')).toHaveText('1 / 1'); // ...one match
+});
+
+// The panel needs a visible exit: clicking away still closes it, but since
+// transcript clicks deliberately keep it open (#559), most of the screen no
+// longer dismisses it.
+test('the replace panel has a close button', async ({ page }) => {
+  await page.click('#find-replace-toggle');
+  await expect(page.locator('#replace-panel')).toBeVisible();
+  await page.click('#replace-close');
+  await expect(page.locator('#replace-panel')).toBeHidden();
+  // the toggle agrees it is shut, so one click reopens it
+  await expect(page.locator('#find-replace-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await page.click('#find-replace-toggle');
+  await expect(page.locator('#replace-panel')).toBeVisible();
+});
