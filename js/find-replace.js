@@ -42,10 +42,21 @@
   let matches = [];       // groups of marks: one group per phrase occurrence
   let activeIndex = -1;
 
-  // How many spans searchPhrase marks per hit — the query's word count.
+  // How many spans searchPhrase marks per hit. This must count the needles
+  // the VENDORED search derives, not raw whitespace tokens: it strips
+  // punctuation from each word and drops any that empties, so a query like
+  // "big - pharma" yields two needles, not three. Counting tokens instead
+  // grouped the marks in threes and misaligned every match after the first.
+  // (Mirrors SEARCH_PUNCT in hyperaudio-lite-extension.js, which is vendored
+  // and must not be imported from.)
+  const QUERY_PUNCT = /[.,\-\/#!$%\^&\*;:{}=_`~()\?\s]/g;
   const queryWordCount = () => {
-    const words = searchBox.value.trim().split(/\s+/).filter(Boolean);
-    return Math.max(1, words.length);
+    const needles = searchBox.value
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => w.replace(QUERY_PUNCT, ''))
+      .filter(Boolean);
+    return Math.max(1, needles.length);
   };
 
   const isOpen = () => !panel.hasAttribute('hidden');

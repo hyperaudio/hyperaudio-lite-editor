@@ -232,3 +232,29 @@ test('a hand correction keeps your place in the matches (#559)', async ({ page }
   await expect(page.locator('#replace-panel')).toBeVisible();
   await expect(page.locator('#find-match-count')).toHaveText('4 / 4');
 });
+
+// The group size must follow the VENDORED search's needles, not raw
+// whitespace tokens: it strips punctuation per word and drops any that
+// empties. "big , pharma" is two needles — grouping by three misaligned
+// every match after the first.
+test('a query with a punctuation-only token still groups correctly (#557)', async ({ page }) => {
+  await page.evaluate(() => {
+    const spans = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+    spans[0].textContent = 'big '; spans[1].textContent = 'pharma ';
+    spans[4].textContent = 'big '; spans[5].textContent = 'pharma ';
+  });
+  await page.evaluate(() => {
+    const sb = document.querySelector('#search-box');
+    sb.value = 'big , pharma';           // three tokens, two needles
+    sb.dispatchEvent(new KeyboardEvent('keyup'));
+    document.getElementById('find-replace-toggle').click();
+    document.getElementById('replace-box').value = 'Big Pharma';
+  });
+  await expect(page.locator('#find-match-count')).toHaveText('1 / 2');
+  await page.click('#replace-all');
+  const words = await page.evaluate(() =>
+    [...document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)')]
+      .slice(0, 6).map((s) => s.textContent.trim()));
+  expect([words[0], words[1]]).toEqual(['Big', 'Pharma']);
+  expect([words[4], words[5]]).toEqual(['Big', 'Pharma']);
+});
