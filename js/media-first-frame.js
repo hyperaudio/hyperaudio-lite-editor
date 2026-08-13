@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.3 — new in 1.3.x
+ * @version 1.3.4 — new in 1.3.4
  * @license MIT
  *
  * First-frame display for video media (#556). A <video> shows its poster —
