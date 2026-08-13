@@ -180,3 +180,55 @@ test('Escape in the search box clears it (#558)', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('#replace-panel')).toBeHidden();
 });
+
+// #559 — correcting a match by hand must not cost you the panel or your
+// place in the matches. The click that places the caret used to close the
+// panel, and the re-search dumped you back at match 1.
+test('a click into the transcript leaves the replace panel open (#559)', async ({ page }) => {
+  await search(page, 'captions');
+  await page.click('#find-replace-toggle');
+  await expect(page.locator('#replace-panel')).toBeVisible();
+
+  await page.click('#hypertranscript span[data-m]:not(.speaker)');
+  await expect(page.locator('#replace-panel')).toBeVisible();
+
+  // a click genuinely elsewhere still closes it (the Recents heading is
+  // inert — the player is covered by its own play overlay)
+  await page.click('#recents-title');
+  await expect(page.locator('#replace-panel')).toBeHidden();
+});
+
+test('a hand correction keeps your place in the matches (#559)', async ({ page }) => {
+  // four occurrences of a word, so there is a middle to hold
+  await page.evaluate(() => {
+    const spans = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+    [0, 3, 6, 9].forEach((i) => { spans[i].textContent = 'widget '; });
+  });
+  await search(page, 'widget');
+  await page.click('#find-replace-toggle');
+  await expect(page.locator('#find-match-count')).toHaveText('1 / 4');
+
+  await page.click('#find-next');
+  await page.click('#find-next');
+  await expect(page.locator('#find-match-count')).toHaveText('3 / 4');
+
+  // hand-correct the THIRD occurrence's neighbour, as a user would
+  await page.evaluate(() => {
+    const spans = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+    const target = spans[7];
+    const range = document.createRange();
+    range.setStart(target.firstChild, 1);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.getElementById('hypertranscript').focus();
+  });
+  await page.keyboard.type('X');
+  await page.waitForTimeout(1600); // the debounced re-search
+
+  // still open, still four matches, and anchored at the one we were on —
+  // not reset to 1 / 4
+  await expect(page.locator('#replace-panel')).toBeVisible();
+  await expect(page.locator('#find-match-count')).toHaveText('4 / 4');
+});

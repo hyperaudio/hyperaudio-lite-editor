@@ -184,6 +184,92 @@
     clearActive();
   };
 
+  // A hand correction changes the very spans the marks live in, so the match
+  // list goes stale. Re-run the search once the edit settles (past the 1s
+  // maintenance pass), then re-anchor to the first match at or after the
+  // caret instead of dumping the user back at match 1 (#559).
+  //
+  // Re-running rewrites those spans, so the caret is measured as a character
+  // offset within the transcript beforehand and restored after — the offset
+  // survives the unwrap/re-wrap that node references would not.
+  let editTimer = null;
+  let selfEdit = false;
+
+  const caretOffset = () => {
+    const ht = document.getElementById('hypertranscript');
+    const sel = window.getSelection();
+    if (ht === null || sel === null || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!ht.contains(range.startContainer)) return null;
+    const probe = range.cloneRange();
+    probe.selectNodeContents(ht);
+    probe.setEnd(range.startContainer, range.startOffset);
+    return probe.toString().length;
+  };
+
+  const restoreCaret = (offset) => {
+    const ht = document.getElementById('hypertranscript');
+    if (ht === null || offset === null) return;
+    const walker = document.createTreeWalker(ht, NodeFilter.SHOW_TEXT);
+    let seen = 0;
+    let node = walker.nextNode();
+    while (node !== null) {
+      const len = node.textContent.length;
+      if (seen + len >= offset) {
+        const range = document.createRange();
+        range.setStart(node, Math.max(0, Math.min(len, offset - seen)));
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+      seen += len;
+      node = walker.nextNode();
+    }
+  };
+
+  // Which group sits at or after the caret — the match the user was working
+  // on, or the next one down if their edit consumed it.
+  const anchorToCaret = (offset) => {
+    if (matches.length === 0 || offset === null) return;
+    const ht = document.getElementById('hypertranscript');
+    let seen = 0;
+    const walker = document.createTreeWalker(ht, NodeFilter.SHOW_TEXT);
+    const markStart = new Map();
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const mark = node.parentNode && node.parentNode.closest
+        ? node.parentNode.closest('mark.search-mark') : null;
+      if (mark !== null && !markStart.has(mark)) markStart.set(mark, seen);
+      seen += node.textContent.length;
+    }
+    const at = matches.findIndex((group) => {
+      const start = markStart.get(group[0]);
+      return start !== undefined && start >= offset;
+    });
+    activeIndex = at === -1 ? matches.length - 1 : at;
+    renderActive();
+  };
+
+  const transcriptEl = document.getElementById('hypertranscript');
+  if (transcriptEl !== null) {
+    transcriptEl.addEventListener('input', () => {
+      if (!isOpen() || selfEdit || searchBox.value === '') return;
+      clearTimeout(editTimer);
+      editTimer = setTimeout(() => {
+        const offset = caretOffset();
+        selfEdit = true;
+        try {
+          runSearch(false);
+          anchorToCaret(offset);
+          restoreCaret(offset);
+        } finally {
+          selfEdit = false;
+        }
+      }, 1200); // past the maintenance pass, so the DOM has settled
+    });
+  }
+
   // A history restore replaces transcript.innerHTML, invalidating every mark
   // reference held in matches. Search is view state: clear its UI cache and do
   // not persist or automatically recreate highlights in the restored document.
@@ -224,9 +310,14 @@
 
   toggle.addEventListener('click', () => { isOpen() ? closePanel() : openPanel(); });
 
-  // Click anywhere outside the find/replace widget closes the panel; Escape too.
+  // Click outside the widget closes the panel — EXCEPT in the transcript
+  // (#559). Correcting a match by hand starts with a click to place the
+  // caret, and closing there punished exactly the flow the panel exists to
+  // support. Clicks anywhere else still close it.
   document.addEventListener('click', (e) => {
-    if (isOpen() && e.target.closest && !e.target.closest('#find-replace')) closePanel();
+    if (!isOpen() || !e.target.closest) return;
+    if (e.target.closest('#find-replace') || e.target.closest('#hypertranscript')) return;
+    closePanel();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) closePanel(); });
 
