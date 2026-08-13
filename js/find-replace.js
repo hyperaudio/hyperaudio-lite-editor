@@ -1,7 +1,7 @@
 /**
  * find-replace.js
  * (C) The Hyperaudio Project
- * @version 0.6.29 — last changed in release 0.6.29
+ * @version 1.3.3 — last changed in release 1.3.3
  * @license MIT
  *
  * Find & replace for the transcript (#25). "Find" reuses the vendored
@@ -15,8 +15,14 @@
  *    distinct colour (mark.search-mark.active) and scrolled into view.
  *
  * Each match is a <mark> inside a word span; replacing swaps only the mark's text
- * and leaves the span's data-m / data-d timing intact. Works best on single
- * terms — a multi-word phrase is highlighted per word, so stepping is per word.
+ * and leaves the span's data-m / data-d timing intact.
+ *
+ * A PHRASE is one match, not one per word (#557). searchPhrase marks exactly
+ * one span per query word, in consecutive [data-m] spans, for every hit — so
+ * the flat mark list groups cleanly into runs of that length. Stepping, the
+ * counter and the active highlight all work on groups, and replacing a group
+ * distributes the replacement's words across its spans so each keeps its own
+ * timing.
  */
 
 (function () {
@@ -32,8 +38,14 @@
 
   if (searchBox === null || toggle === null || panel === null) return;
 
-  let matches = [];       // ordered mark.search-mark elements in the transcript
+  let matches = [];       // groups of marks: one group per phrase occurrence
   let activeIndex = -1;
+
+  // How many spans searchPhrase marks per hit — the query's word count.
+  const queryWordCount = () => {
+    const words = searchBox.value.trim().split(/\s+/).filter(Boolean);
+    return Math.max(1, words.length);
+  };
 
   const isOpen = () => !panel.hasAttribute('hidden');
 
@@ -43,10 +55,10 @@
   };
 
   const renderActive = () => {
-    matches.forEach((m, i) => m.classList.toggle('active', i === activeIndex));
+    matches.forEach((group, i) => group.forEach((m) => m.classList.toggle('active', i === activeIndex)));
     const active = activeIndex >= 0 ? matches[activeIndex] : null;
     if (active) {
-      active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      active[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
     countEl.textContent = matches.length ? `${activeIndex + 1} / ${matches.length}` : '0 / 0';
     const has = matches.length > 0;
@@ -57,7 +69,13 @@
 
   // Re-read the highlighted matches after a search run (or a replace).
   const collectMatches = (keepIndex) => {
-    matches = Array.from(document.querySelectorAll('#hypertranscript mark.search-mark'));
+    // Chunk the marks into one group per occurrence. (An overlapping hit —
+    // "a a" against "a a a" — can leave a short final group; it is kept
+    // rather than dropped, so nothing becomes unreachable.)
+    const flat = Array.from(document.querySelectorAll('#hypertranscript mark.search-mark'));
+    const per = queryWordCount();
+    matches = [];
+    for (let i = 0; i < flat.length; i += per) matches.push(flat.slice(i, i + per));
     if (matches.length === 0) {
       activeIndex = -1;
     } else if (!keepIndex || activeIndex < 0) {
@@ -89,10 +107,34 @@
     if (ht !== null) ht.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
-  const replaceMark = (mark) => {
-    const span = mark.closest('[data-m]') || mark.parentNode;
-    mark.replaceWith(document.createTextNode(replaceBox.value));
-    if (span && typeof span.normalize === 'function') span.normalize();
+  // Replace one occurrence — a group of marks spanning consecutive word spans.
+  // The replacement's words are distributed across the group so every span
+  // keeps its own data-m / data-d: equal counts give one word per span (the
+  // "big pharma" -> "Big Pharma" case, timings untouched); a longer
+  // replacement puts the surplus in the last span; a shorter one empties the
+  // spans left over, and any span reduced to nothing is removed with them.
+  const replaceGroup = (group) => {
+    const words = replaceBox.value.trim().split(/\s+/).filter(Boolean);
+    const n = group.length;
+    group.forEach((mark, i) => {
+      const span = mark.closest('[data-m]') || mark.parentNode;
+      let chunk;
+      if (words.length === 0) {
+        chunk = '';
+      } else if (i < n - 1) {
+        chunk = i < words.length ? words[i] : '';
+      } else {
+        chunk = words.slice(n - 1).join(' '); // the last span takes any surplus
+      }
+      mark.replaceWith(document.createTextNode(chunk));
+      if (span && typeof span.normalize === 'function') span.normalize();
+      // A span whose text is now empty holds no word: drop it rather than
+      // leave a timed span with nothing in it for the sanitiser to trip on.
+      if (span && span.hasAttribute && span.hasAttribute('data-m')
+          && span.textContent.trim() === '') {
+        span.remove();
+      }
+    });
   };
 
   const mutateTranscript = (fn, origin) => {
@@ -106,7 +148,7 @@
     if (activeIndex < 0 || !matches[activeIndex]) return;
     const at = activeIndex;
     mutateTranscript(() => {
-      replaceMark(matches[activeIndex]);
+      replaceGroup(matches[activeIndex]);
       markDirty();
     }, 'replace-one');
     runSearch(true);           // refresh; keep position so we land on the next hit
@@ -119,7 +161,7 @@
   const replaceAll = () => {
     if (matches.length === 0) return;
     mutateTranscript(() => {
-      matches.forEach(replaceMark);
+      matches.forEach(replaceGroup);
       markDirty();
     }, 'replace-all');
     activeIndex = -1;
