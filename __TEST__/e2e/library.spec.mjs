@@ -106,11 +106,12 @@ test('rows list by last edit with the current project highlighted; editing reord
   // name and duration ONLY — the stored summary lives in the Info modal, not
   // the glance (a long one, e.g. the benchmark report, swallowed the card)
   await expect(popout).not.toContainText('summary of Project A');
+  // ...and FLUSH with the panel's right edge, not floated off it
   expect(await page.evaluate(() => {
     const pane = document.getElementById('recents-pane').getBoundingClientRect();
     const pop = document.getElementById('recents-popout').getBoundingClientRect();
-    return pop.left >= pane.right;
-  })).toBe(true);
+    return Math.round(pop.left - pane.right);
+  })).toBe(0);
   await page.locator('#hypertranscript').hover(); // leaving the row dismisses it
   await expect(popout).toHaveCount(0);
 
@@ -537,4 +538,48 @@ test('the has-projects hint tracks the library (#473)', async ({ page }, testInf
   await del.click();
   await del.click();
   await pollPage(page, () => localStorage.getItem('hyperaudioHasProjects') === null);
+});
+
+
+// A long title used to run to five lines and stretch the card past the poster
+// it sits above: the name clamps to two lines with an ellipsis (the full name
+// lives in the ⓘ). The clip must be real — an earlier attempt drew the
+// ellipsis but still rendered a third line below it.
+test('a long project name clamps to two lines in the hover popout', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Project A');
+  await page.evaluate(async () => {
+    const lib = window.HyperaudioSave.library;
+    await lib.rename(lib.currentId(),
+      'David A. Kochalski (July 28th, 1994) interview master file final v3 EXTENDED.mp4');
+  });
+  await expect(page.locator('#file-picker .file-item').first()).toContainText('Kochalski');
+
+  await page.locator('#file-picker .recents-row').first().hover();
+  await expect(page.locator('#recents-popout')).toBeVisible();
+  const name = await page.evaluate(() => {
+    const el = document.querySelector('#recents-popout .recents-popout-name');
+    const cs = getComputedStyle(el);
+    const lineHeight = parseFloat(cs.lineHeight);
+    return {
+      lines: Math.round(el.getBoundingClientRect().height / lineHeight),
+      clipped: el.scrollHeight > el.clientHeight + 1, // text really is cut off
+    };
+  });
+  expect(name.lines).toBe(2);
+  expect(name.clipped).toBe(true);
+
+  // the card's width is FIXED — it must not shrink or grow with the title,
+  // or moving down the list makes it jump about
+  const wide = await page.evaluate(() =>
+    Math.round(document.getElementById('recents-popout').getBoundingClientRect().width));
+  await page.locator('#hypertranscript').hover();
+  await page.evaluate(async () => {
+    const lib = window.HyperaudioSave.library;
+    await lib.rename(lib.currentId(), 'Short.mp4');
+  });
+  await page.locator('#file-picker .recents-row').first().hover();
+  await expect(page.locator('#recents-popout')).toBeVisible();
+  const narrow = await page.evaluate(() =>
+    Math.round(document.getElementById('recents-popout').getBoundingClientRect().width));
+  expect(narrow).toBe(wide);
 });

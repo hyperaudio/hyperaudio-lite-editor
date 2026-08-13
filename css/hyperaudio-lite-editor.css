@@ -1370,7 +1370,9 @@ label[data-a11y-wired]:focus-visible {
 #recents-popout {
   position: fixed;
   z-index: 50;
-  max-width: 300px;
+  /* FIXED, not max-: a shrink-to-fit card changed width with every title,
+     so moving down the list made the card jump about. */
+  width: 300px;
   padding: 10px 14px;
   border-radius: 0.5rem;
   background-color: oklch(var(--b1));
@@ -1384,6 +1386,19 @@ label[data-a11y-wired]:focus-visible {
 #recents-popout .recents-popout-name {
   font-weight: 600;
   overflow-wrap: anywhere; /* full filenames without spaces must wrap, not clip */
+  /* ...but only so far: a long interview title ran to five lines and stretched
+     the card past the poster it sits above. Two lines, then ellipsis — the
+     full name is one click away in the ⓘ. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  /* The clamp draws the ellipsis; this CLIPS. (Chrome normalizes display away
+     from -webkit-box when the unprefixed line-clamp is also present, and a
+     third line then rendered below the ellipsis.) An explicit line-height
+     makes the two-line ceiling exact rather than inherited-dependent. */
+  line-height: 1.35;
+  max-height: 2.7em;
 }
 #recents-popout .recents-popout-topics {
   opacity: 0.7;
@@ -1665,3 +1680,24 @@ html.ha-transcribing #upload-transcribe-btn {
 .url-source summary:hover { opacity: 1; }
 .url-source[open] summary { margin-bottom: 10px; }
 .url-source { margin-top: 4px; }
+
+/* Popout poster thumbnail (#523 phase A): first-frame capture for video,
+   tinted wave glyph for audio. Fixed 16:9 box so the card doesn't reflow
+   when the async poster lands. */
+#recents-popout .recents-popout-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  color: #5b6472;
+}
+#recents-popout .recents-popout-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
