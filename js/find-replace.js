@@ -1,7 +1,7 @@
 /**
  * find-replace.js
  * (C) The Hyperaudio Project
- * @version 1.3.4 — last changed in release 1.3.4
+ * @version 1.3.5 — last changed in release 1.3.5
  * @license MIT
  *
  * Find & replace for the transcript (#25). "Find" reuses the vendored
