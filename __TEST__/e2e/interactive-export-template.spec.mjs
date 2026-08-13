@@ -97,3 +97,45 @@ test('an untitled export keeps the boilerplate title and shows no empty heading 
   expect(html).not.toContain('{heading}');
 });
 
+// #560 — the exported page links its media by bare filename, so what we WRITE
+// must be safe as a filename AND a URL path segment: no spaces to
+// percent-encode, nothing a static host will normalise or reject.
+test('a media filename with spaces is sanitised, not percent-encoded (#560)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => {
+    document.getElementById('interactive-export-modal').checked = true;
+    document.getElementById('interactive-media-filename').value = 'my media file.mp4';
+    document.getElementById('interactive-export-download').click();
+  });
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const html = Buffer.concat(chunks).toString('utf8');
+
+  const videoTag = html.match(/<video[^>]*>/)[0];
+  expect(videoTag).toContain('src="my_media_file.mp4"');
+  expect(videoTag).not.toContain('%20');   // the media link needs no encoding
+  expect(html).not.toContain('my media file.mp4');
+  // (the inline caption data: URL is percent-encoded by nature — that is
+  // #561's subject, not this one)
+});
+
+test('a media URL the user typed is left exactly as entered (#560)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => {
+    document.getElementById('interactive-export-modal').checked = true;
+    document.getElementById('interactive-media-filename').value = 'https://example.com/a b/clip.mp4';
+    document.getElementById('interactive-export-download').click();
+  });
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const html = Buffer.concat(chunks).toString('utf8');
+  expect(html).toContain('src="https://example.com/a b/clip.mp4"'); // theirs, untouched
+});

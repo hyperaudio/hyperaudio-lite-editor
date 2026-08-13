@@ -596,10 +596,32 @@
   //
   // STORE, not deflate: the payload is already-compressed media, so compressing
   // buys nothing and costs time on large exports.
-  const zipFolderName = (name) => {
-    const cleaned = String(name).replace(/[\\/:*?"<>|]+/g, '-').replace(/^\.+/, '').trim();
-    return cleaned !== '' ? cleaned : 'hyperaudio-export';
+  /* --------------------------------------------------------------------------
+   * Export filenames (#560). The interactive transcript links its media by
+   * bare filename, so whatever we WRITE has to be safe as both a filename and
+   * a URL path segment — otherwise the page carries "media%20file.mp4" while
+   * the disk holds "media file.mp4", and static hosts, CDNs and equality
+   * checks each handle that pair differently.
+   *
+   * One helper, every call site: spaces (and runs of them) become single
+   * underscores, filesystem/URL-hostile characters go, and leading dots are
+   * dropped so nothing exports as a hidden file. The user's own media and
+   * project titles are untouched — this only names the files we produce.
+   * ------------------------------------------------------------------------ */
+  const safeExportName = (name, fallback) => {
+    const cleaned = String(name === undefined || name === null ? '' : name)
+      .normalize('NFC')
+      .replace(/[\/\\:*?"<>|#%&{}$!'`+=@]+/g, '')  // hostile in a path, a URL, or a shell
+      .replace(/\s+/g, '_')                        // no percent-encoding needed anywhere
+      .replace(/_+/g, '_')
+      .replace(/^[._-]+/, '')                      // no hidden files, no leading noise
+      .replace(/[._-]+$/, '')
+      .trim();
+    return cleaned !== '' ? cleaned : (fallback || 'hyperaudio-export');
   };
+  window.safeExportName = safeExportName;
+
+  const zipFolderName = (name) => safeExportName(name, 'hyperaudio-export');
 
   const buildOutputsZip = async (outputs, baseName, onProgress) => {
     if (!window.HyperaudioSave || typeof window.HyperaudioSave.loadJSZip !== 'function') {
@@ -974,7 +996,10 @@
       // user-chosen export name (verbatim, so the media file and the transcript's
       // <video src> always agree); light sanitise for filename safety
       const rawName = nameInput !== null ? nameInput.value.trim() : '';
-      const baseName = (rawName || exportBaseName() || 'export').replace(/[\/\\:*?"<>|]+/g, '_');
+      // Sanitised once, here: the media file, the sidecar captions, the
+      // transcript page and the archive folder all derive from this, so the
+      // bundle stays internally consistent and needs no encoding (#560).
+      const baseName = safeExportName(rawName || exportBaseName(), 'export');
 
       const player = document.getElementById('hyperplayer');
       const duration = player && !isNaN(player.duration) ? player.duration : Infinity;

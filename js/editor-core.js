@@ -205,8 +205,21 @@
 
     if (iaDownload !== null && iaInput !== null) {
       iaDownload.addEventListener('click', () => {
-        const mediaSrc = iaInput.value.trim();
-        if (mediaSrc === '') { iaInput.focus(); return; }
+        const typed = iaInput.value.trim();
+        if (typed === '') { iaInput.focus(); return; }
+        // A bare filename is a path segment in the exported page, so it gets
+        // the same sanitising as the files the media exporter writes (#560)
+        // — spaces and hostile characters out, no percent-encoding needed.
+        // A URL the user typed is theirs: left exactly as entered.
+        const isUrl = /^[a-z][a-z0-9+.-]*:/i.test(typed) || typed.startsWith('//');
+        const mediaSrc = (!isUrl && typeof window.safeExportName === 'function')
+          ? (() => {
+            const dot = typed.lastIndexOf('.');
+            const stem = dot > 0 ? typed.slice(0, dot) : typed;
+            const ext = dot > 0 ? typed.slice(dot) : '';
+            return window.safeExportName(stem, 'media') + ext.replace(/\s+/g, '');
+          })()
+          : typed;
         const track = document.querySelector('#hyperplayer-vtt');
         // function replacements so a literal $ in the transcript/filename isn't
         // treated as a replacement pattern
