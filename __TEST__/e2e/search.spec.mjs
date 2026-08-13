@@ -150,3 +150,33 @@ test('a longer replacement keeps its surplus in the last span (#557)', async ({ 
   expect(after[0].text).toBe('the');
   expect(after[1].text).toBe('big pharmaceutical industry');
 });
+
+// #558 — a search you can clear. The ✕ appears only when there is something
+// to clear, and Escape in the box does the same without closing the panel's
+// world around it.
+test('the ✕ clears the query, the marks and the count (#558)', async ({ page }) => {
+  const clear = page.locator('#search-clear');
+  await expect(clear).toBeHidden(); // nothing to clear yet
+
+  await search(page, 'captions');
+  await expect(clear).toBeVisible();
+  expect(await page.locator('#hypertranscript mark.search-mark').count()).toBeGreaterThan(0);
+
+  await clear.click();
+  expect(await page.inputValue('#search-box')).toBe('');
+  await expect(page.locator('#hypertranscript mark.search-mark')).toHaveCount(0);
+  await expect(clear).toBeHidden();
+});
+
+test('Escape in the search box clears it (#558)', async ({ page }) => {
+  await search(page, 'captions');
+  await page.click('#find-replace-toggle');           // panel open
+  await page.focus('#search-box');
+  await page.keyboard.press('Escape');
+  expect(await page.inputValue('#search-box')).toBe('');
+  await expect(page.locator('#hypertranscript mark.search-mark')).toHaveCount(0);
+  // the first Escape cleared rather than closed; a second one closes
+  await expect(page.locator('#replace-panel')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#replace-panel')).toBeHidden();
+});

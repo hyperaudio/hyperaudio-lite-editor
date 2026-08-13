@@ -35,6 +35,7 @@
   const nextBtn = document.getElementById('find-next');
   const replaceOneBtn = document.getElementById('replace-one');
   const replaceAllBtn = document.getElementById('replace-all');
+  const clearBtn = document.getElementById('search-clear');
 
   if (searchBox === null || toggle === null || panel === null) return;
 
@@ -191,6 +192,35 @@
     activeIndex = -1;
     renderActive();
   });
+
+  // Clearing the search (#558): searchPhrase('') unwraps every mark before
+  // its empty-query early return, so one call retires the highlights, the
+  // groups and the count together. The ✕ only shows when there is something
+  // to clear; Escape in the search box does the same from the keyboard.
+  const reflectClearBtn = () => {
+    if (clearBtn !== null) clearBtn.hidden = searchBox.value === '';
+  };
+  const clearSearch = () => {
+    searchBox.value = '';
+    if (typeof searchPhrase === 'function') searchPhrase('');
+    collectMatches(false);
+    reflectClearBtn();
+    searchBox.focus();
+  };
+  if (clearBtn !== null) clearBtn.addEventListener('click', clearSearch);
+  // input covers typing/paste/cut; keyup is what the vendored search itself
+  // hooks, and the only signal a programmatically-set value produces.
+  searchBox.addEventListener('input', reflectClearBtn);
+  searchBox.addEventListener('keyup', reflectClearBtn);
+  searchBox.addEventListener('keydown', (e) => {
+    // Escape clears a non-empty box; an empty one falls through to the
+    // document handler, which closes the replace panel as before.
+    if (e.key === 'Escape' && searchBox.value !== '') {
+      e.stopPropagation();
+      clearSearch();
+    }
+  });
+  reflectClearBtn();
 
   toggle.addEventListener('click', () => { isOpen() ? closePanel() : openPanel(); });
 
