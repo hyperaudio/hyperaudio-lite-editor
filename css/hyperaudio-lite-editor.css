@@ -809,7 +809,20 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
    it lines up with the search box (left edge and width) rather than the wider
    centred form-control */
 #search-wrap { position: relative; flex: 1 1 auto; min-width: 0; max-width: 230px; }
-#search-wrap #search-box { width: 100%; max-width: none; margin-right: 0; }
+#search-wrap #search-box { width: 100%; max-width: none; margin-right: 0; padding-right: 30px; }
+/* Clear control (#558): inside the box's right edge, above the input's own
+   padding so the text never runs under it. */
+#search-wrap #search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  opacity: 0.55;
+}
+#search-wrap #search-clear:hover { opacity: 1; }
+/* .btn's display:inline-flex outranks the hidden attribute's UA display:none */
+#search-wrap #search-clear[hidden] { display: none; }
 #replace-panel {
   position: absolute;
   top: calc(100% + 6px);
