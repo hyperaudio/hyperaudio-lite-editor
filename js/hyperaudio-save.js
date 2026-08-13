@@ -3330,6 +3330,25 @@
     // speaker-preserving, caption-mode-aware gather the save path uses
     getTranscriptJson: () => getEditorTranscriptJson(),
     loadJSZip, // shared vendored-zip loader (the .docx export packages with it)
+    // The project's media as a FRESH File. An object URL made from an OPFS
+    // file is a snapshot: once that file is rewritten (any save that re-writes
+    // media does), the URL still plays from buffered data but can no longer be
+    // read back — which is how the media exporter met "Failed to fetch" on
+    // some projects and not others. Callers that need the BYTES ask here
+    // rather than re-reading the player's src.
+    currentMediaFile: async () => {
+      if (session.projectId !== null) {
+        try {
+          const root = await navigator.storage.getDirectory();
+          const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(session.projectId);
+          const mediaDir = await dir.getDirectoryHandle('media');
+          for await (const [, handle] of mediaDir.entries()) {
+            if (handle.kind === 'file') return await handle.getFile();
+          }
+        } catch (e) { /* no stored media — fall through */ }
+      }
+      return session.mediaFile;
+    },
     openFromFile,
     autosaveNow: writeDraft,
     isDirty,

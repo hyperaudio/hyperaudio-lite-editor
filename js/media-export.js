@@ -110,18 +110,39 @@
 
   // The player src may be http(s), blob: or data: (local files restored from
   // IndexedDB) — fetch handles all three; mediabunny reads the Blob.
-  const makeInput = async (mb) => {
+  // Read the media BYTES. The player's src is the obvious source but not a
+  // reliable one: an object URL made from an OPFS file is a snapshot, and
+  // once that file is rewritten (any save that re-writes media does) the URL
+  // still plays from buffered data yet fails to read back — "Failed to fetch"
+  // on some projects and not others. So the library's stored file wins when
+  // it exists, and the player's src is the fallback (URL-mode media, or no
+  // project at all). Both failing is a real error, reported for what it is.
+  const readMediaBlob = async () => {
+    const save = window.HyperaudioSave;
+    if (save && typeof save.currentMediaFile === 'function') {
+      try {
+        const file = await save.currentMediaFile();
+        if (file && file.size > 0) return file;
+      } catch (e) { /* fall through to the player's src */ }
+    }
     const src = playerSrc();
     if (!src) throw new Error('No media is loaded.');
     let response;
     try {
       response = await fetch(src);
+      if (!response.ok) throw new Error(`Could not read the media (HTTP ${response.status}).`);
+      return await response.blob();   // .blob() can fail too: a stale object URL dies here
     } catch (e) {
+      if (src.startsWith('blob:')) {
+        throw new Error('The media could not be re-read from this page. Reopen the project (or reload the media file) and try the export again.');
+      }
       // playing cross-origin media needs no CORS, but READING its bytes does
       throw new Error('This media source does not allow cross-origin reading (CORS), so it cannot be exported. Load the file locally and try again.');
     }
-    if (!response.ok) throw new Error(`Could not read the media (HTTP ${response.status}).`);
-    const blob = await response.blob();
+  };
+
+  const makeInput = async (mb) => {
+    const blob = await readMediaBlob();
     return new mb.Input({ formats: mb.ALL_FORMATS, source: new mb.BlobSource(blob) });
   };
 
