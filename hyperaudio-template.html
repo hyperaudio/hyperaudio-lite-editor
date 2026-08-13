@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hyperaudio – Interactive Transcript</title>
+  <title>{title}</title>
+  <meta name="description" content="{description}">
+  <meta property="og:title" content="{title}">
+  <meta property="og:description" content="{description}">
+  <meta property="og:type" content="article">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/css/hyperaudio-lite-player.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/css/share-this.css">
   <style>
@@ -11,6 +15,18 @@
       margin: 0;
       background: #f7f7f8;
       color: #1a1a1a;
+    }
+    /* The page says what it is a transcript of. Sized to sit under the
+       player's own weight rather than compete with it; an export with no
+       title omits the element entirely, so there is no empty gap. */
+    .ht-title {
+      max-width: 34rem;
+      margin: 20px auto 12px;
+      padding: 0 8px;
+      font: 600 1.25rem/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #23252a;
+      text-align: center;
+      overflow-wrap: anywhere;
     }
     /* ------------------------------------------------------------------
        Select-to-copy. The library owns behaviour — it positions #popover,
@@ -170,6 +186,7 @@
 </head>
 <body>
   <main class="ht-wrap">
+    <h1 class="ht-title">{heading}</h1>
     <video id="hyperplayer" class="hyperaudio-player" playsinline controls src="{sourcemedia}" type="video/mp4">
       <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="{sourcevtt}">
     </video>

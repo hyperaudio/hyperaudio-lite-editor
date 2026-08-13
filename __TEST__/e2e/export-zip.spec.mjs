@@ -66,7 +66,12 @@ test('a multi-file export downloads once, as a zip holding one folder', async ({
   await page.waitForFunction(
     () => document.getElementById('export-status').textContent.startsWith('Done'));
 
-  expect(download.suggestedFilename()).toBe('my clip.zip');
+  // Since #560 the names we WRITE carry no spaces: the interactive transcript
+  // links its media by bare filename, and a space there means the page says
+  // "my%20clip.wav" while the disk says "my clip.wav" — a pair static hosts
+  // and equality checks handle inconsistently. The typed name is the user's;
+  // the written ones are ours to make safe.
+  expect(download.suggestedFilename()).toBe('my_clip.zip');
 
   const fs = await import('node:fs/promises');
   const zip = await JSZip.loadAsync(await fs.readFile(await download.path()));
@@ -74,14 +79,14 @@ test('a multi-file export downloads once, as a zip holding one folder', async ({
 
   // every entry sits under exactly one top-level folder
   const tops = new Set(paths.map((p) => p.split('/')[0]));
-  expect([...tops]).toEqual(['my clip']);
+  expect([...tops]).toEqual(['my_clip']);
 
   // and that folder holds both files, under their own names
   const names = paths.filter((p) => !zip.files[p].dir).map((p) => p.split('/').pop()).sort();
-  expect(names).toEqual(['my clip.srt', 'my clip.wav']);
+  expect(names).toEqual(['my_clip.srt', 'my_clip.wav']);
 
   // the media survives the round trip as real bytes
-  const wavEntry = zip.file('my clip/my clip.wav');
+  const wavEntry = zip.file('my_clip/my_clip.wav');
   expect(wavEntry).not.toBeNull();
   const bytes = await wavEntry.async('uint8array');
   expect(bytes.length).toBeGreaterThan(1000);
