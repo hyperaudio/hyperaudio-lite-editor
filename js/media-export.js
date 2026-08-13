@@ -230,7 +230,7 @@
       .replace('{sourcemedia}', () => mediaSrc)
       .replace('{sourcevtt}', () => (trackSrc || ''));
     if (!trackSrc) html = html.replace(/<track[^>]*>/i, '');
-    return html;
+    return window.fillExportIdentity ? window.fillExportIdentity(html, inner) : html;
   };
 
   // Word chunks for burn-in, already mapped onto the EDITED/output timeline.
@@ -528,6 +528,54 @@
   // ---------------------------------------------------------------------------
   // Downloads
   // ---------------------------------------------------------------------------
+
+  /* --------------------------------------------------------------------------
+   * Exported-page identity (#563): the project's title in the tab, in an
+   * unfurl, and on the page itself — every export was previously anonymous
+   * boilerplate. The description is the transcript's opening words, which is
+   * what a reader (or a link preview) needs to recognise it.
+   *
+   * Shared with the plain Interactive Transcript modal in editor-core, so
+   * both routes produce the same page: one filler, two callers.
+   * ------------------------------------------------------------------------ */
+  const escapeAttr = (text) => String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  // The transcript's opening words, trimmed to a sentence-ish length.
+  const openingWords = (transcriptHtml) => {
+    const host = document.createElement('div');
+    host.innerHTML = transcriptHtml || '';
+    // speakers are labels, not speech — the description reads better without
+    host.querySelectorAll('.speaker').forEach((el) => el.remove());
+    const text = host.textContent.replace(/\s+/g, ' ').trim();
+    if (text === '') return '';
+    if (text.length <= 160) return text;
+    const cut = text.slice(0, 160);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 80 ? cut.slice(0, lastSpace) : cut) + '…';
+  };
+
+  const fillExportIdentity = (html, transcriptHtml) => {
+    const title = exportTitle();
+    const description = openingWords(transcriptHtml);
+    const pageTitle = title !== '' ? title : 'Hyperaudio – Interactive Transcript';
+    return html
+      .replace(/\{title\}/g, () => escapeAttr(pageTitle))
+      .replace(/\{description\}/g, () => escapeAttr(description))
+      // an untitled export drops the heading element rather than showing an
+      // empty one — no gap, no lonely rule above the player
+      .replace(/\s*<h1 class="ht-title">\{heading\}<\/h1>/,
+        () => (title !== '' ? '\n    <h1 class="ht-title">' + escapeAttr(title) + '</h1>' : ''));
+  };
+  window.fillExportIdentity = fillExportIdentity;
+
+  // The project's own title, before it is reduced to a filename.
+  const exportTitle = () => {
+    const title = (window.HyperaudioSave && typeof window.HyperaudioSave.getProjectTitle === 'function')
+      ? window.HyperaudioSave.getProjectTitle() : '';
+    return title.trim();
+  };
 
   const exportBaseName = () => {
     // the Recents list is gone (#451); the project session names exports now

@@ -10,9 +10,11 @@ import { test, expect } from '@playwright/test';
 // requestAnimationFrame loop with easeInOutCubic), so the tag was pure
 // legacy — a third-party request on every exported page, for nothing.
 
-const exportedHtml = async (page) => {
-  await page.goto('/index.html');
-  await page.waitForSelector('#hypertranscript [data-m]');
+const exportedHtml = async (page, navigate = true) => {
+  if (navigate) {
+    await page.goto('/index.html');
+    await page.waitForSelector('#hypertranscript [data-m]');
+  }
   const downloadPromise = page.waitForEvent('download');
   await page.evaluate(() => {
     document.getElementById('interactive-export-modal').checked = true;
@@ -46,3 +48,52 @@ test('speakers keep their class in the exported transcript (#188)', async ({ pag
   const html = await exportedHtml(page);
   expect(html).toMatch(/<span[^>]*class="speaker"[^>]*>/);
 });
+
+// #563 — an exported transcript is published and shared, so it must say what
+// it is a transcript of: in the tab, in a link unfurl, and on the page.
+const withTitle = async (page, title) => {
+  await page.evaluate(async (t) => {
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    for (let i = 0; i < 50 && window.HyperaudioSave.library.currentId() === null; i += 1) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    await window.HyperaudioSave.library.rename(window.HyperaudioSave.library.currentId(), t);
+  }, title);
+};
+
+test('the project title reaches the tab, the page and the unfurl (#563)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await withTitle(page, 'Atmosphere Conf 26 — Teon Brooks');
+  const html = await exportedHtml(page, false);
+
+  expect(html).toContain('<title>Atmosphere Conf 26 — Teon Brooks</title>');
+  expect(html).toContain('<h1 class="ht-title">Atmosphere Conf 26 — Teon Brooks</h1>');
+  expect(html).toMatch(/<meta property="og:title" content="Atmosphere Conf 26 — Teon Brooks">/);
+  // the description is the transcript's opening words, minus speaker labels
+  const desc = html.match(/<meta name="description" content="([^"]*)">/);
+  expect(desc).not.toBeNull();
+  expect(desc[1].length).toBeGreaterThan(10);
+  expect(desc[1]).not.toContain('[Mark]');
+  // no placeholder survives into a published page
+  expect(html).not.toContain('{title}');
+  expect(html).not.toContain('{heading}');
+  expect(html).not.toContain('{description}');
+});
+
+test('a title with markup characters cannot break out of the page (#563)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await withTitle(page, '<script>alert(1)</script> & "quoted"');
+  const html = await exportedHtml(page, false);
+  expect(html).not.toContain('<script>alert(1)</script>');
+  expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;quoted&quot;');
+});
+
+test('an untitled export keeps the boilerplate title and shows no empty heading (#563)', async ({ page }) => {
+  const html = await exportedHtml(page); // no project, no title
+  expect(html).toContain('<title>Hyperaudio – Interactive Transcript</title>');
+  expect(html).not.toContain('<h1 class="ht-title">'); // the rule stays in CSS; the element goes
+  expect(html).not.toContain('{heading}');
+});
+
