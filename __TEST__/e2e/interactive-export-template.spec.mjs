@@ -36,7 +36,7 @@ test('the exported page loads no Velocity, and no cdnjs at all (#562)', async ({
 
 test('the exported page still carries the player that does the scrolling (#562)', async ({ page }) => {
   const html = await exportedHtml(page);
-  expect(html).toContain('hyperaudio-lite/js/hyperaudio-lite.js');
+  expect(html).toMatch(/hyperaudio-lite@[\d.]+\/js\/hyperaudio-lite\.js/); // pinned since #571
   expect(html).toContain('id="hypertranscript"');
   expect(html).toContain('data-m=');
 });
