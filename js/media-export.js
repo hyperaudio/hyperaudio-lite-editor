@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.1.8 — last changed in release 1.1.8
+ * @version 1.3.6 — last changed in release 1.3.6
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -110,18 +110,39 @@
 
   // The player src may be http(s), blob: or data: (local files restored from
   // IndexedDB) — fetch handles all three; mediabunny reads the Blob.
-  const makeInput = async (mb) => {
+  // Read the media BYTES. The player's src is the obvious source but not a
+  // reliable one: an object URL made from an OPFS file is a snapshot, and
+  // once that file is rewritten (any save that re-writes media does) the URL
+  // still plays from buffered data yet fails to read back — "Failed to fetch"
+  // on some projects and not others. So the library's stored file wins when
+  // it exists, and the player's src is the fallback (URL-mode media, or no
+  // project at all). Both failing is a real error, reported for what it is.
+  const readMediaBlob = async () => {
+    const save = window.HyperaudioSave;
+    if (save && typeof save.currentMediaFile === 'function') {
+      try {
+        const file = await save.currentMediaFile();
+        if (file && file.size > 0) return file;
+      } catch (e) { /* fall through to the player's src */ }
+    }
     const src = playerSrc();
     if (!src) throw new Error('No media is loaded.');
     let response;
     try {
       response = await fetch(src);
+      if (!response.ok) throw new Error(`Could not read the media (HTTP ${response.status}).`);
+      return await response.blob();   // .blob() can fail too: a stale object URL dies here
     } catch (e) {
+      if (src.startsWith('blob:')) {
+        throw new Error('The media could not be re-read from this page. Reopen the project (or reload the media file) and try the export again.');
+      }
       // playing cross-origin media needs no CORS, but READING its bytes does
       throw new Error('This media source does not allow cross-origin reading (CORS), so it cannot be exported. Load the file locally and try again.');
     }
-    if (!response.ok) throw new Error(`Could not read the media (HTTP ${response.status}).`);
-    const blob = await response.blob();
+  };
+
+  const makeInput = async (mb) => {
+    const blob = await readMediaBlob();
     return new mb.Input({ formats: mb.ALL_FORMATS, source: new mb.BlobSource(blob) });
   };
 
@@ -230,7 +251,7 @@
       .replace('{sourcemedia}', () => mediaSrc)
       .replace('{sourcevtt}', () => (trackSrc || ''));
     if (!trackSrc) html = html.replace(/<track[^>]*>/i, '');
-    return html;
+    return window.fillExportIdentity ? window.fillExportIdentity(html, inner) : html;
   };
 
   // Word chunks for burn-in, already mapped onto the EDITED/output timeline.
@@ -529,6 +550,54 @@
   // Downloads
   // ---------------------------------------------------------------------------
 
+  /* --------------------------------------------------------------------------
+   * Exported-page identity (#563): the project's title in the tab, in an
+   * unfurl, and on the page itself — every export was previously anonymous
+   * boilerplate. The description is the transcript's opening words, which is
+   * what a reader (or a link preview) needs to recognise it.
+   *
+   * Shared with the plain Interactive Transcript modal in editor-core, so
+   * both routes produce the same page: one filler, two callers.
+   * ------------------------------------------------------------------------ */
+  const escapeAttr = (text) => String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  // The transcript's opening words, trimmed to a sentence-ish length.
+  const openingWords = (transcriptHtml) => {
+    const host = document.createElement('div');
+    host.innerHTML = transcriptHtml || '';
+    // speakers are labels, not speech — the description reads better without
+    host.querySelectorAll('.speaker').forEach((el) => el.remove());
+    const text = host.textContent.replace(/\s+/g, ' ').trim();
+    if (text === '') return '';
+    if (text.length <= 160) return text;
+    const cut = text.slice(0, 160);
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 80 ? cut.slice(0, lastSpace) : cut) + '…';
+  };
+
+  const fillExportIdentity = (html, transcriptHtml) => {
+    const title = exportTitle();
+    const description = openingWords(transcriptHtml);
+    const pageTitle = title !== '' ? title : 'Hyperaudio – Interactive Transcript';
+    return html
+      .replace(/\{title\}/g, () => escapeAttr(pageTitle))
+      .replace(/\{description\}/g, () => escapeAttr(description))
+      // an untitled export drops the heading element rather than showing an
+      // empty one — no gap, no lonely rule above the player
+      .replace(/\s*<h1 class="ht-title">\{heading\}<\/h1>/,
+        () => (title !== '' ? '\n    <h1 class="ht-title">' + escapeAttr(title) + '</h1>' : ''));
+  };
+  window.fillExportIdentity = fillExportIdentity;
+
+  // The project's own title, before it is reduced to a filename.
+  const exportTitle = () => {
+    const title = (window.HyperaudioSave && typeof window.HyperaudioSave.getProjectTitle === 'function')
+      ? window.HyperaudioSave.getProjectTitle() : '';
+    return title.trim();
+  };
+
   const exportBaseName = () => {
     // the Recents list is gone (#451); the project session names exports now
     const title = (window.HyperaudioSave && typeof window.HyperaudioSave.getProjectTitle === 'function')
@@ -548,10 +617,32 @@
   //
   // STORE, not deflate: the payload is already-compressed media, so compressing
   // buys nothing and costs time on large exports.
-  const zipFolderName = (name) => {
-    const cleaned = String(name).replace(/[\\/:*?"<>|]+/g, '-').replace(/^\.+/, '').trim();
-    return cleaned !== '' ? cleaned : 'hyperaudio-export';
+  /* --------------------------------------------------------------------------
+   * Export filenames (#560). The interactive transcript links its media by
+   * bare filename, so whatever we WRITE has to be safe as both a filename and
+   * a URL path segment — otherwise the page carries "media%20file.mp4" while
+   * the disk holds "media file.mp4", and static hosts, CDNs and equality
+   * checks each handle that pair differently.
+   *
+   * One helper, every call site: spaces (and runs of them) become single
+   * underscores, filesystem/URL-hostile characters go, and leading dots are
+   * dropped so nothing exports as a hidden file. The user's own media and
+   * project titles are untouched — this only names the files we produce.
+   * ------------------------------------------------------------------------ */
+  const safeExportName = (name, fallback) => {
+    const cleaned = String(name === undefined || name === null ? '' : name)
+      .normalize('NFC')
+      .replace(/[\/\\:*?"<>|#%&{}$!'`+=@]+/g, '')  // hostile in a path, a URL, or a shell
+      .replace(/\s+/g, '_')                        // no percent-encoding needed anywhere
+      .replace(/_+/g, '_')
+      .replace(/^[._-]+/, '')                      // no hidden files, no leading noise
+      .replace(/[._-]+$/, '')
+      .trim();
+    return cleaned !== '' ? cleaned : (fallback || 'hyperaudio-export');
   };
+  window.safeExportName = safeExportName;
+
+  const zipFolderName = (name) => safeExportName(name, 'hyperaudio-export');
 
   const buildOutputsZip = async (outputs, baseName, onProgress) => {
     if (!window.HyperaudioSave || typeof window.HyperaudioSave.loadJSZip !== 'function') {
@@ -926,7 +1017,10 @@
       // user-chosen export name (verbatim, so the media file and the transcript's
       // <video src> always agree); light sanitise for filename safety
       const rawName = nameInput !== null ? nameInput.value.trim() : '';
-      const baseName = (rawName || exportBaseName() || 'export').replace(/[\/\\:*?"<>|]+/g, '_');
+      // Sanitised once, here: the media file, the sidecar captions, the
+      // transcript page and the archive folder all derive from this, so the
+      // bundle stays internally consistent and needs no encoding (#560).
+      const baseName = safeExportName(rawName || exportBaseName(), 'export');
 
       const player = document.getElementById('hyperplayer');
       const duration = player && !isNaN(player.duration) ? player.duration : Infinity;

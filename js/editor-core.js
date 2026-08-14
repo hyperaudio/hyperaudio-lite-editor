@@ -141,7 +141,7 @@
   window.document.addEventListener('hyperaudioGenerateCaptionsFromTranscript', hyperaudioGenerateCaptionsFromTranscript, false);
   let hyperaudioTemplate = "";
 
-  fetch('hyperaudio-template.html?v=1.1.7') // bump with the template — an unversioned fetch served stale copies from the browser cache
+  fetch('hyperaudio-template.html?v=1.3.6') // bump with the template — an unversioned fetch served stale copies from the browser cache
   .then(function(response) {
       // When the page is loaded convert it to text
       return response.text()
@@ -205,17 +205,36 @@
 
     if (iaDownload !== null && iaInput !== null) {
       iaDownload.addEventListener('click', () => {
-        const mediaSrc = iaInput.value.trim();
-        if (mediaSrc === '') { iaInput.focus(); return; }
+        const typed = iaInput.value.trim();
+        if (typed === '') { iaInput.focus(); return; }
+        // A bare filename is a path segment in the exported page, so it gets
+        // the same sanitising as the files the media exporter writes (#560)
+        // — spaces and hostile characters out, no percent-encoding needed.
+        // A URL the user typed is theirs: left exactly as entered.
+        const isUrl = /^[a-z][a-z0-9+.-]*:/i.test(typed) || typed.startsWith('//');
+        const mediaSrc = (!isUrl && typeof window.safeExportName === 'function')
+          ? (() => {
+            const dot = typed.lastIndexOf('.');
+            const stem = dot > 0 ? typed.slice(0, dot) : typed;
+            const ext = dot > 0 ? typed.slice(dot) : '';
+            return window.safeExportName(stem, 'media') + ext.replace(/\s+/g, '');
+          })()
+          : typed;
         const track = document.querySelector('#hyperplayer-vtt');
         // function replacements so a literal $ in the transcript/filename isn't
         // treated as a replacement pattern
-        const html = hyperaudioTemplate
-          .replace('{hypertranscript}', () => (typeof serializeTranscriptHtml === 'function'
-            ? serializeTranscriptHtml(document.querySelector('#hypertranscript'))
-            : getTranscriptData()))
+        const inner = typeof serializeTranscriptHtml === 'function'
+          ? serializeTranscriptHtml(document.querySelector('#hypertranscript'))
+          : getTranscriptData();
+        let html = hyperaudioTemplate
+          .replace('{hypertranscript}', () => inner)
           .replace('{sourcemedia}', () => mediaSrc)
           .replace('{sourcevtt}', () => (track !== null ? track.src : ''));
+        // the project's title in the tab, the unfurl and on the page (#563) —
+        // the same filler the media-export route uses, so both agree
+        if (typeof window.fillExportIdentity === 'function') {
+          html = window.fillExportIdentity(html, inner);
+        }
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');

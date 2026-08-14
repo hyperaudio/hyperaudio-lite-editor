@@ -3,15 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hyperaudio – Interactive Transcript</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/css/hyperaudio-lite-player.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/css/share-this.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/velocity/1.5.0/velocity.js"></script>
+  <title>{title}</title>
+  <meta name="description" content="{description}">
+  <meta property="og:title" content="{title}">
+  <meta property="og:description" content="{description}">
+  <meta property="og:type" content="article">
+  <!-- PINNED (#571). Unpinned, jsDelivr serves hyperaudio-lite's default
+       branch, so every exported page tracked upstream HEAD forever: a change
+       there could alter — or break — a transcript published years earlier and
+       cited with a timecode link. An export is an archival artefact and must
+       stay reproducible. The pin matches the player the editor itself vendors
+       (js/hyperaudio-lite.js, "Version 2.6.4"); bump both together, never one
+       alone — __TEST__/unit/export-pins.test.mjs fails if they drift. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite@2.6.4/css/hyperaudio-lite-player.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite@2.6.4/css/share-this.css">
   <style>
     body {
       margin: 0;
       background: #f7f7f8;
       color: #1a1a1a;
+    }
+    /* The page says what it is a transcript of. Sized to sit under the
+       player's own weight rather than compete with it; an export with no
+       title omits the element entirely, so there is no empty gap. */
+    /* Taking the text is the commonest thing anyone does with a transcript
+       page, and select-to-copy is a different job (it copies a quotation
+       plus a replay link). This copies the whole transcript, always. */
+    /* The editor's corner copy button, transplanted: it sits in the TRANSCRIPT
+       PANE's own top-right corner (the wrapper is the positioning context, so
+       the button never lands in the transcript markup the player walks), grey
+       until hovered, icon only. */
+    /* The wrapper must be the CARD's box, not the page column's: #hypertranscript
+       is 34rem centred inside a 40rem wrap, so a button anchored to the wrap
+       landed ~30px outside the card's right edge. */
+    .ht-transcript-wrap {
+      position: relative;
+      max-width: 34rem;
+      margin: 0 auto;
+    }
+    #ht-copy {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 5;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: 0;
+      border-radius: 7px;
+      background: rgba(247, 247, 248, 0.82);
+      color: rgba(26, 26, 26, 0.5);
+      cursor: pointer;
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+    }
+    #ht-copy:hover { color: #1a1a1a; }
+    #ht-copy[data-copied] { color: #1f7a48; }
+    @media print { #ht-copy { display: none; } }
+
+    .ht-title {
+      max-width: 34rem;
+      margin: 20px auto 12px;
+      padding: 0 8px;
+      font: 600 1.25rem/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #23252a;
+      text-align: center;
+      overflow-wrap: anywhere;
     }
     /* ------------------------------------------------------------------
        Select-to-copy. The library owns behaviour — it positions #popover,
@@ -171,12 +231,18 @@
 </head>
 <body>
   <main class="ht-wrap">
+    <h1 class="ht-title">{heading}</h1>
     <video id="hyperplayer" class="hyperaudio-player" playsinline controls src="{sourcemedia}" type="video/mp4">
       <track id="hyperplayer-vtt" label="English" kind="subtitles" srclang="en" src="{sourcevtt}">
     </video>
 
-    <div id="hypertranscript" class="hyperaudio-transcript">
+    <div class="ht-transcript-wrap">
+      <button id="ht-copy" type="button" aria-label="Copy transcript" title="Copy transcript">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      </button>
+      <div id="hypertranscript" class="hyperaudio-transcript">
 {hypertranscript}
+      </div>
     </div>
 
     <!-- Select-to-copy: hyperaudio-lite's OWN copy feature, which it
@@ -230,10 +296,117 @@
   })();
   </script>
 
-  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/hyperaudio-lite.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/hyperaudio-lite-extension.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/share-this.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite/js/share-this-clipboard.js"></script>
+  <script>
+  /* Copy transcript — the editor's own contract (#467), inherited rather than
+     reinvented: it ALWAYS copies the whole transcript (a selection-sensitive
+     button is a trap, and selection copying already has an owner here — the
+     citation popover), it writes both a plain-text and a conservative HTML
+     flavour so it pastes cleanly everywhere, and because a clipboard write is
+     invisible it flips to a checkmark and announces itself to screen readers.
+     Struck-through words are speech the author removed, so they are not
+     copied. */
+  (function () {
+    var btn = document.getElementById('ht-copy');
+    var transcript = document.getElementById('hypertranscript');
+    if (!btn || !transcript) return;
+
+    var status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.style.cssText = 'position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;';
+    document.body.appendChild(status);
+
+    var COPY_ICON = btn.innerHTML;
+    var CHECK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    var resetTimer = null;
+
+    function blocks() {
+      var out = [];
+      transcript.querySelectorAll('p').forEach(function (p) {
+        var speaker = '';
+        var words = [];
+        p.querySelectorAll('span[data-m]').forEach(function (span) {
+          if ((span.style.textDecoration || '').indexOf('line-through') !== -1) return;
+          var text = span.textContent;
+          if (span.classList.contains('speaker')) {
+            speaker = text.replace(/^\s*\[?/, '').replace(/\]?\s*$/, '').trim();
+            return;
+          }
+          words.push(text);
+        });
+        var line = words.join('').replace(/\s+/g, ' ').trim();
+        if (line !== '') out.push({ speaker: speaker, text: line });
+      });
+      return out;
+    }
+
+    function escapeHtml(text) {
+      return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function confirmCopied() {
+      btn.dataset.copied = '1';
+      btn.innerHTML = CHECK_ICON;
+      btn.setAttribute('aria-label', 'Transcript copied');
+      btn.setAttribute('title', 'Copied');
+      status.textContent = '';
+      status.textContent = 'Transcript copied to clipboard.';
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(function () {
+        delete btn.dataset.copied;
+        btn.innerHTML = COPY_ICON;
+        btn.setAttribute('aria-label', 'Copy transcript');
+        btn.setAttribute('title', 'Copy transcript');
+      }, 1500);
+    }
+
+    btn.addEventListener('click', function () {
+      var parts = blocks();
+      if (parts.length === 0) return;
+      var plain = parts.map(function (b) {
+        return (b.speaker ? b.speaker + ': ' : '') + b.text;
+      }).join('\n\n') + '\n';
+      var html = parts.map(function (b) {
+        return '<p>' + (b.speaker ? '<b>' + escapeHtml(b.speaker) + ':</b> ' : '')
+          + escapeHtml(b.text) + '</p>';
+      }).join('\n');
+
+      if (navigator.clipboard && window.ClipboardItem && navigator.clipboard.write) {
+        navigator.clipboard.write([new ClipboardItem({
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' }),
+        })]).then(confirmCopied, function () { fallback(plain); });
+      } else {
+        fallback(plain);
+      }
+    });
+
+    // Older engines, and any page served without a secure context: plain text
+    // through the legacy path rather than no copy button at all.
+    function fallback(plain) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(plain).then(confirmCopied, legacy);
+        return;
+      }
+      legacy();
+      function legacy() {
+        var area = document.createElement('textarea');
+        area.value = plain;
+        area.setAttribute('readonly', '');
+        area.style.cssText = 'position:fixed; top:-1000px; left:-1000px;';
+        document.body.appendChild(area);
+        area.select();
+        try { document.execCommand('copy'); confirmCopied(); } catch (e) { /* nothing more to try */ }
+        area.remove();
+      }
+    }
+  })();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite@2.6.4/js/hyperaudio-lite.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite@2.6.4/js/hyperaudio-lite-extension.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite@2.6.4/js/share-this.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/hyperaudio/hyperaudio-lite@2.6.4/js/share-this-clipboard.js"></script>
   <script>
   // minimizedMode is still experimental - it aims to show the current words in the title, which can be seen on the browser tab.
   let minimizedMode = false;
