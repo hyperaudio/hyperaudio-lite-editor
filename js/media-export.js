@@ -1049,7 +1049,15 @@
         const subs = genRetimedCaptions(sections, rate);
         const vttName = `${baseName}.vtt`;
         const srtName = `${baseName}.srt`;
-        if (wantVtt && subs && subs.vtt) {
+        // The interactive transcript's captions ride as a SIDECAR file, not an
+        // inline data: URL (#561). The page has never been self-contained —
+        // its media is a separate file beside it, and the bundle ships as one
+        // folder — so inlining bought nothing while costing a percent-encoded
+        // copy of the whole VTT inside the HTML. Files are also the only shape
+        // that extends: a translated transcript means one <track> per
+        // language, which no data: URL can express.
+        const needVtt = (wantVtt || (wantRetime && !burn)) && subs && subs.vtt;
+        if (needVtt) {
           outputs.push({ blob: new Blob([subs.vtt], { type: 'text/vtt' }), name: vttName });
         }
         if (wantSrt && subs && subs.srt) {
@@ -1057,15 +1065,13 @@
         }
         if (wantRetime) {
           // captions track inside the interactive transcript:
-          //   burned in    -> none (they are already painted into the video)
-          //   VTT exported -> link the sidecar .vtt file
-          //   otherwise    -> embed the re-timed VTT inline (self-contained)
+          //   burned in -> none (they are already painted into the video)
+          //   otherwise -> link the sidecar .vtt, which ships in the bundle
           let trackSrc = null;
           if (!burn) {
-            if (wantVtt) trackSrc = encodeURI(vttName);
-            else if (subs && subs.vtt) trackSrc = 'data:text/vtt,' + encodeURIComponent(subs.vtt);
+            if (needVtt) trackSrc = vttName; // sanitised already (#560): no encoding needed
           }
-          const html = buildInteractiveExportHtml(sections, rate, encodeURI(mediaName), trackSrc);
+          const html = buildInteractiveExportHtml(sections, rate, mediaName, trackSrc);
           if (html !== null) {
             outputs.push({ blob: new Blob([html], { type: 'text/html' }), name: `${baseName}-transcript.html` });
           }
