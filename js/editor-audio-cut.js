@@ -322,7 +322,22 @@
       if (run !== null) cuts.push(run);
     };
 
+    // The LEADING region (#577): media start to the first kept word. Handled
+    // separately because the loop below only knows regions BETWEEN kept words
+    // — prevKeptEnd is null until one exists — so the setting-up before anyone
+    // speaks was never a candidate, however long. Struck words at the head
+    // belong to this region too, so their audio goes with it.
+    const firstKeptIndex = words.findIndex((w) => !w.struck);
+    if (firstKeptIndex !== -1 && words[firstKeptIndex].start > 0) {
+      const leadingStruck = words.slice(0, firstKeptIndex).filter((w) => w.struck);
+      // bufferLeft false: nothing precedes media start to protect
+      flushRegion(0, words[firstKeptIndex].start, leadingStruck, false, true);
+      // those struck words are now accounted for; the loop must not cut them again
+      words.slice(0, firstKeptIndex).forEach((w) => { w.struck = false; w.consumed = true; });
+    }
+
     words.forEach(word => {
+      if (word.consumed) return; // already covered by the leading region
       if (word.struck) {
         pendingStruck.push(word);
         return;
@@ -340,11 +355,20 @@
       prevKeptEnd = word.end;
     });
 
-    // trailing region after the last kept word
-    if (pendingStruck.length > 0) {
-      const regionStart = prevKeptEnd !== null ? prevKeptEnd : pendingStruck[0].start;
-      const regionEnd = pendingStruck[pendingStruck.length - 1].end;
+    // The TRAILING region: the last kept word to the end of the media (#577).
+    // Previously this only existed when struck words followed the last kept
+    // word, so plain dead air after the final word always played out. The
+    // media's real end is only usable when metadata has loaded — with an
+    // unknown duration the tail is left alone rather than guessed.
+    const regionStart = prevKeptEnd !== null
+      ? prevKeptEnd
+      : (pendingStruck.length > 0 ? pendingStruck[0].start : null);
+    if (regionStart !== null) {
+      const struckEnd = pendingStruck.length > 0
+        ? pendingStruck[pendingStruck.length - 1].end : regionStart;
+      const regionEnd = Number.isFinite(duration) ? Math.max(duration, struckEnd) : struckEnd;
       if (regionEnd > regionStart) {
+        // bufferRight false: nothing follows the media end to protect
         flushRegion(regionStart, regionEnd, pendingStruck, prevKeptEnd !== null, false);
       }
     }
@@ -415,8 +439,20 @@
   // struck region — without this the first word can sneak through between
   // RAF ticks.
   function checkStrikeThrus(myPlayer) {
-    if (audioDataArray.length < 2) return;
+    if (audioDataArray.length === 0) return;
     const t = myPlayer.currentTime;
+    const first = audioDataArray[0];
+    const last = audioDataArray[audioDataArray.length - 1];
+
+    // The LEADING gap (#577). The loop below only examines the bands BETWEEN
+    // kept sections, so the silence before the first one — the longest gap in
+    // many recordings — played in full even with skipping on.
+    if (t + 0.01 < first.start) {
+      myPlayer.currentTime = first.start + 0.05;
+      kickPlayhead();
+      return;
+    }
+
     for (let i = 0; i < audioDataArray.length - 1; i++) {
       const stop = audioDataArray[i].stop;
       const nextStart = audioDataArray[i + 1].start;
@@ -426,12 +462,29 @@
         // it has no idea we just jumped. Kick its polling chain so the
         // highlight re-locks onto the post-skip word instead of waiting for
         // its stale setTimeout to fire seconds later.
-        const instance = window.hyperaudioInstance;
-        if (instance && typeof instance.checkPlayHead === 'function') {
-          instance.checkPlayHead();
-        }
+        kickPlayhead();
         return;
       }
+    }
+
+    // The TRAILING gap (#577): past the last kept section there is nothing to
+    // play, so let the media end rather than run out its dead air. Only with a
+    // known duration, and only when the tail was actually cut.
+    const duration = myPlayer.duration;
+    if (Number.isFinite(last.stop) && Number.isFinite(duration)
+        && t >= last.stop && duration > last.stop + 0.01) {
+      myPlayer.currentTime = duration;
+      kickPlayhead();
+    }
+  }
+
+  // The library only listens for play/pause natively, not seeked, so it has no
+  // idea we just jumped: kick its polling chain or the highlight re-locks
+  // seconds later, via its stale setTimeout.
+  function kickPlayhead() {
+    const instance = window.hyperaudioInstance;
+    if (instance && typeof instance.checkPlayHead === 'function') {
+      instance.checkPlayHead();
     }
   }
 
