@@ -1956,9 +1956,21 @@
         deferEmbedToBridge = embedderSrc;
         saveAsLink = true; // container carries the link; the bridge upgrades it
       } else {
-        showProgress('Reading the media…', 0, token);
-        mediaFile = await fetchRemoteMediaFile(embedderSrc);
-        embedderMedia = mediaFile;
+        try {
+          showProgress('Reading the media…', 0, token);
+          mediaFile = await fetchRemoteMediaFile(embedderSrc);
+          embedderMedia = mediaFile;
+        } catch (e) {
+          // The host application's scheme handler could not produce the file —
+          // moved, renamed, permissions changed, or not ready yet. Same
+          // treatment as the remote branch below (#574): explain it and offer
+          // the link save, rather than throwing a raw 'Failed to fetch' and
+          // losing the save entirely. No server is involved here, so the
+          // wording says what actually happened.
+          const proceed = await projectConfirm('The application could not provide the media file, so it cannot be embedded in the project file.\n\nSave the project with a LINK to the media instead? The file will contain all your work, but opening it will need the application to find that media again.', 'Save with link', 'Cancel');
+          if (!proceed) return false;
+          saveAsLink = true;
+        }
       }
     }
     if (mediaFile === null && remoteSrc !== null) {
