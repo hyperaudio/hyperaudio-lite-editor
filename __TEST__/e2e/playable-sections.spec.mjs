@@ -34,9 +34,13 @@ test('#383: with gaps on, the edge buffer never keeps struck audio', async ({ pa
 test('#371: pauses around struck filler words merge into the cut (gaps on)', async ({ page }) => {
   const sections = await sectionsFor(page, ISSUE_371_WORDS, { gapsOn: true, duration: 58.599 });
   // verified boundaries from the #371 fix: the "and …um… uses" region cuts
-  // [13.86 → 17.26] and "Yeah …Uh… you" cuts [28.34 → 29.18]
+  // [13.86 → 17.26] and "Yeah …Uh… you" cuts [28.34 → 29.18]. The EDGES moved
+  // with #577: this fixture opens with 2.24s before its first word and ends
+  // 24.7s before the media does, and both are now skipped like any other gap
+  // — playback starts at 2.14 (buffer protecting the first word's onset) and
+  // stops at 33.94 (buffer protecting the last word's tail).
   expect(sections).toEqual([
-    { start: 0, end: 2.42 },
+    { start: 2.14, end: 2.42 },
     { start: 3.34, end: 3.62 },
     { start: 5.02, end: 9.3 },
     { start: 9.66, end: 9.94 },
@@ -45,7 +49,7 @@ test('#371: pauses around struck filler words merge into the cut (gaps on)', asy
     { start: 17.26, end: 19.46 },
     { start: 19.98, end: 20.26 },
     { start: 20.94, end: 28.34 },
-    { start: 29.18, end: 58.599 },
+    { start: 29.18, end: 33.94 },
   ]);
 });
 
