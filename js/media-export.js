@@ -404,6 +404,50 @@
   const startStreamStretcher = async (rate, emit) =>
     makeStreamStretcher(await loadSoundtouch(), rate, emit);
 
+  /* --------------------------------------------------------------------------
+   * Encoder input rate (#579). WebKit's WebCodecs AudioEncoder picks HE-AAC
+   * for MONO input below 32 kHz — a sharp, measured boundary — and the muxed
+   * track that results is unreadable to AVFoundation: zero audio tracks, so
+   * the export is SILENT in QuickTime, Safari and Finder preview while
+   * appearing to have succeeded. Voice notes, telephony, voicemail and much
+   * interview audio live below that line. Chrome is unaffected; this is
+   * WebKit's encoder choice.
+   *
+   * Forcing the codec string to mp4a.40.2 does NOT help — measured: WebKit
+   * emits HE-AAC regardless while describing it as LC, so the muxed
+   * configuration disagrees with the samples either way.
+   *
+   * So low-rate audio is lifted before it reaches the encoder. 32 kHz encodes
+   * as AAC-LC across bitrates (verified at QUALITY_LOW/MEDIUM/HIGH and
+   * 32/64/128 kbps), but we lift clear of that cliff rather than onto it, and
+   * prefer a target the source divides into exactly — 8/12/16/24 kHz into
+   * 48 kHz, 11.025/22.05 into 44.1 — which keeps the resampling arithmetic
+   * simple. Upsampling cannot restore bandwidth the source never had, and it
+   * cannot lose any either. Applied on every engine: skipping it by sniffing
+   * for WebKit would risk guessing wrong about some variant, and the early
+   * return means anything at 32 kHz or above pays nothing.
+   * ------------------------------------------------------------------------ */
+  const MIN_ENCODE_RATE = 32000;     // below this WebKit picks HE-AAC for mono
+  const liftTargetFor = (rate) => (44100 % rate === 0 ? 44100 : 48000);
+
+  const liftForEncoder = async (buffer) => {
+    if (!buffer || buffer.sampleRate >= MIN_ENCODE_RATE) return buffer;
+    const target = liftTargetFor(buffer.sampleRate);
+    try {
+      const frames = Math.max(1, Math.round(buffer.length * target / buffer.sampleRate));
+      const ctx = new OfflineAudioContext(buffer.numberOfChannels, frames, target);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start();
+      return await ctx.startRendering();
+    } catch (e) {
+      // A silent export is bad; breaking an export that used to work is worse.
+      console.warn('media-export: could not lift audio to ' + target + ' Hz — encoding at the source rate', e);
+      return buffer;
+    }
+  };
+
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
   // the sections concatenate without any timestamp bookkeeping.
@@ -421,7 +465,12 @@
     try {
       const total = keptDuration(sections);
       let done = 0;
-      const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => source.add(b)) : null;
+      // Every buffer reaches the encoder through here — the direct branch AND
+      // the stretcher's emit — so the lift (#579) cannot be missed by a call
+      // site. Deliberately AFTER the stretcher: SoundTouch keeps working on
+      // the smaller source-rate buffers rather than three times the samples.
+      const addAudio = async (b) => { await source.add(await liftForEncoder(b)); };
+      const stretcher = rate !== 1 ? await startStreamStretcher(rate, addAudio) : null;
       for (const sec of sections) {
         for await (const wrapped of sink.buffers(sec.start, sec.end)) {
           const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
@@ -429,7 +478,7 @@
             if (stretcher !== null) {
               await stretcher.push(trimmed);
             } else {
-              await source.add(trimmed);
+              await addAudio(trimmed);
             }
             done += trimmed.duration;
             onProgress(Math.min(0.99, done / total));
@@ -518,7 +567,8 @@
       vSource.close();
 
       if (aSink !== null) {
-        const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => aSource.add(b)) : null;
+        const addAudio = async (b) => { await aSource.add(await liftForEncoder(b)); };
+        const stretcher = rate !== 1 ? await startStreamStretcher(rate, addAudio) : null;
         for (const sec of sections) {
           for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
             const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
@@ -526,7 +576,7 @@
               if (stretcher !== null) {
                 await stretcher.push(trimmed);
               } else {
-                await aSource.add(trimmed);
+                await addAudio(trimmed);
               }
               done += trimmed.duration;
               onProgress(Math.min(0.99, done / total));
