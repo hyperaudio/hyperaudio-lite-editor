@@ -145,3 +145,63 @@ test('the zip offer appears once a second file is selected', async ({ page }) =>
   });
   await expect(page.locator('#export-name-note')).toContainText('keep the downloads together');
 });
+
+// #561 — the interactive transcript links its captions as a SIDECAR file
+// rather than embedding them as a data: URL. The page was never
+// self-contained (its media sits beside it), and files are the only shape
+// that extends to a <track> per language for translations.
+test('the interactive transcript links a sidecar .vtt, never an inline data URL', async ({ page }) => {
+  await openExportModal(page);
+  await page.evaluate(() => {
+    const set = (id, on) => {
+      const c = document.getElementById(id);
+      if (c) { c.checked = on; c.dispatchEvent(new Event('change')); }
+    };
+    // captions NOT ticked: the interactive transcript must still get its file
+    ['export-vtt', 'export-srt', 'export-burn', 'export-project'].forEach((id) => set(id, false));
+    set('export-retime', true);
+    set('export-zip', true);
+    document.getElementById('export-name').value = 'talk';
+  });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.click('#export-start');
+  const download = await downloadPromise;
+  await page.waitForFunction(
+    () => document.getElementById('export-status').textContent.startsWith('Done'));
+
+  const fs = await import('node:fs/promises');
+  const zip = await JSZip.loadAsync(await fs.readFile(await download.path()));
+  const names = Object.keys(zip.files).filter((p) => !zip.files[p].dir).map((p) => p.split('/').pop()).sort();
+  expect(names).toContain('talk.vtt');            // the sidecar rides along
+  expect(names).toContain('talk-transcript.html');
+
+  const html = await zip.file('talk/talk-transcript.html').async('string');
+  expect(html).toContain('src="talk.vtt"');       // linked by plain filename
+  expect(html).not.toContain('data:text/vtt');    // never inlined
+});
+
+// The .vtt rides along with an interactive transcript (#561) — but NOT when
+// captions are burned into the picture, since then the page carries no
+// <track> at all. The note has to say so only when it is true: a blanket
+// claim is wrong exactly when someone burns captions, which is how the
+// missing <track> looked like a bug in the first place.
+test('the "included with the interactive transcript" note tracks reality', async ({ page }) => {
+  await openExportModal(page);
+  const note = page.locator('#export-vtt-note');
+  const set = (id, on) => page.evaluate(({ i, v }) => {
+    const c = document.getElementById(i);
+    if (c) { c.checked = v; c.dispatchEvent(new Event('change')); }
+  }, { i: id, v: on });
+
+  await set('export-retime', false);
+  await expect(note).toBeHidden();          // no interactive transcript, no claim
+
+  await set('export-retime', true);
+  await expect(note).toBeVisible();         // the .vtt does ride along
+
+  // (The burn case — note retracts because no sidecar is written — is covered
+  // by the code comment rather than a test: asserting it needs a video source,
+  // which is minutes of suite time for a line of label text.)
+});
+

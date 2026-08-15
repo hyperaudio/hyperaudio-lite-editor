@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.6 — last changed in release 1.3.6
+ * @version 1.3.7 — last changed in release 1.3.7
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1956,9 +1956,21 @@
         deferEmbedToBridge = embedderSrc;
         saveAsLink = true; // container carries the link; the bridge upgrades it
       } else {
-        showProgress('Reading the media…', 0, token);
-        mediaFile = await fetchRemoteMediaFile(embedderSrc);
-        embedderMedia = mediaFile;
+        try {
+          showProgress('Reading the media…', 0, token);
+          mediaFile = await fetchRemoteMediaFile(embedderSrc);
+          embedderMedia = mediaFile;
+        } catch (e) {
+          // The host application's scheme handler could not produce the file —
+          // moved, renamed, permissions changed, or not ready yet. Same
+          // treatment as the remote branch below (#574): explain it and offer
+          // the link save, rather than throwing a raw 'Failed to fetch' and
+          // losing the save entirely. No server is involved here, so the
+          // wording says what actually happened.
+          const proceed = await projectConfirm('The application could not provide the media file, so it cannot be embedded in the project file.\n\nSave the project with a LINK to the media instead? The file will contain all your work, but opening it will need the application to find that media again.', 'Save with link', 'Cancel');
+          if (!proceed) return false;
+          saveAsLink = true;
+        }
       }
     }
     if (mediaFile === null && remoteSrc !== null) {
@@ -3330,6 +3342,10 @@
     // speaker-preserving, caption-mode-aware gather the save path uses
     getTranscriptJson: () => getEditorTranscriptJson(),
     loadJSZip, // shared vendored-zip loader (the .docx export packages with it)
+    // The live caption track's text, decoded from its data: URL. The
+    // Interactive Transcript modal needs the VTT as a FILE, never inlined
+    // into the page (#581), and this is where that decode already lives.
+    getCaptionsVtt,
     // The project's media as a FRESH File. An object URL made from an OPFS
     // file is a snapshot: once that file is rewritten (any save that re-writes
     // media does), the URL still plays from buffered data but can no longer be

@@ -1,7 +1,7 @@
 /**
  * responsive.js
  * (C) The Hyperaudio Project
- * @version 0.8.11 — last changed in release 0.8.11
+ * @version 1.3.7 — last changed in release 1.3.7
  * @license MIT
  *
  * Small-screen UI toggles for the responsive layout (#349):
@@ -16,6 +16,43 @@
 (function () {
   const body = document.body;
   const mobile = window.matchMedia('(max-width: 948px)');
+
+  /* --- Where the transcript card starts (#580) -------------------------------
+   * The card's top was a CSS constant per band — 78px wide, 58px compact —
+   * each assuming a navbar height. The navbar has since grown: at 1000px it is
+   * 74px tall against that 58px, so its grey band painted over the card's top
+   * edge (losing the rounded corners) and over the ⓘ/copy buttons pinned to
+   * it. Measuring is the only way that cannot go stale: the navbar's real
+   * bottom, plus the 4px of canvas the wide layout has always shown, becomes
+   * --card-top, and the card and every corner button derive from it.
+   *
+   * The mobile band (<=948px) pins the player under the navbar and computes
+   * its own --card-top in CSS, so the inline value is REMOVED there — an
+   * inline property would outrank that media query.
+   * ------------------------------------------------------------------------ */
+  const CANVAS_GAP = 4;
+  const navbar = document.querySelector('.main-panel');
+
+  const syncCardTop = () => {
+    if (navbar === null) return;
+    if (mobile.matches) {
+      body.style.removeProperty('--card-top');
+      return;
+    }
+    const bottom = Math.round(navbar.getBoundingClientRect().bottom);
+    if (bottom > 0) body.style.setProperty('--card-top', (bottom + CANVAS_GAP) + 'px');
+  };
+
+  syncCardTop();
+  window.addEventListener('resize', syncCardTop);
+  mobile.addEventListener('change', syncCardTop);
+  if (navbar !== null && typeof ResizeObserver === 'function') {
+    // the navbar can change height after boot (a control arrives, a label
+    // wraps), which is what made the overlap look intermittent
+    new ResizeObserver(syncCardTop).observe(navbar);
+  }
+  // webfonts and late-injected toolbar buttons can settle after first paint
+  window.addEventListener('load', syncCardTop);
 
   // --- Recents drawer --------------------------------------------------------
   // Keep #sidebar-toggle's aria-pressed tracking the drawer while in the

@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.6 — last changed in release 1.3.6
+ * @version 1.3.7 — last changed in release 1.3.7
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -404,6 +404,50 @@
   const startStreamStretcher = async (rate, emit) =>
     makeStreamStretcher(await loadSoundtouch(), rate, emit);
 
+  /* --------------------------------------------------------------------------
+   * Encoder input rate (#579). WebKit's WebCodecs AudioEncoder picks HE-AAC
+   * for MONO input below 32 kHz — a sharp, measured boundary — and the muxed
+   * track that results is unreadable to AVFoundation: zero audio tracks, so
+   * the export is SILENT in QuickTime, Safari and Finder preview while
+   * appearing to have succeeded. Voice notes, telephony, voicemail and much
+   * interview audio live below that line. Chrome is unaffected; this is
+   * WebKit's encoder choice.
+   *
+   * Forcing the codec string to mp4a.40.2 does NOT help — measured: WebKit
+   * emits HE-AAC regardless while describing it as LC, so the muxed
+   * configuration disagrees with the samples either way.
+   *
+   * So low-rate audio is lifted before it reaches the encoder. 32 kHz encodes
+   * as AAC-LC across bitrates (verified at QUALITY_LOW/MEDIUM/HIGH and
+   * 32/64/128 kbps), but we lift clear of that cliff rather than onto it, and
+   * prefer a target the source divides into exactly — 8/12/16/24 kHz into
+   * 48 kHz, 11.025/22.05 into 44.1 — which keeps the resampling arithmetic
+   * simple. Upsampling cannot restore bandwidth the source never had, and it
+   * cannot lose any either. Applied on every engine: skipping it by sniffing
+   * for WebKit would risk guessing wrong about some variant, and the early
+   * return means anything at 32 kHz or above pays nothing.
+   * ------------------------------------------------------------------------ */
+  const MIN_ENCODE_RATE = 32000;     // below this WebKit picks HE-AAC for mono
+  const liftTargetFor = (rate) => (44100 % rate === 0 ? 44100 : 48000);
+
+  const liftForEncoder = async (buffer) => {
+    if (!buffer || buffer.sampleRate >= MIN_ENCODE_RATE) return buffer;
+    const target = liftTargetFor(buffer.sampleRate);
+    try {
+      const frames = Math.max(1, Math.round(buffer.length * target / buffer.sampleRate));
+      const ctx = new OfflineAudioContext(buffer.numberOfChannels, frames, target);
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      src.start();
+      return await ctx.startRendering();
+    } catch (e) {
+      // A silent export is bad; breaking an export that used to work is worse.
+      console.warn('media-export: could not lift audio to ' + target + ' Hz — encoding at the source rate', e);
+      return buffer;
+    }
+  };
+
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
   // the sections concatenate without any timestamp bookkeeping.
@@ -421,7 +465,12 @@
     try {
       const total = keptDuration(sections);
       let done = 0;
-      const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => source.add(b)) : null;
+      // Every buffer reaches the encoder through here — the direct branch AND
+      // the stretcher's emit — so the lift (#579) cannot be missed by a call
+      // site. Deliberately AFTER the stretcher: SoundTouch keeps working on
+      // the smaller source-rate buffers rather than three times the samples.
+      const addAudio = async (b) => { await source.add(await liftForEncoder(b)); };
+      const stretcher = rate !== 1 ? await startStreamStretcher(rate, addAudio) : null;
       for (const sec of sections) {
         for await (const wrapped of sink.buffers(sec.start, sec.end)) {
           const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
@@ -429,7 +478,7 @@
             if (stretcher !== null) {
               await stretcher.push(trimmed);
             } else {
-              await source.add(trimmed);
+              await addAudio(trimmed);
             }
             done += trimmed.duration;
             onProgress(Math.min(0.99, done / total));
@@ -518,7 +567,8 @@
       vSource.close();
 
       if (aSink !== null) {
-        const stretcher = rate !== 1 ? await startStreamStretcher(rate, (b) => aSource.add(b)) : null;
+        const addAudio = async (b) => { await aSource.add(await liftForEncoder(b)); };
+        const stretcher = rate !== 1 ? await startStreamStretcher(rate, addAudio) : null;
         for (const sec of sections) {
           for await (const wrapped of aSink.buffers(sec.start, sec.end)) {
             const trimmed = trimBufferToRange(wrapped.buffer, wrapped.timestamp, sec.start, sec.end);
@@ -526,7 +576,7 @@
               if (stretcher !== null) {
                 await stretcher.push(trimmed);
               } else {
-                await aSource.add(trimmed);
+                await addAudio(trimmed);
               }
               done += trimmed.duration;
               onProgress(Math.min(0.99, done / total));
@@ -836,11 +886,25 @@
   // The transcript/caption sidecars (interactive transcript, VTT, SRT) are all
   // offered whenever there's a transcript to derive them from — they re-time
   // themselves to whatever edits/speed the export uses.
+  // The interactive transcript ships its captions as a sidecar file (#561), so
+  // a .vtt is written whether or not this box is ticked — but NOT when the
+  // captions are burned into the picture, since then the page carries no
+  // <track> at all. The note says so only when it is true, rather than making
+  // a blanket claim that is wrong exactly when someone burns captions.
+  const updateVttNote = () => {
+    const note = document.getElementById('export-vtt-note');
+    if (note === null) return;
+    const interactive = retimeCheck !== null && retimeCheck.checked && retimeRow.style.display !== 'none';
+    const burning = burnCheck !== null && burnCheck.checked && burnRow !== null && burnRow.style.display !== 'none';
+    note.style.display = (interactive && !burning) ? '' : 'none';
+  };
+
   const updateRetimeVisibility = () => {
     const show = hasTranscript() ? 'flex' : 'none';
     retimeRow.style.display = show;
     if (vttRow !== null) vttRow.style.display = show;
     if (srtRow !== null) srtRow.style.display = show;
+    updateVttNote();
     // the flattened project (#455) needs a transcript to flatten, and the
     // container writer to be loaded
     if (projectRow !== null) {
@@ -1049,7 +1113,15 @@
         const subs = genRetimedCaptions(sections, rate);
         const vttName = `${baseName}.vtt`;
         const srtName = `${baseName}.srt`;
-        if (wantVtt && subs && subs.vtt) {
+        // The interactive transcript's captions ride as a SIDECAR file, not an
+        // inline data: URL (#561). The page has never been self-contained —
+        // its media is a separate file beside it, and the bundle ships as one
+        // folder — so inlining bought nothing while costing a percent-encoded
+        // copy of the whole VTT inside the HTML. Files are also the only shape
+        // that extends: a translated transcript means one <track> per
+        // language, which no data: URL can express.
+        const needVtt = (wantVtt || (wantRetime && !burn)) && subs && subs.vtt;
+        if (needVtt) {
           outputs.push({ blob: new Blob([subs.vtt], { type: 'text/vtt' }), name: vttName });
         }
         if (wantSrt && subs && subs.srt) {
@@ -1057,15 +1129,13 @@
         }
         if (wantRetime) {
           // captions track inside the interactive transcript:
-          //   burned in    -> none (they are already painted into the video)
-          //   VTT exported -> link the sidecar .vtt file
-          //   otherwise    -> embed the re-timed VTT inline (self-contained)
+          //   burned in -> none (they are already painted into the video)
+          //   otherwise -> link the sidecar .vtt, which ships in the bundle
           let trackSrc = null;
           if (!burn) {
-            if (wantVtt) trackSrc = encodeURI(vttName);
-            else if (subs && subs.vtt) trackSrc = 'data:text/vtt,' + encodeURIComponent(subs.vtt);
+            if (needVtt) trackSrc = vttName; // sanitised already (#560): no encoding needed
           }
-          const html = buildInteractiveExportHtml(sections, rate, encodeURI(mediaName), trackSrc);
+          const html = buildInteractiveExportHtml(sections, rate, mediaName, trackSrc);
           if (html !== null) {
             outputs.push({ blob: new Blob([html], { type: 'text/html' }), name: `${baseName}-transcript.html` });
           }
@@ -1144,9 +1214,14 @@
   [retimeCheck, vttCheck, srtCheck, projectCheck, zipCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', updateZipVisibility);
   });
+  // the note depends on BOTH the interactive transcript and the burn choice
+  [retimeCheck, burnCheck].forEach((el) => {
+    if (el !== null) el.addEventListener('change', updateVttNote);
+  });
   sourceEntire.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
   sourceEdited.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
-  formatSelect.addEventListener('change', updateBurnVisibility);
+  // the format decides whether burning is even offered, so the note follows it
+  formatSelect.addEventListener('change', () => { updateBurnVisibility(); updateVttNote(); });
   if (adjustCheck !== null) {
     adjustCheck.addEventListener('change', () => {
       updateAdjustVisibility();
