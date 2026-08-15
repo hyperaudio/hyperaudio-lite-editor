@@ -204,7 +204,7 @@
     }
 
     if (iaDownload !== null && iaInput !== null) {
-      iaDownload.addEventListener('click', () => {
+      iaDownload.addEventListener('click', async () => {
         const typed = iaInput.value.trim();
         if (typed === '') { iaInput.focus(); return; }
         // A bare filename is a path segment in the exported page, so it gets
@@ -220,7 +220,17 @@
             return window.safeExportName(stem, 'media') + ext.replace(/\s+/g, '');
           })()
           : typed;
-        const track = document.querySelector('#hyperplayer-vtt');
+        // Captions travel as a FILE, never inlined (#581): a data: URL carries
+        // a percent-encoded copy of the whole track inside the HTML, and no
+        // data: URL can express the <track srclang> per language that
+        // translations need. The page was never self-contained anyway — its
+        // media sits beside it.
+        const save = window.HyperaudioSave;
+        const vtt = (save && typeof save.getCaptionsVtt === 'function') ? save.getCaptionsVtt() : '';
+        const baseName = (typeof window.safeExportName === 'function'
+          ? window.safeExportName((save && save.getProjectTitle && save.getProjectTitle()) || '', 'interactive')
+          : 'interactive').replace(/\.[a-z0-9]+$/i, '');
+        const vttName = baseName + '.vtt';
         // function replacements so a literal $ in the transcript/filename isn't
         // treated as a replacement pattern
         const inner = typeof serializeTranscriptHtml === 'function'
@@ -229,17 +239,41 @@
         let html = hyperaudioTemplate
           .replace('{hypertranscript}', () => inner)
           .replace('{sourcemedia}', () => mediaSrc)
-          .replace('{sourcevtt}', () => (track !== null ? track.src : ''));
+          .replace('{sourcevtt}', () => (vtt !== '' ? vttName : ''));
+        if (vtt === '') html = html.replace(/<track[^>]*>/i, '');
         // the project's title in the tab, the unfurl and on the page (#563) —
         // the same filler the media-export route uses, so both agree
         if (typeof window.fillExportIdentity === 'function') {
           html = window.fillExportIdentity(html, inner);
         }
-        const blob = new Blob([html], { type: 'text/html' });
+        // With captions the page and its .vtt travel together in ONE archive:
+        // two separate downloads would let the browser de-duplicate the second
+        // to "name (1).vtt" and silently break the page's reference. Without
+        // captions there is nothing to pair, so a single HTML file as before.
+        let blob;
+        let filename;
+        if (vtt !== '') {
+          try {
+            const JSZipImpl = await window.HyperaudioSave.loadJSZip();
+            const zip = new JSZipImpl();
+            const folder = zip.folder(baseName);
+            folder.file(baseName + '-transcript.html', html);
+            folder.file(vttName, vtt);
+            blob = await zip.generateAsync({ type: 'blob' });
+            filename = baseName + '.zip';
+          } catch (e) {
+            console.warn('interactive export: could not package the captions, downloading the page alone', e);
+            blob = new Blob([html.replace(/<track[^>]*>/i, '')], { type: 'text/html' });
+            filename = baseName + '-transcript.html';
+          }
+        } else {
+          blob = new Blob([html], { type: 'text/html' });
+          filename = baseName + '-transcript.html';
+        }
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'interactive-transcript.html';
+        a.download = filename;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 0);
         if (iaModal !== null) iaModal.checked = false;
