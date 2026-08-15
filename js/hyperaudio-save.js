@@ -3342,6 +3342,10 @@
     // speaker-preserving, caption-mode-aware gather the save path uses
     getTranscriptJson: () => getEditorTranscriptJson(),
     loadJSZip, // shared vendored-zip loader (the .docx export packages with it)
+    // The live caption track's text, decoded from its data: URL. The
+    // Interactive Transcript modal needs the VTT as a FILE, never inlined
+    // into the page (#581), and this is where that decode already lives.
+    getCaptionsVtt,
     // The project's media as a FRESH File. An object URL made from an OPFS
     // file is a snapshot: once that file is rewritten (any save that re-writes
     // media does), the URL still plays from buffered data but can no longer be

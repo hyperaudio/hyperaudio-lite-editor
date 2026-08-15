@@ -180,3 +180,28 @@ test('the interactive transcript links a sidecar .vtt, never an inline data URL'
   expect(html).toContain('src="talk.vtt"');       // linked by plain filename
   expect(html).not.toContain('data:text/vtt');    // never inlined
 });
+
+// The .vtt rides along with an interactive transcript (#561) — but NOT when
+// captions are burned into the picture, since then the page carries no
+// <track> at all. The note has to say so only when it is true: a blanket
+// claim is wrong exactly when someone burns captions, which is how the
+// missing <track> looked like a bug in the first place.
+test('the "included with the interactive transcript" note tracks reality', async ({ page }) => {
+  await openExportModal(page);
+  const note = page.locator('#export-vtt-note');
+  const set = (id, on) => page.evaluate(({ i, v }) => {
+    const c = document.getElementById(i);
+    if (c) { c.checked = v; c.dispatchEvent(new Event('change')); }
+  }, { i: id, v: on });
+
+  await set('export-retime', false);
+  await expect(note).toBeHidden();          // no interactive transcript, no claim
+
+  await set('export-retime', true);
+  await expect(note).toBeVisible();         // the .vtt does ride along
+
+  // (The burn case — note retracts because no sidecar is written — is covered
+  // by the code comment rather than a test: asserting it needs a video source,
+  // which is minutes of suite time for a line of label text.)
+});
+

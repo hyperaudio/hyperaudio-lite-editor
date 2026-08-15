@@ -886,11 +886,25 @@
   // The transcript/caption sidecars (interactive transcript, VTT, SRT) are all
   // offered whenever there's a transcript to derive them from — they re-time
   // themselves to whatever edits/speed the export uses.
+  // The interactive transcript ships its captions as a sidecar file (#561), so
+  // a .vtt is written whether or not this box is ticked — but NOT when the
+  // captions are burned into the picture, since then the page carries no
+  // <track> at all. The note says so only when it is true, rather than making
+  // a blanket claim that is wrong exactly when someone burns captions.
+  const updateVttNote = () => {
+    const note = document.getElementById('export-vtt-note');
+    if (note === null) return;
+    const interactive = retimeCheck !== null && retimeCheck.checked && retimeRow.style.display !== 'none';
+    const burning = burnCheck !== null && burnCheck.checked && burnRow !== null && burnRow.style.display !== 'none';
+    note.style.display = (interactive && !burning) ? '' : 'none';
+  };
+
   const updateRetimeVisibility = () => {
     const show = hasTranscript() ? 'flex' : 'none';
     retimeRow.style.display = show;
     if (vttRow !== null) vttRow.style.display = show;
     if (srtRow !== null) srtRow.style.display = show;
+    updateVttNote();
     // the flattened project (#455) needs a transcript to flatten, and the
     // container writer to be loaded
     if (projectRow !== null) {
@@ -1200,9 +1214,14 @@
   [retimeCheck, vttCheck, srtCheck, projectCheck, zipCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', updateZipVisibility);
   });
+  // the note depends on BOTH the interactive transcript and the burn choice
+  [retimeCheck, burnCheck].forEach((el) => {
+    if (el !== null) el.addEventListener('change', updateVttNote);
+  });
   sourceEntire.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
   sourceEdited.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
-  formatSelect.addEventListener('change', updateBurnVisibility);
+  // the format decides whether burning is even offered, so the note follows it
+  formatSelect.addEventListener('change', () => { updateBurnVisibility(); updateVttNote(); });
   if (adjustCheck !== null) {
     adjustCheck.addEventListener('change', () => {
       updateAdjustVisibility();
