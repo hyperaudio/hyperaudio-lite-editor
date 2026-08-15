@@ -1,7 +1,7 @@
 /**
  * responsive.js
  * (C) The Hyperaudio Project
- * @version 0.8.11 — last changed in release 0.8.11
+ * @version 1.3.7 — last changed in release 1.3.7
  * @license MIT
  *
  * Small-screen UI toggles for the responsive layout (#349):
