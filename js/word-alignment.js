@@ -1,6 +1,11 @@
 /**
  * ============================================================================
  * TRANSCRIPT ALIGNMENT ALGORITHM
+ * @version 1.3.8 — reworked for #425
+ *
+ * Portions derived from ts-aligner (https://github.com/theirstory/ts-aligner),
+ * Apache License 2.0, © TheirStory contributors; modified. The banded
+ * alignment and greedy fallback in particular originate there (v0.2.2).
  * ============================================================================
  * 
  * PURPOSE:
@@ -104,9 +109,13 @@
  *   stripPunctuation("okay.") → "okay"
  */
 function stripPunctuation(word) {
-  // Remove one or more trailing punctuation characters: .,!?;:'"
-  // The + means "one or more", $ means "at the end of string"
-  return word.replace(/[.,!?;:'"]+$/, '');
+  // Strip punctuation from BOTH edges, including the typographic characters
+  // real transcripts carry (curly quotes, ellipses, dashes, brackets). Interior
+  // characters stay, so "don't" and "co-op" keep their identity — only the
+  // word's edges are dressing. (#425: the old version stripped ASCII trailing
+  // punctuation only, so “quoted” words and (parenthesised) ones never
+  // matched their plain forms.)
+  return word.replace(/^[\s.,!?;:'"“”‘’()\[\]«»…—–-]+|[\s.,!?;:'"“”‘’()\[\]«»…—–-]+$/g, '');
 }
 
 /**
@@ -272,56 +281,40 @@ function extractWordsFromPlainText(plainText) {
  *   "hello: world" → {isValid: false} (lowercase speaker name)
  */
 function isValidSpeakerPattern(text) {
-  // Try bracketed pattern first: [Name] optional(:) optional(whitespace) rest
-  const bracketedMatch = text.match(/^\[([^\]]+)\]\s*:?\s*(.*)$/);
-  
+  // Bracketed pattern: [anything] optional(:) then content. Brackets are an
+  // explicit statement of intent, so the label and the following text can be
+  // ANY script — the old rule required the content to start with [A-Z0-9],
+  // which rejected every non-Latin transcript outright (#425).
+  const bracketedMatch = text.match(/^\[([^\]]+)\]\s*:?\s*(.+)$/);
   if (bracketedMatch) {
-    const potentialSpeaker = bracketedMatch[1];
-    const remainingText = bracketedMatch[2];
-    
-    // If there's remaining text, check if it starts with capital letter
-    if (remainingText.length > 0) {
-      const firstChar = remainingText.charAt(0);
-      
-      // Must start with uppercase letter or digit
-      if (firstChar === firstChar.toUpperCase() && /[A-Z0-9]/.test(firstChar)) {
-        return {
-          isValid: true,
-          speaker: potentialSpeaker,
-          remainingText: remainingText
-        };
-      } else {
-        // Lowercase first character - not a valid speaker pattern
-        return { isValid: false, speaker: null, remainingText: text };
-      }
-    } else {
-      // Empty remaining text - not valid (need actual content)
-      return { isValid: false, speaker: null, remainingText: text };
-    }
+    return {
+      isValid: true,
+      speaker: bracketedMatch[1].trim(),
+      remainingText: bracketedMatch[2]
+    };
   }
-  
-  // Try unbracketed pattern: Name(s) followed by : and then capitalized word
-  // Pattern matches text before colon that can include letters, spaces, periods, and dashes
-  // This allows: "Q:", "A:", "Dr. Johnson:", "Smith-Jones:", "Mary Jane Watson:", etc.
-  const unbracketedMatch = text.match(/^([A-Z][A-Za-z.\-\s]*?):\s*(.+)$/);
-  
+
+  // Unbracketed pattern: label followed by ':' and content. No case rules
+  // (they were Latin-only too); instead the label is bounded — at most six
+  // words and sixty characters, no sentence punctuation — so a sentence that
+  // merely CONTAINS a colon is not mistaken for a speaker.
+  // Whitespace after the colon is REQUIRED here: without it, times of day
+  // ("at 3:30") parse as a speaker called "at 3". "Alice:hello" with no space
+  // loses out, but clock times are far commoner in transcripts than unspaced
+  // labels.
+  const unbracketedMatch = text.match(/^([^:\n]{1,60}?):\s+(.+)$/);
   if (unbracketedMatch) {
-    const potentialSpeaker = unbracketedMatch[1].trim();
-    const remainingText = unbracketedMatch[2];
-    
-    // Check if remaining text starts with capital letter
-    const firstChar = remainingText.charAt(0);
-    
-    if (firstChar === firstChar.toUpperCase() && /[A-Z0-9]/.test(firstChar)) {
+    const label = unbracketedMatch[1].trim();
+    const wordCount = label.split(/\s+/).filter(Boolean).length;
+    if (label.length > 0 && wordCount <= 6 && !/[.!?]{2,}|[,;]/.test(label)) {
       return {
         isValid: true,
-        speaker: potentialSpeaker,
-        remainingText: remainingText
+        speaker: label,
+        remainingText: unbracketedMatch[2]
       };
     }
   }
-  
-  // No valid pattern found
+
   return { isValid: false, speaker: null, remainingText: text };
 }
 
@@ -481,88 +474,223 @@ function detectParagraphs(plainText) {
  *   ]
  */
 function alignWords(sourceWords, targetWords) {
-  const m = sourceWords.length;  // Number of words in machine transcript
-  const n = targetWords.length;  // Number of words in corrected transcript
-  
-  // ===== PHASE 1: BUILD DP TABLE =====
-  // Create a 2D table to store minimum edit distances
-  // dp[i][j] = minimum number of operations to align sourceWords[0..i-1] with targetWords[0..j-1]
-  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-  
-  // Initialize base cases:
-  // dp[i][0] = i: To align i source words with 0 target words, delete all i words
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  
-  // dp[0][j] = j: To align 0 source words with j target words, insert all j words
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  
-  // Fill the DP table using dynamic programming
-  // For each cell, compute the minimum cost of three possible operations
+  const m = sourceWords.length;
+  const n = targetWords.length;
+
+  // Full-table DP is exact but O(m*n): at 10M cells (Uint32Array, ~40MB) we
+  // switch to banded alignment. The band bound matters because this runs in
+  // the EDITOR'S tab, alongside the media and the transcript DOM — ts-aligner
+  // (whose v0.2.2 this rework is informed by) uses a 4000-word band sized for
+  // a dedicated bulk tool, which costs ~2GB; a corrected transcript tracks
+  // its machine original closely by nature, so a 1000-word cumulative-drift
+  // band is generous here at a tenth of the memory.
+  const FULL_TABLE_CELL_LIMIT = 10000000;
+  const BANDWIDTH = 1000;
+
+  if (m * n <= FULL_TABLE_CELL_LIMIT) {
+    return alignWordsStandard(sourceWords, targetWords);
+  }
+  return alignWordsBanded(sourceWords, targetWords, BANDWIDTH);
+}
+
+/**
+ * Exact DP over the full table, as a flat Uint32Array (4 bytes/cell, no
+ * per-row array objects).
+ *
+ * Words are compared NORMALIZED (#425): "recording." must match "recording",
+ * or every punctuation difference counts as a substitution and drags the
+ * whole alignment sideways. Normalization is precomputed once per word — in
+ * the inner loop it would run m*n times.
+ *
+ * Substitution costs 2 (a delete plus an insert) while insert and delete cost
+ * 1 each, so the algorithm prefers to keep exact matches anchored rather than
+ * substitute through one and hand its timing to the wrong word.
+ */
+function alignWordsStandard(sourceWords, targetWords) {
+  const m = sourceWords.length;
+  const n = targetWords.length;
+  const src = sourceWords.map(normalizeWord);
+  const tgt = targetWords.map(normalizeWord);
+
+  const width = n + 1;
+  const dp = new Uint32Array((m + 1) * width);
+  for (let i = 0; i <= m; i++) dp[i * width] = i;
+  for (let j = 0; j <= n; j++) dp[j] = j;
+
   for (let i = 1; i <= m; i++) {
+    const row = i * width;
+    const prev = row - width;
     for (let j = 1; j <= n; j++) {
-      // Check if current words match (case-insensitive comparison)
-      if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
-        // Words match! No operation needed, inherit cost from diagonal
-        dp[i][j] = dp[i-1][j-1];
+      if (src[i - 1] === tgt[j - 1]) {
+        dp[row + j] = dp[prev + j - 1];
       } else {
-        // Words don't match. Choose the minimum cost operation:
-        dp[i][j] = Math.min(
-          dp[i-1][j-1] + 1,  // SUBSTITUTE: Replace source word with target word (cost: 1)
-          dp[i-1][j] + 1,    // DELETE: Remove source word (cost: 1)
-          dp[i][j-1] + 1     // INSERT: Add target word (cost: 1)
+        dp[row + j] = Math.min(
+          dp[prev + j - 1] + 2,  // substitute
+          dp[prev + j] + 1,      // delete
+          dp[row + j - 1] + 1    // insert
         );
       }
     }
   }
-  
-  // ===== PHASE 2: BACKTRACK TO FIND ALIGNMENT =====
-  // Now that we have the minimum edit distance, trace back through the table
-  // to find which specific operations were used
+
+  // Backtrack from the corner, reading the same costs the fill used.
   const alignment = [];
-  let i = m;  // Start at bottom-right corner (end of source words)
-  let j = n;  // Start at bottom-right corner (end of target words)
-  
-  // Work backwards from dp[m][n] to dp[0][0]
+  let i = m, j = n;
   while (i > 0 || j > 0) {
     if (i === 0) {
-      // No more source words left, all remaining target words are insertions
-      alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
+      alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j - 1 });
       j--;
     } else if (j === 0) {
-      // No more target words left, all remaining source words are deletions
-      alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
+      alignment.push({ type: 'delete', sourceIdx: i - 1, targetIdx: null });
       i--;
+    } else if (src[i - 1] === tgt[j - 1]) {
+      alignment.push({ type: 'match', sourceIdx: i - 1, targetIdx: j - 1 });
+      i--; j--;
     } else {
-      // Both sequences still have words, determine which operation was used
-      const current = dp[i][j];
-      
-      // Check if words match (this gives us the operation for free)
-      if (sourceWords[i-1].toLowerCase() === targetWords[j-1].toLowerCase()) {
-        alignment.push({ type: 'match', sourceIdx: i-1, targetIdx: j-1 });
+      const here = dp[i * width + j];
+      if (here === dp[(i - 1) * width + j - 1] + 2) {
+        alignment.push({ type: 'substitute', sourceIdx: i - 1, targetIdx: j - 1 });
+        i--; j--;
+      } else if (here === dp[(i - 1) * width + j] + 1) {
+        alignment.push({ type: 'delete', sourceIdx: i - 1, targetIdx: null });
         i--;
-        j--;
-      } 
-      // Check if the current cost came from a substitution (diagonal)
-      else if (current === dp[i-1][j-1] + 1) {
-        alignment.push({ type: 'substitute', sourceIdx: i-1, targetIdx: j-1 });
-        i--;
-        j--;
-      } 
-      // Check if the current cost came from a deletion (move up)
-      else if (current === dp[i-1][j] + 1) {
-        alignment.push({ type: 'delete', sourceIdx: i-1, targetIdx: null });
-        i--;
-      } 
-      // Otherwise, it must have come from an insertion (move left)
-      else {
-        alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j-1 });
+      } else {
+        alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j - 1 });
         j--;
       }
     }
   }
-  
-  // Reverse the alignment array because we built it backwards
   alignment.reverse();
+  return alignment;
+}
+
+/**
+ * Banded alignment for inputs too large for the full table: only cells within
+ * `bandwidth` of the (scaled) diagonal are computed, on the observation that a
+ * corrected transcript never wanders far from its machine original. Memory is
+ * O(m * bandwidth) at 5 bytes per cell (Uint32 cost + Uint8 backtrack).
+ * If the corner proves unreachable — drift beyond the band — the greedy
+ * fallback still produces a usable alignment rather than nothing.
+ */
+function alignWordsBanded(sourceWords, targetWords, bandwidth) {
+  const m = sourceWords.length;
+  const n = targetWords.length;
+  if (m === 0) return targetWords.map((_, j) => ({ type: 'insert', sourceIdx: null, targetIdx: j }));
+  if (n === 0) return sourceWords.map((_, i) => ({ type: 'delete', sourceIdx: i, targetIdx: null }));
+
+  const src = sourceWords.map(normalizeWord);
+  const tgt = targetWords.map(normalizeWord);
+
+  // the band must at least cover the sequences' length difference
+  const effectiveBandwidth = Math.max(bandwidth, Math.abs(m - n) + 50);
+  const bandWidth = 2 * effectiveBandwidth + 1;
+
+  const INF = 0xFFFFFFFF;
+  const NONE = 0, MATCH = 1, SUB = 2, DEL = 3, INS = 4;
+  const costs = new Uint32Array((m + 1) * bandWidth).fill(INF);
+  const backs = new Uint8Array((m + 1) * bandWidth);
+
+  const diagOf = (i) => Math.round(i * n / m);
+  const idxOf = (i, j) => {
+    const offset = j - diagOf(i) + effectiveBandwidth;
+    if (offset < 0 || offset >= bandWidth) return -1;
+    return i * bandWidth + offset;
+  };
+  const costAt = (i, j) => {
+    if (i < 0 || j < 0 || j > n) return INF;
+    const k = idxOf(i, j);
+    return k < 0 ? INF : costs[k];
+  };
+
+  for (let j = 0; j <= n; j++) {
+    const k = idxOf(0, j);
+    if (k >= 0) { costs[k] = j; backs[k] = j > 0 ? INS : NONE; }
+  }
+
+  for (let i = 1; i <= m; i++) {
+    const diag = diagOf(i);
+    const minJ = Math.max(0, diag - effectiveBandwidth);
+    const maxJ = Math.min(n, diag + effectiveBandwidth);
+    for (let j = minJ; j <= maxJ; j++) {
+      const k = idxOf(i, j);
+      if (k < 0) continue;
+      if (j === 0) {
+        costs[k] = i;
+        backs[k] = DEL;
+        continue;
+      }
+      const isMatch = src[i - 1] === tgt[j - 1];
+      let best = costAt(i - 1, j - 1) + (isMatch ? 0 : 2);
+      let back = isMatch ? MATCH : SUB;
+      const del = costAt(i - 1, j) + 1;
+      if (del < best) { best = del; back = DEL; }
+      const ins = costAt(i, j - 1) + 1;
+      if (ins < best) { best = ins; back = INS; }
+      costs[k] = best;
+      backs[k] = back;
+    }
+  }
+
+  const endIdx = idxOf(m, n);
+  if (endIdx < 0 || costs[endIdx] === INF) {
+    console.warn('word-alignment: drift exceeded the band — using greedy fallback');
+    return alignWordsGreedy(src, tgt);
+  }
+
+  const alignment = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i === 0) { alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j - 1 }); j--; continue; }
+    if (j === 0) { alignment.push({ type: 'delete', sourceIdx: i - 1, targetIdx: null }); i--; continue; }
+    switch (backs[idxOf(i, j)]) {
+      case MATCH: alignment.push({ type: 'match', sourceIdx: i - 1, targetIdx: j - 1 }); i--; j--; break;
+      case SUB: alignment.push({ type: 'substitute', sourceIdx: i - 1, targetIdx: j - 1 }); i--; j--; break;
+      case DEL: alignment.push({ type: 'delete', sourceIdx: i - 1, targetIdx: null }); i--; break;
+      case INS: alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j - 1 }); j--; break;
+      default: i--; j--; // unreachable given a valid fill; never loop forever
+    }
+  }
+  alignment.reverse();
+  return alignment;
+}
+
+/**
+ * Greedy fallback when even the band cannot reach the corner: walk both
+ * sequences, looking ahead a window for the next agreement. Not optimal, but
+ * always terminates with a usable alignment. Receives NORMALIZED words.
+ */
+function alignWordsGreedy(src, tgt) {
+  const alignment = [];
+  const m = src.length;
+  const n = tgt.length;
+  const LOOKAHEAD = 50;
+
+  let i = 0, j = 0;
+  while (i < m && j < n) {
+    if (src[i] === tgt[j]) {
+      alignment.push({ type: 'match', sourceIdx: i, targetIdx: j });
+      i++; j++;
+      continue;
+    }
+    let foundInTarget = -1;
+    for (let k = j + 1; k < Math.min(j + LOOKAHEAD, n); k++) {
+      if (src[i] === tgt[k]) { foundInTarget = k; break; }
+    }
+    let foundInSource = -1;
+    for (let k = i + 1; k < Math.min(i + LOOKAHEAD, m); k++) {
+      if (src[k] === tgt[j]) { foundInSource = k; break; }
+    }
+    if (foundInTarget >= 0 && (foundInSource < 0 || foundInTarget - j <= foundInSource - i)) {
+      while (j < foundInTarget) { alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j }); j++; }
+    } else if (foundInSource >= 0) {
+      while (i < foundInSource) { alignment.push({ type: 'delete', sourceIdx: i, targetIdx: null }); i++; }
+    } else {
+      alignment.push({ type: 'substitute', sourceIdx: i, targetIdx: j });
+      i++; j++;
+    }
+  }
+  while (i < m) { alignment.push({ type: 'delete', sourceIdx: i, targetIdx: null }); i++; }
+  while (j < n) { alignment.push({ type: 'insert', sourceIdx: null, targetIdx: j }); j++; }
   return alignment;
 }
 
@@ -605,71 +733,92 @@ function alignWords(sourceWords, targetWords) {
 function generateAlignedJSON(alignment, sourceWords, targetWords, timings, plainText) {
   // ===== PHASE 1: BUILD OUTPUT ARRAY WITH WORDS AND TIMINGS =====
   
-  // Array to store final words with their timing information
-  // Each element: {word, start, end, targetIdx}
+  // Words that matched (or substituted) take their machine timing directly
+  // and act as ANCHORS. Inserted words are collected into runs and their
+  // timing DISTRIBUTED across the gap between the surrounding anchors (#425)
+  // — the old behaviour gave every inserted word the next anchor's timing
+  // verbatim, so a run of insertions collapsed onto identical timestamps:
+  // zero-duration words, overlapping cues, and highlighting that jumped.
+  //
+  // The distribution is weighted by syllable estimate — contiguous vowel
+  // groups, the same heuristic the editor's word-split feature uses — so a
+  // long word takes a proportionally longer span of the silence.
   const outputWords = [];
-  
-  // Track the most recent timing for interpolation purposes
+
+  const syllableWeight = (word) => {
+    const groups = String(word).toLowerCase().match(/[aeiouyàáâäåèéêëìíîïòóôöùúûüæø]+/g);
+    return groups && groups.length > 0 ? groups.length : 1;
+  };
+
+  // Nominal per-word duration for runs with an open end (before the first
+  // anchor, after the last, or a transcript with no anchors at all).
+  const NOMINAL_WORD_SECONDS = 0.25;
+
+  const distributeRun = (words, startTime, endTime) => {
+    const span = Math.max(0, endTime - startTime);
+    const weights = words.map((w) => syllableWeight(w.word));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let cursor = startTime;
+    words.forEach((w, k) => {
+      // the last word absorbs the rounding remainder, keeping the run flush
+      const share = k === words.length - 1
+        ? (startTime + span) - cursor
+        : span * (weights[k] / totalWeight);
+      w.start = cursor;
+      w.end = cursor + share;
+      cursor = w.end;
+    });
+  };
+
+  let pendingRun = [];
   let lastTiming = null;
-  
-  // Process each alignment operation to build the output
-  alignment.forEach((align, idx) => {
-    
-    // CASE 1: MATCH or SUBSTITUTE
-    // The target word corresponds to a source word, so we can use its timing directly
+
+  const flushRun = (nextTiming) => {
+    if (pendingRun.length === 0) return;
+    if (lastTiming !== null && nextTiming !== null) {
+      // between two anchors: share out the silence between them
+      distributeRun(pendingRun, lastTiming.end, Math.max(lastTiming.end, nextTiming.start));
+    } else if (nextTiming !== null) {
+      // before the first anchor: back-fill toward it, clamped at zero
+      const total = Math.min(nextTiming.start, pendingRun.length * NOMINAL_WORD_SECONDS);
+      distributeRun(pendingRun, Math.max(0, nextTiming.start - total), nextTiming.start);
+    } else if (lastTiming !== null) {
+      // after the last anchor: run on at nominal pace
+      distributeRun(pendingRun, lastTiming.end,
+        lastTiming.end + pendingRun.length * NOMINAL_WORD_SECONDS);
+    } else {
+      // no anchors anywhere: a transcript with no matches at all
+      distributeRun(pendingRun, 0, pendingRun.length * NOMINAL_WORD_SECONDS);
+    }
+    pendingRun = [];
+  };
+
+  alignment.forEach((align) => {
     if (align.type === 'match' || align.type === 'substitute') {
       const timing = timings[align.sourceIdx];
+      flushRun(timing);
       outputWords.push({
-        word: targetWords[align.targetIdx],   // Use corrected word text
-        start: timing.start,                  // Use machine timing (seconds)
-        end: timing.end,                      // Use machine timing (seconds)
-        targetIdx: align.targetIdx            // Track position in target array
+        word: targetWords[align.targetIdx],
+        start: timing.start,
+        end: timing.end,
+        targetIdx: align.targetIdx
       });
-      lastTiming = timing;  // Remember this for interpolating inserted words
-    } 
-    
-    // CASE 2: INSERT
-    // This word was added in the corrected transcript, so it has no direct timing.
-    // We need to estimate/interpolate the timing from nearby words.
-    else if (align.type === 'insert') {
-      // Look ahead in the alignment to find the next word with timing
-      let nextTiming = null;
-      for (let i = idx + 1; i < alignment.length; i++) {
-        if (alignment[i].type === 'match' || alignment[i].type === 'substitute') {
-          nextTiming = timings[alignment[i].sourceIdx];
-          break;  // Found it, stop searching
-        }
-      }
-      
-      // Use the next timing if found, otherwise fall back to the last timing
-      // This means inserted words will "borrow" timing from adjacent words
-      const timing = nextTiming || lastTiming;
-      
-      if (timing) {
-        outputWords.push({
-          word: targetWords[align.targetIdx],
-          start: timing.start,    // Borrow start time from nearby word
-          end: timing.end,        // Borrow end time from nearby word
-          targetIdx: align.targetIdx
-        });
-      } else {
-        // FALLBACK: If no timing available at all (rare edge case)
-        // Use dummy timing values so the output is still valid
-        outputWords.push({
-          word: targetWords[align.targetIdx],
-          start: 0,     // Start at beginning
-          end: 0.1,     // 100ms duration
-          targetIdx: align.targetIdx
-        });
-      }
+      lastTiming = timing;
+    } else if (align.type === 'insert') {
+      const placeholder = {
+        word: targetWords[align.targetIdx],
+        start: 0,
+        end: 0,
+        targetIdx: align.targetIdx
+      };
+      outputWords.push(placeholder); // position holds; times filled at flush
+      pendingRun.push(placeholder);
     }
-    
-    // CASE 3: DELETE
-    // Word existed in machine transcript but not in corrected transcript
-    // We simply skip it - it won't appear in the output at all
-    // (No code needed here, just explanation)
+    // 'delete': the machine word has no counterpart in the corrected text —
+    // it simply does not appear in the output
   });
-  
+  flushRun(null);
+
   // ===== PHASE 2: DETECT PARAGRAPH STRUCTURE =====
   // Analyze the plain text to find paragraph boundaries and speaker labels
   const paragraphMap = detectParagraphs(plainText);
@@ -789,15 +938,6 @@ function alignTranscripts(machineTranscript, correctedText) {
     correctedText
   );
 
-  console.log("original timings");
-  console.log(sourceWords);
-  console.log("machine transcript");
-  console.log(machineTranscript)
-  console.log("timings");
-  console.log(timings);
-  console.log("aligned timings");
-  console.log(alignedJSON);
-  
   return alignedJSON;
 }
 
@@ -816,6 +956,9 @@ if (typeof module !== 'undefined' && module.exports) {
     extractWordsFromPlainText,
     detectParagraphs,
     alignWords,
+    alignWordsStandard,
+    alignWordsBanded,
+    alignWordsGreedy,
     generateAlignedJSON,
     // Export helpers
     stripPunctuation,
