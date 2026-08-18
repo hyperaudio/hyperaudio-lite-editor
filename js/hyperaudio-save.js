@@ -1108,6 +1108,74 @@
 
   // Replay a loaded project into the editor. Mirrors what the legacy
   // renderTranscript() does for Recents, but builds the DOM safely from JSON.
+  /* --------------------------------------------------------------------------
+   * Session resume (#587): switching back to a project restores your place —
+   * the scroll position and the paused playhead. In-memory only: a reload
+   * starts clean, and durable resume is a separate decision (it would touch
+   * the library format). The caret is deliberately NOT restored: it is input
+   * routing, not context — restoring it restores focus, and a focused
+   * transcript captures the next keystroke. (Document editors, Google Docs
+   * included, restore nothing; this is already more restorative than that.)
+   *
+   * Scroll anchors to the first visible word's data-m rather than a pixel
+   * offset — pixels break when the viewport, the font, or the text changes.
+   * ------------------------------------------------------------------------ */
+  const resumePositions = new Map(); // project id → { wordM, playhead }
+
+  function scrollContainerEl() {
+    // the holder scrolls on every band; the transcript itself never does
+    return document.querySelector('.transcript-holder');
+  }
+
+  function captureResumePosition() {
+    if (session.projectId === null) return;
+    const holder = scrollContainerEl();
+    const player = document.getElementById('hyperplayer');
+    let wordM = null;
+    if (holder !== null) {
+      const holderTop = holder.getBoundingClientRect().top;
+      const words = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+      for (const span of words) {
+        if (span.getBoundingClientRect().bottom >= holderTop) {
+          wordM = span.getAttribute('data-m');
+          break;
+        }
+      }
+    }
+    resumePositions.set(session.projectId, {
+      wordM,
+      playhead: player !== null && Number.isFinite(player.currentTime) ? player.currentTime : 0,
+    });
+  }
+
+  function restoreResumePosition(id) {
+    const pos = resumePositions.get(id);
+    const holder = scrollContainerEl();
+    if (holder !== null) {
+      if (pos && pos.wordM !== null) {
+        const span = document.querySelector(
+          '#hypertranscript span[data-m="' + CSS.escape(pos.wordM) + '"]');
+        if (span !== null) {
+          span.scrollIntoView({ block: 'start' });
+        } else {
+          holder.scrollTop = 0; // the anchor word was edited away — the top
+        }
+      } else {
+        // unknown project (or nothing captured): its beginning, not the
+        // previous project's offset — replaceChildren keeps scrollTop, which
+        // was the leak this feature grew out of
+        holder.scrollTop = 0;
+      }
+    }
+    const player = document.getElementById('hyperplayer');
+    if (player === null || !pos || !(pos.playhead > 0)) return;
+    // the new media's metadata may not be in yet; the seek waits for it, and
+    // playback stays PAUSED — restoring your place is not resuming playback
+    const seek = () => { try { player.currentTime = pos.playhead; } catch (e) { /* not seekable */ } };
+    if (player.readyState >= 1) seek();
+    else player.addEventListener('loadedmetadata', seek, { once: true });
+  }
+
   function apply(loaded) {
     suppressCapture = true;
     try {
@@ -2604,6 +2672,7 @@
       if (t === null || t.getAttribute('aria-busy') !== 'true') return true;
     }
     leaveTranscriptionView();
+    captureResumePosition(); // where you are in the OUTGOING project (#587)
     const files = await readProjectFiles(id);
     if (files === null) return false;
     await flushPendingDraft();
@@ -2614,6 +2683,7 @@
     } finally {
       suppressCapture = false;
     }
+    restoreResumePosition(id); // your place in the INCOMING one (#587)
     await acquireProjectLock(id);
     const lib = await readLibrary();
     const entry = lib.projects.find((p) => p.id === id);
