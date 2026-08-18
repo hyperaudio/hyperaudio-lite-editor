@@ -1705,3 +1705,72 @@ test('a project switch does not leave a stray caret above the transcript', async
   expect(result.hostStillFocused).toBe(false);
   expect(result.selectionOnHost).toBe(false);
 });
+
+// #587 — switching back to a project restores your place: scroll (anchored to
+// the first visible word, not pixels) and the paused playhead. An UNKNOWN
+// project opens at its top — previously replaceChildren kept the scroll
+// container's offset, so the incoming project inherited the outgoing one's
+// scroll position. Session-only: nothing persists.
+test('a project switch restores scroll and playhead; unknown projects start at the top (#587)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  // a long transcript, so there is somewhere to scroll to
+  await openFixture(page, testInfo, dialogs, (project) => {
+    // word0 keeps the fixture's expected first word: openFixture asserts it
+    const words = [{ text: 'Benvenuti ', start: 0, end: 0.4 }];
+    for (let i = 1; i < 600; i += 1) {
+      words.push({ text: 'word' + i + ' ', start: i * 0.5, end: i * 0.5 + 0.4 });
+    }
+    project.transcript.words = words;
+    project.transcript.paragraphs = [{ speaker: '', start: 0, end: 300 }];
+  });
+  await awaitLibraryEntry(page);
+  const longId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  // a second, short project to switch to
+  await page.evaluate(async (id) => { await window.HyperaudioSave.library.duplicate(id); }, longId);
+  const shortId = await page.evaluate(async (a) => {
+    const list = await window.HyperaudioSave.library.list();
+    return list.find((e) => e.id !== a).id;
+  }, longId);
+
+  // scroll deep into the long project and note the first visible word
+  const anchorM = await page.evaluate(() => {
+    const holder = document.querySelector('.transcript-holder');
+    holder.scrollTop = holder.scrollHeight / 2;
+    const top = holder.getBoundingClientRect().top;
+    const words = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+    for (const s of words) {
+      if (s.getBoundingClientRect().bottom >= top) return s.getAttribute('data-m');
+    }
+    return null;
+  });
+  expect(anchorM).not.toBeNull();
+
+  // park the playhead mid-media before leaving
+  await page.evaluate(() => {
+    const player = document.getElementById('hyperplayer');
+    if (player.readyState >= 1) player.currentTime = 3;
+  });
+
+  // switching to the OTHER copy must open at ITS top, not inherit the offset
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), shortId);
+  await page.waitForFunction((id) => window.HyperaudioSave.library.currentId() === id, shortId);
+  expect(await page.evaluate(() => document.querySelector('.transcript-holder').scrollTop)).toBe(0);
+
+  // ...and switching BACK restores the anchored word to the visible top
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), longId);
+  await page.waitForFunction((id) => window.HyperaudioSave.library.currentId() === id, longId);
+  const restored = await page.evaluate(() => {
+    const holder = document.querySelector('.transcript-holder');
+    const top = holder.getBoundingClientRect().top;
+    const words = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+    for (const s of words) {
+      if (s.getBoundingClientRect().bottom >= top) {
+        return { m: s.getAttribute('data-m'), scrollTop: holder.scrollTop };
+      }
+    }
+    return null;
+  });
+  expect(restored.scrollTop).toBeGreaterThan(0);
+  expect(Math.abs(Number(restored.m) - Number(anchorM))).toBeLessThanOrEqual(1000); // within ~2 words
+});
