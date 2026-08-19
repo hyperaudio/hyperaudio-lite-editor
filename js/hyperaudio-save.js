@@ -364,14 +364,22 @@
   // STORED because media formats are already compressed.
   function zipProject(files, JSZipImpl, outType, onUpdate) {
     const zip = new JSZipImpl();
+    // Order matters for hosts, not for readers (§ 2.3; readers are
+    // path-addressed and MUST NOT depend on order beyond mimetype).
+    // mimetype first for magic-byte sniffing, then the MEDIA — which never
+    // changes after import — and only then the entries rewritten on every
+    // save. That puts the mutable bytes in the archive's TAIL: a transcript
+    // edit rewrites a few KB there instead of shifting a multi-GB member,
+    // which is what block-level delta sync (Dropbox, OneDrive) and
+    // byte-range media serving both need to stay cheap.
     zip.file(ENTRY.mimetype, CONTAINER_MIMETYPE, { compression: 'STORE' });
+    if (files.media) {
+      zip.file(MEDIA_DIR + sanitizeMediaFilename(files.media.name), files.media.data, { compression: 'STORE', binary: true });
+    }
     zip.file(ENTRY.json, files.json);
     if (files.html) zip.file(ENTRY.html, files.html);
     if (files.originalJson) zip.file(ENTRY.original, files.originalJson);
     if (files.captionsVtt) zip.file(ENTRY.captions, files.captionsVtt);
-    if (files.media) {
-      zip.file(MEDIA_DIR + sanitizeMediaFilename(files.media.name), files.media.data, { compression: 'STORE', binary: true });
-    }
     // onUpdate is JSZip's own progress callback (second argument to
     // generateAsync) — optional so the node pure-layer tests call this
     // unchanged. Packing the media dominates the wait, so this is the only
