@@ -1,5 +1,17 @@
 /* Extracted verbatim from index.html (#334) — loaded as a module in the same document order. */
-  import { AudioData } from "./audio-cut.js";
+  // The kept sections of the ORIGINAL media, as plain value objects. This was
+  // the one live import from js/audio-cut.js, whose destructive machinery
+  // (decode, splice, re-encode, download) has had no callers since the export
+  // modal took that job (#289/#291/#292) — editing is referential: strikes and
+  // gap-skips are annotations applied at playback and at export, never written
+  // back into the media (#585, spec § 1).
+  class AudioData {
+    constructor(url, start, stop) {
+      this.url = url;
+      this.start = start;
+      this.stop = stop;
+    }
+  }
 
   const audioDataArray = [];
   let skipListenersAttached = false;
