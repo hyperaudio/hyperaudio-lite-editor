@@ -14,8 +14,9 @@ this file supersedes that comment. Shared conformance fixtures live in
 | 1.2 | `media.kind: "none"` (§ 7.2.2); writer-side unknown-field preservation made normative (§ 8.1); STORE required for media entries on read (§ 7.1); `media.path` segment rule and byte-measured caps pinned (§ 10.2, § 10.3); container exclusion of app/session identity made explicit (§ 9) |
 
 > **Clarifications since 1.2, no version bump:** the `versions/` namespace is
-> reserved (§ 2.2) and § 9.4's "editor history" exclusion is narrowed to
-> session history to accommodate it. Neither changes what a conforming 1.2
+> reserved (§ 2.2); § 9.4's "editor history" exclusion is narrowed to
+> session history to accommodate it; and § 2.3 recommends media-before-text
+> member ordering (writer-side only — readers never depended on order). Neither changes what a conforming 1.2
 > writer emits or what a 1.2 reader accepts, so `formatVersion` stays at
 > `1.2`; the bump belongs to the release that first *writes* versions.
 
@@ -194,6 +195,27 @@ Consequences for whoever specifies the feature:
   representation, timestamps and identifiers, pruning policy, malformed-entry
   behaviour, and the § 10 security tests (path traversal, zip bombs,
   oversized entries, invalid UTF-8).
+
+### 2.3 Member order: media before mutable text
+
+After `mimetype`, a writer **SHOULD** place the media member (§ 7.1) before
+the entries it rewrites on every save (`hyperaudio.json`, `transcript.html`,
+`captions.vtt`). The media never changes after import; the text entries change
+constantly. Ordering them media-first puts every mutable byte in the
+archive's **tail**, which buys three things at no cost:
+
+- a host updating the transcript in place rewrites only the tail; the media
+  member's bytes and offsets never move;
+- block-level delta sync (Dropbox, OneDrive and similar) uploads a few KB for
+  a transcript edit instead of re-hashing past a moved multi-GB member;
+- because the media is a STORE entry it is a contiguous byte range, so a host
+  can serve it by range directly from the container, with offsets that stay
+  stable across saves.
+
+This is a **writer-side** convention only. Readers are path-addressed and
+**MUST NOT** depend on entry order beyond `mimetype` being first (§ 10.6), so
+containers written in either order remain valid and no version bump is
+required.
 
 ---
 
@@ -767,6 +789,8 @@ excepted.
       never modifies it again
 - [ ] writes the media byte for byte, STORE entry, name preserved — or, for
       a link save (§ 7.2.1), no media entry and an http(s) `url`
+- [ ] places the media member before the entries rewritten on every save, so
+      the mutable bytes sit in the archive's tail (§ 2.3)
 - [ ] never writes keys/credentials/derived artifacts
 
 **A conforming reader:**
