@@ -414,3 +414,23 @@ test('gather-side class sanitizer keeps the speaker class, strips pollution (#45
   const mixed = save.sanitizeTranscriptClasses('<span data-m="0" class="speaker read">[A] </span>');
   assert.equal(mixed, '<span data-m="0" class="speaker">[A] </span>');
 });
+
+// #584 (§ 2.3) — member order is a writer-side convention with real
+// consequences for hosts: mimetype first for sniffing, then the media (which
+// never changes after import), then the entries rewritten on every save. That
+// keeps every mutable byte in the archive's tail, so a transcript edit does
+// not shift a multi-GB member — what block-level delta sync and byte-range
+// media serving both depend on.
+test('the container writes mimetype, then media, then the mutable text entries', async () => {
+  const bytes = await save.zipProject(sampleFiles(), JSZip, 'uint8array');
+  const order = [];
+  const zip = await JSZip.loadAsync(bytes);
+  zip.forEach((path, file) => { if (!file.dir) order.push(path); }); // skip the implicit media/ folder entry
+  assert.equal(order[0], 'mimetype');
+  assert.equal(order[1], 'media/test.mp4');
+  // every entry that a save rewrites comes after the media
+  const mediaAt = order.indexOf('media/test.mp4');
+  ['hyperaudio.json', 'transcript.html', 'captions.vtt'].forEach((name) => {
+    assert.ok(order.indexOf(name) > mediaAt, name + ' must follow the media');
+  });
+});

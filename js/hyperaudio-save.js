@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.8 — last changed in release 1.3.8
+ * @version 1.3.9 — last changed in release 1.3.9
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -364,14 +364,22 @@
   // STORED because media formats are already compressed.
   function zipProject(files, JSZipImpl, outType, onUpdate) {
     const zip = new JSZipImpl();
+    // Order matters for hosts, not for readers (§ 2.3; readers are
+    // path-addressed and MUST NOT depend on order beyond mimetype).
+    // mimetype first for magic-byte sniffing, then the MEDIA — which never
+    // changes after import — and only then the entries rewritten on every
+    // save. That puts the mutable bytes in the archive's TAIL: a transcript
+    // edit rewrites a few KB there instead of shifting a multi-GB member,
+    // which is what block-level delta sync (Dropbox, OneDrive) and
+    // byte-range media serving both need to stay cheap.
     zip.file(ENTRY.mimetype, CONTAINER_MIMETYPE, { compression: 'STORE' });
+    if (files.media) {
+      zip.file(MEDIA_DIR + sanitizeMediaFilename(files.media.name), files.media.data, { compression: 'STORE', binary: true });
+    }
     zip.file(ENTRY.json, files.json);
     if (files.html) zip.file(ENTRY.html, files.html);
     if (files.originalJson) zip.file(ENTRY.original, files.originalJson);
     if (files.captionsVtt) zip.file(ENTRY.captions, files.captionsVtt);
-    if (files.media) {
-      zip.file(MEDIA_DIR + sanitizeMediaFilename(files.media.name), files.media.data, { compression: 'STORE', binary: true });
-    }
     // onUpdate is JSZip's own progress callback (second argument to
     // generateAsync) — optional so the node pure-layer tests call this
     // unchanged. Packing the media dominates the wait, so this is the only
@@ -576,6 +584,87 @@
     } catch (e) { /* nothing to delete */ }
   }
 
+  /* The rest of the storage surface (#586). Everything the editor does to
+   * storage goes through this handful of functions rather than traversing
+   * OPFS at the call site — which a dozen places used to do. That keeps the
+   * surface honest and small (root files; project directories with an
+   * optional media/ subdirectory), and it is the precondition for ever
+   * letting a host inject its own backend. It is NOT that interface yet: no
+   * injection point is exposed here, deliberately, until a host needs one.
+   *
+   * Contract worth stating even now: writes replace ATOMICALLY. readLibrary
+   * reads library.json without a lock precisely because createWritable swaps
+   * on close, so a torn read is impossible. */
+  const storageRoot = () => navigator.storage.getDirectory();
+
+  async function readRootText(name) {
+    try {
+      return await readTextFrom(await storageRoot(), name);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function deleteRootEntry(name) {
+    try {
+      await (await storageRoot()).removeEntry(name);
+    } catch (e) { /* nothing to delete */ }
+  }
+
+  async function getMediaDir(id, create) {
+    const dir = await getProjectDir(id, create);
+    return dir.getDirectoryHandle('media', { create: !!create });
+  }
+
+  // The project's media as a File — one media per project, so the first file
+  // in the directory IS the media. null when the project has none stored.
+  async function firstMediaFileOf(id) {
+    try {
+      const mediaDir = await getMediaDir(id, false);
+      for await (const [, handle] of mediaDir.entries()) {
+        if (handle.kind === 'file') return await handle.getFile();
+      }
+    } catch (e) { /* no media directory */ }
+    return null;
+  }
+
+  // One media per project: drop anything that is not the file being kept.
+  async function pruneMediaExcept(id, keepName) {
+    try {
+      const mediaDir = await getMediaDir(id, true);
+      for await (const name of mediaDir.keys()) {
+        if (name !== keepName) await mediaDir.removeEntry(name).catch(() => {});
+      }
+      return mediaDir;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function copyMediaTo(srcDir, dstId) {
+    try {
+      const srcMedia = await srcDir.getDirectoryHandle('media');
+      const dstMedia = await getMediaDir(dstId, true);
+      for await (const [name, handle] of srcMedia.entries()) {
+        if (handle.kind === 'file') await writeFileTo(dstMedia, name, await handle.getFile());
+      }
+    } catch (e) { /* no media to copy */ }
+  }
+
+  async function deleteWorkEntry(name, options) {
+    try {
+      const work = await getWorkRoot(false);
+      await work.removeEntry(name, options || undefined);
+    } catch (e) { /* nothing to delete */ }
+  }
+
+  async function deleteProjectEntry(id, name, options) {
+    try {
+      const dir = await getProjectDir(id, false);
+      await dir.removeEntry(name, options || undefined);
+    } catch (e) { /* nothing to delete */ }
+  }
+
   /* --------------------------------------------------------------------------
    * The library index — library.json at the OPFS root. Reads are lock-free
    * (a torn read is impossible: createWritable swaps atomically on close);
@@ -587,8 +676,7 @@
 
   async function readLibrary() {
     try {
-      const root = await navigator.storage.getDirectory();
-      const text = await readTextFrom(root, LIBRARY_FILE);
+      const text = await readRootText(LIBRARY_FILE);
       const lib = text !== null ? JSON.parse(text) : null;
       if (lib === null || typeof lib !== 'object' || !Array.isArray(lib.projects)) {
         return { projects: [] };
@@ -603,8 +691,7 @@
     const run = async () => {
       const lib = await readLibrary();
       mutate(lib);
-      const root = await navigator.storage.getDirectory();
-      await writeFileTo(root, LIBRARY_FILE, JSON.stringify(lib));
+      await writeFileTo(await storageRoot(), LIBRARY_FILE, JSON.stringify(lib));
       return lib;
     };
     let lib;
@@ -1463,8 +1550,7 @@
       snapshotChain = snapshotChain.then(async () => {
         try {
           const state = await writeStateFile(projectId, SAVED_FILE);
-          const dir = await getProjectDir(projectId, false);
-          await dir.removeEntry(DRAFT_FILE).catch(() => {});
+          await deleteProjectEntry(projectId, DRAFT_FILE);
           await touchLibraryEntry(projectId, state, { saved: true });
           ok = true;
         } catch (e) {
@@ -1512,13 +1598,8 @@
   async function writeMediaOnce() {
     if (!opfsAvailable || session.mediaFile === null || !hasProjectLock || session.projectId === null) return;
     try {
-      const dir = await getProjectDir(session.projectId, true);
-      const mediaDir = await dir.getDirectoryHandle('media', { create: true });
-      // one media per project: drop any previous file first
-      for await (const name of mediaDir.keys()) {
-        if (name !== session.mediaFile.name) await mediaDir.removeEntry(name).catch(() => {});
-      }
-      await writeFileTo(mediaDir, session.mediaFile.name, session.mediaFile);
+      const mediaDir = await pruneMediaExcept(session.projectId, session.mediaFile.name);
+      if (mediaDir !== null) await writeFileTo(mediaDir, session.mediaFile.name, session.mediaFile);
     } catch (e) {
       console.warn('hyperaudio-save: media write failed', e);
     }
@@ -2754,13 +2835,7 @@
         const text = await readTextFrom(src, name);
         if (text !== null) await writeFileTo(dst, name, text);
       }
-      try {
-        const srcMedia = await src.getDirectoryHandle('media');
-        const dstMedia = await dst.getDirectoryHandle('media', { create: true });
-        for await (const [name, handle] of srcMedia.entries()) {
-          if (handle.kind === 'file') await writeFileTo(dstMedia, name, await handle.getFile());
-        }
-      } catch (e) { /* no media dir */ }
+      await copyMediaTo(src, newId);
       // the copy carries its own title so a later switch doesn't resurrect the old one
       await rewriteStateTitle(dst, DRAFT_FILE, copyName);
       await rewriteStateTitle(dst, SAVED_FILE, copyName);
@@ -2783,14 +2858,9 @@
   }
 
   // Delete removes the directory and the index entry. Deleting the CURRENT
-  // project leaves the document on screen (the only undo there is) but
-  // nothing owns it anymore — autosave stops until the panel's Restore
-  // re-homes it as a new entry.
-  // Deleting the CURRENT project keeps the document ON SCREEN — the undo's
-  // raw material — while the library entry and directory go. The panel shows
-  // a placeholder row carrying Restore (which re-homes the on-screen
-  // document) in the deleted row's place; any navigation elsewhere replaces
-  // the screen and withdraws the offer. Returns { wasCurrent }.
+  // project releases the session's claim on it — the caller is expected to
+  // put another project on screen, since what stays there owns nothing and
+  // autosaves nowhere. Returns { wasCurrent } to say whether that is needed.
   async function deleteProject(id) {
     const wasCurrent = id === session.projectId;
     if (wasCurrent) {
@@ -2806,38 +2876,6 @@
       lib.projects = lib.projects.filter((p) => p.id !== id);
     });
     return { wasCurrent };
-  }
-
-  // Undo for deleting the current project: re-home the on-screen document —
-  // still fully held by the session — under a fresh id.
-  async function restoreCurrentAsNewProject(starred, stamps) {
-    if (!opfsAvailable || !session.active || session.projectId !== null) return null;
-    session.projectId = newProjectId();
-    const id = session.projectId;
-    await acquireProjectLock(id);
-    await writeOriginToProjectDir();
-    await writeMediaOnce();
-    // a rebirth: the on-screen content IS the new baseline — commit it clean
-    await commitInitialState(id);
-    // A restore is an UNDO, not new work: carry the original entry's ordering
-    // stamps so the row reappears where it lived (the panel orders by
-    // modifiedAt), rather than teleporting to the top as freshly written.
-    // lastActiveAt stays fresh — the restored project IS the one on screen,
-    // and a reload should return to it.
-    if (stamps && (stamps.modifiedAt || stamps.createdAt)) {
-      await updateLibrary((lib) => {
-        const entry = lib.projects.find((p) => p.id === id);
-        if (entry !== undefined) {
-          if (stamps.modifiedAt) entry.modifiedAt = stamps.modifiedAt;
-          if (stamps.createdAt) entry.createdAt = stamps.createdAt;
-        }
-      });
-    }
-    sessionEdited = false;
-    updateSaveIndicator();
-    if (starred === true) await setProjectStarred(id, true);
-    notifyLibraryChanged(false);
-    return id;
   }
 
   /* ---- Boot (#456): migrate any pre-#456 single-slot working copy, then
@@ -2860,17 +2898,10 @@
       await writeFileTo(dir, DRAFT_FILE, snapshotText);
       const originalText = await readTextFrom(work, ENTRY.original);
       if (originalText !== null) await writeFileTo(dir, ENTRY.original, originalText);
-      try {
-        const srcMedia = await work.getDirectoryHandle('media');
-        const dstMedia = await dir.getDirectoryHandle('media', { create: true });
-        for await (const [name, handle] of srcMedia.entries()) {
-          if (handle.kind === 'file') await writeFileTo(dstMedia, name, await handle.getFile());
-        }
-      } catch (e) { /* no media */ }
+      await copyMediaTo(work, id);
       let appState = {};
       try {
-        const root = await navigator.storage.getDirectory();
-        const text = await readTextFrom(root, APP_STATE_FILE);
+        const text = await readRootText(APP_STATE_FILE);
         if (text !== null) appState = JSON.parse(text);
       } catch (e) { /* defaults below */ }
       const now = Date.now();
@@ -2893,13 +2924,10 @@
         });
       });
       // the old slot is spent — remove it so this runs exactly once
-      await work.removeEntry('snapshot.json').catch(() => {});
-      await work.removeEntry(ENTRY.original).catch(() => {});
-      await work.removeEntry('media', { recursive: true }).catch(() => {});
-      try {
-        const root = await navigator.storage.getDirectory();
-        await root.removeEntry(APP_STATE_FILE).catch(() => {});
-      } catch (e) { /* fine */ }
+      await deleteWorkEntry('snapshot.json');
+      await deleteWorkEntry(ENTRY.original);
+      await deleteWorkEntry('media', { recursive: true });
+      await deleteRootEntry(APP_STATE_FILE);
       try { localStorage.removeItem('hyperaudioWorkPresent'); } catch (e) { /* retired hint */ }
     } catch (e) { /* no single-slot layout (the usual case) */ }
   }
@@ -3232,7 +3260,7 @@
         snapshotChain = snapshotChain.then(async () => {
           if (sessionEdited || id !== session.projectId) return;
           const dir = await getProjectDir(id, false);
-          await dir.removeEntry(DRAFT_FILE).catch(() => {});
+          await deleteProjectEntry(session.projectId, DRAFT_FILE);
           await updateLibrary((lib) => {
             const entry = lib.projects.find((p) => p.id === id);
             if (entry !== undefined) entry.lastDraftAt = 0;
@@ -3416,6 +3444,17 @@
     // Interactive Transcript modal needs the VTT as a FILE, never inlined
     // into the page (#581), and this is where that decode already lives.
     getCaptionsVtt,
+    /* The storage surface, shared with the poster module so it does not
+     * traverse OPFS on its own (#586). INTERNAL, deliberately: this is not
+     * an injection point, and a host wanting its own backend is not served
+     * by it yet — that decision waits until one actually needs it. Writes
+     * replace atomically; the library index depends on that. */
+    storage: Object.freeze({
+      projectDir: getProjectDir,
+      readText: readTextFrom,
+      writeFile: writeFileTo,
+      firstMediaFile: firstMediaFileOf,
+    }),
     // The project's media as a FRESH File. An object URL made from an OPFS
     // file is a snapshot: once that file is rewritten (any save that re-writes
     // media does), the URL still plays from buffered data but can no longer be
@@ -3424,14 +3463,8 @@
     // rather than re-reading the player's src.
     currentMediaFile: async () => {
       if (session.projectId !== null) {
-        try {
-          const root = await navigator.storage.getDirectory();
-          const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(session.projectId);
-          const mediaDir = await dir.getDirectoryHandle('media');
-          for await (const [, handle] of mediaDir.entries()) {
-            if (handle.kind === 'file') return await handle.getFile();
-          }
-        } catch (e) { /* no stored media — fall through */ }
+        const stored = await firstMediaFileOf(session.projectId);
+        if (stored !== null) return stored;
       }
       return session.mediaFile;
     },
@@ -3456,7 +3489,6 @@
       setStarred: setProjectStarred,
       duplicate: duplicateProject,
       remove: deleteProject,
-      restoreDeleted: restoreCurrentAsNewProject,
       pendingTranscription: pendingTranscriptionInfo,
       openPendingTranscription: switchToPendingTranscription,
     },
