@@ -26,15 +26,17 @@
   const CAPTURE_TIMEOUT_MS = 8000;
   const urlCache = new Map(); // id → object URL of poster.jpg (or null probe result)
 
-  async function projectDir(id, create) {
-    const root = await navigator.storage.getDirectory();
-    const work = await root.getDirectoryHandle('work', { create: false });
-    return work.getDirectoryHandle(id, { create: create === true });
-  }
+  // Storage goes through the save module's own surface (#586) rather than
+  // this module traversing OPFS a second time. It is internal, not an
+  // injection point; if it is absent this module simply does nothing, which
+  // is the right degradation for an optional feature.
+  const store = () => (window.HyperaudioSave && window.HyperaudioSave.storage) || null;
 
   async function readPoster(id) {
+    const s = store();
+    if (s === null) return null;
     try {
-      const dir = await projectDir(id, false);
+      const dir = await s.projectDir(id, false);
       const handle = await dir.getFileHandle(POSTER_NAME);
       return await handle.getFile();
     } catch (e) {
@@ -42,16 +44,10 @@
     }
   }
 
-  async function firstMediaFile(id) {
-    try {
-      const dir = await projectDir(id, false);
-      const mediaDir = await dir.getDirectoryHandle('media');
-      for await (const [, handle] of mediaDir.entries()) {
-        if (handle.kind === 'file') return handle.getFile();
-      }
-    } catch (e) { /* no media stored */ }
-    return null;
-  }
+  const firstMediaFile = (id) => {
+    const s = store();
+    return s === null ? Promise.resolve(null) : s.firstMediaFile(id);
+  };
 
   // First-frame capture. Resolves null for audio (videoWidth 0), decode
   // failure, CORS taint, or timeout — null means "no poster", never throws.
@@ -105,11 +101,10 @@
       try {
         const blob = await captureFrameBlob(url);
         if (blob === null) return; // audio or uncapturable — the glyph serves
-        const dir = await projectDir(id, false);
-        const handle = await dir.getFileHandle(POSTER_NAME, { create: true });
-        const w = await handle.createWritable();
-        await w.write(blob);
-        await w.close();
+        const s = store();
+        if (s === null) return;
+        const dir = await s.projectDir(id, false);
+        await s.writeFile(dir, POSTER_NAME, blob);
         urlCache.delete(id); // next urlFor sees the fresh file
       } finally {
         URL.revokeObjectURL(url);
