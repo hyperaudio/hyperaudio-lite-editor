@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.8 — last changed in release 1.3.8
+ * @version 1.3.9 — last changed in release 1.3.9
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -2858,14 +2858,9 @@
   }
 
   // Delete removes the directory and the index entry. Deleting the CURRENT
-  // project leaves the document on screen (the only undo there is) but
-  // nothing owns it anymore — autosave stops until the panel's Restore
-  // re-homes it as a new entry.
-  // Deleting the CURRENT project keeps the document ON SCREEN — the undo's
-  // raw material — while the library entry and directory go. The panel shows
-  // a placeholder row carrying Restore (which re-homes the on-screen
-  // document) in the deleted row's place; any navigation elsewhere replaces
-  // the screen and withdraws the offer. Returns { wasCurrent }.
+  // project releases the session's claim on it — the caller is expected to
+  // put another project on screen, since what stays there owns nothing and
+  // autosaves nowhere. Returns { wasCurrent } to say whether that is needed.
   async function deleteProject(id) {
     const wasCurrent = id === session.projectId;
     if (wasCurrent) {
@@ -2881,38 +2876,6 @@
       lib.projects = lib.projects.filter((p) => p.id !== id);
     });
     return { wasCurrent };
-  }
-
-  // Undo for deleting the current project: re-home the on-screen document —
-  // still fully held by the session — under a fresh id.
-  async function restoreCurrentAsNewProject(starred, stamps) {
-    if (!opfsAvailable || !session.active || session.projectId !== null) return null;
-    session.projectId = newProjectId();
-    const id = session.projectId;
-    await acquireProjectLock(id);
-    await writeOriginToProjectDir();
-    await writeMediaOnce();
-    // a rebirth: the on-screen content IS the new baseline — commit it clean
-    await commitInitialState(id);
-    // A restore is an UNDO, not new work: carry the original entry's ordering
-    // stamps so the row reappears where it lived (the panel orders by
-    // modifiedAt), rather than teleporting to the top as freshly written.
-    // lastActiveAt stays fresh — the restored project IS the one on screen,
-    // and a reload should return to it.
-    if (stamps && (stamps.modifiedAt || stamps.createdAt)) {
-      await updateLibrary((lib) => {
-        const entry = lib.projects.find((p) => p.id === id);
-        if (entry !== undefined) {
-          if (stamps.modifiedAt) entry.modifiedAt = stamps.modifiedAt;
-          if (stamps.createdAt) entry.createdAt = stamps.createdAt;
-        }
-      });
-    }
-    sessionEdited = false;
-    updateSaveIndicator();
-    if (starred === true) await setProjectStarred(id, true);
-    notifyLibraryChanged(false);
-    return id;
   }
 
   /* ---- Boot (#456): migrate any pre-#456 single-slot working copy, then
@@ -3526,7 +3489,6 @@
       setStarred: setProjectStarred,
       duplicate: duplicateProject,
       remove: deleteProject,
-      restoreDeleted: restoreCurrentAsNewProject,
       pendingTranscription: pendingTranscriptionInfo,
       openPendingTranscription: switchToPendingTranscription,
     },
