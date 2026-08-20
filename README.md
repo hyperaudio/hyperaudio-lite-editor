@@ -11,7 +11,7 @@ Portable :iphone:
 
 ### Try it out!
 
-[Demo (with localStorage, installable as a Progressive Web App)](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html)
+### :point_right: [Demo (with localStorage, installable as a Progressive Web App)](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html) :point_left:
 
 [<img alt="Hyperaudio Lite Editor — default view" src="docs/images/default-view.png" width="860">](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html)
 
