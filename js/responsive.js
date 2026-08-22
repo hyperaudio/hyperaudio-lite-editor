@@ -69,7 +69,12 @@
    * Below MIN_SEARCH_ROOM the box drops under ~100px and stops being typable.
    * The 580px CSS rule stays as the no-JS floor.
    * ------------------------------------------------------------------------ */
-  const MIN_SEARCH_ROOM = 150;
+  // 128px of room is the chosen cut-off: the search stays down to ~1070px
+  // wide, where the box is 83px with about 37px for text — tight, but you can
+  // type and read a short term in it. Below that it goes rather than shrink
+  // toward the 48px floor, where it was focusable and useless. In the band
+  // under the 948px layout change the same number lands at ~670px.
+  const MIN_SEARCH_ROOM = 128;
   const navbarEl = document.querySelector('.main-panel .navbar');
   const navStart = document.querySelector('.navbar-start');
   const navEnd = document.querySelector('.navbar-end');
