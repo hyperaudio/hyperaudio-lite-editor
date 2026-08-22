@@ -1,7 +1,7 @@
 /**
  * responsive.js
  * (C) The Hyperaudio Project
- * @version 1.3.7 — last changed in release 1.3.7
+ * @version 1.3.10 — last changed in release 1.3.10
  * @license MIT
  *
  * Small-screen UI toggles for the responsive layout (#349):
@@ -10,7 +10,8 @@
  * sets body.video-collapsed — see toggleAudioOnly in editor-main.js, #375.)
  *
  * Layout itself is CSS (css/hyperaudio-lite-editor.css, @media max-width:948px);
- * this only flips classes on <body>. No editor logic is touched.
+ * this only flips classes on <body>. No editor logic is touched, beyond
+ * clearing a search the user can no longer see (#592).
  */
 
 (function () {
@@ -53,6 +54,50 @@
   }
   // webfonts and late-injected toolbar buttons can settle after first paint
   window.addEventListener('load', syncCardTop);
+
+  /* --- Hide the search when there is no room to type in it (#592) -----------
+   * The input bottoms out at 48px — its own padding plus the clear button —
+   * and then simply stays there: at 1000px wide it is a visible, focusable
+   * stub with about 2px of room for text. There are two such bands, either
+   * side of the 948px layout change, which is why a breakpoint per band would
+   * be guesswork. What decides it is the room the navbar actually has, and
+   * that is measurable.
+   *
+   * navbar-start and navbar-end are both flex: 0 0 auto, so they hold their
+   * width whether the search is shown or hidden — the measurement cannot
+   * chase its own result, which a min-width on the search itself would.
+   * Below MIN_SEARCH_ROOM the box drops under ~100px and stops being typable.
+   * The 580px CSS rule stays as the no-JS floor.
+   * ------------------------------------------------------------------------ */
+  const MIN_SEARCH_ROOM = 150;
+  const navbarEl = document.querySelector('.main-panel .navbar');
+  const navStart = document.querySelector('.navbar-start');
+  const navEnd = document.querySelector('.navbar-end');
+
+  const syncSearchRoom = () => {
+    if (navbarEl === null || navStart === null || navEnd === null) return;
+    const room = navbarEl.getBoundingClientRect().width
+      - navStart.getBoundingClientRect().width
+      - navEnd.getBoundingClientRect().width;
+    const cramped = room < MIN_SEARCH_ROOM;
+    if (cramped === body.classList.contains('search-cramped')) return;
+    body.classList.toggle('search-cramped', cramped);
+    // Going away with a query still live would strand highlighted matches in
+    // the transcript with nothing on screen to clear them, so the existing
+    // clear control is used rather than a second way to reset the search.
+    if (cramped) {
+      const clear = document.getElementById('search-clear');
+      const box = document.getElementById('search-box');
+      if (clear !== null && box !== null && box.value !== '') clear.click();
+    }
+  };
+
+  syncSearchRoom();
+  window.addEventListener('resize', syncSearchRoom);
+  window.addEventListener('load', syncSearchRoom);
+  if (navbarEl !== null && typeof ResizeObserver === 'function') {
+    new ResizeObserver(syncSearchRoom).observe(navbarEl);
+  }
 
   // --- Recents drawer --------------------------------------------------------
   // Keep #sidebar-toggle's aria-pressed tracking the drawer while in the
