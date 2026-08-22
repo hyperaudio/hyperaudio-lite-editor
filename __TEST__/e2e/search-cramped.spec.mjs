@@ -30,6 +30,18 @@ test('the search is gone in BOTH cramped bands, not just the reported one (#592)
   }
 });
 
+test('the cut-off sits where it was chosen, in both bands (#592)', async ({ page }) => {
+  // 1070px is the deliberate boundary: an 83px box with ~37px for text. One
+  // notch narrower and it goes, rather than creeping toward the 48px floor.
+  for (const [width, shown] of [[1070, true], [1060, false], [670, true], [660, false]]) {
+    await page.setViewportSize({ width, height: 800 });
+    // poll rather than sleep: the navbar's width animates, so a fixed wait
+    // reads a size that is still on its way somewhere
+    await expect.poll(() => searchVisible(page), { message: `search at ${width}px` })
+      .toBe(shown);
+  }
+});
+
 test('the search stays where it is usable (#592)', async ({ page }) => {
   for (const width of [1400, 1200, 1120, 900, 800]) {
     await page.setViewportSize({ width, height: 800 });
