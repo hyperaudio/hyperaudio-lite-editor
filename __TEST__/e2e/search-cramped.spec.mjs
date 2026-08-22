@@ -58,3 +58,21 @@ test('an active search is cleared on the way out, leaving no orphan highlights (
     .toBe(0);
   expect(await page.inputValue('#search-box')).toBe('');
 });
+
+test('hiding the search leaves Save/Export/New still right-aligned (#594)', async ({ page }) => {
+  // .navbar-center was the only flex: 1 1 auto item, so hiding it took the
+  // growing with it and left both fixed sides bunched at the left — the
+  // right-hand buttons trailing a gap where the search used to be.
+  for (const width of [1400, 1050, 1000, 960, 900, 620, 600]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(250);
+    const gap = await page.evaluate(() => {
+      const nav = document.querySelector('.main-panel .navbar');
+      const end = document.querySelector('.navbar-end');
+      return nav.getBoundingClientRect().right - end.getBoundingClientRect().right;
+    });
+    // the navbar's own right padding, and nothing more, whether or not the
+    // search is showing at this width
+    expect(gap, `right-hand gap at ${width}px`).toBeLessThan(12);
+  }
+});

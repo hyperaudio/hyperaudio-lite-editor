@@ -109,6 +109,13 @@ input[type="number"] {
 body.search-cramped .navbar-center {
   display: none;
 }
+/* ...and the right-hand group still has to sit on the right. .navbar-center
+   was the only flex: 1 1 auto item, so removing it left both fixed sides
+   bunched at the left with the free space trailing behind Save/Export/New.
+   The auto margin takes over the growing the hidden item used to do. */
+body.search-cramped .navbar-end {
+  margin-left: auto;
+}
 
 /* Fixed-width side panel so its grey background fills to the transcript edge,
    with an equal 16px gutter on both sides (matches left:400px on
