@@ -102,6 +102,14 @@ input[type="number"] {
   margin-right: 4px;
 }
 
+/* No room to type, so no search (#592). responsive.js measures what the
+   navbar has left after its two fixed sides and sets this; the box would
+   otherwise sit at its 48px floor with ~2px of text room, visible and
+   focusable and useless. The 580px rule below is the no-JS floor. */
+body.search-cramped .navbar-center {
+  display: none;
+}
+
 /* Fixed-width side panel so its grey background fills to the transcript edge,
    with an equal 16px gutter on both sides (matches left:400px on
    .transcript-holder). Items fill the 368px content width, so the video and the
