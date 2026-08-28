@@ -99,3 +99,49 @@ test('the hover popout shows the stored poster, or the wave glyph without one (#
   await page.hover('#file-picker .recents-row .file-item');
   await expect(page.locator('#recents-popout img.recents-popout-poster')).toBeVisible({ timeout: 5000 });
 });
+
+// #575's other half, which the standalone fixture cannot show: in the app the
+// player must end up wearing THIS project's stored capture, not the frozen
+// frame of the one before it and not the intro artwork. Chromium, because the
+// app needs OPFS and Playwright's WebKit has none.
+test('the player wears the project\'s own capture after a switch (#575)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+
+  const make = async (name) => {
+    await page.evaluate(async (name) => {
+      const blob = await window.__makeWebmForTest();
+      const file = new File([blob], name + '.webm', { type: 'video/webm' });
+      const dt = new DataTransfer(); dt.items.add(file);
+      const input = document.getElementById('file-input');
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      document.getElementById('hyperplayer').src = URL.createObjectURL(file);
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+      const lib = window.HyperaudioSave.library;
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 100));
+        const id = lib.currentId();
+        if (id !== null && (await lib.list()).some((e) => e.id === id)) break;
+      }
+      await window.HyperaudioSave.saveProject();
+    }, name);
+    await page.waitForTimeout(1200);
+  };
+
+  await page.addScriptTag({ content: `window.__makeWebmForTest = ${makeWebmBlob.toString()};` });
+  await make('First');
+  await make('Second');
+  const ids = await page.evaluate(async () =>
+    (await window.HyperaudioSave.library.list()).map((e) => e.id));
+
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), ids[ids.length - 1]);
+
+  // it settles on a stored capture: a blob URL, not the previous project's
+  // frozen data: URL and not the markup's poster
+  await expect.poll(async () => {
+    const poster = await page.getAttribute('#hyperplayer', 'poster');
+    return poster === null ? 'none' : poster.split(':')[0];
+  }, { timeout: 15000 }).toBe('blob');
+});
