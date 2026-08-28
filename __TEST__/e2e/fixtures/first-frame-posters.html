@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Fixture for #575, the shape the bug report used: the real module driving
+     two elements, one that only ever plays audio and one that plays a video
+     first. Both end in identical DOM state; before the fix only the first
+     painted anything in WebKit. Deliberately standalone — no OPFS, which
+     Playwright's WebKit does not provide, and none of the app around it. -->
+<style>
+  body { background: #d9d9d9; margin: 0; font: 12px sans-serif; }
+  video { width: 320px; display: block; background: transparent; }
+  .cell { display: inline-block; margin: 8px; }
+</style>
+<div class="cell"><b>A: audio alone</b><video id="hyperplayer" playsinline muted poster="../../../images/poster.png"></video></div>
+<div class="cell"><b>B: video, then the same audio</b><video id="second" playsinline muted poster="../../../images/poster.png"></video></div>
+<script src="../../../js/media-first-frame.js"></script>
+<script>
+  document.getElementById('hyperplayer').id = 'first';
+  document.getElementById('second').id = 'hyperplayer';
+</script>
+<script src="../../../js/media-first-frame.js"></script>
+<script>
+window.ready = (async () => {
+  const mkVideo = () => new Promise((resolve) => {
+    const c = document.createElement('canvas'); c.width = 320; c.height = 180;
+    const x = c.getContext('2d');
+    const rec = new MediaRecorder(c.captureStream(10), { mimeType: 'video/mp4' });
+    const ch = []; rec.ondataavailable = e => ch.push(e.data);
+    rec.onstop = () => resolve(URL.createObjectURL(new Blob(ch, { type: 'video/mp4' })));
+    rec.start();
+    let f = 0;
+    const t = setInterval(() => { x.fillStyle = f % 2 ? '#c33' : '#3c3'; x.fillRect(0,0,320,180);
+      if (++f >= 10) { clearInterval(t); rec.stop(); } }, 60);
+  });
+  const mkAudio = () => {
+    const sr = 8000, n = sr, buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    w(0,'RIFF'); dv.setUint32(4, 36 + n*2, true); w(8,'WAVEfmt ');
+    dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+    dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true);
+    dv.setUint16(34,16,true); w(36,'data'); dv.setUint32(40,n*2,true);
+    for (let i = 0; i < n; i++) dv.setInt16(44 + i*2, Math.sin(i/20)*3000, true);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  };
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const videoUrl = await mkVideo();
+  const audioUrl = mkAudio();
+  const a = document.getElementById('first');
+  const b = document.getElementById('hyperplayer');
+
+  a.src = audioUrl;                    // A: only ever audio
+  b.src = videoUrl;                    // B: a video first...
+  await wait(2500);
+  b.src = audioUrl;                    // ...then the same audio
+  await wait(2500);
+  return true;
+})();
+</script>

@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.9 — last changed in release 1.3.9
+ * @version 1.3.12 — last changed in release 1.3.12
  * @license MIT
  *
  * First-frame display for video media (#556). A <video> shows its poster —
@@ -25,6 +25,20 @@
  * medium IS gets settled when its metadata says so, not guessed at
  * loadstart.
  *
+ * The poster is NEVER removed (#575). Removing it and epsilon-seeking did
+ * paint frame 1, but it also moved the element's display mode to "video", and
+ * WebKit has no path back: every project opened afterwards painted nothing —
+ * a blank box, with the poster attribute present and resolving. Restoring the
+ * attribute does not restore the mode, and neither does load(); only a fresh
+ * element recovers. Blink is unaffected, so it never showed up in Chrome.
+ *
+ * What is shown instead is the project's own stored capture, which
+ * media-posters.js (#523) already makes for the Recents thumbnail: the same
+ * picture the seek was chasing, without the element ever going posterless.
+ * Going through MediaPosters.urlFor also honours window.hyperaudioMediaPoster,
+ * the embedder seam #567 asks for. Each load carries a token so a capture that
+ * arrives late cannot repaint the project that replaced it.
+ *
  * Self-contained and removable: no other module depends on this file.
  */
 (function firstFrameForVideo() {
@@ -32,7 +46,9 @@
     const player = document.getElementById('hyperplayer');
     if (player === null) { setTimeout(wire, 500); return; }
     const defaultPoster = player.getAttribute('poster');
-    let nudged = false;
+    // Bumped on every load; an async poster lookup that finishes after the
+    // next one has started must stand down rather than repaint it.
+    let loadToken = 0;
 
     // The frame on screen, as a data URL — the stand-in while the next medium
     // loads. Null for audio (nothing to draw) and for cross-origin media,
@@ -56,19 +72,55 @@
       // poster for the length of the gap. With nothing to freeze — a cold
       // start, or audio, where the poster IS the display — whatever is
       // already showing is left alone, which is the same continuity.
-      nudged = false;
+      loadToken += 1;
       const frozen = freezeFrame();
       if (frozen !== null) player.setAttribute('poster', frozen);
     });
 
+    const currentProjectId = () => {
+      const lib = window.HyperaudioSave && window.HyperaudioSave.library;
+      return lib && typeof lib.currentId === 'function' ? lib.currentId() : null;
+    };
+
+    // The project's own stored frame-1 capture, waiting for it to be made if
+    // this is the first visit. ensureProjectPoster is the same serialized,
+    // capture-once chain the Recents thumbnails use, so asking again here
+    // costs a read when one already exists.
+    async function applyStoredPoster(token) {
+      const posters = window.MediaPosters;
+      const id = currentProjectId();
+      if (!posters || typeof posters.urlFor !== 'function' || id === null) return false;
+      try {
+        let url = await posters.urlFor(id);
+        if (!url && typeof posters.ensureProjectPoster === 'function') {
+          await posters.ensureProjectPoster(id);
+          if (token !== loadToken) return false;
+          url = await posters.urlFor(id);
+        }
+        if (token !== loadToken || !url) return false;
+        player.setAttribute('poster', url);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
     function reveal() {
       if (player.videoWidth <= 0) return; // audio, or dimensions not known yet
       player.style.aspectRatio = player.videoWidth + ' / ' + player.videoHeight;
-      if (player.getAttribute('poster') !== null) player.removeAttribute('poster');
-      if (!nudged && player.paused && player.currentTime === 0) {
-        nudged = true;
-        try { player.currentTime = 0.0001; } catch (e) { /* decoder not ready — harmless */ }
-      }
+      // NO removeAttribute, and no epsilon seek: both drove the element into
+      // the display mode WebKit will not leave (#575). The stand-in frame
+      // showing right now belongs to the PREVIOUS project, so it is replaced
+      // by this one's capture; failing that, the markup's poster is a better
+      // answer than another project's picture.
+      const token = loadToken;
+      applyStoredPoster(token).then((applied) => {
+        if (applied || token !== loadToken) return;
+        const showing = player.getAttribute('poster');
+        if (defaultPoster !== null && showing !== null && showing.startsWith('data:')) {
+          player.setAttribute('poster', defaultPoster);
+        }
+      });
     }
     ['loadedmetadata', 'loadeddata', 'resize', 'canplay'].forEach((ev) => {
       player.addEventListener(ev, reveal);

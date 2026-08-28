@@ -64,8 +64,11 @@ test('switching projects keeps the media box sized and unbranded (#590)', async 
     let brandedPoster = false;
     const watch = new MutationObserver(() => {
       if (player.style.aspectRatio === '') pinCleared = true;
+      // "branded" means the markup's poster — the intro audio's artwork.
+      // A stored capture is a blob: URL and is exactly what SHOULD be here
+      // (#575), so test for the artwork itself rather than for "not data:".
       const poster = player.getAttribute('poster');
-      if (poster !== null && !poster.startsWith('data:')) brandedPoster = true;
+      if (poster !== null && poster.includes('images/poster.png')) brandedPoster = true;
     });
     watch.observe(player, { attributes: true, attributeFilter: ['style', 'poster', 'src'] });
     await window.HyperaudioSave.library.open(id);
@@ -85,7 +88,8 @@ test('switching projects keeps the media box sized and unbranded (#590)', async 
   expect(seen.pinCleared).toBe(false);
 
   // and the hyperaudio wordmark never went up: the outgoing frame covered the
-  // gap, and video ends with no poster at all once it is painting
+  // gap, then this project's own capture replaced it. Never posterless —
+  // that is the WebKit trap #575 documents.
   expect(seen.brandedPoster).toBe(false);
-  expect(seen.posterAfter).toBe(null);
+  expect(seen.posterAfter).not.toBe(null);
 });
