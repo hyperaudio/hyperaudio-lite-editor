@@ -205,10 +205,32 @@
     // Picture-in-picture: pops the video into a floating window so it stays
     // visible while scrolling the transcript. Only meaningful for media with a
     // video track, so the button disables itself for audio-only sources.
+    //
+    // Two APIs, and WebKit is the reason (#600). It answers
+    // document.pictureInPictureEnabled with true and offers
+    // requestPictureInPicture(), then rejects the call with NotSupportedError
+    // — "The video element does not support the Picture-in-Picture mode." Its
+    // working API is the presentation-mode one, so that is tried FIRST
+    // wherever it exists rather than kept as a fallback: a browser that
+    // implements it means it.
+    const webkitPip = (video) =>
+      typeof video.webkitSetPresentationMode === 'function'
+      && typeof video.webkitSupportsPresentationMode === 'function';
+
     function togglePictureInPicture() {
       const video = document.querySelector('#hyperplayer');
       if (video === null) {
         return;
+      }
+      if (webkitPip(video)) {
+        try {
+          video.webkitSetPresentationMode(
+            video.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture',
+          );
+          return;
+        } catch (e) {
+          console.warn('Picture-in-picture failed:', e); // fall through to the standard call
+        }
       }
       const action = document.pictureInPictureElement
         ? document.exitPictureInPicture()
@@ -378,7 +400,10 @@
       if (btn === null || video === null) {
         return;
       }
-      if (!document.pictureInPictureEnabled || video.disablePictureInPicture) {
+      // Hide only when NEITHER API is on offer; WebKit has the presentation-mode
+      // one whatever document.pictureInPictureEnabled says (#600).
+      const standardPip = document.pictureInPictureEnabled && !video.disablePictureInPicture;
+      if (!standardPip && !webkitPip(video)) {
         btn.style.display = 'none';   // unsupported – don't show a dead button
         return;
       }
