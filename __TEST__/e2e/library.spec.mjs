@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
-import { ladderWav, pollPage } from './helpers.mjs';
+import { ladderWav, pollPage, withoutIntroProject } from './helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const save = require('../../js/hyperaudio-save.js');
@@ -78,6 +78,8 @@ const readLibraryState = (page) => page.evaluate(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
+  // #602: the intro is a project now; this spec's subject is not it.
+  await withoutIntroProject(page);
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
 });
