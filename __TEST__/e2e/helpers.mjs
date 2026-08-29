@@ -108,3 +108,16 @@ export async function pollPage(page, fn, arg, { timeout = 10000, interval = 100 
     await page.waitForTimeout(interval);
   }
 }
+
+// #602 — the intro is a project now: it is seeded into the library on first
+// boot, so a fresh context starts with one project rather than none. Specs
+// whose subject is anything else opt out the way an embedder would, by
+// shipping no intro title, rather than through a test-only backdoor. Routing
+// the HTML is deterministic where a DOM edit would race the boot.
+export async function withoutIntroProject(page) {
+  await page.route(/\/index\.html($|\?)/, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).replace(/ data-intro-title="[^"]*"/, '');
+    await route.fulfill({ response, body });
+  });
+}

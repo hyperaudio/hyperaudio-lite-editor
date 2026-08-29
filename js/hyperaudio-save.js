@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.9 — last changed in release 1.3.9
+ * @version 1.3.13 — last changed in release 1.3.13
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -2932,6 +2932,53 @@
     } catch (e) { /* no single-slot layout (the usual case) */ }
   }
 
+  /* The intro is a project like any other (#602) -----------------------------
+   * It used to be markup that boot fell back to: a document on screen with no
+   * library entry, no directory and session.projectId null — so editing it
+   * autosaved nowhere and isDirty() answered false. Seeding it as a real
+   * project retires that second case rather than adding a third.
+   *
+   * Everything comes from the DOCUMENT rather than from constants here: the
+   * transcript is whatever #hypertranscript holds, the media is whatever the
+   * player points at, and the name is a data attribute beside the transcript.
+   * An embedder shipping its own index.html therefore gets its own intro with
+   * no API to call — which is what Glider needs, since it ships this file.
+   *
+   * The media stays a LINK. Recording the player's remote URL costs nothing at
+   * first boot, where downloading the intro audio to make the project
+   * self-contained would be a poor trade for a document most people replace.
+   * ------------------------------------------------------------------------ */
+  async function seedIntroProject() {
+    const transcriptEl = document.getElementById('hypertranscript');
+    if (transcriptEl === null || transcriptEl.querySelector('[data-m]') === null) {
+      return false; // a host shipping no intro transcript gets no intro project
+    }
+    const title = (transcriptEl.getAttribute('data-intro-title') || '').trim();
+    if (title === '') return false; // opting out is leaving the attribute off
+    try {
+      releaseProjectLock();
+      session.active = true;
+      session.projectId = newProjectId();
+      session.created = nowIso();
+      session.title = title;
+      session.hasOriginal = false;
+      session.mediaFile = null;        // link media: there is nothing to embed
+      session.mediaFileFromUrl = null;
+      session.pendingReconcile = null;
+      session.envelope = null;
+      sessionEdited = false;           // born clean, as any committed birth is
+      identityGeneration += 1;
+      await acquireProjectLock(session.projectId);
+      await writeOriginOnce(getEditorTranscriptJson());
+      await commitInitialState(session.projectId);
+      updateSaveIndicator();
+      return true;
+    } catch (e) {
+      console.warn('hyperaudio-save: seeding the intro project failed', e);
+      return false;
+    }
+  }
+
   async function bootLibrary() {
     if (!opfsAvailable) {
       revealTranscript();
@@ -2948,10 +2995,25 @@
       await migrateSingleSlotWork();
       const lib = await readLibrary();
       syncProjectsHint(lib); // self-heal a cleared/stale hint (#473)
+      // First run: adopt the document already on screen as a project (#602).
+      // Keyed on a marker, not on "is the library empty?" — otherwise deleting
+      // the intro would only last until the next reload.
+      let seeded = false;
+      if (lib.projects.length === 0 && lib.introSeeded !== true) {
+        seeded = await seedIntroProject();
+        // The marker is set either way: a host with no intro markup should not
+        // be asked again on every boot. updateLibrary re-syncs the boot hint
+        // and notifies the panel itself.
+        await updateLibrary((l) => { l.introSeeded = true; });
+      }
       // Most recently ACTIVE first; a corrupt head entry falls through to the
-      // next rather than abandoning the boot (the demo stays for none).
-      for (const entry of sortByLastActive(lib.projects)) {
-        if (await switchToProject(entry.id)) break;
+      // next rather than abandoning the boot (nothing to restore for none).
+      // Skipped when the intro was just seeded: it IS what is on screen, and
+      // returning early here would skip the panel refresh below.
+      if (!seeded) {
+        for (const entry of sortByLastActive(lib.projects)) {
+          if (await switchToProject(entry.id)) break;
+        }
       }
     } catch (e) {
       console.warn('hyperaudio-save: boot restore failed, leaving demo', e);

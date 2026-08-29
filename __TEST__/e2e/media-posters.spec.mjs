@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
-import { ladderWav } from './helpers.mjs';
+import { ladderWav, withoutIntroProject } from './helpers.mjs';
 
 // #523 phase A — poster capture and the hover-card thumbnail. The video
 // fixture is synthesized in-page (canvas + MediaRecorder); the capture,
@@ -105,6 +105,7 @@ test('the hover popout shows the stored poster, or the wave glyph without one (#
 // frame of the one before it and not the intro artwork. Chromium, because the
 // app needs OPFS and Playwright's WebKit has none.
 test('the player wears the project\'s own capture after a switch (#575)', async ({ page }) => {
+  await withoutIntroProject(page); // the two projects here are the subject (#602)
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
 

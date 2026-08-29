@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { withoutIntroProject } from './helpers.mjs';
 
 // The exported interactive transcript is an archival artefact: it gets
 // published, linked and cited long after it leaves the editor. What it loads
@@ -91,6 +92,8 @@ test('a title with markup characters cannot break out of the page (#563)', async
 });
 
 test('an untitled export keeps the boilerplate title and shows no empty heading (#563)', async ({ page }) => {
+  // untitled means untitled: the seeded intro carries a name (#602)
+  await withoutIntroProject(page);
   const html = await exportedHtml(page); // no project, no title
   expect(html).toContain('<title>Hyperaudio – Interactive Transcript</title>');
   expect(html).not.toContain('<h1 class="ht-title">'); // the rule stays in CSS; the element goes
