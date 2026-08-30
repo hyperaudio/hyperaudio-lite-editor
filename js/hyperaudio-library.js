@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.9 — last changed in release 1.3.9
+ * @version 1.3.13 — last changed in release 1.3.13
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -98,14 +98,16 @@
      in the small-screen drawer, where there is no useful hover and no room
      beside the panel. ---- */
 
-  // deterministic per-project hue for the glyph background, so audio rows
-  // differ at a glance without storing anything
-  function hashHue(id) {
-    let h = 0;
-    for (let i = 0; i < id.length; i += 1) h = (h * 31 + id.charCodeAt(i)) % 360;
-    return h;
-  }
-  const WAVE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>';
+  // The glyph is media-posters' (#603): the player draws the same one, and two
+  // copies of a picture are two pictures waiting to diverge. Local fallbacks
+  // keep the popout working if that module is absent — it is optional.
+  const hashHue = (id) => (window.MediaPosters && window.MediaPosters.glyphHue)
+    ? window.MediaPosters.glyphHue(id)
+    : (() => { let h = 0; const s = String(id || '');
+        for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 360; return h; })();
+  const glyphUrl = (id) => (window.MediaPosters && window.MediaPosters.glyphUrl)
+    ? window.MediaPosters.glyphUrl(id)
+    : null;
 
   const drawerQuery = window.matchMedia('(max-width: 948px)');
   let popoutEl = null;
@@ -134,8 +136,17 @@
     if (entry.media && entry.media.kind !== 'none') {
       const thumb = document.createElement('div');
       thumb.className = 'recents-popout-thumb';
-      thumb.style.background = 'hsl(' + (hashHue(entry.id || '')) + ' 30% 88%)';
-      thumb.innerHTML = WAVE_SVG;
+      thumb.style.background = 'hsl(' + hashHue(entry.id || '') + ' 30% 88%)';
+      // the same picture the player shows for this project (#603), as an
+      // element so the stored poster can replace it cleanly when one arrives
+      const glyph = glyphUrl(entry.id || '');
+      if (glyph !== null) {
+        const glyphImg = document.createElement('img');
+        glyphImg.className = 'recents-popout-glyph';
+        glyphImg.alt = '';
+        glyphImg.src = glyph;
+        thumb.appendChild(glyphImg);
+      }
       popoutEl.appendChild(thumb);
       const posters = window.MediaPosters;
       if (posters && typeof posters.urlFor === 'function') {

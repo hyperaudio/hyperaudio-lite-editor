@@ -31,8 +31,10 @@ const makeWebm = () => new Promise((resolve) => {
 test('video media pins its aspect and keeps a poster throughout (#556/#575)', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
-  // the demo is audio: the generic poster must be present at boot
-  await expect(page.locator('#hyperplayer')).toHaveAttribute('poster', /poster/);
+  // the intro is audio, so it wears the wave glyph at boot (#603) — the
+  // markup poster is the intro audio's artwork and no longer stands in for
+  // whatever project happens to be open
+  await expect(page.locator('#hyperplayer')).toHaveAttribute('poster', /^data:image\/svg/);
 
   await page.evaluate(`(${makeWebm.toString()})().then((url) => {
     document.getElementById('hyperplayer').src = url;
@@ -79,5 +81,5 @@ test('audio media keeps the poster and clears the aspect pin (#556)', async ({ p
     () => page.evaluate(() => document.getElementById('hyperplayer').style.aspectRatio),
     { timeout: 10000 },
   ).toBe('');
-  await expect(player).toHaveAttribute('poster', /poster/);
+  await expect(player).toHaveAttribute('poster', /^data:image\/svg/); // the glyph, not the artwork (#603)
 });

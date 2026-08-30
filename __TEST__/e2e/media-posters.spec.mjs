@@ -82,9 +82,11 @@ test('the hover popout shows the stored poster, or the wave glyph without one (#
   const id = await page.evaluate(() => window.HyperaudioSave.library.currentId());
   expect(id).not.toBeNull();
 
-  // no poster stored (the demo is audio): the wave glyph
+  // no poster stored (the intro is audio): the wave glyph — now the very
+  // image the player shows for it (#603), not a second drawing of one
   await page.hover('#file-picker .recents-row .file-item');
-  await expect(page.locator('#recents-popout .recents-popout-thumb svg')).toBeVisible();
+  await expect(page.locator('#recents-popout .recents-popout-thumb img.recents-popout-glyph'))
+    .toBeVisible();
   await page.mouse.move(10, 10);
 
   // plant a poster; a fresh hover swaps the glyph for the image
