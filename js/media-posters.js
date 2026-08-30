@@ -1,7 +1,7 @@
 /**
  * media-posters.js
  * (C) The Hyperaudio Project
- * @version 1.3.9 — last changed in release 1.3.9
+ * @version 1.3.13 — last changed in release 1.3.13
  * @license MIT
  *
  * Project posters (#523 phase A): a first-frame JPEG captured from each
@@ -31,6 +31,58 @@
   // injection point; if it is absent this module simply does nothing, which
   // is the right degradation for an optional feature.
   const store = () => (window.HyperaudioSave && window.HyperaudioSave.storage) || null;
+
+  /* The wave glyph (#603) ----------------------------------------------------
+   * An audio project has no frame to capture, and the library popout has long
+   * drawn it a waveform instead. The player showed the markup poster — the
+   * INTRO audio's artwork — so every audio project wore the same picture, and
+   * the same project had two different faces depending on where you looked.
+   *
+   * The glyph lives here, in the module that owns what a project looks like,
+   * and both places draw it from these three pieces. As an <img> it is an SVG
+   * data URI: self-contained, no canvas, nothing to store, and it costs the
+   * player nothing to show one.
+   * ------------------------------------------------------------------------ */
+  const GLYPH_STROKE = '#5b6472';
+  // A waveform, not the 24px icon scaled up: the play badge sits dead centre
+  // over the media, and a square glyph hid behind it. Bars spanning the frame
+  // stay legible with the badge on top. Heights are fractions of the tallest.
+  const WAVE_BARS = [
+    0.30, 0.55, 0.85, 0.45, 0.70, 1.00, 0.60, 0.35, 0.75, 0.95,
+    0.50, 0.80, 0.40, 0.65, 1.00, 0.55, 0.30, 0.70, 0.45,
+  ];
+
+  // deterministic per-project hue, so audio projects differ at a glance
+  // without anything being stored
+  function glyphHue(id) {
+    let h = 0;
+    const s = String(id || '');
+    for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 360;
+    return h;
+  }
+
+  // 16:9 to match the popout's thumb, and so the player keeps the shape it has
+  // with the markup poster rather than going square.
+  function glyphUrl(id) {
+    const W = 640;
+    const H = 360;
+    const span = 240;              // the bars' width: well clear of the play badge
+    const left = (W - span) / 2;
+    const mid = H / 2;
+    const maxHalf = 70;
+    const step = span / (WAVE_BARS.length - 1);
+    const bars = WAVE_BARS.map((f, i) => {
+      const x = Math.round(left + i * step);
+      const half = Math.round(maxHalf * f);
+      return '<path d="M' + x + ' ' + (mid - half) + 'V' + (mid + half) + '"/>';
+    }).join('');
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '"'
+      + ' viewBox="0 0 ' + W + ' ' + H + '">'
+      + '<rect width="' + W + '" height="' + H + '" fill="hsl(' + glyphHue(id) + ' 30% 88%)"/>'
+      + '<g fill="none" stroke="' + GLYPH_STROKE + '" stroke-width="7"'
+      + ' stroke-linecap="round" opacity="0.75">' + bars + '</g></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+  }
 
   async function readPoster(id) {
     const s = store();
@@ -136,5 +188,7 @@
     if (lib && typeof lib.currentId === 'function') ensureProjectPoster(lib.currentId());
   });
 
-  window.MediaPosters = Object.freeze({ ensureProjectPoster, urlFor, captureFrameBlob });
+  window.MediaPosters = Object.freeze({
+    ensureProjectPoster, urlFor, captureFrameBlob, glyphUrl, glyphHue,
+  });
 })();

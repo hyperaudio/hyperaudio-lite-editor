@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.12 — last changed in release 1.3.12
+ * @version 1.3.13 — last changed in release 1.3.13
  * @license MIT
  *
  * First-frame display for video media (#556). A <video> shows its poster —
@@ -86,13 +86,18 @@
     // this is the first visit. ensureProjectPoster is the same serialized,
     // capture-once chain the Recents thumbnails use, so asking again here
     // costs a read when one already exists.
-    async function applyStoredPoster(token) {
+    // waitForCapture: video only. Asking media-posters to MAKE a capture is
+    // worth waiting for when there is a frame to grab, and pointless for audio
+    // — captureFrameBlob has nothing to draw there and only resolves on its
+    // 8s timeout, which left an audio project wearing the previous project's
+    // glyph for eight seconds after a switch (#603).
+    async function applyStoredPoster(token, waitForCapture) {
       const posters = window.MediaPosters;
       const id = currentProjectId();
       if (!posters || typeof posters.urlFor !== 'function' || id === null) return false;
       try {
         let url = await posters.urlFor(id);
-        if (!url && typeof posters.ensureProjectPoster === 'function') {
+        if (!url && waitForCapture && typeof posters.ensureProjectPoster === 'function') {
           await posters.ensureProjectPoster(id);
           if (token !== loadToken) return false;
           url = await posters.urlFor(id);
@@ -114,7 +119,7 @@
       // by this one's capture; failing that, the markup's poster is a better
       // answer than another project's picture.
       const token = loadToken;
-      applyStoredPoster(token).then((applied) => {
+      applyStoredPoster(token, true).then((applied) => {
         if (applied || token !== loadToken) return;
         const showing = player.getAttribute('poster');
         if (defaultPoster !== null && showing !== null && showing.startsWith('data:')) {
@@ -128,14 +133,29 @@
 
     // Audio has no frame to reveal, so it is settled here instead: release the
     // outgoing video's aspect pin, which would otherwise leave the audio
-    // player standing video-tall, and put the markup's poster back — for
-    // audio there is nothing else to show. Note this is the INTRO audio's
-    // artwork, so a user's own audio project wears hyperaudio branding; that
-    // predates #590 and is left as it was rather than changed in passing.
+    // player standing video-tall, then find it a picture.
+    //
+    // The markup poster is the INTRO audio's artwork (#603), so falling back
+    // to it made every audio project wear the same face — branding, shown to
+    // someone about a recording they made this morning. The library already
+    // draws audio a per-project wave glyph; the player now shows the same one,
+    // so a project looks the same wherever you meet it. Order: an embedder's
+    // poster still wins, then the glyph, then the markup poster as before, so
+    // nothing regresses if the glyph cannot be made.
     player.addEventListener('loadedmetadata', () => {
       if (player.videoWidth > 0) return;
       player.style.aspectRatio = '';
-      if (defaultPoster !== null) player.setAttribute('poster', defaultPoster);
+      const token = loadToken;
+      applyStoredPoster(token, false).then((applied) => {
+        if (applied || token !== loadToken) return;
+        const posters = window.MediaPosters;
+        const id = currentProjectId();
+        if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
+          player.setAttribute('poster', posters.glyphUrl(id));
+          return;
+        }
+        if (defaultPoster !== null) player.setAttribute('poster', defaultPoster);
+      });
     });
   }
   if (document.readyState === 'loading') {

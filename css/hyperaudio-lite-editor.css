@@ -1705,7 +1705,8 @@ html.ha-transcribing #upload-transcribe-btn {
   margin-bottom: 8px;
   color: #5b6472;
 }
-#recents-popout .recents-popout-poster {
+#recents-popout .recents-popout-poster,
+#recents-popout .recents-popout-glyph {
   width: 100%;
   height: 100%;
   object-fit: cover;
