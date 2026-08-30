@@ -336,6 +336,57 @@
   /* ---- Rendering ---- */
   /* ---- Rendering ---- */
 
+  /* Host-contributed rows (#604) --------------------------------------------
+   * A host may know about projects the editor does not — .hyperaudio files in
+   * a folder the user chose, say. Those are the user's projects; that OPFS has
+   * not seen them is an implementation detail they should not have to hold.
+   * So the panel shows them, in the same division of labour as the poster
+   * seam: the host owns storage, the panel owns presentation.
+   *
+   * Rendered as plainly NOT-yet-opened, without a kebab: rename, star and
+   * delete are meaningless until the thing exists here, and opening one
+   * promotes it to an ordinary project, at which point it gets all of them.
+   *
+   * The panel NEVER waits for the host. Its own rows are drawn first and the
+   * host's are merged in when they arrive, which matters because this runs on
+   * every library write — not just when Recents is opened, but after each
+   * autosave. Waiting made a 1200ms host delay the active-row highlight by
+   * 1216ms after a project switch: the document had already changed while the
+   * list still pointed at the one you left. Nothing here gates anything, so a
+   * slow host merely means its rows land a beat later, a hung one means they
+   * never land, and a throwing one is indistinguishable from a host that
+   * defines no hook at all.
+   * ------------------------------------------------------------------------ */
+  // The host's last answer, drawn immediately on the next render so the panel
+  // never has to wait for it twice. Compared by signature so a stable host
+  // settles after one extra render rather than looping.
+  let pendingExternal = [];
+  const externalSignature = (list) =>
+    list.map((e) => e.id + '\u0000' + e.modifiedAt + '\u0000' + e.name).join('\u0001');
+
+  async function externalRows(knownIds) {
+    const hook = window.hyperaudioExternalProjects;
+    if (typeof hook !== 'function') return [];
+    let list;
+    try {
+      list = await hook();
+    } catch (e) {
+      return []; // the host's problem; the panel still has its own rows
+    }
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((e) => e && typeof e.id === 'string' && e.id !== '' && !knownIds.has(e.id))
+      .map((e) => ({
+        id: e.id,
+        name: (typeof e.title === 'string' && e.title.trim() !== '')
+          ? e.title.trim()
+          : (e.mediaFilename || 'project'),
+        modifiedAt: Number(e.modified) || 0,
+        starred: false,
+        external: true,
+      }));
+  }
+
   let renderToken = 0;
 
   async function render() {
@@ -345,6 +396,10 @@
     const token = ++renderToken;
     const rows = await api.list();
     if (token !== renderToken) return; // a newer render superseded this one
+    // Drawn from the last answer, never waited for (#604). A fresh ask goes out
+    // below; if it differs, one more render folds it in.
+    const knownIds = new Set(rows.map((r) => r.id));
+    const external = pendingExternal.filter((e) => !knownIds.has(e.id));
 
     closeMenu();  // the rows it was anchored to are about to be replaced
     hidePopout(); // ditto
@@ -390,6 +445,18 @@
 
     const entryById = {};
     const renderRow = (entry) => {
+      if (entry.external === true) {
+        // No kebab and no data-id: this row is not a project here yet, and
+        // every action in that menu would be a lie about something the editor
+        // does not hold.
+        const extName = escapeMarkup(entry.name || 'project');
+        filePicker.insertAdjacentHTML('beforeend',
+          `<li class="recents-row recents-row-external">`
+          + `<a class="file-item" data-external-id="${escapeMarkup(entry.id)}">${extName}</a>`
+          + `<span class="recents-actions"><span class="recents-external-badge">not opened</span></span>`
+          + `</li>`);
+        return;
+      }
       entryById[entry.id] = entry;
       const idAttr = escapeMarkup(entry.id);
       const nameHtml = escapeMarkup(entry.name || 'project');
@@ -408,7 +475,11 @@
     // No "Projects" label anywhere: it's obvious these are projects.
     // Ordering within each group is unchanged (last edit).
     const starredRows = rows.filter((r) => r.starred === true);
-    const recentRows = rows.filter((r) => r.starred !== true);
+    // Interleaved by last edit rather than grouped below (#604): a separate
+    // block would put the two-list feel back inside one list, which is the
+    // thing the seam exists to remove.
+    const recentRows = rows.filter((r) => r.starred !== true).concat(external)
+      .sort((a, b) => (b.modifiedAt || 0) - (a.modifiedAt || 0));
     const panelTitle = document.getElementById('recents-title');
     if (panelTitle !== null) {
       panelTitle.style.display = starredRows.length > 0 ? 'none' : '';
@@ -428,6 +499,31 @@
       // contrast ratio on the white card (#402)
       filePicker.insertAdjacentHTML('beforeend', '<li style="padding:8px 16px; opacity:0.75">No projects yet.</li>');
     }
+
+    // Ask the host, and draw again only if the answer CHANGED. A stable host
+    // therefore costs exactly one extra render the first time and none after;
+    // a hung host never resolves and never triggers one.
+    externalRows(knownIds).then((hostRows) => {
+      if (token !== renderToken) return;
+      if (externalSignature(hostRows) === externalSignature(pendingExternal)) return;
+      pendingExternal = hostRows;
+      render();
+    }).catch(() => {});
+
+    filePicker.querySelectorAll('.file-item[data-external-id]').forEach((el) => {
+      el.addEventListener('click', (event) => {
+        event.preventDefault();
+        const open = window.hyperaudioOpenExternalProject;
+        if (typeof open !== 'function') return; // rows with no way to open them do nothing
+        try {
+          Promise.resolve(open(el.getAttribute('data-external-id'))).catch((e) => {
+            console.warn('[library] the host could not open an external project', e);
+          });
+        } catch (e) {
+          console.warn('[library] the host could not open an external project', e);
+        }
+      });
+    });
 
     filePicker.querySelectorAll('.file-item[data-id]').forEach((el) => {
       el.classList.toggle('active', !viewingPending && el.getAttribute('data-id') === currentId);

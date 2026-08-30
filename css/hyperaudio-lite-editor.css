@@ -1622,6 +1622,28 @@ label[data-a11y-wired]:focus-visible {
   #project-progress { transition: none; }
 }
 
+/* Host-contributed rows (#604): present, and plainly not yet the editor's.
+   Dimmed rather than greyed-out — they are clickable, and the badge says
+   what the dimming means. Opening one promotes it to an ordinary row, which
+   is why nothing here is styled as permanently different. */
+#file-picker .recents-row-external .file-item {
+  opacity: 0.6;
+}
+#file-picker .recents-row-external .recents-actions {
+  opacity: 1;              /* the badge is not a hover-revealed action */
+  flex: 0 0 auto;
+}
+#file-picker .recents-external-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 8px;
+  border: 1px dashed oklch(var(--bc) / 0.35);
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  color: oklch(var(--bc) / 0.55);
+}
+
 /* The in-progress transcription row (#525): the same anatomy and widths as a
    normal row, with a spinner in the kebab's slot as the wordless "something
    is happening" signal — always visible, where a kebab reveals on hover. */
