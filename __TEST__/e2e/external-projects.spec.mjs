@@ -87,19 +87,24 @@ test('a slow host does not delay the panel (#604)', async ({ page }) => {
   // Measured before the rewrite: a 1200ms host delayed the active-row
   // highlight by 1216ms after a switch, leaving the list pointing at the
   // project you had just left.
+  // The gap between the host's delay and the assertion window has to be wide
+  // enough to survive a loaded machine: at 1200ms vs 900ms this failed in a
+  // full gate run where other specs were launching browsers. The point is that
+  // the panel does not WAIT, not that it renders within any particular
+  // millisecond, so give the host a delay nothing could mistake for prompt.
   await withHost(page, () => {
     window.hyperaudioExternalProjects = () => new Promise((r) => setTimeout(() => r([
       { id: 'ext:slow', title: 'a slow host row', modified: 9_000_000_000_000 },
-    ]), 1200));
+    ]), 6000));
   });
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
 
   // the editor's own row is there long before the host answers
-  await expect.poll(() => panel(page), { timeout: 900 })
+  await expect.poll(() => panel(page), { timeout: 3000 })
     .toEqual([{ name: 'How to use the Editor', external: false }]);
   // and the host's arrives afterwards, without anything having blocked
-  await expect.poll(() => panel(page), { timeout: 5000 }).toEqual([
+  await expect.poll(() => panel(page), { timeout: 12000 }).toEqual([
     { name: 'a slow host row', external: true },
     { name: 'How to use the Editor', external: false },
   ]);

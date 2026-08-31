@@ -238,6 +238,36 @@
     }
   }
 
+  // Does the selection actually COVER any of this span's text?
+  //
+  // intersectsNode() is true for a span the range merely touches, and WebKit
+  // touches the previous one constantly: a drag that starts on a word's first
+  // letter is anchored at the END of the PREVIOUS span's text node, where
+  // Chromium anchors at offset 0 of the word itself. The previous span then
+  // contributes no characters at all, and the leading-space trim below cannot
+  // notice, because the selected string starts cleanly at the word — the space
+  // sits before the anchor. Striking a word therefore struck its neighbour too,
+  // in Safari only.
+  //
+  // Clamping the range to the span and asking what text is left is the direct
+  // question, and only uses like-for-like boundary comparisons.
+  function coversText(range, span) {
+    const spanRange = document.createRange();
+    spanRange.selectNodeContents(span);
+    const clipped = range.cloneRange();
+    try {
+      if (clipped.compareBoundaryPoints(Range.START_TO_START, spanRange) < 0) {
+        clipped.setStart(spanRange.startContainer, spanRange.startOffset);
+      }
+      if (clipped.compareBoundaryPoints(Range.END_TO_END, spanRange) > 0) {
+        clipped.setEnd(spanRange.endContainer, spanRange.endOffset);
+      }
+    } catch (e) {
+      return true; // unexpected boundaries: keep the old, inclusive behaviour
+    }
+    return clipped.toString().trim() !== '';
+  }
+
   // Map the user's Range to the spans it actually covers, regardless of where
   // the caret was parked (text node, span boundary, or paragraph element).
   function applyStrikeThroughToSelection() {
@@ -252,7 +282,8 @@
     let startSpan = null;
     let endSpan = null;
     for (const span of allSpans) {
-      if (range.intersectsNode(span) && span.textContent.trim() !== '') {
+      if (range.intersectsNode(span) && span.textContent.trim() !== ''
+          && coversText(range, span)) {
         if (!startSpan) startSpan = span;
         endSpan = span;
       }
