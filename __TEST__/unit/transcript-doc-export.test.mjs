@@ -1,6 +1,7 @@
 // Unit tests for the transcript document exports (#467): the pure TXT and
 // Markdown renderers over the words/paragraphs model. Rendered semantics:
-// struck (redacted) words dropped, speakers as prefixes, paragraphs as
+// struck words kept where the format can mark them and dropped where it
+// cannot (#611), speakers as prefixes, paragraphs as
 // blank-line-separated blocks.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -72,9 +73,26 @@ test('txt: a paragraph whose every word is struck disappears entirely', () => {
 
 /* ---------- Markdown ---------- */
 
-test('md: bold speaker prefixes, same structure and redaction semantics', () => {
+test('md: bold speaker prefixes, and struck words kept but MARKED (#611)', () => {
+  // Markdown can say a word was struck, so it says it rather than quietly
+  // shortening the document. Plain text cannot, and drops them — see the txt
+  // tests above; that asymmetry is the point, not an oversight.
   assert.equal(doc.renderMarkdown(sampleTranscript()),
-    '**Maria:** Benvenuti a Hyperaudio\n\n**Luca:** Grazie\n');
+    '**Maria:** Benvenuti ~~ehm~~ a Hyperaudio\n\n**Luca:** Grazie ~~mille~~\n');
+});
+
+test('md and txt disagree about struck words, deliberately (#611)', () => {
+  const t = sampleTranscript();
+  assert.match(doc.renderMarkdown(t), /~~ehm~~/);   // marked, so a reader can tell
+  assert.doesNotMatch(doc.renderTxt(t), /ehm/);     // unmarkable, so omitted
+});
+
+test('md: a literal tilde in speech cannot open a strikethrough (#611)', () => {
+  const out = doc.renderMarkdown({
+    words: [{ start: 0, end: 1, text: '~~not~~' }],
+    paragraphs: [{ speaker: null, start: 0, end: 2 }],
+  });
+  assert.equal(out, '\\~\\~not\\~\\~\n');
 });
 
 test('md: inline-construct characters in words and speaker names are escaped', () => {
@@ -93,7 +111,7 @@ test('md: empty transcript renders to an empty string', () => {
 
 const JSZip = require('jszip');
 
-test('docx: package round-trips with bold speaker runs, struck words dropped', async () => {
+test('docx: package round-trips, bold speaker runs, struck words marked (#611)', async () => {
   const out = await doc.buildDocx(sampleTranscript(), JSZip, 'nodebuffer');
   const zip = await JSZip.loadAsync(out);
   const types = await zip.file('[Content_Types].xml').async('string');
@@ -102,9 +120,29 @@ test('docx: package round-trips with bold speaker runs, struck words dropped', a
   assert.match(rels, /Target="word\/document\.xml"/);
   const docXml = await zip.file('word/document.xml').async('string');
   assert.match(docXml, /<w:r><w:rPr><w:b\/><\/w:rPr><w:t xml:space="preserve">Maria: <\/w:t><\/w:r>/);
-  assert.match(docXml, /<w:t xml:space="preserve">Benvenuti a Hyperaudio<\/w:t>/);
-  assert.ok(!docXml.includes('ehm')); // redacted: must not survive
+  // .docx can say a word was struck, so it does — the word survives inside a
+  // run carrying <w:strike/>, and the space before it stays in the kept run
+  assert.match(docXml, /<w:t xml:space="preserve">Benvenuti <\/w:t>/);
+  assert.match(docXml, /<w:r><w:rPr><w:strike\/><\/w:rPr><w:t xml:space="preserve">ehm<\/w:t><\/w:r>/);
+  assert.match(docXml, /<w:t xml:space="preserve"> a Hyperaudio<\/w:t>/);
   assert.match(docXml, /Luca: /);
+});
+
+test('docx: consecutive words of the same kind share one run (#611)', async () => {
+  const out = await doc.buildDocx({
+    words: [
+      { start: 0, end: 1, text: 'one' },
+      { start: 1, end: 2, text: 'two' },
+      { start: 2, end: 3, text: 'cut', struck: true },
+      { start: 3, end: 4, text: 'also', struck: true },
+      { start: 4, end: 5, text: 'three' },
+    ],
+    paragraphs: [{ speaker: null, start: 0, end: 6 }],
+  }, JSZip, 'nodebuffer');
+  const docXml = await (await JSZip.loadAsync(out)).file('word/document.xml').async('string');
+  // three runs, not five: kept, struck, kept
+  assert.equal((docXml.match(/<w:r>/g) || []).length, 3);
+  assert.match(docXml, /<w:rPr><w:strike\/><\/w:rPr><w:t xml:space="preserve">cut also<\/w:t>/);
 });
 
 test('docx: word text is XML-escaped', () => {

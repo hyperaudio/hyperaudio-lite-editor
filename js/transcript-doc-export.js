@@ -3,14 +3,19 @@
  * TRANSCRIPT DOCUMENT EXPORTS (#467) — TXT and Markdown
  * ============================================================================
  *
- * @version 1.1.1 — last changed in release 1.1.1
+ * @version 1.3.13 — last changed in release 1.3.13
  *
  * Rendered document exports of the transcript, added to the FILE →
  * Export / Import submenu. RENDERED means the semantics of the format doc's
  * § 1.1 privacy caveat (share rendered exports, not project files):
  *
- *   - struck (redacted) words are DROPPED — a redacted word must not survive
- *     into a shared document, matching the media-export semantics;
+ *   - struck (redacted) words are kept where the format can SHOW that they
+ *     were struck, and dropped where it cannot (#611). Markdown marks them
+ *     `~~word~~`; plain text has no way to say it, and including them there
+ *     would silently promote removed speech to kept speech — a reader could
+ *     not tell. (This used to say "matching the media-export semantics",
+ *     which stopped being a single behaviour when #605 made media-export
+ *     depend on the Entire/Edited choice.);
  *   - speakers come from the paragraph model and become prefixes
  *     ("Maria: …" in TXT, "**Maria:**" in Markdown);
  *   - paragraphs become paragraphs (blank-line separated).
@@ -31,10 +36,13 @@
 
   // Assign words to paragraphs the same way the editor builds its DOM from
   // JSON: a word belongs to the paragraph whose [start, end) contains its
-  // start; with no paragraphs everything is one block. Struck words are
-  // dropped here so every renderer inherits the redaction semantics.
-  function paragraphsWithWords(transcript) {
-    const words = ((transcript && transcript.words) || []).filter((w) => w.struck !== true);
+  // start; with no paragraphs everything is one block. Whether struck words
+  // survive is the RENDERER's call (#611) — it depends on whether the format
+  // can mark them — so this takes it as an argument rather than deciding for
+  // everyone.
+  function paragraphsWithWords(transcript, keepStruck) {
+    const words = ((transcript && transcript.words) || [])
+      .filter((w) => keepStruck === true || w.struck !== true);
     const paragraphs = (transcript && transcript.paragraphs && transcript.paragraphs.length > 0)
       ? transcript.paragraphs
       : [{ start: -Infinity, end: Infinity, speaker: null }];
@@ -52,8 +60,10 @@
     return words.map((w) => w.text + (w.space === false ? '' : ' ')).join('').trim();
   }
 
+  // Plain text drops them: there is no way to mark a word as removed, and an
+  // unmarked struck word reads exactly like speech that was kept.
   function renderTxt(transcript) {
-    const blocks = paragraphsWithWords(transcript)
+    const blocks = paragraphsWithWords(transcript, false)
       .map((p) => (p.speaker ? p.speaker + ': ' : '') + joinWords(p.words));
     return blocks.length > 0 ? blocks.join('\n\n') + '\n' : '';
   }
@@ -62,14 +72,16 @@
   // trigger ("*laughs*" must not italicise); full CommonMark escaping is
   // overkill for natural speech.
   function escapeMd(text) {
-    return String(text).replace(/([\\`*_[\]])/g, '\\$1');
+    return String(text).replace(/([\\`*_[\]~])/g, '\\$1');
   }
 
+  // Markdown keeps them, struck: `~~word~~` says what happened, so the
+  // document is the transcript as edited rather than a quietly shorter one.
   function renderMarkdown(transcript) {
-    const blocks = paragraphsWithWords(transcript)
+    const blocks = paragraphsWithWords(transcript, true)
       .map((p) => {
         const text = joinWords(p.words.map((w) => ({
-          text: escapeMd(w.text),
+          text: w.struck === true ? '~~' + escapeMd(w.text) + '~~' : escapeMd(w.text),
           space: w.space,
         })));
         return (p.speaker ? '**' + escapeMd(p.speaker) + ':** ' : '') + text;
@@ -95,7 +107,9 @@
    * DOCX (#467): a .docx is a zip of XML parts — the vendored JSZip builds
    * it, no new dependency. Three parts make a minimal valid package:
    * [Content_Types].xml, _rels/.rels, and word/document.xml with one w:p per
-   * paragraph (bold run for the speaker prefix, normal run for the text).
+   * paragraph (bold run for the speaker prefix, then a run per stretch of
+   * text — struck stretches carry <w:strike/>, which is how a .docx says a
+   * word was removed; see #611).
    * Opens natively in Word, Pages, LibreOffice and Google Docs. NOT the
    * legacy binary .doc, and not the HTML-named-.doc trick.
    * ======================================================================== */
@@ -107,16 +121,49 @@
       .replace(/>/g, '&gt;');
   }
 
+  // Consecutive words of the same struck-ness become one run, so a paragraph
+  // is a handful of runs rather than one per word (#611). Each word carries
+  // its own trailing space, and only the paragraph's final space is trimmed —
+  // the space between a kept word and a struck one therefore sits in the kept
+  // run, where it is not struck, which is what a reader expects to see.
+  function wordRuns(words) {
+    const runs = [];
+    words.forEach((w) => {
+      const struck = w.struck === true;
+      const text = w.text + (w.space === false ? '' : ' ');
+      const last = runs[runs.length - 1];
+      if (last !== undefined && last.struck === struck) last.text += text;
+      else runs.push({ struck, text });
+    });
+    // A struck run must not end in whitespace: the strikethrough would draw
+    // through the gap after the word, which looks like a mistake in Word. Hand
+    // that space to the next run, where it is not struck.
+    runs.forEach((run, i) => {
+      if (!run.struck) return;
+      const trailing = (run.text.match(/\s+$/) || [''])[0];
+      if (trailing === '') return;
+      run.text = run.text.slice(0, run.text.length - trailing.length);
+      if (runs[i + 1] !== undefined) runs[i + 1].text = trailing + runs[i + 1].text;
+    });
+    if (runs.length > 0) {
+      runs[runs.length - 1].text = runs[runs.length - 1].text.replace(/\s+$/, '');
+    }
+    return runs.filter((r) => r.text !== '');
+  }
+
   // The document part. xml:space="preserve" keeps the speaker prefix's
   // trailing space; word text is XML-escaped (it is user/file data).
   function docxDocumentXml(transcript) {
-    const paragraphs = paragraphsWithWords(transcript).map((p) => {
+    const paragraphs = paragraphsWithWords(transcript, true).map((p) => {
       const runs = [];
       if (p.speaker) {
         runs.push('<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">'
           + escapeXml(p.speaker + ': ') + '</w:t></w:r>');
       }
-      runs.push('<w:r><w:t xml:space="preserve">' + escapeXml(joinWords(p.words)) + '</w:t></w:r>');
+      wordRuns(p.words).forEach((r) => {
+        runs.push('<w:r>' + (r.struck ? '<w:rPr><w:strike/></w:rPr>' : '')
+          + '<w:t xml:space="preserve">' + escapeXml(r.text) + '</w:t></w:r>');
+      });
       return '<w:p>' + runs.join('') + '</w:p>';
     });
     if (paragraphs.length === 0) paragraphs.push('<w:p/>');

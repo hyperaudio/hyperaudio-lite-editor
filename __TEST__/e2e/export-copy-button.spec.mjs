@@ -44,13 +44,17 @@ const exportedPage = async (page, context) => {
   return exported;
 };
 
-test('the exported page copies the whole transcript, struck words excluded (#564)', async ({ page, context }) => {
+test('the exported page copies the whole transcript, as shown (#564/#605)', async ({ page, context }) => {
   const exported = await exportedPage(page, context);
   await exported.click('#ht-copy');
   const copied = await exported.evaluate(() => navigator.clipboard.readText());
 
   expect(copied.length).toBeGreaterThan(50);       // the whole transcript
-  expect(copied).not.toContain('STRUCKWORD');      // ...minus the struck word
+  // Struck words are COPIED here (#605): this page links the original media,
+  // which still speaks them, and they are visible on the page. An Edited-media
+  // export has no struck words in it at all, so its copy is clean without any
+  // filter — the decision belongs to the export, not to the copy button.
+  expect(copied).toContain('STRUCKWORD');
   expect(copied).not.toContain('[');               // speakers read "Name: ", not "[Name]"
   expect(copied.split('\n\n').length).toBeGreaterThan(1); // paragraphs survive
 });

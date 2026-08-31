@@ -326,7 +326,12 @@
         var speaker = '';
         var words = [];
         p.querySelectorAll('span[data-m]').forEach(function (span) {
-          if ((span.style.textDecoration || '').indexOf('line-through') !== -1) return;
+          // No struck-word filter here (#605). Whether struck words belong in
+          // this page was decided when it was exported: an Edited-media export
+          // has none in it, because the cuts are real and the audio no longer
+          // says them; an Entire-media export has them, visible, because the
+          // original file still does. Copying what is shown is therefore right
+          // in both cases, and a filter here could only disagree with the page.
           var text = span.textContent;
           if (span.classList.contains('speaker')) {
             speaker = text.replace(/^\s*\[?/, '').replace(/\]?\s*$/, '').trim();

@@ -78,13 +78,15 @@ test('TXT export: speaker prefix, redacted word dropped, title-derived filename'
   expect(out.text).toBe('Maria: Benvenuti a\n'); // "ehm" is struck: it must not survive
 });
 
-test('MD export: bold speaker, same redaction semantics', async ({ page }, testInfo) => {
+test('MD export: bold speaker, struck word kept but marked (#611)', async ({ page }, testInfo) => {
   const out = await exportVia(page, 'export-transcript-md', testInfo, 'out.md');
   expect(out.name).toBe('Doc Export Project.md');
-  expect(out.text).toBe('**Maria:** Benvenuti a\n');
+  // Markdown can say "this was struck", so it does, rather than handing over a
+  // quietly shorter document. TXT above cannot, so it drops the word instead.
+  expect(out.text).toBe('**Maria:** Benvenuti ~~ehm~~ a\n');
 });
 
-test('DOCX export: a valid package with bold speaker run, redaction dropped', async ({ page }, testInfo) => {
+test('DOCX export: a valid package with bold speaker run, struck word marked (#611)', async ({ page }, testInfo) => {
   const downloadPromise = page.waitForEvent('download');
   await page.evaluate(() => document.getElementById('export-transcript-docx').click());
   const download = await downloadPromise;
@@ -94,8 +96,12 @@ test('DOCX export: a valid package with bold speaker run, redaction dropped', as
   const zip = await JSZip.loadAsync(fs.readFileSync(outPath));
   const docXml = await zip.file('word/document.xml').async('string');
   expect(docXml).toContain('<w:t xml:space="preserve">Maria: </w:t>');
-  expect(docXml).toContain('Benvenuti a');
-  expect(docXml).not.toContain('ehm');
+  // .docx can show that a word was struck, so the word survives inside a run
+  // carrying <w:strike/> rather than vanishing (#611). The space after it sits
+  // in the following run, so the strikethrough does not draw through the gap.
+  expect(docXml).toContain('<w:t xml:space="preserve">Benvenuti </w:t>');
+  expect(docXml).toContain('<w:rPr><w:strike/></w:rPr><w:t xml:space="preserve">ehm</w:t>');
+  expect(docXml).toContain('<w:t xml:space="preserve"> a</w:t>');
 });
 
 test('exports follow edits: a new word appears, a newly struck word disappears', async ({ page }, testInfo) => {

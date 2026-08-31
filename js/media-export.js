@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.7 — last changed in release 1.3.7
+ * @version 1.3.13 — last changed in release 1.3.13
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -182,16 +182,24 @@
     return offset;
   };
 
-  // Clone the transcript with struck words removed and every word's data-m
-  // mapped onto the edited timeline (and scaled when the playback speed is
-  // applied — data-d shrinks with the sped-up media too). Returns the HTML.
-  const buildRetimedTranscriptHtml = (sections, rate) => {
+  // Clone the transcript with every word's data-m mapped onto the exported
+  // timeline (and scaled when the playback speed is applied — data-d shrinks
+  // with the sped-up media too). Returns the HTML.
+  //
+  // dropStruck follows the Entire/Edited choice (#605). The text has to match
+  // the media it ships with: with Edited media the cuts are real, the struck
+  // speech is gone from the audio, and the words must go with it. With Entire
+  // media the original file is exported untouched — every struck word is still
+  // audible — so removing them would describe audio that is not what plays.
+  // Retiming needs no such flag: Entire media passes whole-timeline sections,
+  // which makes mapTime an identity of its own accord.
+  const buildRetimedTranscriptHtml = (sections, rate, dropStruck) => {
     const transcript = document.getElementById('hypertranscript');
     if (transcript === null) return null;
     const clone = transcript.cloneNode(true);
     clone.querySelectorAll('mark.search-mark').forEach((m) => m.replaceWith(document.createTextNode(m.textContent)));
     clone.querySelectorAll('[data-m]').forEach((span) => {
-      if ((span.style.textDecoration || '').includes('line-through')) {
+      if (dropStruck && (span.style.textDecoration || '').includes('line-through')) {
         span.remove();
         return;
       }
@@ -221,9 +229,9 @@
   // non-existent playerId makes caption()'s player-side effects (setting the live
   // track src, forcing captions to show) a no-op — the live editor is untouched.
   // Returns { vtt, srt } or null.
-  const genRetimedCaptions = (sections, rate) => {
+  const genRetimedCaptions = (sections, rate, dropStruck) => {
     if (typeof caption !== 'function') return null;
-    const inner = buildRetimedTranscriptHtml(sections, rate);
+    const inner = buildRetimedTranscriptHtml(sections, rate, dropStruck);
     if (inner === null) return null;
     const host = document.createElement('div');
     const t = document.createElement('div');
@@ -242,9 +250,9 @@
   // links the exported media by its relative filename; the transcript is the
   // re-timed, struck-words-removed clone. trackSrc: a captions URL to link/embed,
   // or null to omit the <track> entirely (e.g. when captions are burned in).
-  const buildInteractiveExportHtml = (sections, rate, mediaSrc, trackSrc) => {
+  const buildInteractiveExportHtml = (sections, rate, mediaSrc, trackSrc, dropStruck) => {
     if (typeof hyperaudioTemplate !== 'string' || hyperaudioTemplate === '') return null;
-    const inner = buildRetimedTranscriptHtml(sections, rate);
+    const inner = buildRetimedTranscriptHtml(sections, rate, dropStruck);
     if (inner === null) return null;
     let html = hyperaudioTemplate
       .replace('{hypertranscript}', () => inner)
@@ -260,9 +268,9 @@
   // (word-vtt.js) yields chunks whose times line up with the `t` the video loop
   // stamps on each frame — no separate mapping needed here. Returns null when
   // there is no transcript, no words, or word-vtt.js isn't loaded.
-  const buildCaptionChunks = (sections, rate) => {
+  const buildCaptionChunks = (sections, rate, dropStruck) => {
     if (typeof window.hyperaudioWordChunks !== 'function') return null;
-    const html = buildRetimedTranscriptHtml(sections, rate);
+    const html = buildRetimedTranscriptHtml(sections, rate, dropStruck);
     if (html === null) return null;
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
@@ -1099,7 +1107,7 @@
         setStatus('Exporting entire media…');
         blob = await exportEntire(mb, fmt, setProgress);
       } else {
-        const captions = burn ? buildCaptionChunks(sections, rate) : null;
+        const captions = burn ? buildCaptionChunks(sections, rate, edited) : null;
         setStatus(burn ? 'Exporting with captions…' : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…` : 'Exporting edited media…'));
         blob = fmt.kind === 'video'
           ? await exportEditedVideo(mb, fmt, sections, rate, setProgress, captions)
@@ -1110,7 +1118,7 @@
 
       // 2. caption sidecars + interactive transcript, all re-timed to the export
       if (wantRetime || wantVtt || wantSrt) {
-        const subs = genRetimedCaptions(sections, rate);
+        const subs = genRetimedCaptions(sections, rate, edited);
         const vttName = `${baseName}.vtt`;
         const srtName = `${baseName}.srt`;
         // The interactive transcript's captions ride as a SIDECAR file, not an
@@ -1135,7 +1143,7 @@
           if (!burn) {
             if (needVtt) trackSrc = vttName; // sanitised already (#560): no encoding needed
           }
-          const html = buildInteractiveExportHtml(sections, rate, mediaName, trackSrc);
+          const html = buildInteractiveExportHtml(sections, rate, mediaName, trackSrc, edited);
           if (html !== null) {
             outputs.push({ blob: new Blob([html], { type: 'text/html' }), name: `${baseName}-transcript.html` });
           }
@@ -1149,9 +1157,9 @@
       // doc's § 1.1 caveat points to.
       if (wantProject) {
         setStatus('Building project container…');
-        const projHtml = buildRetimedTranscriptHtml(sections, rate);
+        const projHtml = buildRetimedTranscriptHtml(sections, rate, edited);
         if (projHtml !== null) {
-          const projSubs = genRetimedCaptions(sections, rate);
+          const projSubs = genRetimedCaptions(sections, rate, edited);
           const projDur = keptDuration(sections) / rate; // Infinity when metadata never loaded
           const projBlob = await window.HyperaudioSave.buildFlattenedProjectBlob({
             html: projHtml,
