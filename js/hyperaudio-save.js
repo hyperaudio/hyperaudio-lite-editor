@@ -2543,8 +2543,18 @@
     return pendingTranscription === null ? null : { name: pendingTranscription.name };
   }
 
+  // What is BEING TRANSCRIBED, which is not the same question as what is open
+  // (#612). The engine contract puts the transcription's media on the player
+  // before setTranscriptBusy(true), so the player is the authority here; the
+  // session is the authority on the open project. Asking the session first
+  // labelled a URL transcription with the previous project's name, because a
+  // URL leaves session.mediaFile holding the outgoing project's File and it
+  // won on the first line.
+  //
+  // A local file is unaffected: it gives the player a blob: src, which is not
+  // a link URL, so the answer still comes from session.mediaFile — which by
+  // then is the chosen file, having been overwritten on the way in.
   function mediaDisplayName() {
-    if (session.mediaFile !== null && session.mediaFile.name) return session.mediaFile.name;
     const player = document.getElementById('hyperplayer');
     const src = player !== null ? player.src : '';
     if (isLinkUrl(src)) { // http(s) or a declared embedder scheme
@@ -2553,6 +2563,7 @@
         if (leaf !== '') return leaf;
       } catch (e) { /* fall through */ }
     }
+    if (session.mediaFile !== null && session.mediaFile.name) return session.mediaFile.name;
     return 'Transcription';
   }
 
