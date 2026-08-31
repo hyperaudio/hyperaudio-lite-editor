@@ -23,11 +23,21 @@ const MARKUP = '<article><section><p>'
 
 const WORD = '#hypertranscript span[data-m]:nth-of-type(3)'; // "charlie"
 
-async function strikeVia(page, how) {
-  await page.evaluate((m) => {
-    document.getElementById('hypertranscript').innerHTML = m;
-    window.getSelection().removeAllRanges();
-  }, MARKUP);
+// Repeat a selection WITHOUT resetting the transcript, so the toggle acts on
+// whatever state the previous call left behind.
+async function strikeAgain(page, how) {
+  return strikeVia(page, how, true);
+}
+
+async function strikeVia(page, how, keepState) {
+  if (keepState !== true) {
+    await page.evaluate((m) => {
+      document.getElementById('hypertranscript').innerHTML = m;
+      window.getSelection().removeAllRanges();
+    }, MARKUP);
+  } else {
+    await page.evaluate(() => window.getSelection().removeAllRanges());
+  }
   const box = await page.locator(WORD).boundingBox();
   const midY = box.y + box.height / 2;
   if (how === 'dblclick') {
@@ -77,6 +87,20 @@ for (const [engineName, engine] of [['WebKit', webkit], ['Chromium', chromium]])
       expect(await strikeVia(page, 'two-words'), 'two words').toEqual(['charlie', 'delta']);
       // and the case that always worked, which the fix must not disturb
       expect(await strikeVia(page, 'dblclick'), 'double-click').toEqual(['charlie']);
+
+      // The SAME span set decides which way the toggle goes:
+      //   selectedSpans.every(isStruck) ? unstrikeElement : strikeoutElement
+      // so a wrong set breaks removal exactly as it breaks application. The
+      // first version of this spec covered only application, because it was
+      // written from the bug report rather than from what the function decides.
+      expect(await strikeVia(page, 'ltr'), 'strike, to be undone').toEqual(['charlie']);
+      expect(await strikeAgain(page, 'ltr'), 'unstrike by the same drag').toEqual([]);
+      expect(await strikeAgain(page, 'dblclick'), 'unstrike by double-click').toEqual(['charlie']);
+
+      // and a selection covering one struck and one unstruck word STRIKES both
+      // rather than clearing — every() is false, so the action is application
+      expect(await strikeVia(page, 'ltr'), 'one struck to begin with').toEqual(['charlie']);
+      expect(await strikeAgain(page, 'two-words'), 'mixed selection strikes').toEqual(['charlie', 'delta']);
     } finally {
       await browser.close();
     }
