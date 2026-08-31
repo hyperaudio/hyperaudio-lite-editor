@@ -44,11 +44,35 @@ const exportedPage = async (page, context) => {
   return exported;
 };
 
+// Stand in for the clipboard API and record what the page hands it (#606).
+// Reading the SYSTEM clipboard back made this test fail intermittently under
+// the full gate — an empty read, five times in one session, passing every time
+// in isolation. The round trip was never the subject: this file's own header
+// says it tests OUR script. Standing in for the API removes a shared resource
+// from the assertion and makes the page take its first path every time.
+const captureClipboard = (exported) => exported.evaluate(() => {
+  window.__copied = null;
+  navigator.clipboard.write = async (items) => {
+    const item = items[0];
+    window.__copied = {
+      plain: await (await item.getType('text/plain')).text(),
+      html: await (await item.getType('text/html')).text(),
+    };
+  };
+  navigator.clipboard.writeText = async (text) => { window.__copied = { plain: text, html: null }; };
+});
+
 test('the exported page copies the whole transcript, as shown (#564/#605)', async ({ page, context }) => {
   const exported = await exportedPage(page, context);
+  await captureClipboard(exported);
   await exported.click('#ht-copy');
-  const copied = await exported.evaluate(() => navigator.clipboard.readText());
-
+  // Poll: the stub awaits getType() and blob.text(), so what the page hands
+  // over lands a few microtasks after the click. Reading once passed in
+  // isolation and failed under a loaded gate — the same race the fallback
+  // test below avoids by polling.
+  await expect.poll(() => exported.evaluate(() => window.__copied !== null)).toBe(true);
+  const handed = await exported.evaluate(() => window.__copied);
+  const copied = handed.plain;
   expect(copied.length).toBeGreaterThan(50);       // the whole transcript
   // Struck words are COPIED here (#605): this page links the original media,
   // which still speaks them, and they are visible on the page. An Edited-media
@@ -57,6 +81,24 @@ test('the exported page copies the whole transcript, as shown (#564/#605)', asyn
   expect(copied).toContain('STRUCKWORD');
   expect(copied).not.toContain('[');               // speakers read "Name: ", not "[Name]"
   expect(copied.split('\n\n').length).toBeGreaterThan(1); // paragraphs survive
+  // the rich flavour rides along, with the speaker in bold
+  expect(handed.html).toContain('<b>');
+});
+
+test('a rejected rich copy falls back to plain text (#606)', async ({ page, context }) => {
+  // The fallback chain used to be exercised only by accident, whenever the
+  // real clipboard misbehaved. Forced here instead, so it is covered on
+  // purpose rather than as a side effect of a flaky environment.
+  const exported = await exportedPage(page, context);
+  await exported.evaluate(() => {
+    window.__copied = null;
+    navigator.clipboard.write = () => Promise.reject(new Error('no rich clipboard here'));
+    navigator.clipboard.writeText = async (text) => { window.__copied = { plain: text, html: null }; };
+  });
+  await exported.click('#ht-copy');
+  await expect.poll(() => exported.evaluate(() => window.__copied && window.__copied.plain.length))
+    .toBeGreaterThan(50);
+  expect(await exported.evaluate(() => window.__copied.plain)).toContain('STRUCKWORD');
 });
 
 test('the copy button confirms itself, then returns (#564)', async ({ page, context }) => {
