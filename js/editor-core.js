@@ -196,9 +196,25 @@
       // Refresh the field to the current media every time the dialog opens, so a
       // value left over from a previous clip (or a name typed and abandoned) can
       // never be exported by mistake — the field always reflects what's loaded now.
+      // ...and say what this export does with cuts (#608). It references the
+      // ORIGINAL media, so struck-out speech is still audible in it — and,
+      // since #605, shown struck in the transcript that travels with it. Only
+      // when something is actually struck: a note about nothing teaches people
+      // to skip notes.
+      const cutsNote = document.getElementById('interactive-cuts-note');
+      const struckCount = () => document.querySelectorAll(
+        '#hypertranscript [data-m][style*="line-through"]',
+      ).length;
       iaModal.addEventListener('change', () => {
         if (iaModal.checked) {
           iaInput.value = guessMediaSrc();
+          if (cutsNote !== null) {
+            const n = struckCount();
+            cutsNote.style.display = n > 0 ? '' : 'none';
+            cutsNote.textContent = n > 0
+              ? 'This page links your original media, so anything struck out is still in it — and stays struck in the transcript. To share a version with the cuts applied, use Export media and choose Edited media.'
+              : '';
+          }
         }
       });
     }

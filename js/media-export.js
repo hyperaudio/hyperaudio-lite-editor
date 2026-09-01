@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.13 — last changed in release 1.3.13
+ * @version 1.3.14 — last changed in release 1.3.14
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -982,6 +982,21 @@
     } catch (e) { /* storage unavailable (private mode / quota) — non-fatal */ }
   };
 
+  // What the chosen source means for someone's cuts (#608). Only shown when
+  // there ARE cuts: with a clean transcript both options produce the same
+  // media, and a warning about nothing is the kind people learn to ignore.
+  const sourceNote = document.getElementById('export-source-note');
+  // The whole option greys out, not just its radio (#608): a disabled input
+  // beside a full-strength label still reads as a choice you could make.
+  const editedLabel = sourceEdited !== null ? sourceEdited.closest('label') : null;
+  const setSourceNote = (edits) => {
+    if (sourceNote === null) return;
+    sourceNote.style.display = edits ? '' : 'none';
+    sourceNote.textContent = edits
+      ? 'Entire media exports your file as it is — nothing is cut, and anything struck out is still in it, and in the transcript and captions. Edited media applies the cuts and re-renders the file.'
+      : '';
+  };
+
   const populateModal = async () => {
     setStatus('');
     setProgress(null);
@@ -993,6 +1008,8 @@
     const sections = editedSections(duration);
     const edits = hasEdits(sections, duration);
     sourceEdited.disabled = !edits;
+    if (editedLabel !== null) editedLabel.classList.toggle('export-source-off', !edits);
+    setSourceNote(edits);
     if (edits) {
       const saved = duration - keptDuration(sections);
       editSummary.textContent = `(${sections.length - 1} cut${sections.length - 1 === 1 ? '' : 's'}, saves ${saved.toFixed(1)}s)`;

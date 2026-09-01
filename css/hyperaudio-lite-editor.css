@@ -1622,6 +1622,15 @@ label[data-a11y-wired]:focus-visible {
   #project-progress { transition: none; }
 }
 
+/* An unavailable export source reads as unavailable (#608). Disabling the
+   radio alone left its label at full strength, so "Edited media" looked like a
+   choice you could make when there was nothing to edit. The summary beside it
+   still says why — "(no strikeouts or skipped silences)". */
+.export-source-off {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Host-contributed rows (#604): present, and plainly not yet the editor's.
    Dimmed rather than greyed-out — they are clickable, and the badge says
    what the dimming means. Opening one promotes it to an ordinary row, which
