@@ -130,8 +130,56 @@
     return s === null ? Promise.resolve(null) : s.firstMediaFile(id);
   };
 
-  // First-frame capture. Resolves null for audio (videoWidth 0), decode
-  // failure, CORS taint, or timeout — null means "no poster", never throws.
+  // Where to look for a poster frame, in order (#582). Frame 1 was the
+  // likeliest black frame in the whole clip — produced video fades in from
+  // black, and a camera's exposure is still settling — so the capture now
+  // starts around 5s and works outward: later, then earlier, then the true
+  // first frame last. Clipped to the clip. A container that declares no
+  // duration (MediaRecorder's webm) gets the 5s seek anyway, which clamps
+  // to the last frame.
+  function captureCandidates(duration) {
+    const d = Number.isFinite(duration) && duration > 0 ? duration : null;
+    const raw = d === null
+      ? [5, 0.0001]
+      : [Math.min(5, d / 2), Math.min(10, d * 0.75), d / 4, 0.5, 0.0001];
+    const out = [];
+    raw.forEach((t) => {
+      const v = d === null ? t : Math.max(0.0001, Math.min(t, d - 0.05));
+      if (!out.some((o) => Math.abs(o - v) < 0.2)) out.push(v);
+    });
+    return out;
+  }
+
+  // A frame that is certainly nothing: no tonal range, and dark. Measured
+  // on a 16×16 downsample so it costs nothing. "Dark" is generous (up to
+  // ~25% grey) because black rarely arrives as 0: limited-range video
+  // decoded as full range lands near 16, and a JPEG of it drifts higher —
+  // the black posters in the wild are charcoal, not black. What makes it
+  // nothing is the absent range: a dim scene with a face in it has
+  // highlights, and is a fine poster. Deliberately NOT frame scoring, and
+  // the reason a capture may resolve null for a video: writing nothing
+  // means ensureProjectPoster tries again later, where writing black would
+  // have made the black permanent.
+  function isFlatBlack(canvas) {
+    const probe = document.createElement('canvas');
+    probe.width = 16;
+    probe.height = 16;
+    const ctx = probe.getContext('2d');
+    ctx.drawImage(canvas, 0, 0, 16, 16);
+    const d = ctx.getImageData(0, 0, 16, 16).data;
+    let max = 0;
+    let min = 255;
+    for (let i = 0; i < d.length; i += 4) {
+      const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      if (l > max) max = l;
+      if (l < min) min = l;
+    }
+    return max - min < 255 * 0.05 && max < 255 * 0.25;
+  }
+
+  // Poster capture. Resolves null for audio (videoWidth 0), decode failure,
+  // CORS taint, timeout, or a clip that is flat black at every candidate —
+  // null means "no poster", never throws.
   function captureFrameBlob(objectUrl) {
     return new Promise((resolve) => {
       const video = document.createElement('video');
@@ -148,21 +196,39 @@
         resolve(blob || null);
       };
       const timer = setTimeout(() => done(null), CAPTURE_TIMEOUT_MS);
+      let candidates = null;
+      let index = 0;
+      let target = null;       // the seek in flight, or just landed
+      let drawnTarget = null;  // each candidate is drawn once: seeked and canplay both arrive
+      const seekTo = (t) => {
+        target = t;
+        try { video.currentTime = t; } catch (e) { done(null); }
+      };
+      const nextCandidate = () => {
+        index += 1;
+        if (candidates !== null && index < candidates.length) seekTo(candidates[index]);
+        else done(null); // flat black everywhere we looked: no poster is the honest answer
+      };
       const tryDraw = () => {
+        // never the pre-seek frame: that is frame 1 back by another door
+        if (target === null || video.seeking || drawnTarget === target) return;
         if (video.videoWidth <= 0 || video.readyState < 2 /* HAVE_CURRENT_DATA */) return;
+        drawnTarget = target;
         const canvas = document.createElement('canvas');
         canvas.width = CAPTURE_WIDTH;
         canvas.height = Math.max(1, Math.round(CAPTURE_WIDTH * video.videoHeight / video.videoWidth));
         try {
           canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+          if (isFlatBlack(canvas)) { nextCandidate(); return; }
           canvas.toBlob((blob) => done(blob), 'image/jpeg', 0.75);
         } catch (e) {
           done(null); // tainted canvas or draw failure
         }
       };
-      video.addEventListener('loadeddata', () => {
-        // decode the true first frame, then draw on the seek's completion
-        try { video.currentTime = 0.0001; } catch (e) { tryDraw(); }
+      video.addEventListener('loadedmetadata', () => {
+        if (video.videoWidth <= 0) { done(null); return; } // audio: nothing to draw
+        candidates = captureCandidates(video.duration);
+        seekTo(candidates[0]);
       });
       video.addEventListener('seeked', tryDraw);
       video.addEventListener('canplay', tryDraw);
@@ -171,11 +237,33 @@
     });
   }
 
+  // Whether a stored poster is the flat black an earlier capture could
+  // save (#582). Decoded once per project per session: a black poster is
+  // treated as absent so the capture runs again with the candidates above;
+  // if that finds nothing either, the stored one stays.
+  const rechecked = new Set();
+  async function storedPosterIsFlatBlack(id, file) {
+    if (rechecked.has(id)) return false;
+    rechecked.add(id);
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0);
+      bitmap.close();
+      return isFlatBlack(canvas);
+    } catch (e) {
+      return false;
+    }
+  }
+
   let ensureChain = Promise.resolve(); // captures serialize; they're heavy
   function ensureProjectPoster(id) {
     ensureChain = ensureChain.then(async () => {
       if (!id) return;
-      if (await readPoster(id) !== null) return; // once is enough
+      const existing = await readPoster(id);
+      if (existing !== null && !(await storedPosterIsFlatBlack(id, existing))) return; // once is enough
       const media = await firstMediaFile(id);
       if (media === null) return;
       const url = URL.createObjectURL(media);
@@ -218,6 +306,6 @@
   });
 
   window.MediaPosters = Object.freeze({
-    ensureProjectPoster, urlFor, captureFrameBlob, glyphUrl, glyphHue, glyphSeed, glyphFill,
+    ensureProjectPoster, urlFor, captureFrameBlob, captureCandidates, glyphUrl, glyphHue, glyphSeed, glyphFill,
   });
 })();
