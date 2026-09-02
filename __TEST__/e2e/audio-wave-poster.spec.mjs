@@ -251,3 +251,19 @@ test.describe('glyph colour (#618)', () => {
     });
   }
 });
+
+// #621 — the intro's medium is in the markup and starts loading before any script,
+// so a cached mp3 can report metadata before media-first-frame has a
+// listener: the markup poster then stayed on the player while the Recents
+// popout drew the glyph. A library change now settles audio that is still
+// wearing the markup poster.
+test('audio still wearing the markup poster takes the glyph at the next library change', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect.poll(() => posterKind(page)).toBe('glyph');
+  // the state a missed loadedmetadata leaves behind
+  await page.evaluate(() => document.getElementById('hyperplayer').setAttribute('poster', 'images/poster.png'));
+  await expect.poll(() => posterKind(page)).toBe('intro-artwork');
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('hyperaudioLibraryChanged')));
+  await expect.poll(() => posterKind(page), { timeout: 5000 }).toBe('glyph');
+});
