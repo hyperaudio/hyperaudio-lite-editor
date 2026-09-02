@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.13 — last changed in release 1.3.13
+ * @version 1.3.14 — last changed in release 1.3.14
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -98,15 +98,16 @@
      in the small-screen drawer, where there is no useful hover and no room
      beside the panel. ---- */
 
-  // The glyph is media-posters' (#603): the player draws the same one, and two
-  // copies of a picture are two pictures waiting to diverge. Local fallbacks
+  // The glyph is media-posters' (#603), and so is its tint (#618): the player
+  // draws the same one, and two copies of a picture are two pictures waiting
+  // to diverge — the hand-built hsl string here was exactly that. Both take
+  // the library ENTRY, whose created time seeds the colour. Neutral fallbacks
   // keep the popout working if that module is absent — it is optional.
-  const hashHue = (id) => (window.MediaPosters && window.MediaPosters.glyphHue)
-    ? window.MediaPosters.glyphHue(id)
-    : (() => { let h = 0; const s = String(id || '');
-        for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 360; return h; })();
-  const glyphUrl = (id) => (window.MediaPosters && window.MediaPosters.glyphUrl)
-    ? window.MediaPosters.glyphUrl(id)
+  const glyphFill = (entry) => (window.MediaPosters && window.MediaPosters.glyphFill)
+    ? window.MediaPosters.glyphFill(entry)
+    : '#e5e7eb';
+  const glyphUrl = (entry) => (window.MediaPosters && window.MediaPosters.glyphUrl)
+    ? window.MediaPosters.glyphUrl(entry)
     : null;
 
   const drawerQuery = window.matchMedia('(max-width: 948px)');
@@ -136,10 +137,10 @@
     if (entry.media && entry.media.kind !== 'none') {
       const thumb = document.createElement('div');
       thumb.className = 'recents-popout-thumb';
-      thumb.style.background = 'hsl(' + hashHue(entry.id || '') + ' 30% 88%)';
+      thumb.style.background = glyphFill(entry);
       // the same picture the player shows for this project (#603), as an
       // element so the stored poster can replace it cleanly when one arrives
-      const glyph = glyphUrl(entry.id || '');
+      const glyph = glyphUrl(entry);
       if (glyph !== null) {
         const glyphImg = document.createElement('img');
         glyphImg.className = 'recents-popout-glyph';

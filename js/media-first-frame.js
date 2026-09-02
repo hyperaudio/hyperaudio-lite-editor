@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.13 — last changed in release 1.3.13
+ * @version 1.3.14 — last changed in release 1.3.14
  * @license MIT
  *
  * First-frame display for video media (#556). A <video> shows its poster —
@@ -81,6 +81,20 @@
       const lib = window.HyperaudioSave && window.HyperaudioSave.library;
       return lib && typeof lib.currentId === 'function' ? lib.currentId() : null;
     };
+    // The library's entry for an id, for the glyph's seed (#618): the colour
+    // hashes from the project's created time, which only the entry carries.
+    // Resolves the bare id when the library cannot say, so the glyph is
+    // still drawn — just seeded per app rather than per file.
+    const currentEntry = async (id) => {
+      const lib = window.HyperaudioSave && window.HyperaudioSave.library;
+      if (!lib || typeof lib.list !== 'function') return id;
+      try {
+        const entry = (await lib.list()).find((p) => String(p.id) === String(id));
+        return entry === undefined ? id : entry;
+      } catch (e) {
+        return id;
+      }
+    };
 
     // The project's own stored frame-1 capture, waiting for it to be made if
     // this is the first visit. ensureProjectPoster is the same serialized,
@@ -146,15 +160,37 @@
       if (player.videoWidth > 0) return;
       player.style.aspectRatio = '';
       const token = loadToken;
-      applyStoredPoster(token, false).then((applied) => {
+      applyStoredPoster(token, false).then(async (applied) => {
         if (applied || token !== loadToken) return;
         const posters = window.MediaPosters;
         const id = currentProjectId();
         if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
-          player.setAttribute('poster', posters.glyphUrl(id));
+          const entry = await currentEntry(id);
+          if (token !== loadToken) return;   // the library moved on meanwhile
+          player.setAttribute('poster', posters.glyphUrl(entry));
           return;
         }
         if (defaultPoster !== null) player.setAttribute('poster', defaultPoster);
+      });
+    });
+
+    // A project born on this player — a dropped file, a transcription — gets
+    // its library entry AFTER its media loads, so the glyph drawn above could
+    // only be seeded by the id. Re-seed it when the library changes, and only
+    // a glyph: a stored capture or an embedder's poster is never touched here
+    // (#618).
+    document.addEventListener('hyperaudioLibraryChanged', () => {
+      if (player.videoWidth > 0) return;
+      const showing = player.getAttribute('poster') || '';
+      if (!showing.startsWith('data:image/svg')) return;
+      const posters = window.MediaPosters;
+      const id = currentProjectId();
+      if (!posters || typeof posters.glyphUrl !== 'function' || id === null) return;
+      const token = loadToken;
+      currentEntry(id).then((entry) => {
+        if (token !== loadToken) return;
+        const url = posters.glyphUrl(entry);
+        if (player.getAttribute('poster') !== url) player.setAttribute('poster', url);
       });
     });
   }
