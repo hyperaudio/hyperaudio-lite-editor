@@ -188,6 +188,9 @@ test('the interactive transcript links a sidecar .vtt, never an inline data URL'
 // missing <track> looked like a bug in the first place.
 test('the "included with the interactive transcript" note tracks reality', async ({ page }) => {
   await openExportModal(page);
+  // the sidecar options live in a disclosure now (#616), closed by default;
+  // this note explains a choice you are looking at, so open it to look
+  await page.evaluate(() => { document.getElementById('export-extras').open = true; });
   const note = page.locator('#export-vtt-note');
   const set = (id, on) => page.evaluate(({ i, v }) => {
     const c = document.getElementById(i);
