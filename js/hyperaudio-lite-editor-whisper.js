@@ -1,9 +1,33 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.3 — last changed in release 1.3.3
+ * @version 1.3.14 — last changed in release 1.3.14
  * @license MIT
  */
+
+// Where this engine keeps its downloaded models (#615), so Settings can size
+// and remove them without knowing any engine. 'transformers-cache' is the
+// Cache API name transformers.js (4.2.0, whisper.worker.js) stores under;
+// each model's files sit under its Hugging Face repo path, which `label`
+// turns into the name the Transcribe modal uses (size, and English-only or
+// multilingual) so every model can be removed on its own. Null marks an
+// entry as ancillary — counted in the total, not listed, and dropped with
+// the last model.
+(window.HyperaudioModelStores = window.HyperaudioModelStores || []).push({
+  engine: 'Whisper',
+  cacheName: 'transformers-cache',
+  label(url) {
+    // <host>/<org>/<repo>/resolve/... — the repo names the model. Sizes are
+    // read from the repo name so older repos (Xenova/whisper-tiny.en, from
+    // before the June 2026 lineup) label the same way as today's.
+    const repo = /^https?:\/\/[^/]+\/([^/]+\/[^/]+)\/resolve\//.exec(url);
+    if (repo === null) return null;   // the ONNX runtime, cached alongside: not a model
+    const m = /whisper-(tiny|base|small|medium|large[a-z0-9-]*)(\.en)?(?:_|$)/.exec(repo[1].split('/')[1] + '_');
+    if (m === null) return 'Whisper · ' + repo[1];
+    const size = /turbo/.test(m[1]) ? 'turbo' : m[1];
+    return 'Whisper ' + size + (m[2] ? ' · English' : ' · multilingual');
+  },
+});
 
 class WhisperService extends HTMLElement {
 

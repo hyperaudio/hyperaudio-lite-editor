@@ -1,7 +1,7 @@
 /**
  * transcribe-prefs.js
  * (C) The Hyperaudio Project
- * @version 0.8.2 — last changed in release 0.8.2
+ * @version 1.3.14 — last changed in release 1.3.14
  * @license MIT
  *
  * Remembers the Transcribe modal's choices across sessions (#390): the
@@ -11,7 +11,8 @@
  *
  * The keys live in localStorage in plain text — same trust model as pasting a
  * bring-your-own key into the page at all; convenient for a personal tool, and
- * the user can clear site data to remove them.
+ * the user can clear site data to remove them — or, since #615, press Forget
+ * in Settings, which is what the TranscribePrefs surface below is for.
  */
 
 (function () {
@@ -129,6 +130,35 @@
       });
     });
   }
+
+  // Forget every remembered key (#615): blank the fields, untick their
+  // remember toggles so the next save omits them, let each engine re-evaluate
+  // its TRANSCRIBE button, then persist. Purging them by hand meant visiting
+  // each engine tab and unticking each box.
+  function forgetKeys() {
+    Object.keys(REMEMBER_MAP).forEach((id) => {
+      const el = byId(id);
+      if (el) el.value = '';
+      const rem = byId(REMEMBER_MAP[id]);
+      if (rem) rem.checked = false;
+    });
+    [...Object.keys(REMEMBER_MAP), 'assemblyai-media', 'deepgram-media', 'parakeet-hf-media'].forEach((id) => {
+      const el = byId(id);
+      if (el) el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    savePrefs();
+  }
+
+  // Whether any key is currently persisted — read from storage, not the
+  // fields, since the fields also hold keys typed this session and not kept.
+  function hasRememberedKeys() {
+    let prefs = null;
+    try { prefs = JSON.parse(localStorage.getItem(PREFS_KEY)); } catch (e) { return false; }
+    const vals = (prefs && prefs.values) || {};
+    return Object.keys(REMEMBER_MAP).some((id) => typeof vals[id] === 'string' && vals[id].trim() !== '');
+  }
+
+  window.TranscribePrefs = Object.freeze({ forgetKeys, hasRememberedKeys });
 
   function init() {
     wireKeyEyes();

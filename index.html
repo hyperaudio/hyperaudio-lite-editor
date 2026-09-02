@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 1.3.13 (last changed in release 1.3.13) -->
+<!--  Hyperaudio Lite Editor - Version 1.3.14 (last changed in release 1.3.14) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,7 +18,12 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="1.3.13">
+  <meta name="version" content="1.3.14">
+  <!-- The version is bumped with the FIRST change of a release, like the
+       per-file cache stamps, so a working tree reports the release it is
+       becoming. The date is set by the release commit and stays empty until
+       then: Settings shows "unreleased" in its place (#615). -->
+  <meta name="release-date" content="">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -45,9 +50,10 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=0.6.7"></script>
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=0.8.1"></script>
   <script src="js/hyperaudio-lite-editor-parakeet.js?v=0.8.2"></script>
-  <script src="js/transcribe-prefs.js?v=0.8.2"></script>
-  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.3"></script>
-  <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.3"></script>
+  <script src="js/transcribe-prefs.js?v=1.3.14"></script>
+  <script src="js/settings.js?v=1.3.14"></script>
+  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.14"></script>
+  <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.14"></script>
   <script src="js/word-alignment.js?v=1.3.8"></script>
   <script src="js/html-json-converter.js?v=1.1.9"></script>
   <script src="js/transcript-to-ionosphere.js?v=1.1.1"></script>
@@ -382,6 +388,14 @@ If you are creating an open source application under a license compatible with t
             <button id="audio-only-btn" type="button" class="btn btn-square btn-outline btn-sm tooltip" data-tip="Audio only" aria-label="Toggle audio only" aria-pressed="false" onclick="toggleAudioOnly(this)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-audio-lines"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
             </button>
+            <!-- Settings (#615): a label-button, so a11y.js makes it keyboard-
+                 operable and the CSS-only modal opens with no script. Here,
+                 with the other icon buttons, rather than in the navbar (no
+                 width to spare, #592) or beside Speakers/Timecodes, which are
+                 the project's options, not the user's. -->
+            <label id="settings-btn" for="settings-modal" class="btn btn-square btn-outline btn-sm tooltip" data-tip="Settings" aria-label="Settings">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </label>
             <!-- margin-left:auto right-aligns the toggle pair in the space the
                  info button freed when it moved into the kebab menu (#456) -->
             <label for="show-speakers" style="display:flex; align-items:center; gap:6px; margin-left:auto; cursor:pointer; white-space:nowrap;">
@@ -535,6 +549,72 @@ If you are creating an open source application under a license compatible with t
                 <p id="topics"></p>
               </div>
               <p id="app-version" style="margin-top:14px; font-size:75%; opacity:0.55; text-align:right"></p>
+            </div>
+          </div>
+
+          <!-- Settings (#615): the user's choices, not the project's. The rule
+               for what belongs here: if it travels in the .hyperaudio file
+               (Speakers, Timecodes, gap removal) it is a property of the
+               project and stays out. Playback leads because the gear sits in
+               the player's row; Application holds the escape hatches for
+               choices that could not otherwise be undone. Wired by
+               js/settings.js. -->
+          <input type="checkbox" id="settings-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
+          <div class="modal">
+            <div class="modal-box relative" style="max-width:28rem">
+              <label for="settings-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
+              <h3 class="text-lg font-bold">Settings</h3>
+              <div class="settings-section">
+                <h4 class="settings-section-label">Playback</h4>
+                <label class="settings-row settings-row-toggle" for="setting-play-on-dblclick">
+                  <span class="settings-text">
+                    Double-click a word to play from it
+                    <span class="settings-hint">Off: a double-click only moves the playhead there.</span>
+                  </span>
+                  <input type="checkbox" id="setting-play-on-dblclick" class="toggle toggle-primary" />
+                </label>
+              </div>
+              <div class="settings-section">
+                <h4 class="settings-section-label">Application</h4>
+                <div class="settings-row">
+                  <span class="settings-text">Version</span>
+                  <span id="settings-app-version" class="settings-value"></span>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-text">
+                    Storage
+                    <span id="settings-storage" class="settings-hint">Measuring…</span>
+                  </span>
+                </div>
+                <div class="settings-row settings-row-stack">
+                  <span class="settings-text">
+                    Downloaded models
+                    <span id="settings-models-hint" class="settings-hint">Measuring…</span>
+                  </span>
+                  <ul id="settings-models" class="settings-models" aria-label="Downloaded models"></ul>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-text">
+                    Warnings you asked not to see again
+                    <span id="settings-undismiss-hint" class="settings-hint"></span>
+                  </span>
+                  <button type="button" id="settings-undismiss" class="btn btn-sm btn-outline">Show again</button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-text">
+                    API keys remembered by Transcribe
+                    <span id="settings-forget-keys-hint" class="settings-hint"></span>
+                  </span>
+                  <button type="button" id="settings-forget-keys" class="btn btn-sm btn-outline">Forget</button>
+                </div>
+                <div class="settings-row">
+                  <span class="settings-text">
+                    Reset the editor
+                    <span class="settings-hint">Removes every project and every remembered choice, and brings the intro back.</span>
+                  </span>
+                  <button type="button" id="settings-reset" class="btn btn-sm btn-outline btn-error">Reset…</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1122,7 +1202,7 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=1.3.13"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=1.3.13"></script>
+  <script src="js/hyperaudio-save.js?v=1.3.14"></script>
   <script src="js/hyperaudio-library.js?v=1.3.14"></script>
   <script src="js/media-first-frame.js?v=1.3.14"></script>
   <script src="js/media-posters.js?v=1.3.14"></script>

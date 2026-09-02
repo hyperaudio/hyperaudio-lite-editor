@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.13 — last changed in release 1.3.13
+ * @version 1.3.14 — last changed in release 1.3.14
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -605,9 +605,9 @@
     }
   }
 
-  async function deleteRootEntry(name) {
+  async function deleteRootEntry(name, recursive) {
     try {
-      await (await storageRoot()).removeEntry(name);
+      await (await storageRoot()).removeEntry(name, { recursive: recursive === true });
     } catch (e) { /* nothing to delete */ }
   }
 
@@ -2889,6 +2889,29 @@
     return { wasCurrent };
   }
 
+  // Back to the initial state (#615): every project directory, the index
+  // (and with it the intro marker, so the intro is seeded again — the only
+  // way back once it has been deleted, #602), the legacy root files and the
+  // boot hint. Storage only: the caller owns the reload that puts a fresh
+  // page on the emptied origin, and whatever localStorage is its own. The
+  // local engines' cached models are downloads, not work, and are not
+  // touched. Quiesces the session first, as deleteProject does, so no
+  // in-flight draft can land in a directory that is about to go.
+  async function resetEverything() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    autosavePending = false;
+    await snapshotChain;
+    releaseProjectLock();
+    session.projectId = null;
+    if (opfsAvailable) {
+      await deleteRootEntry(WORK_DIR, true);
+      await deleteRootEntry(LIBRARY_FILE);
+      await deleteRootEntry(APP_STATE_FILE);
+    }
+    try { localStorage.removeItem('hyperaudioHasProjects'); } catch (e) { /* private mode */ }
+  }
+
   /* ---- Boot (#456): migrate any pre-#456 single-slot working copy, then
      restore the most recently edited project — the index IS the boot hint.
      The single-slot layout (work/snapshot.json + root app-state.json) never
@@ -3549,6 +3572,9 @@
     // through this rather than growing their own markup — the caption
     // divergence warning (editor-main) is the first outside caller.
     dialog: projectDialog,
+    // Settings → Reset (#615): empties storage and leaves the reload to the
+    // caller. Destructive by design; the confirmation lives with the button.
+    resetEverything,
     // The project library (#456) — everything the side panel
     // (hyperaudio-library.js) needs; re-renders ride the
     // 'hyperaudioLibraryChanged' document event.
