@@ -3,7 +3,7 @@
 // wore the same face, and the same project looked different in the library
 // (which has drawn audio a wave glyph since #523) than in the player. Both
 // now draw the one glyph, from media-posters.
-import { test, expect } from '@playwright/test';
+import { test, expect, webkit, chromium } from '@playwright/test';
 
 const posterKind = (page) => page.evaluate(() => {
   const poster = document.getElementById('hyperplayer').getAttribute('poster') || '';
@@ -26,15 +26,27 @@ test('the player and the library draw the SAME glyph (#603)', async ({ page }) =
   await expect.poll(() => posterKind(page)).toBe('glyph');
 
   // one picture, two places: the hue is per-project, so a mismatch here means
-  // the two have drifted apart again
-  const agree = await page.evaluate(() => {
+  // the two have drifted apart again. Since #618 the seed is the entry's
+  // created time, so the player must have hashed the ENTRY, not the bare id.
+  const agree = await page.evaluate(async () => {
     const poster = decodeURIComponent(document.getElementById('hyperplayer').getAttribute('poster'));
-    const inPlayer = (poster.match(/hsl\((\d+)/) || [])[1];
-    const id = window.HyperaudioSave.library.currentId();
-    return { inPlayer: Number(inPlayer), inLibrary: window.MediaPosters.glyphHue(id) };
+    const inPlayer = (poster.match(/oklch\(\S+ \S+ (\d+)\)/) || [])[1];
+    const lib = window.HyperaudioSave.library;
+    const entry = (await lib.list()).find((p) => String(p.id) === String(lib.currentId()));
+    const P = window.MediaPosters;
+    return {
+      inPlayer: Number(inPlayer),
+      inLibrary: P.glyphHue(P.glyphSeed(entry)),
+      byIdOnly: P.glyphHue(P.glyphSeed(entry.id)),
+      seededByCreated: P.glyphSeed(entry).startsWith('created:'),
+    };
   });
-  expect(agree.inPlayer).toBe(agree.inLibrary);
   expect(Number.isFinite(agree.inPlayer)).toBe(true);
+  expect(agree.inPlayer).toBe(agree.inLibrary);
+  expect(agree.seededByCreated).toBe(true);
+  // a distinct answer from the id-seeded hue is what proves the seed changed
+  // (they could collide 1 time in 360, so this is a guard on the setup)
+  test.info().annotations.push({ type: 'byIdOnly', description: String(agree.byIdOnly) });
 });
 
 test('an embedder poster still wins over the glyph (#603)', async ({ page }) => {
@@ -101,20 +113,141 @@ test('switching between audio projects changes the glyph with it (#603)', async 
     (await window.HyperaudioSave.library.list()).map((e) => e.id));
   expect(ids.length).toBe(2);
 
-  const shownHue = () => page.evaluate(() => {
+  // #618: the ENTRY seeds the colour, so the expected hue is read from the
+  // library — asynchronously, which is why the target is polled for rather
+  // than captured once right after open(), when the index is still settling.
+  const shownHue = (id) => page.evaluate(async (id) => {
     const poster = decodeURIComponent(
       document.getElementById('hyperplayer').getAttribute('poster') || '');
+    const P = window.MediaPosters;
+    const entry = (await window.HyperaudioSave.library.list()).find((e) => String(e.id) === String(id));
     return {
-      shown: Number((poster.match(/hsl\((\d+)/) || [])[1]),
-      expected: window.MediaPosters.glyphHue(window.HyperaudioSave.library.currentId()),
+      shown: Number((poster.match(/oklch\(\S+ \S+ (\d+)\)/) || [])[1]),
+      expected: entry ? P.glyphHue(P.glyphSeed(entry)) : null,
     };
-  });
+  }, id);
 
+  let previous = null;
   for (const id of [ids[1], ids[0], ids[1]]) {
     await page.evaluate((i) => window.HyperaudioSave.library.open(i), id);
     // deliberately shorter than the capture timeout: the point is that the
     // glyph arrives promptly, not eventually
-    await expect.poll(shownHue, { timeout: 4000 })
-      .toEqual(await shownHue().then((h) => ({ shown: h.expected, expected: h.expected })));
+    await expect.poll(async () => {
+      const h = await shownHue(id);
+      return h.expected !== null && h.shown === h.expected ? 'settled' : JSON.stringify(h);
+    }, { timeout: 4000 }).toBe('settled');
+    const h = await shownHue(id);
+    if (previous !== null) expect(h.shown).not.toBe(previous);   // it CHANGED, not merely matched
+    previous = h.shown;
+  }
+});
+
+// #618 — every glyph read as the same pale grey (hsl 30% 88% is within a few
+// steps of white for any hue), and a project changed colour between HLE and
+// Glider because each app hashed its own OPFS id. The colour now hashes the
+// project's created time, which travels in the file, and the tint is an
+// oklch pastel with real chroma.
+test.describe('glyph colour (#618)', () => {
+  test('follows the created time, not the id, and accepts either shape', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForSelector('#hypertranscript [data-m]');
+    const r = await page.evaluate(() => {
+      const P = window.MediaPosters;
+      const T = 1756800000000;
+      return {
+        sameCreatedDifferentIds: P.glyphUrl({ id: 'a', createdAt: T }) === P.glyphUrl({ id: 'b', createdAt: T }),
+        isoAndMsAgree: P.glyphSeed({ created: new Date(T).toISOString() }) === P.glyphSeed({ createdAt: T }),
+        secondsApartDiffer: P.glyphHue(P.glyphSeed({ createdAt: T })) !== P.glyphHue(P.glyphSeed({ createdAt: T + 1000 })),
+        noCreatedFallsBackToId: P.glyphUrl({ id: 'x' }) === P.glyphUrl('x'),
+        fillIsOklch: /^oklch\(84% 0\.09 \d+\)$/.test(P.glyphFill({ createdAt: T })),
+      };
+    });
+    expect(r).toEqual({
+      sameCreatedDifferentIds: true, isoAndMsAgree: true, secondsApartDiffer: true,
+      noCreatedFallsBackToId: true, fillIsOklch: true,
+    });
+  });
+
+  // A project born from a file has no library entry when its media loads,
+  // so the first glyph is id-seeded; once the entry exists the colour must
+  // become the file's. Without the re-seed the player kept the id colour
+  // until the next project switch.
+  test('a project born from a file takes its created-time colour once its entry exists', async ({ page }) => {
+    await page.goto('/index.html');
+    await page.waitForSelector('#hypertranscript [data-m]');
+    await page.waitForTimeout(1500);
+    await page.evaluate(async () => {
+      const sr = 8000, n = sr, buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+      const w = (o, s) => { for (let i = 0; i < s.length; i += 1) dv.setUint8(o + i, s.charCodeAt(i)); };
+      w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt ');
+      dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+      dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true); dv.setUint16(32, 2, true);
+      dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+      const file = new File([buf], 'born.wav', { type: 'audio/wav' });
+      const dt = new DataTransfer(); dt.items.add(file);
+      const input = document.getElementById('file-input');
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      document.getElementById('hyperplayer').src = URL.createObjectURL(file);
+      document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    });
+    const hues = () => page.evaluate(async () => {
+      const P = window.MediaPosters, lib = window.HyperaudioSave.library;
+      const poster = decodeURIComponent(document.getElementById('hyperplayer').getAttribute('poster') || '');
+      const entry = (await lib.list()).find((e) => String(e.id) === String(lib.currentId()));
+      if (!entry || !entry.createdAt) return null;   // the entry has not been written yet
+      return {
+        shown: Number((poster.match(/oklch\(\S+ \S+ (\d+)\)/) || [])[1]),
+        byEntry: P.glyphHue(P.glyphSeed(entry)),
+        byId: P.glyphHue(P.glyphSeed(entry.id)),
+      };
+    });
+    await expect.poll(hues, { timeout: 15000 }).not.toBeNull();
+    await expect.poll(async () => { const h = await hues(); return h && h.shown === h.byEntry; }, { timeout: 5000 }).toBe(true);
+    // guard on the setup: an id-seeded glyph is only distinguishable when the two hues differ
+    const h = await hues();
+    test.info().annotations.push({ type: 'hues', description: JSON.stringify(h) });
+  });
+
+  // The fill is inside an SVG data URI in a poster attribute, and the pale
+  // tint was invisible by construction — so measure the painted colour, in
+  // both engines: WebKit's SVG-as-image path is not Chromium's.
+  for (const [engineName, engine] of [['WebKit', webkit], ['Chromium', chromium]]) {
+    test(`${engineName}: the glyph paints a visibly coloured background`, async () => {
+      let browser;
+      try {
+        browser = await engine.launch();
+      } catch (e) {
+        test.skip(true, `${engineName} build not installed: ${e.message}`);
+        return;
+      }
+      try {
+        const page = await (await browser.newContext()).newPage();
+        await page.goto('http://localhost:4173/index.html');
+        await page.waitForSelector('#hypertranscript [data-m]');
+        const px = await page.evaluate(() => new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = 64; c.height = 36;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0, 64, 36);
+            const d = ctx.getImageData(2, 2, 1, 1).data;   // a corner: clear of the bars
+            resolve({ r: d[0], g: d[1], b: d[2], a: d[3] });
+          };
+          img.onerror = () => resolve(null);
+          img.src = window.MediaPosters.glyphUrl({ id: 'probe', createdAt: 1756800000000 });
+        }));
+        expect(px).not.toBeNull();
+        expect(px.a).toBe(255);
+        const spread = Math.max(px.r, px.g, px.b) - Math.min(px.r, px.g, px.b);
+        // the old tint measured ~18 here; a fill that failed to parse paints
+        // black (spread 0) or nothing (alpha 0)
+        expect(spread).toBeGreaterThanOrEqual(25);
+        expect(Math.max(px.r, px.g, px.b)).toBeGreaterThan(120);
+      } finally {
+        await browser.close();
+      }
+    });
   }
 });

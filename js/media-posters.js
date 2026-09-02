@@ -1,7 +1,7 @@
 /**
  * media-posters.js
  * (C) The Hyperaudio Project
- * @version 1.3.13 — last changed in release 1.3.13
+ * @version 1.3.14 — last changed in release 1.3.14
  * @license MIT
  *
  * Project posters (#523 phase A): a first-frame JPEG captured from each
@@ -52,18 +52,47 @@
     0.50, 0.80, 0.40, 0.65, 1.00, 0.55, 0.30, 0.70, 0.45,
   ];
 
-  // deterministic per-project hue, so audio projects differ at a glance
-  // without anything being stored
-  function glyphHue(id) {
-    let h = 0;
-    const s = String(id || '');
-    for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 360;
-    return h;
+  // Deterministic per-project hue, so audio projects differ at a glance
+  // without anything being stored. FNV-1a rather than the h*31 walk (#618):
+  // the seed is now a timestamp, and two recordings seconds apart differ in
+  // one digit — a weak mix would put them a few degrees apart on the wheel.
+  function glyphHue(seed) {
+    let h = 0x811c9dc5;
+    const s = String(seed === null || seed === undefined ? '' : seed);
+    for (let i = 0; i < s.length; i += 1) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h % 360;
+  }
+
+  // What the hue hashes FROM (#618). The OPFS id is minted per app, so one
+  // file wore unrelated colours in HLE and in Glider. `created` travels in
+  // the .hyperaudio and is preserved on open, so hashing it gives a project
+  // one colour wherever it turns up. Accepts a library entry (createdAt, ms)
+  // or a state (created, ISO) — both normalise to the same instant — and a
+  // bare id for callers that have nothing else, or entries from before the
+  // field existed.
+  function glyphSeed(entry) {
+    if (entry === null || entry === undefined) return '';
+    if (typeof entry !== 'object') return String(entry);
+    const created = entry.createdAt !== undefined ? entry.createdAt : entry.created;
+    const ms = typeof created === 'number' ? created : Date.parse(created);
+    if (Number.isFinite(ms) && ms > 0) return 'created:' + ms;
+    return String(entry.id || '');
+  }
+
+  // oklch, for uniform PERCEIVED lightness across the wheel: the hsl tint this
+  // replaced (30% 88%) put every hue within a few steps of white, so the
+  // per-project colour read as one pale grey everywhere (#618). One
+  // definition, shared with the library's popout thumb.
+  function glyphFill(entry) {
+    return 'oklch(84% 0.09 ' + glyphHue(glyphSeed(entry)) + ')';
   }
 
   // 16:9 to match the popout's thumb, and so the player keeps the shape it has
   // with the markup poster rather than going square.
-  function glyphUrl(id) {
+  function glyphUrl(entry) {
     const W = 640;
     const H = 360;
     const span = 240;              // the bars' width: well clear of the play badge
@@ -78,7 +107,7 @@
     }).join('');
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '"'
       + ' viewBox="0 0 ' + W + ' ' + H + '">'
-      + '<rect width="' + W + '" height="' + H + '" fill="hsl(' + glyphHue(id) + ' 30% 88%)"/>'
+      + '<rect width="' + W + '" height="' + H + '" fill="' + glyphFill(entry) + '"/>'
       + '<g fill="none" stroke="' + GLYPH_STROKE + '" stroke-width="7"'
       + ' stroke-linecap="round" opacity="0.75">' + bars + '</g></svg>';
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
@@ -189,6 +218,6 @@
   });
 
   window.MediaPosters = Object.freeze({
-    ensureProjectPoster, urlFor, captureFrameBlob, glyphUrl, glyphHue,
+    ensureProjectPoster, urlFor, captureFrameBlob, glyphUrl, glyphHue, glyphSeed, glyphFill,
   });
 })();
