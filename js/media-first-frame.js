@@ -124,9 +124,36 @@
       }
     }
 
+    // Whether the transcript loader owns the screen: the medium on the player
+    // is a transcription's, and no project owns it yet.
+    const loaderOwnsScreen = () => {
+      const t = document.getElementById('hypertranscript');
+      return t !== null && t.getAttribute('aria-busy') === 'true';
+    };
+    let ownFrameToken = -1; // the load whose own first frame is already the poster
+
     function reveal() {
       if (player.videoWidth <= 0) return; // audio, or dimensions not known yet
       player.style.aspectRatio = player.videoWidth + ' / ' + player.videoHeight;
+      // A transcription's medium (#619): the session's project — whose capture the
+      // stored-poster pass below would fetch — is still the PREVIOUS one, so
+      // its picture was drawn into THIS medium's box: a 16:9 photo
+      // letterboxed in a 4:3 frame, corners squared off, until the newborn
+      // project's own capture arrived at the end. The medium's own first
+      // frame is the honest picture. Drawn once a frame is decodable (the
+      // loadeddata / canplay passes land here too), once per load, and with
+      // no seek (#575). A frame that cannot be drawn (cross-origin) leaves
+      // the stand-in alone, as loadstart does.
+      if (loaderOwnsScreen()) {
+        if (player.readyState >= 2 && ownFrameToken !== loadToken) {
+          const own = freezeFrame();
+          if (own !== null) {
+            player.setAttribute('poster', own);
+            ownFrameToken = loadToken;
+          }
+        }
+        return;
+      }
       // NO removeAttribute, and no epsilon seek: both drove the element into
       // the display mode WebKit will not leave (#575). The stand-in frame
       // showing right now belongs to the PREVIOUS project, so it is replaced
