@@ -1,9 +1,18 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.3 — last changed in release 1.3.3
+ * @version 1.3.14 — last changed in release 1.3.14
  * @license MIT
  */
+
+// Where this engine keeps its downloaded models (#615), so Settings can size
+// and remove them without knowing any engine. Must match CACHE_NAME in
+// parakeet.worker.js, which owns the entries (and their length sidecars).
+(window.HyperaudioModelStores = window.HyperaudioModelStores || []).push({
+  engine: 'Parakeet',
+  cacheName: 'parakeet-models-v1',
+  label: () => 'Parakeet TDT 0.6B v3 · multilingual',   // the one model this engine ships
+});
 
 class ParakeetLocalService extends HTMLElement {
 

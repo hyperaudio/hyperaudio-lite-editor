@@ -743,7 +743,10 @@
       autoScroll: true,
       doubleClick: true,
       webMonetization: false,
-      playOnClick: false,
+      // The user's choice (#615, settings.js): a double-click always moves
+      // the playhead; whether it also plays is a matter of taste. Read here
+      // so every re-init honours it; the toggle also sets it live.
+      playOnClick: window.HyperaudioSettings ? window.HyperaudioSettings.get('playOnDoubleClick') : false,
       scrollOffset: SCROLL_TOP_GAP,
       // The element that actually scrolls is .transcript-holder, not
       // #hypertranscript (the library default, which is absolutely positioned
