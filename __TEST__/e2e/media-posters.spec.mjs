@@ -148,3 +148,102 @@ test('the player wears the project\'s own capture after a switch (#575)', async 
     return poster === null ? 'none' : poster.split(':')[0];
   }, { timeout: 15000 }).toBe('blob');
 });
+
+// #582 — frame 1 is the likeliest black frame in a clip (fade-ins, a camera
+// still settling), and a black capture was permanent. The capture now starts
+// around 5s, refuses a flat-black frame and tries other offsets, and writes
+// nothing rather than black; a stored black poster is captured again.
+const makeClip = (paintSource, frames) => new Promise((resolve) => {
+  const paint = eval(paintSource);
+  const canvas = document.createElement('canvas');
+  canvas.width = 320; canvas.height = 180;
+  const ctx = canvas.getContext('2d');
+  paint(ctx, 0);
+  const stream = canvas.captureStream(10);
+  const rec = new MediaRecorder(stream, { mimeType: 'video/webm' });
+  const chunks = [];
+  rec.ondataavailable = (e) => chunks.push(e.data);
+  rec.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }));
+  rec.start();
+  let n = 0;
+  const tick = setInterval(() => {
+    paint(ctx, ++n);
+    if (n >= frames) { clearInterval(tick); rec.stop(); }
+  }, 100);
+});
+// "black" for the first 2 s (20 frames at 10 fps), then orange. Charcoal,
+// not #000: that is what black video decodes to in practice, and what the
+// stuck posters in the wild look like.
+const blackThenOrange = `(ctx, n) => { ctx.fillStyle = n < 20 ? '#1c1c1e' : '#e80'; ctx.fillRect(0, 0, 320, 180); }`;
+const allBlack = `(ctx) => { ctx.fillStyle = '#1c1c1e'; ctx.fillRect(0, 0, 320, 180); }`;
+
+const meanLuma = async (page, blobExpr) => page.evaluate(`(async () => {
+  const blob = await (${blobExpr});
+  if (!blob) return null;
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0, 16, 16);
+  const d = ctx.getImageData(0, 0, 16, 16).data;
+  let sum = 0; for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+  return sum / 256;
+})()`);
+
+test('the candidates start around 5s and end with the first frame, clipped to the clip (#582)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const c = await page.evaluate(() => ({
+    long: window.MediaPosters.captureCandidates(1320),   // 22 minutes
+    short: window.MediaPosters.captureCandidates(4),
+    tiny: window.MediaPosters.captureCandidates(0.3),
+    unknown: window.MediaPosters.captureCandidates(Infinity),
+  }));
+  expect(c.long).toEqual([5, 10, 330, 0.5, 0.0001]);
+  expect(c.short).toEqual([2, 3, 1, 0.5, 0.0001]);
+  expect(c.tiny).toEqual([0.15]);   // everything else is within the 0.2s dedupe window
+  expect(c.unknown).toEqual([5, 0.0001]);
+});
+
+test('a clip that opens black gets a poster from where the picture is (#582)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(`window.__clip = (${makeClip.toString()})(${JSON.stringify(blackThenOrange)}, 40)`);
+  const luma = await meanLuma(page, `window.MediaPosters.captureFrameBlob(URL.createObjectURL(await window.__clip))`);
+  expect(luma).not.toBeNull();
+  expect(luma).toBeGreaterThan(100);   // orange, not the black lead-in (0 before)
+});
+
+test('a clip that is black throughout gets NO poster rather than a black one (#582)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(`window.__clip = (${makeClip.toString()})(${JSON.stringify(allBlack)}, 20)`);
+  const result = await page.evaluate(`(async () => window.MediaPosters.captureFrameBlob(URL.createObjectURL(await window.__clip)))()`);
+  expect(result).toBeNull();
+});
+
+test('a stored black poster is captured again, so an old black thumbnail is not for ever (#582)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const r = await page.evaluate(`(async () => {
+    const clip = await (${makeClip.toString()})(${JSON.stringify(blackThenOrange)}, 40);
+    const root = await navigator.storage.getDirectory();
+    const work = await root.getDirectoryHandle('work', { create: true });
+    const dir = await work.getDirectoryHandle('black-poster-project', { create: true });
+    const media = await dir.getDirectoryHandle('media', { create: true });
+    let fh = await media.getFileHandle('clip.webm', { create: true });
+    let w = await fh.createWritable(); await w.write(clip); await w.close();
+    // the poster an earlier capture left: a flat charcoal jpeg
+    const c = document.createElement('canvas'); c.width = 320; c.height = 180;
+    const cx = c.getContext('2d'); cx.fillStyle = '#1c1c1e'; cx.fillRect(0, 0, 320, 180);
+    const black = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.75));
+    fh = await dir.getFileHandle('poster.jpg', { create: true });
+    w = await fh.createWritable(); await w.write(black); await w.close();
+    const before = (await (await dir.getFileHandle('poster.jpg')).getFile()).size;
+
+    await window.MediaPosters.ensureProjectPoster('black-poster-project');
+    window.__after = await (await dir.getFileHandle('poster.jpg')).getFile();
+    return { before, after: window.__after.size };
+  })()`);
+  expect(r.after).not.toBe(r.before);
+  const luma = await meanLuma(page, 'window.__after');
+  expect(luma).toBeGreaterThan(100);
+});

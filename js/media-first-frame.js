@@ -117,6 +117,9 @@
           url = await posters.urlFor(id);
         }
         if (token !== loadToken || !url) return false;
+        // arrived late, after a transcription took the screen (#619): the
+        // session's project is not what is on the player any more
+        if (loaderOwnsScreen()) return false;
         player.setAttribute('poster', url);
         return true;
       } catch (e) {
@@ -131,6 +134,13 @@
       return t !== null && t.getAttribute('aria-busy') === 'true';
     };
     let ownFrameToken = -1; // the load whose own first frame is already the poster
+    let standInUrl = null;  // an object URL this module made for a transcription's stand-in
+    const setStandIn = (url) => {
+      if (standInUrl !== null) URL.revokeObjectURL(standInUrl);
+      standInUrl = url;
+      player.setAttribute('poster', url);
+    };
+    const isStandIn = (showing) => showing.startsWith('data:') || (standInUrl !== null && showing === standInUrl);
 
     function reveal() {
       if (player.videoWidth <= 0) return; // audio, or dimensions not known yet
@@ -150,6 +160,21 @@
           if (own !== null) {
             player.setAttribute('poster', own);
             ownFrameToken = loadToken;
+            // Frame 1 is the likeliest black frame in the clip (#582), so
+            // once it is up, ask the capture pipeline — which seeks a
+            // detached copy to the 5s mark and refuses flat frames — for a
+            // better stand-in. The live player cannot seek without moving
+            // the playhead; the copy can. Null (cross-origin, flat all
+            // through) keeps frame 1.
+            const posters = window.MediaPosters;
+            const token = loadToken;
+            const src = player.currentSrc || player.src;
+            if (posters && typeof posters.captureFrameBlob === 'function' && src) {
+              posters.captureFrameBlob(src).then((blob) => {
+                if (blob === null || token !== loadToken || !loaderOwnsScreen()) return;
+                setStandIn(URL.createObjectURL(blob));
+              }).catch(() => { /* frame 1 stays */ });
+            }
           }
         }
         return;
@@ -199,6 +224,21 @@
         }
         if (defaultPoster !== null) player.setAttribute('poster', defaultPoster);
       });
+    });
+
+    // A project born on this player — a transcription — keeps the medium it
+    // was born with, so no load event runs the reveal above, and the stand-in
+    // drawn while the loader owned the screen (frame 1: the likeliest black
+    // frame in the clip, #582) stayed as the player's poster while the
+    // Recents thumbnail showed the real capture. When the library changes
+    // and a project owns the medium again, a stand-in gives way to the
+    // project's stored capture — waiting for the capture that same change
+    // has just set going. A stored capture or an embedder's poster already
+    // showing is left alone (#619).
+    document.addEventListener('hyperaudioLibraryChanged', () => {
+      if (player.videoWidth <= 0 || loaderOwnsScreen()) return;
+      if (!isStandIn(player.getAttribute('poster') || '')) return;
+      applyStoredPoster(loadToken, true);
     });
 
     // A project born on this player — a dropped file, a transcription — gets
