@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.15 — last changed in release 1.3.15
  * @license MIT
  *
  * First-frame display for video media (#556). A <video> shows its poster —
@@ -208,7 +208,7 @@
     // so a project looks the same wherever you meet it. Order: an embedder's
     // poster still wins, then the glyph, then the markup poster as before, so
     // nothing regresses if the glyph cannot be made.
-    player.addEventListener('loadedmetadata', () => {
+    function settleAudio() {
       if (player.videoWidth > 0) return;
       player.style.aspectRatio = '';
       const token = loadToken;
@@ -224,7 +224,8 @@
         }
         if (defaultPoster !== null) player.setAttribute('poster', defaultPoster);
       });
-    });
+    }
+    player.addEventListener('loadedmetadata', settleAudio);
 
     // A project born on this player — a transcription — keeps the medium it
     // was born with, so no load event runs the reveal above, and the stand-in
@@ -246,9 +247,14 @@
     // only be seeded by the id. Re-seed it when the library changes, and only
     // a glyph: a stored capture or an embedder's poster is never touched here
     // (#618).
+    // ...and the markup poster still showing on audio whose metadata is known
+    // is the same gap from the other side (#621): the intro's medium is in the
+    // markup and starts loading before any script, so a cached mp3 can
+    // report metadata before this module has a listener to hear it.
     document.addEventListener('hyperaudioLibraryChanged', () => {
       if (player.videoWidth > 0) return;
       const showing = player.getAttribute('poster') || '';
+      if (showing === defaultPoster && player.readyState >= 1) { settleAudio(); return; }
       if (!showing.startsWith('data:image/svg')) return;
       const posters = window.MediaPosters;
       const id = currentProjectId();
@@ -260,6 +266,12 @@
         if (player.getAttribute('poster') !== url) player.setAttribute('poster', url);
       });
     });
+
+    // Metadata that arrived before this module wired up (a cached medium in
+    // the markup, #621): settle it now, as the event would have.
+    if (player.readyState >= 1) {
+      if (player.videoWidth > 0) reveal(); else settleAudio();
+    }
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wire);
