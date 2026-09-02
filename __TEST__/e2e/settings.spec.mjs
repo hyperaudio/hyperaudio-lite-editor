@@ -39,7 +39,7 @@ test('the gear sits with the icon buttons and opens the modal from the keyboard'
   await page.keyboard.press('Enter');
   expect(await page.evaluate(() => document.getElementById('settings-modal').checked)).toBe(true);
   // the version meta, and the release date when the release commit has set it
-  await expect(page.locator('#settings-app-version')).toHaveText(/^v\d+\.\d+\.\d+ · (unreleased|\d{1,2} \w{3} \d{4})$/);
+  await expect(page.locator('#settings-app-version')).toHaveText(/^v\d+\.\d+\.\d+ · (unreleased|.*\b\d{4})$/);   // the date is locale-formatted
   await expect(page.locator('#settings-storage')).toHaveText(/Using .+ of the .+ this browser allows/);
 });
 
