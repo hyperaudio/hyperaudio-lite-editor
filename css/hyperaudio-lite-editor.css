@@ -124,6 +124,10 @@ body.search-cramped .navbar-end {
 .side-panel {
   width: 400px;
   box-sizing: border-box;
+  /* the video's top rides the navbar buttons' top (#617): the navbar sits
+     4px down (its optical-centring margin, below) and its 48px buttons are
+     centred in the 70px band, so they start at y=15 */
+  padding-top: 15px;
   padding-left: 16px;
   padding-right: 16px;
   /* stop content 60px above the bottom so the Recents card's bottom lines up
@@ -989,7 +993,7 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 12px;   /* the same air above the row as #recents-card puts below it (#617) */
   width: 100%;
 }
 
@@ -1104,16 +1108,19 @@ label[data-a11y-wired]:focus-visible {
 #find-row { gap: 6px; }
 
 /* With the video collapsed (audio-only), the controls row shares the line with
-   the navbar buttons (both centred in the 70px top band), and the Recents card
-   top aligns with the transcript card top. Values measured against the navbar
-   buttons' centre (y=35). Desktop two-pane only — the pinned-player layout
-   handles small screens. */
+   the navbar buttons, and the Recents card top aligns with the transcript card
+   top. Derived, not measured: the navbar buttons span 15..63 (centre 39), so
+   the 32px row starts at 23 = the side panel's 15px top padding + 8; the card
+   then starts at 78 = 23 + 32 + 23. The earlier constants (11/27) were
+   measured before the navbar gained its 4px margin and left the row 4px high
+   (#617). Desktop two-pane only — the pinned-player layout handles small
+   screens. */
 @media screen and (min-width: 949px) {
   body.video-collapsed #player-controls {
-    margin-top: 11px;
+    margin-top: 8px;
   }
   body.video-collapsed #recents-card {
-    margin-top: 27px;
+    margin-top: 23px;
   }
 }
 
