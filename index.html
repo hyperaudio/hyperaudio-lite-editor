@@ -859,25 +859,34 @@ If you are creating an open source application under a license compatible with t
         <input type="checkbox" id="export-burn" class="toggle toggle-primary" />
         <span class="label-text">Burn captions into the video (word-level highlight)</span>
       </label>
-      <label id="export-retime-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
-        <input type="checkbox" id="export-retime" class="toggle toggle-primary" />
-        <span class="label-text">Download an interactive transcript (re-timed, links the exported media)</span>
-      </label>
-      <label id="export-vtt-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
-        <input type="checkbox" id="export-vtt" class="toggle toggle-primary" />
-        <span class="label-text">Download WebVTT (.vtt) captions<span id="export-vtt-note" style="opacity:0.6; display:none"> — included with the interactive transcript</span></span>
-      </label>
-      <label id="export-srt-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
-        <input type="checkbox" id="export-srt" class="toggle toggle-primary" />
-        <span class="label-text">Download SRT (.srt) captions</span>
-      </label>
-      <label id="export-project-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
-        <input type="checkbox" id="export-project" class="toggle toggle-primary" />
-        <span class="label-text">Download a new project (.hyperaudio) — edits applied, struck words removed, safe to share</span>
-      </label>
+      <!-- The extras collapse (#616): everything here is a file that comes
+           ALONGSIDE the media, so the modal stays about the media itself.
+           These options are remembered across sessions, so the summary
+           reports how many are selected and the panel opens itself when any
+           are — collapsed and empty is fine, collapsed and active must not
+           be silent. -->
+      <details id="export-extras" style="display:none; margin-top:14px">
+        <summary style="cursor:pointer; font-size:95%">Also download<span id="export-extras-count" style="opacity:0.6; font-size:90%"></span></summary>
+        <label id="export-retime-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+          <input type="checkbox" id="export-retime" class="toggle toggle-primary" />
+          <span class="label-text">Download an interactive transcript (re-timed, links the exported media)</span>
+        </label>
+        <label id="export-vtt-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+          <input type="checkbox" id="export-vtt" class="toggle toggle-primary" />
+          <span class="label-text">Download WebVTT (.vtt) captions<span id="export-vtt-note" style="opacity:0.6; display:none"> — included with the interactive transcript</span></span>
+        </label>
+        <label id="export-srt-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+          <input type="checkbox" id="export-srt" class="toggle toggle-primary" />
+          <span class="label-text">Download SRT (.srt) captions</span>
+        </label>
+        <label id="export-project-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
+          <input type="checkbox" id="export-project" class="toggle toggle-primary" />
+          <span class="label-text">Download a new project (.hyperaudio) — edits applied, struck words removed, safe to share</span>
+        </label>
+      </details>
       <label id="export-zip-row" style="display:none; gap:10px; align-items:center; margin-top:14px; cursor:pointer">
         <input type="checkbox" id="export-zip" class="toggle toggle-primary" checked />
-        <span class="label-text">Download everything as a single .zip (one folder, files stay paired)</span>
+        <span class="label-text">Download everything as a single .zip <span id="export-zip-count" style="opacity:0.6; font-size:90%"></span></span>
       </label>
       <progress id="export-progress" class="progress progress-primary w-full" value="0" max="100" style="visibility:hidden; margin-top:14px"></progress>
       <div id="export-status" aria-live="polite" style="font-size:85%; opacity:0.75; min-height:1.3em; margin-top:2px"></div>

@@ -929,6 +929,30 @@
   const checkedAndVisible = (check, row) =>
     check !== null && check.checked && row !== null && row.style.display !== 'none';
 
+  // The extras disclosure (#616). Closed by default, and it stays closed even
+  // when something inside is selected — the COUNT in the summary is what keeps
+  // that honest. These options are remembered across sessions, so a panel that
+  // hid a ticked option with no sign of it would export more files than the
+  // modal appears to offer; "(2 selected)" says so without opening anything.
+  //
+  // Whether it is open is itself remembered, so someone who works with the
+  // sidecars every time is not made to open it every time.
+  const extrasBox = document.getElementById('export-extras');
+  const extrasCount = document.getElementById('export-extras-count');
+  const zipCount = document.getElementById('export-zip-count');
+  const updateExtrasDisclosure = (selected) => {
+    if (extrasBox === null) return;
+    // zipRow is deliberately NOT here: it lives outside the panel, because
+    // packaging is not an extra file and its offer has to be SEEN the moment a
+    // second output is chosen — which a closed panel would prevent.
+    const applicable = [retimeRow, vttRow, srtRow, projectRow]
+      .filter((row) => row !== null && row.style.display !== 'none').length;
+    extrasBox.style.display = applicable > 0 ? '' : 'none';
+    if (extrasCount !== null) {
+      extrasCount.textContent = selected > 0 ? ` (${selected} selected)` : '';
+    }
+  };
+
   const updateZipVisibility = () => {
     if (zipRow === null) return;
     const extras = [
@@ -939,6 +963,16 @@
     ].filter(Boolean).length;
     const multi = extras > 0;   // the media itself is always the first output
     zipRow.style.display = multi ? 'flex' : 'none';
+    // Name what is being packaged (#616). The options that cause this offer to
+    // appear now live in a collapsed panel, so without the count the zip row
+    // shows up with no visible cause — "(3 files, one folder)" supplies it
+    // without making anyone open the panel to find out why.
+    if (zipCount !== null) {
+      const files = extras + 1; // the media itself is always the first output
+      zipCount.textContent = `(${files} files, one folder)`;
+    }
+    // counted AFTER the zip row settles, so the summary matches what is shown
+    updateExtrasDisclosure(extras);
     if (nameNote !== null) {
       nameNote.textContent = (multi && zipCheck !== null && zipCheck.checked)
         ? 'All exported files use this name. They arrive in one .zip, in a folder that keeps them together.'
@@ -978,6 +1012,7 @@
         vtt: vttCheck !== null && vttCheck.checked,
         srt: srtCheck !== null && srtCheck.checked,
         project: projectCheck !== null && projectCheck.checked,
+        extrasOpen: extrasBox !== null && extrasBox.open,
       }));
     } catch (e) { /* storage unavailable (private mode / quota) — non-fatal */ }
   };
@@ -1029,6 +1064,7 @@
     if (vttCheck !== null) vttCheck.checked = opts.vtt === true;
     if (srtCheck !== null) srtCheck.checked = opts.srt === true;
     if (projectCheck !== null) projectCheck.checked = opts.project === true;
+    if (extrasBox !== null) extrasBox.open = opts.extrasOpen === true;
 
     // speed / length: offer it whenever there's media; restore the toggle and
     // the last speed, defaulting to the player's current rate so a playback
@@ -1239,6 +1275,8 @@
   [retimeCheck, vttCheck, srtCheck, projectCheck, zipCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', updateZipVisibility);
   });
+  // opening or closing the extras is itself a preference worth keeping (#616)
+  if (extrasBox !== null) extrasBox.addEventListener('toggle', saveExportOpts);
   // the note depends on BOTH the interactive transcript and the burn choice
   [retimeCheck, burnCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', updateVttNote);
