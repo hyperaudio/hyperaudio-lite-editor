@@ -440,6 +440,24 @@
   }
   customElements.define('import-ionosphere', ImportIonosphere);
 
+  // The static viewer (#624) is a sibling of the editor, so a relative link
+  // reaches it wherever the editor is served from.
+  const viewerUrl = (talkUri) => 'viewer/?talk=' + encodeURIComponent(talkUri);
+
+  // A status line with a "View it" link after the text — the viewer opens in
+  // a new tab, leaving the editor where it is.
+  function showWithViewLink(statusEl, text, talkUri) {
+    statusEl.textContent = text + ' ';
+    const a = document.createElement('a');
+    a.id = 'ionosphere-view-link';
+    a.href = viewerUrl(talkUri);
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'View it';
+    a.className = 'link link-primary';
+    statusEl.appendChild(a);
+  }
+
   function readPublishPrefs() {
     try { return JSON.parse(localStorage.getItem(PUBLISH_PREFS_KEY)) || {}; } catch (e) { return {}; }
   }
@@ -543,6 +561,7 @@
       btn.disabled = false;
       uriEl.value = rememberedTalk();
       unpublishBtn.disabled = false;
+      if (uriEl.value) showWithViewLink(status, 'Last published from this project.', uriEl.value);
     });
 
     unpublishBtn.addEventListener('click', async () => {
@@ -598,7 +617,7 @@
         rememberIdentity(handleEl.value.trim().replace(/^@/, ''), result.did);
         rememberTalk(result.talkUri);
         uriEl.value = result.talkUri;   // ready to take back
-        status.textContent = 'Published ' + result.written + ' records. Talk: ' + result.talkUri;
+        showWithViewLink(status, 'Published ' + result.written + ' records. Talk: ' + result.talkUri + '.', result.talkUri);
       } catch (err) {
         status.style.color = 'oklch(var(--er))';
         status.textContent = 'Could not publish: ' + (err && err.message ? err.message : String(err));

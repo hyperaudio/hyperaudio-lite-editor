@@ -73,7 +73,12 @@ test('publishes the record set to the resolved PDS under the real did, talk last
   await expect(page.locator('#ionosphere-app-password')).toHaveAttribute('type', 'password');
   await page.fill('#ionosphere-title', 'A talk');
   await page.click('#ionosphere-publish-btn');
-  await expect(page.locator('#ionosphere-publish-status')).toHaveText(new RegExp('^Published 7 records\\. Talk: at://' + DID + '/tv\\.ionosphere\\.talk/[a-z2-7]{13}$'));
+  await expect(page.locator('#ionosphere-publish-status')).toHaveText(new RegExp('^Published 7 records\\. Talk: at://' + DID + '/tv\\.ionosphere\\.talk/[a-z2-7]{13}\\. View it$'));
+  // …with a link to the viewer (#624), relative so it works wherever the editor is served
+  const link = page.locator('#ionosphere-view-link');
+  await expect(link).toHaveAttribute('target', '_blank');
+  const talkUriShown = (await page.locator('#ionosphere-publish-status').textContent()).match(/at:\/\/\S+\/tv\.ionosphere\.talk\/[a-z2-7]{13}/)[0];
+  expect(await link.getAttribute('href')).toBe('viewer/?talk=' + encodeURIComponent(talkUriShown));
 
   expect(calls.session).toEqual([{ identifier: 'mark.example.com', password: 'abcd-efgh-ijkl-mnop' }]);
   expect(calls.writes).toHaveLength(1);
@@ -206,6 +211,8 @@ test('the talk just published is offered for unpublish, and remembered per proje
   await page.waitForSelector('#hypertranscript [data-m]');
   await openPublish(page);
   await expect(page.locator('#ionosphere-talk-uri')).toHaveValue(uri);
+  await expect(page.locator('#ionosphere-publish-status')).toHaveText('Last published from this project. View it');
+  expect(await page.locator('#ionosphere-view-link').getAttribute('href')).toBe('viewer/?talk=' + encodeURIComponent(uri));
   expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('hyperaudioIonospherePublish')).talks))).toHaveLength(1);
 });
 
