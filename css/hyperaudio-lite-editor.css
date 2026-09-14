@@ -1794,3 +1794,14 @@ html.ha-transcribing #upload-transcribe-btn {
 #settings-modal + .modal .settings-models .settings-model-size { opacity: 0.6; margin-left: 6px; }
 #settings-modal + .modal .settings-row .btn { margin-bottom: 0; flex: 0 0 auto; }
 #settings-modal + .modal .toggle { margin-bottom: 0; flex-shrink: 0; }
+
+/* The FILE menu grew (#346, #624: publish and import entries), and on a short
+   viewport its lowest entries fell below the fixed body's bottom edge, where
+   nothing scrolls — unreachable, which the #539 test caught. Bound the open
+   menu to the viewport and let it scroll inside; it opens ~66px down, so
+   this leaves it a few pixels clear of the bottom. */
+#file-dropdown {
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  flex-wrap: nowrap;   /* daisyUI's .menu wraps a column that hits its max-height into a second column beside it — scroll instead */
+}

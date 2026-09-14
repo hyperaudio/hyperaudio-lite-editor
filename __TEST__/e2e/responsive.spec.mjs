@@ -204,12 +204,16 @@ test.describe('short viewport', () => {
     await page.click('.dropdown label');
     await page.click('#file-export-submenu summary');
     await page.click('#file-download-submenu summary');
-    // the deepest item must actually reach the play-bar zone, or this asserts nothing
-    const item = page.locator('#download-vtt');
+    // The menu is bounded to the viewport and scrolls inside (it grew with
+    // #346's publish and import entries). Scrolled to its end, its LAST
+    // entry must actually reach the play-bar zone, or this asserts nothing.
+    await page.evaluate(() => { const ul = document.getElementById('file-dropdown'); ul.scrollTop = ul.scrollHeight; });
+    const item = page.locator('#file-download-submenu ul > li').last().locator('> *');
     const itemBox = await item.boundingBox();
     const barBox = await page.locator('#playbar').boundingBox();
     expect(itemBox.y + itemBox.height).toBeGreaterThan(barBox.y);
-    await page.click('#download-vtt', { trial: true });
+    // click INSIDE the overlap: a centre click would land above the bar and prove nothing
+    await item.click({ trial: true, position: { x: 12, y: itemBox.height - 2 } });
   });
 });
 
