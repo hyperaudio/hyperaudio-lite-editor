@@ -45,11 +45,17 @@
     .meta code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; word-break: break-all; }
     video { display: block; width: 100%; max-height: 60vh; border-radius: 10px; background: #000; margin-bottom: 20px; }
     video.audio-only { max-height: 54px; background: transparent; }
-    .transcript-card { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 28px 32px; }
+    /* The transcript reads on a dark card in either theme: unread words
+       muted, read words white, the word being spoken yellow. */
+    .transcript-card { background: #1b1e25; border: 1px solid #2c303a; border-radius: 12px; padding: 28px 32px; color: #9aa1ad; }
     .hyperaudio-transcript { font-size: 1.05rem; }
     .hyperaudio-transcript p { margin: 0 0 1.1em; }
     .hyperaudio-transcript span[data-m] { cursor: pointer; }
-    .hyperaudio-transcript .speaker { font-weight: 700; color: var(--accent); }
+    .transcript-card .hyperaudio-transcript .unread { color: #9aa1ad; }
+    .transcript-card .hyperaudio-transcript .read { color: #ffffff; }
+    .transcript-card .hyperaudio-transcript .active > .active,
+    .transcript-card .hyperaudio-transcript span[data-m].active { color: #ffd84a; }
+    .transcript-card .hyperaudio-transcript .speaker { font-weight: 700; color: #c4b5fd; }
     #status { color: var(--muted); margin: 0 0 20px; }
     #status.error { color: #b91c1c; }
     form.ask { display: flex; gap: 8px; margin: 24px 0; }
