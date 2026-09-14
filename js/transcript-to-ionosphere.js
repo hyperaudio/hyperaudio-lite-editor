@@ -383,7 +383,7 @@
       + '<p style="margin-top:8px; font-size:0.9rem; opacity:0.75">Reads a talk\u2019s records from its repository and rebuilds the transcript here, words, timings and paragraphs, with its media when the talk links one. Repositories are public, so no sign-in is needed.</p>'
       + '<form id="ionosphere-import-form" style="display:flex; flex-direction:column; gap:12px; margin-top:16px">'
       + '<input id="ionosphere-import-uri" type="text" placeholder="at://did:plc:…/tv.ionosphere.talk/…" class="input input-bordered w-full" style="font-family:monospace" />'
-      + '<p id="ionosphere-import-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0"></p>'
+      + '<p id="ionosphere-import-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0; overflow-wrap:anywhere"></p>'
       + '<div class="modal-action" style="margin-top:4px"><label for="ionosphere-import-modal" class="btn">Cancel</label>'
       + '<button type="submit" id="ionosphere-import-btn" class="btn btn-primary">Import</button></div>'
       + '</form></div></div>';
@@ -501,7 +501,7 @@
       + '<div class="key-field" style="max-width:none"><input id="ionosphere-app-password" type="password" autocomplete="current-password" placeholder="App password" class="input input-bordered w-full" />'
       + '<button type="button" class="key-eye" id="ionosphere-eye" data-wired="1" aria-label="Show password" tabindex="-1"><span class="eye-open">' + EYE_OPEN + '</span><span class="eye-closed" style="display:none">' + EYE_CLOSED + '</span></button></div>'
       + '<input id="ionosphere-title" type="text" placeholder="Talk title (optional)" class="input input-bordered w-full" />'
-      + '<p id="ionosphere-publish-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0"></p>'
+      + '<p id="ionosphere-publish-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0; overflow-wrap:anywhere"></p>'
       + '<div class="modal-action" style="margin-top:4px"><label for="ionosphere-publish-modal" class="btn">Cancel</label>'
       + '<button type="submit" id="ionosphere-publish-btn" class="btn btn-primary">Publish</button></div>'
       + '<div style="margin-top:8px; padding-top:12px; border-top:1px solid oklch(var(--bc) / 0.12)">'

@@ -18,11 +18,16 @@ const TYPES = {
 
 http.createServer((req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
-  const file = join(ROOT, path === '/' ? 'index.html' : path);
+  let file = join(ROOT, path === '/' ? 'index.html' : path);
   if (!file.startsWith(ROOT)) { res.writeHead(403).end(); return; }
   let stat;
   try { stat = statSync(file); } catch (e) { res.writeHead(404).end(); return; }
-  if (stat.isDirectory()) { res.writeHead(404).end(); return; }
+  // a directory serves its index.html, as GitHub Pages does (viewer/, #624)
+  if (stat.isDirectory()) {
+    file = join(file, 'index.html');
+    try { stat = statSync(file); } catch (e) { res.writeHead(404).end(); return; }
+    if (stat.isDirectory()) { res.writeHead(404).end(); return; }
+  }
   res.writeHead(200, {
     'content-type': TYPES[extname(file)] || 'application/octet-stream',
     'content-length': stat.size,

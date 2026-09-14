@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
+<!--  Hyperaudio Lite Editor - PDS talk viewer (#624) - Version 1.3.16 (last changed in release 1.3.16) -->
+<!--
+  A static viewer for a talk published to an AT Protocol repository
+  (tv.ionosphere / pub.layers records, as the editor's Publish writes them).
+  Everything it reads is public and answers cross-origin, so this page runs
+  from GitHub Pages with no server and no sign-in:
+
+      viewer/?talk=at://did:plc:…/tv.ionosphere.talk/…
+      viewer/?talk=…&media=https://…   (a media URL, when the talk links none)
+
+  The point it demonstrates: the transcript lives in the publisher's own
+  repository, and any page can render it. Includes the editor's DOM-free
+  reader, the converter for the markup, and the vendored hyperaudio-lite
+  player — no editor chrome, no build step.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Talk viewer · Hyperaudio</title>
+  <link rel="stylesheet" href="../css/hyperaudio-lite-player.css?v=2.6.4">
+  <style>
+    :root {
+      --bg: #f5f5f5; --card: #ffffff; --ink: #1f2430; --muted: #6b7280; --rule: #e5e7eb; --accent: #5b21b6;
+      color-scheme: light dark;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #15171c; --card: #1f2229; --ink: #e8eaf0; --muted: #9aa1ad; --rule: #2e323b; --accent: #a78bfa; }
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body {
+      margin: 0; color: var(--ink); background: var(--bg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 96px; }
+    header.page { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+    header.page .brand { font-weight: 700; letter-spacing: 0.01em; text-decoration: none; color: var(--ink); }
+    header.page .brand span { color: var(--muted); font-weight: 500; }
+    h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 4px; }
+    .meta { color: var(--muted); font-size: 0.95rem; margin: 0 0 20px; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+    .meta code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; word-break: break-all; }
+    video { display: block; width: 100%; max-height: 60vh; border-radius: 10px; background: #000; margin-bottom: 20px; }
+    video.audio-only { max-height: 54px; background: transparent; }
+    /* The transcript reads on a dark card in either theme: unread words
+       muted, read words white, the word being spoken yellow. */
+    .transcript-card { background: #1b1e25; border: 1px solid #2c303a; border-radius: 12px; padding: 28px 32px; color: #9aa1ad; }
+    .hyperaudio-transcript { font-size: 1.05rem; }
+    .hyperaudio-transcript p { margin: 0 0 1.1em; }
+    .hyperaudio-transcript span[data-m] { cursor: pointer; }
+    .transcript-card .hyperaudio-transcript .unread { color: #9aa1ad; }
+    .transcript-card .hyperaudio-transcript .read { color: #ffffff; }
+    .transcript-card .hyperaudio-transcript .active > .active,
+    .transcript-card .hyperaudio-transcript span[data-m].active { color: #ffd84a; }
+    .transcript-card .hyperaudio-transcript .speaker { font-weight: 700; color: #c4b5fd; }
+    #status { color: var(--muted); margin: 0 0 20px; }
+    #status.error { color: #b91c1c; }
+    form.ask { display: flex; gap: 8px; margin: 24px 0; }
+    form.ask input { flex: 1 1 auto; padding: 10px 12px; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem;
+      border: 1px solid var(--rule); border-radius: 8px; background: var(--card); color: var(--ink); }
+    form.ask button { padding: 10px 16px; font: inherit; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+    .hint { color: var(--muted); font-size: 0.9rem; }
+    footer { color: var(--muted); font-size: 0.85rem; margin-top: 40px; border-top: 1px solid var(--rule); padding-top: 16px; }
+    footer a { color: inherit; }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="page">
+      <a class="brand" href="https://hyperaud.io/">hyperaudio <span>· talk viewer</span></a>
+    </header>
+
+    <section id="ask" hidden>
+      <p class="hint">Paste the URI of a talk published to an AT Protocol repository. Repositories are public, so nothing to sign in to.</p>
+      <form class="ask" id="ask-form">
+        <input id="ask-uri" type="text" placeholder="at://did:plc:…/tv.ionosphere.talk/…" autocomplete="off" spellcheck="false">
+        <button type="submit">View</button>
+      </form>
+    </section>
+
+    <h1 id="title" hidden></h1>
+    <p class="meta" id="meta" hidden></p>
+    <p id="status" role="status" aria-live="polite"></p>
+    <video id="hyperplayer" controls playsinline hidden></video>
+    <div class="transcript-card" id="card" hidden>
+      <div id="hypertranscript" class="hyperaudio-transcript"></div>
+    </div>
+
+    <footer>
+      Transcript records read from the publisher's repository with the
+      <a href="https://github.com/hyperaudio/hyperaudio-lite-editor">Hyperaudio Lite Editor</a>'s reader;
+      rendered with <a href="https://github.com/hyperaudio/hyperaudio-lite">hyperaudio-lite</a>.
+      Click a word to play from it.
+    </footer>
+  </main>
+
+  <script src="../js/hyperaudio-lite.js?v=2.6.4"></script>
+  <script src="../js/html-json-converter.js?v=1.1.9"></script>
+  <script src="../js/ionosphere-reader.js?v=1.3.16"></script>
+  <script>
+    (function () {
+      'use strict';
+      const byId = (id) => document.getElementById(id);
+      const params = new URLSearchParams(location.search);
+      const status = byId('status');
+      const show = (id, on) => { byId(id).hidden = !on; };
+      let instance = null;
+
+      const fail = (msg) => {
+        status.textContent = msg;
+        status.classList.add('error');
+        show('ask', true);
+      };
+
+      async function view(talkUri, mediaParam) {
+        status.classList.remove('error');
+        status.textContent = 'Reading the talk…';
+        let talk;
+        try {
+          talk = await window.IonosphereReader.fetchTalk(talkUri, (msg) => { status.textContent = msg; });
+        } catch (err) {
+          fail('Could not read that talk: ' + (err && err.message ? err.message : String(err)));
+          return;
+        }
+        document.title = (talk.title || 'Talk') + ' · Hyperaudio';
+        byId('title').textContent = talk.title || 'Untitled talk';
+        show('title', true);
+
+        const meta = byId('meta');
+        meta.textContent = '';
+        if (talk.speaker) meta.appendChild(Object.assign(document.createElement('span'), { textContent: talk.speaker }));
+        meta.appendChild(Object.assign(document.createElement('span'), { textContent: talk.data.words.length + ' words · ' + talk.data.paragraphs.length + ' paragraphs' }));
+        const uriEl = document.createElement('code');
+        uriEl.textContent = talkUri;
+        meta.appendChild(uriEl);
+        show('meta', true);
+
+        const player = byId('hyperplayer');
+        const mediaUrl = (talk.media && talk.media.url) || mediaParam || '';
+        if (mediaUrl) {
+          player.src = mediaUrl;
+          if (talk.media && /^audio\//.test(talk.media.mimeType || '')) player.classList.add('audio-only');
+          show('hyperplayer', true);
+          status.textContent = '';
+        } else {
+          status.textContent = 'This talk links no media, so there is nothing to play. Add ?media=<url> to the address to hear it alongside.';
+        }
+
+        byId('hypertranscript').innerHTML = jsonToHTML(talk.data);
+        show('card', true);
+        if (instance !== null && typeof instance.destroy === 'function') instance.destroy();
+        instance = new HyperaudioLite({ transcript: 'hypertranscript', player: 'hyperplayer', playOnClick: true });
+        window.viewerInstance = instance;
+      }
+
+      byId('ask-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const uri = byId('ask-uri').value.trim();
+        if (!uri) return;
+        const next = new URL(location.href);
+        next.searchParams.set('talk', uri);
+        history.replaceState(null, '', next);
+        show('ask', false);
+        view(uri, params.get('media') || '');
+      });
+
+      const talk = (params.get('talk') || '').trim();
+      if (talk) view(talk, (params.get('media') || '').trim());
+      else { show('ask', true); status.textContent = ''; }
+    })();
+  </script>
+</body>
+</html>
