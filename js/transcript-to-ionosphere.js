@@ -499,7 +499,7 @@
       + '<form id="ionosphere-publish-form" style="display:flex; flex-direction:column; gap:12px; margin-top:16px">'
       + '<input id="ionosphere-handle" type="text" autocomplete="username" placeholder="Handle, e.g. you.bsky.social" class="input input-bordered w-full" />'
       + '<div class="key-field" style="max-width:none"><input id="ionosphere-app-password" type="password" autocomplete="current-password" placeholder="App password" class="input input-bordered w-full" />'
-      + '<button type="button" class="key-eye" id="ionosphere-eye" aria-label="Show password" tabindex="-1"><span class="eye-open">' + EYE_OPEN + '</span><span class="eye-closed" style="display:none">' + EYE_CLOSED + '</span></button></div>'
+      + '<button type="button" class="key-eye" id="ionosphere-eye" data-wired="1" aria-label="Show password" tabindex="-1"><span class="eye-open">' + EYE_OPEN + '</span><span class="eye-closed" style="display:none">' + EYE_CLOSED + '</span></button></div>'
       + '<input id="ionosphere-title" type="text" placeholder="Talk title (optional)" class="input input-bordered w-full" />'
       + '<p id="ionosphere-publish-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0"></p>'
       + '<div class="modal-action" style="margin-top:4px"><label for="ionosphere-publish-modal" class="btn">Cancel</label>'
@@ -521,6 +521,8 @@
     const uriEl = document.getElementById('ionosphere-talk-uri');
     const unpublishBtn = document.getElementById('ionosphere-unpublish-btn');
 
+    // data-wired="1" on the button keeps transcribe-prefs' own eye wiring off
+    // it: two handlers toggled the field twice and it never revealed.
     document.getElementById('ionosphere-eye').addEventListener('click', (e) => {
       const reveal = passEl.type === 'password';
       passEl.type = reveal ? 'text' : 'password';

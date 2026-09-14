@@ -66,6 +66,11 @@ test('publishes the record set to the resolved PDS under the real did, talk last
   await expect(page.locator('#ionosphere-title')).toHaveValue('How to use the Editor');   // prefilled from the project
   await page.fill('#ionosphere-handle', '@mark.example.com');
   await page.fill('#ionosphere-app-password', 'abcd-efgh-ijkl-mnop');
+  // the eye reveals and hides (transcribe-prefs wires every .key-eye too; this one must not be double-toggled)
+  await page.click('#ionosphere-eye');
+  await expect(page.locator('#ionosphere-app-password')).toHaveAttribute('type', 'text');
+  await page.click('#ionosphere-eye');
+  await expect(page.locator('#ionosphere-app-password')).toHaveAttribute('type', 'password');
   await page.fill('#ionosphere-title', 'A talk');
   await page.click('#ionosphere-publish-btn');
   await expect(page.locator('#ionosphere-publish-status')).toHaveText(new RegExp('^Published 7 records\\. Talk: at://' + DID + '/tv\\.ionosphere\\.talk/[a-z2-7]{13}$'));
