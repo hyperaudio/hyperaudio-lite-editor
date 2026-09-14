@@ -35,6 +35,7 @@ async function mockNetwork(page, { badPassword = false } = {}) {
     'pub.layers.annotation.annotationLayer': ['3mvi355ibkkvn-paragraphs'],
     'pub.layers.segmentation.segmentation': ['3mvi355ibkkvn-segmentation-1', '3mvi355ibkkvn-temporal-1', '3mvi999decoyz-temporal-1'],
     'pub.layers.expression.expression': ['3mvi355ibkkvn-expression', '3mvi999decoyz-expression'],
+    'io.hyperaud.media': ['3mvi355ibkkvn-media', '3mvi999decoyz-media'],
   };
   await page.route(PDS + '/xrpc/com.atproto.repo.listRecords*', (route) => {
     const u = new URL(route.request().url());
@@ -67,7 +68,7 @@ test('publishes the record set to the resolved PDS under the real did, talk last
   await page.fill('#ionosphere-app-password', 'abcd-efgh-ijkl-mnop');
   await page.fill('#ionosphere-title', 'A talk');
   await page.click('#ionosphere-publish-btn');
-  await expect(page.locator('#ionosphere-publish-status')).toHaveText(new RegExp('^Published 6 records\\. Talk: at://' + DID + '/tv\\.ionosphere\\.talk/[a-z2-7]{13}$'));
+  await expect(page.locator('#ionosphere-publish-status')).toHaveText(new RegExp('^Published 7 records\\. Talk: at://' + DID + '/tv\\.ionosphere\\.talk/[a-z2-7]{13}$'));
 
   expect(calls.session).toEqual([{ identifier: 'mark.example.com', password: 'abcd-efgh-ijkl-mnop' }]);
   expect(calls.writes).toHaveLength(1);
@@ -75,8 +76,9 @@ test('publishes the record set to the resolved PDS under the real did, talk last
   expect(auth).toBe('Bearer jwt-1');
   expect(body.repo).toBe(DID);
   expect(body.validate).toBe(false);
-  expect(body.writes.map((w) => w.$type)).toEqual(Array(6).fill('com.atproto.repo.applyWrites#create'));
+  expect(body.writes.map((w) => w.$type)).toEqual(Array(7).fill('com.atproto.repo.applyWrites#create'));
   expect(body.writes.map((w) => w.collection)).toEqual([
+    'io.hyperaud.media',             // the intro's media is a URL, so it gets a record…
     'pub.layers.expression.expression',
     'pub.layers.segmentation.segmentation',
     'pub.layers.segmentation.segmentation',
@@ -85,9 +87,15 @@ test('publishes the record set to the resolved PDS under the real did, talk last
     'tv.ionosphere.talk',
   ]);
   expect(JSON.stringify(body)).not.toContain('REPLACE_ME');
-  const talk = body.writes[5].value;
+  const talk = body.writes[6].value;
   expect(talk.title).toBe('A talk');
-  expect(talk.speakerUris).toEqual(['at://' + DID + '/tv.ionosphere.speaker/' + body.writes[4].rkey]);
+  expect(talk.speakerUris).toEqual(['at://' + DID + '/tv.ionosphere.speaker/' + body.writes[5].rkey]);
+  // …and the expression points at it, one hop
+  const mediaRec = body.writes[0];
+  expect(mediaRec.value.url).toBe('https://lab.hyperaud.io/audio/HLEintroAudio.mp3');
+  expect(mediaRec.value.mimeType).toBe('audio/mpeg');
+  expect(body.writes[1].value.mediaRef).toBe('at://' + DID + '/io.hyperaud.media/' + mediaRec.rkey);
+  expect(mediaRec.rkey).toBe(body.writes[6].rkey + '-media');
 
   // the password is not kept; the handle and its did are
   expect(await page.evaluate(() => document.getElementById('ionosphere-app-password').value)).toBe('');
@@ -147,7 +155,7 @@ test('unpublish deletes every record of the talk, talk first, and nothing else (
   await page.fill('#ionosphere-app-password', 'abcd-efgh-ijkl-mnop');
   await page.fill('#ionosphere-talk-uri', 'at://' + DID + '/tv.ionosphere.talk/3mvi355ibkkvn');
   await page.click('#ionosphere-unpublish-btn');
-  await expect(page.locator('#ionosphere-publish-status')).toHaveText('Unpublished: 6 records removed.');
+  await expect(page.locator('#ionosphere-publish-status')).toHaveText('Unpublished: 7 records removed.');
 
   expect(calls.writes).toHaveLength(1);
   const { auth, body } = calls.writes[0];
@@ -161,6 +169,7 @@ test('unpublish deletes every record of the talk, talk first, and nothing else (
     '3mvi355ibkkvn-segmentation-1',
     '3mvi355ibkkvn-temporal-1',
     '3mvi355ibkkvn-expression',
+    '3mvi355ibkkvn-media',
   ]);
   expect(JSON.stringify(body)).not.toContain('decoy');
   await expect(page.locator('#ionosphere-app-password')).toHaveValue('');
@@ -183,7 +192,7 @@ test('the talk just published is offered for unpublish, and remembered per proje
   await page.fill('#ionosphere-handle', 'mark.example.com');
   await page.fill('#ionosphere-app-password', 'abcd-efgh-ijkl-mnop');
   await page.click('#ionosphere-publish-btn');
-  await expect(page.locator('#ionosphere-publish-status')).toHaveText(/^Published 6 records/);
+  await expect(page.locator('#ionosphere-publish-status')).toHaveText(/^Published 7 records/);
   const uri = await page.inputValue('#ionosphere-talk-uri');
   expect(uri.startsWith('at://' + DID + '/tv.ionosphere.talk/')).toBe(true);
 
@@ -211,8 +220,8 @@ const SAMPLE = {
   paragraphs: [{ start: 1.44, end: 3.0, speaker: 'Mark' }, { start: 4.0, end: 5.0 }],
 };
 
-async function mockRepoFrom(page, data, rkey) {
-  const exp = await page.evaluate(([d, rk, did]) => window.transcriptJsonToIonosphere(d, { did, rkey: rk, createdAt: '2026-01-01T00:00:00.000Z', title: 'Round trip' }), [data, rkey, DID]);
+async function mockRepoFrom(page, data, rkey, media) {
+  const exp = await page.evaluate(([d, rk, did, media]) => window.transcriptJsonToIonosphere(d, { did, rkey: rk, createdAt: '2026-01-01T00:00:00.000Z', title: 'Round trip', media }), [data, rkey, DID, media || null]);
   await page.route('https://plc.directory/*', (route) => route.fulfill({ json: { id: DID, service: [{ id: '#atproto_pds', type: 'AtprotoPersonalDataServer', serviceEndpoint: PDS }] } }));
   await page.route(PDS + '/xrpc/com.atproto.repo.getRecord*', (route) => {
     const u = new URL(route.request().url());
@@ -234,6 +243,7 @@ test('import rebuilds the transcript from the repo: words, UTF-8 text, glued wor
   const back = await page.evaluate((uri) => window.IonospherePublish.fetchTalk(uri), exp.talkUri);
   expect(back.title).toBe('Round trip');
   expect(back.data).toEqual(SAMPLE);
+  expect(back.media).toBeNull();   // no media given: no record, no mediaRef
 
   // and through the modal, into the editor as a project
   await page.evaluate(() => { const m = document.getElementById('ionosphere-import-modal'); m.checked = true; m.dispatchEvent(new Event('change')); });
@@ -256,4 +266,21 @@ test('import of a URI with no talk behind it is reported, and the transcript unt
   await page.click('#ionosphere-import-btn');
   await expect(page.locator('#ionosphere-import-status')).toHaveText(/^Could not import: /);
   expect(await page.evaluate(() => document.getElementById('hypertranscript').innerHTML)).toBe(before);
+});
+
+test('a talk with a media record brings its media along, into the player on import', async ({ page }) => {
+  const exp = await mockRepoFrom(page, SAMPLE, '3mvi355ibkkvn', { url: 'https://media.example/talk.mp4', mimeType: 'video/mp4', durationMs: 5000 });
+  const media = exp.records.find((r) => r.collection === 'io.hyperaud.media');
+  expect(media.rkey).toBe('3mvi355ibkkvn-media');
+  expect(exp.records.find((r) => r.collection === 'pub.layers.expression.expression').value.mediaRef)
+    .toBe('at://' + DID + '/io.hyperaud.media/3mvi355ibkkvn-media');
+
+  const back = await page.evaluate((uri) => window.IonospherePublish.fetchTalk(uri), exp.talkUri);
+  expect(back.media).toEqual({ url: 'https://media.example/talk.mp4', uri: media && 'at://' + DID + '/io.hyperaud.media/3mvi355ibkkvn-media', mimeType: 'video/mp4', durationMs: 5000 });
+
+  await page.route('https://media.example/**', (route) => route.fulfill({ status: 404 }));   // the player only needs the src set
+  await page.evaluate(() => { const m = document.getElementById('ionosphere-import-modal'); m.checked = true; m.dispatchEvent(new Event('change')); });
+  await page.fill('#ionosphere-import-uri', exp.talkUri);
+  await page.click('#ionosphere-import-btn');
+  await expect.poll(() => page.evaluate(() => document.getElementById('hyperplayer').src)).toBe('https://media.example/talk.mp4');
 });

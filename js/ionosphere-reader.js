@@ -147,7 +147,20 @@
     });
     if (paragraphs.length === 0) paragraphs.push({ start: words[0].start, end: words[words.length - 1].end });
     if (speaker !== null) paragraphs[0].speaker = speaker;
-    return { data: { words: words, paragraphs: paragraphs }, title: typeof talkValue.title === 'string' ? talkValue.title : '', speaker: speaker };
+    // The media, one hop away: the expression's mediaRef names a media record
+    // (a Hyperaudio io.hyperaud.media one carries a url; any record with a url
+    // field is honoured). Absent or unreadable means no media, not a failure.
+    let media = null;
+    const ref = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(String(expression.mediaRef || ''));
+    if (ref !== null) {
+      const rec = await getRecord(pds, ref[1], ref[2], ref[3]).catch(() => null);
+      if (rec && typeof rec.url === 'string' && /^https?:\/\//.test(rec.url)) {
+        media = { url: rec.url, uri: expression.mediaRef };
+        if (rec.mimeType) media.mimeType = String(rec.mimeType);
+        if (Number.isFinite(rec.durationMs)) media.durationMs = rec.durationMs;
+      }
+    }
+    return { data: { words: words, paragraphs: paragraphs }, title: typeof talkValue.title === 'string' ? talkValue.title : '', speaker: speaker, media: media };
   }
 
   window.IonosphereReader = Object.freeze({ xrpc, parseTalkUri, resolveDid, resolvePds, getRecord, listRecords, fetchTalk });

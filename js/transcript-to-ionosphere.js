@@ -29,6 +29,14 @@
   'use strict';
 
   const PLACEHOLDER_DID = 'did:plc:REPLACE_ME';
+  // The media's own record (#346). Both slots the lexicons offer for media
+  // — videoUri on the talk, mediaRef on the expression — take an AT URI to
+  // a media RECORD, and the editor's media is a file or an https URL with no
+  // record anywhere. So the media gets one, in the publisher's repo, under a
+  // Hyperaudio lexicon, and the expression's mediaRef points at it: one hop
+  // for a consumer, and unpublish finds it by the talk's rkey like the rest.
+  // Written only when the media is a URL; a local file has nothing to link.
+  const MEDIA_COLLECTION = 'io.hyperaud.media';
   const MAX_TOKEN_BYTES = 900000; // atproto record values cap ~1 MB; leave headroom
 
   const utf8 = new TextEncoder();
@@ -118,6 +126,18 @@
     const maxTokenBytes = opts.maxTokenBytes || MAX_TOKEN_BYTES;
     const records = [];
 
+    // 0. The media record, when the media has a URL (see MEDIA_COLLECTION).
+    let mediaRef = null;
+    if (opts.media && typeof opts.media.url === 'string' && /^https?:\/\//.test(opts.media.url)) {
+      const mediaRkey = rkey + '-media';
+      const value = { $type: MEDIA_COLLECTION, url: opts.media.url, createdAt: createdAt };
+      if (opts.media.mimeType) value.mimeType = String(opts.media.mimeType);
+      if (Number.isFinite(opts.media.durationMs) && opts.media.durationMs > 0) value.durationMs = Math.round(opts.media.durationMs);
+      if (opts.media.sha256) value.sha256 = String(opts.media.sha256);
+      records.push({ collection: MEDIA_COLLECTION, rkey: mediaRkey, value: value });
+      mediaRef = 'at://' + did + '/' + MEDIA_COLLECTION + '/' + mediaRkey;
+    }
+
     // 1. Expression text + per-word UTF-8 byte ranges (ranges cover the word only).
     const wordSpans = [];
     let text = '';
@@ -134,10 +154,12 @@
       byteCursor += byteLength(words[i].text);
       wordSpans.push({ byteStart: byteStart, byteEnd: byteCursor });
     }
+    const expression = { $type: 'pub.layers.expression.expression', text: text, createdAt: createdAt };
+    if (mediaRef !== null) expression.mediaRef = mediaRef;   // "AT URI of the media record this expression derives from"
     records.push({
       collection: 'pub.layers.expression.expression',
       rkey: rkey + '-expression',
-      value: { $type: 'pub.layers.expression.expression', text: text, createdAt: createdAt },
+      value: expression,
     });
 
     // 2. Word byte-range tokens (kind "word"), sharded.
@@ -238,7 +260,22 @@
     'pub.layers.annotation.annotationLayer',
     'pub.layers.segmentation.segmentation',
     'pub.layers.expression.expression',
+    MEDIA_COLLECTION,
   ];
+
+  // What the player holds, as a media description for the record — a URL
+  // only; a blob: src is a local file with nothing to link.
+  function currentMedia() {
+    const player = document.getElementById('hyperplayer');
+    if (player === null) return null;
+    const src = player.currentSrc || player.src || '';
+    if (!/^https?:\/\//.test(src)) return null;
+    const media = { url: src };
+    if (Number.isFinite(player.duration) && player.duration > 0) media.durationMs = Math.round(player.duration * 1000);
+    const type = player.getAttribute('type');
+    if (type) media.mimeType = type;
+    return media;
+  }
   const WRITES_PER_CALL = 200;                              // applyWrites' limit
 
   async function createSession(pds, identifier, password) {
@@ -286,6 +323,7 @@
       did: repoDid,
       rkey: generateTid(),
       title: opts.title || undefined,
+      media: opts.media || null,
       createdAt: new Date().toISOString(),
     });
     step('Writing ' + out.records.length + ' records…');
@@ -342,7 +380,7 @@
       + '<div class="modal"><div class="modal-box relative" style="max-width:28rem">'
       + '<label for="ionosphere-import-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>'
       + '<h3 class="text-lg font-bold">Import an ionosphere talk</h3>'
-      + '<p style="margin-top:8px; font-size:0.9rem; opacity:0.75">Reads a talk\u2019s records from its repository and rebuilds the transcript here, words, timings and paragraphs. Repositories are public, so no sign-in is needed. The talk carries no media: open the recording afterwards to play it.</p>'
+      + '<p style="margin-top:8px; font-size:0.9rem; opacity:0.75">Reads a talk\u2019s records from its repository and rebuilds the transcript here, words, timings and paragraphs, with its media when the talk links one. Repositories are public, so no sign-in is needed.</p>'
       + '<form id="ionosphere-import-form" style="display:flex; flex-direction:column; gap:12px; margin-top:16px">'
       + '<input id="ionosphere-import-uri" type="text" placeholder="at://did:plc:…/tv.ionosphere.talk/…" class="input input-bordered w-full" style="font-family:monospace" />'
       + '<p id="ionosphere-import-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0"></p>'
@@ -376,10 +414,13 @@
         // identity, paint the transcript, announce it so it becomes a project
         if (typeof window.clearPendingTranscription === 'function') window.clearPendingTranscription();
         hypertranscript.innerHTML = jsonToHTML(talk.data);
+        // the talk's media, when its expression names one (mediaRef → media
+        // record → url): on the player before the birth, as the JSON import does
+        if (talk.media && talk.media.url) document.getElementById('hyperplayer').src = talk.media.url;
         document.dispatchEvent(new CustomEvent('hyperaudioInit'));
         rememberTalk(uriEl.value.trim());
         status.textContent = 'Imported ' + talk.data.words.length + ' words in ' + talk.data.paragraphs.length + ' paragraphs'
-          + (talk.title ? ' — ' + talk.title : '') + '. Open its media to play along.';
+          + (talk.title ? ' — ' + talk.title : '') + (talk.media && talk.media.url ? '.' : '. Open its media to play along.');
         toggle.checked = false;
         toggle.dispatchEvent(new Event('change'));
       } catch (err) {
@@ -550,6 +591,7 @@
           identifier: handleEl.value,
           password: passEl.value,
           title: titleEl.value.trim(),
+          media: currentMedia(),
         }, (msg) => { status.textContent = msg; });
         rememberIdentity(handleEl.value.trim().replace(/^@/, ''), result.did);
         rememberTalk(result.talkUri);
@@ -604,6 +646,7 @@
       const out = transcriptJsonToIonosphere(data, {
         did: knownDid() || PLACEHOLDER_DID,   // the user's own did once a publish has resolved it
         rkey: generateTid(),
+        media: currentMedia(),
         createdAt: new Date().toISOString(),
       });
       downloadJsonFile(out, 'ionosphere-records.json');
