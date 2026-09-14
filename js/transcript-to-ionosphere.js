@@ -1,17 +1,26 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - ionosphere (AT Protocol) transcript export. @version 0.6.18 */
+/*! Hyperaudio Lite Editor - ionosphere (AT Protocol) transcript export. @version 1.3.16 — last changed in release 1.3.16 */
 
 // Self-contained, modular export feature. To remove it entirely: delete this
-// file, its <script> tag in index.html, and the <export-ionosphere> menu item.
+// file and ionosphere-reader.js, their <script> tags in index.html, and the
+// <export-ionosphere>, <publish-ionosphere> and <import-ionosphere> menu
+// items (both modals are built here).
 //
 // Serializes the canonical transcript JSON ({ words, paragraphs }, as produced
 // by htmlToJSON in html-json-converter.js) into the tv.ionosphere / pub.layers
 // record set that ATmosphereConf's transcript pipeline reads. This is the
 // inverse of transcript-from-ionosphere.ts in the atproto-conf repo.
 //
-// v1 emits the record set as a downloadable JSON file (no PDS write). The repo
-// `did` is a placeholder and the talk rkey is a freshly generated TID — replace
-// the did before publishing the records to a PDS with com.atproto.repo.putRecord.
+// Two doors. "Ionosphere (AT Protocol) JSON" downloads the record set with a
+// placeholder `did` and a freshly generated TID rkey. "Publish to PDS…" (#346)
+// signs in to the user's own PDS with a handle and an app password, resolves
+// the real did, and writes the records with com.atproto.repo.applyWrites —
+// in chunks of 200, the endpoint's limit, with validation off because a PDS
+// does not know these lexicons. The password is held for the call only; the
+// handle is remembered. The same modal unpublishes (#623): every record of
+// a talk, found in the repo by the talk's rkey, deleted talk first. And FILE →
+// Import → "Ionosphere (AT Protocol) talk" reads a talk back into the
+// editor from its URI — repositories are public, so no sign-in.
 //
 // Note: byte ranges are UTF-8 offsets (TextEncoder), never string indices —
 // otherwise any non-ASCII word desyncs every later span.
@@ -24,6 +33,17 @@
 
   const utf8 = new TextEncoder();
   const byteLength = (s) => utf8.encode(s).length;
+
+  // Reading, resolving and the xrpc call live in ionosphere-reader.js, which
+  // a viewer page can include on its own; this module adds the editor's
+  // doors — export, publish, unpublish, import.
+  const reader = () => window.IonosphereReader;
+  const xrpc = (url, init) => reader().xrpc(url, init);
+  const parseTalkUri = (uri) => reader().parseTalkUri(uri);
+  const resolveDid = (id) => reader().resolveDid(id);
+  const resolvePds = (did) => reader().resolvePds(did);
+  const listRecords = (pds, did, collection) => reader().listRecords(pds, did, collection);
+  const fetchTalk = (uri, onStep) => reader().fetchTalk(uri, onStep);
 
   // atproto's conventional record key: a 13-char base32-sortable TID.
   const TID_ALPHABET = '234567abcdefghijklmnopqrstuvwxyz';
@@ -209,6 +229,351 @@
     };
   }
 
+  /* ---- Publishing to a PDS (#346) ---------------------------------------- */
+
+  const PUBLISH_PREFS_KEY = 'hyperaudioIonospherePublish'; // { handle, did, talks: { projectId: talkUri } } — never the password
+  const RECORD_COLLECTIONS = [   // everything a publish writes, talk FIRST for deletion
+    'tv.ionosphere.talk',
+    'tv.ionosphere.speaker',
+    'pub.layers.annotation.annotationLayer',
+    'pub.layers.segmentation.segmentation',
+    'pub.layers.expression.expression',
+  ];
+  const WRITES_PER_CALL = 200;                              // applyWrites' limit
+
+  async function createSession(pds, identifier, password) {
+    const out = await xrpc(pds + '/xrpc/com.atproto.server.createSession', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: identifier, password: password }),
+    });
+    if (!out || !out.accessJwt) throw new Error('Sign-in did not return a session');
+    return out;
+  }
+
+  // Creates, in record order (the talk comes last, after what it references).
+  async function applyWrites(pds, accessJwt, did, records) {
+    const writes = records.map((r) => ({
+      $type: 'com.atproto.repo.applyWrites#create',
+      collection: r.collection,
+      rkey: r.rkey,
+      value: r.value,
+    }));
+    let written = 0;
+    for (let i = 0; i < writes.length; i += WRITES_PER_CALL) {
+      const chunk = writes.slice(i, i + WRITES_PER_CALL);
+      await xrpc(pds + '/xrpc/com.atproto.repo.applyWrites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessJwt },
+        body: JSON.stringify({ repo: did, validate: false, writes: chunk }),
+      });
+      written += chunk.length;
+    }
+    return written;
+  }
+
+  // The whole thing: resolve, sign in, serialize against the real did, write.
+  // onStep reports progress for the modal.
+  async function publish(data, opts, onStep) {
+    const step = typeof onStep === 'function' ? onStep : () => {};
+    step('Resolving ' + opts.identifier + '…');
+    const did = await resolveDid(opts.identifier);
+    const pds = await resolvePds(did);
+    step('Signing in to ' + pds.replace(/^https?:\/\//, '') + '…');
+    const session = await createSession(pds, opts.identifier.trim().replace(/^@/, ''), opts.password);
+    const repoDid = session.did || did;
+    const out = transcriptJsonToIonosphere(data, {
+      did: repoDid,
+      rkey: generateTid(),
+      title: opts.title || undefined,
+      createdAt: new Date().toISOString(),
+    });
+    step('Writing ' + out.records.length + ' records…');
+    const written = await applyWrites(pds, session.accessJwt, repoDid, out.records);
+    return { talkUri: out.talkUri, did: repoDid, pds: pds, written: written };
+  }
+
+  // Unpublish (#623): delete every record a publish wrote for a talk. No
+  // local bookkeeping is needed to find them — every rkey in the set derives
+  // from the talk's — so the set is recovered from the repo itself, by
+  // listing each collection and matching the prefix, and a talk published
+  // from another session or pasted in can go too. Talk first, so a partial
+  // failure never leaves a talk pointing at nothing.
+  const listRkeys = async (pds, did, collection) => (await listRecords(pds, did, collection)).map((r) => r.rkey);
+
+  async function unpublish(talkUri, opts, onStep) {
+    const step = typeof onStep === 'function' ? onStep : () => {};
+    const talk = parseTalkUri(talkUri);
+    if (talk === null) throw new Error('That is not a talk URI (at://did…/tv.ionosphere.talk/…)');
+    step('Signing in…');
+    const identifier = String(opts.identifier || '').trim().replace(/^@/, '');
+    const pds = await resolvePds(talk.did);
+    const session = await createSession(pds, identifier, opts.password);
+    if (session.did && session.did !== talk.did) {
+      throw new Error('That talk is in another repository (' + talk.did + '), not ' + identifier + "'s");
+    }
+    step('Finding the talk\u2019s records…');
+    const deletes = [];
+    for (const collection of RECORD_COLLECTIONS) {
+      (await listRkeys(pds, talk.did, collection)).forEach((rkey) => {
+        if (rkey === talk.rkey || rkey.startsWith(talk.rkey + '-')) {
+          deletes.push({ $type: 'com.atproto.repo.applyWrites#delete', collection: collection, rkey: rkey });
+        }
+      });
+    }
+    if (deletes.length === 0) throw new Error('Nothing found for that talk — already unpublished?');
+    step('Deleting ' + deletes.length + ' records…');
+    for (let i = 0; i < deletes.length; i += WRITES_PER_CALL) {
+      await xrpc(pds + '/xrpc/com.atproto.repo.applyWrites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.accessJwt },
+        body: JSON.stringify({ repo: talk.did, writes: deletes.slice(i, i + WRITES_PER_CALL) }),
+      });
+    }
+    return { talkUri: talkUri.trim(), deleted: deletes.length };
+  }
+
+  function ensureImportModal() {
+    let toggle = document.getElementById('ionosphere-import-modal');
+    if (toggle !== null) return toggle;
+    const frag = document.createElement('div');
+    frag.innerHTML =
+      '<input type="checkbox" id="ionosphere-import-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />'
+      + '<div class="modal"><div class="modal-box relative" style="max-width:28rem">'
+      + '<label for="ionosphere-import-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>'
+      + '<h3 class="text-lg font-bold">Import an ionosphere talk</h3>'
+      + '<p style="margin-top:8px; font-size:0.9rem; opacity:0.75">Reads a talk\u2019s records from its repository and rebuilds the transcript here, words, timings and paragraphs. Repositories are public, so no sign-in is needed. The talk carries no media: open the recording afterwards to play it.</p>'
+      + '<form id="ionosphere-import-form" style="display:flex; flex-direction:column; gap:12px; margin-top:16px">'
+      + '<input id="ionosphere-import-uri" type="text" placeholder="at://did:plc:…/tv.ionosphere.talk/…" class="input input-bordered w-full" style="font-family:monospace" />'
+      + '<p id="ionosphere-import-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0"></p>'
+      + '<div class="modal-action" style="margin-top:4px"><label for="ionosphere-import-modal" class="btn">Cancel</label>'
+      + '<button type="submit" id="ionosphere-import-btn" class="btn btn-primary">Import</button></div>'
+      + '</form></div></div>';
+    document.body.appendChild(frag);
+    toggle = document.getElementById('ionosphere-import-modal');
+    const uriEl = document.getElementById('ionosphere-import-uri');
+    const status = document.getElementById('ionosphere-import-status');
+    const btn = document.getElementById('ionosphere-import-btn');
+    toggle.addEventListener('change', () => {
+      if (!toggle.checked) return;
+      status.textContent = '';
+      status.style.color = '';
+      btn.disabled = false;
+    });
+    document.getElementById('ionosphere-import-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const hypertranscript = document.getElementById('hypertranscript');
+      if (hypertranscript === null || typeof jsonToHTML !== 'function') {
+        status.textContent = 'You can only import into the transcript view.';
+        return;
+      }
+      if (!uriEl.value.trim()) { status.textContent = 'Enter the talk URI.'; return; }
+      btn.disabled = true;
+      status.style.color = '';
+      try {
+        const talk = await fetchTalk(uriEl.value, (msg) => { status.textContent = msg; });
+        // the same door the JSON import uses: clear a stale transcription
+        // identity, paint the transcript, announce it so it becomes a project
+        if (typeof window.clearPendingTranscription === 'function') window.clearPendingTranscription();
+        hypertranscript.innerHTML = jsonToHTML(talk.data);
+        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+        rememberTalk(uriEl.value.trim());
+        status.textContent = 'Imported ' + talk.data.words.length + ' words in ' + talk.data.paragraphs.length + ' paragraphs'
+          + (talk.title ? ' — ' + talk.title : '') + '. Open its media to play along.';
+        toggle.checked = false;
+        toggle.dispatchEvent(new Event('change'));
+      } catch (err) {
+        status.style.color = 'oklch(var(--er))';
+        status.textContent = 'Could not import: ' + (err && err.message ? err.message : String(err));
+        btn.disabled = false;
+      }
+    });
+    return toggle;
+  }
+
+  class ImportIonosphere extends HTMLElement {
+    connectedCallback() {
+      ensureImportModal();
+      this.innerHTML = '<label for="ionosphere-import-modal">Ionosphere (AT Protocol) talk</label>';
+    }
+  }
+  customElements.define('import-ionosphere', ImportIonosphere);
+
+  function readPublishPrefs() {
+    try { return JSON.parse(localStorage.getItem(PUBLISH_PREFS_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function writePublishPrefs(prefs) {
+    try { localStorage.setItem(PUBLISH_PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* private mode */ }
+  }
+  // The handle, and the did it resolved to: once a publish has established
+  // who the user is, the JSON export can carry the real did instead of the
+  // placeholder, so the downloaded file is publishable as it stands.
+  function rememberIdentity(handle, did) {
+    const prefs = readPublishPrefs();
+    prefs.handle = handle;
+    prefs.did = did;
+    writePublishPrefs(prefs);
+  }
+  // The talk each project was last published as — app state, not the
+  // project's, so it stays out of the .hyperaudio file — so reopening the
+  // modal on a published project offers its unpublish without pasting.
+  const currentProjectId = () => {
+    const lib = window.HyperaudioSave && window.HyperaudioSave.library;
+    try { return lib && typeof lib.currentId === 'function' ? lib.currentId() : null; } catch (e) { return null; }
+  };
+  function rememberTalk(talkUri) {
+    const id = currentProjectId();
+    if (id === null) return;
+    const prefs = readPublishPrefs();
+    prefs.talks = prefs.talks || {};
+    if (talkUri) prefs.talks[String(id)] = talkUri; else delete prefs.talks[String(id)];
+    writePublishPrefs(prefs);
+  }
+  function rememberedTalk() {
+    const id = currentProjectId();
+    const talks = readPublishPrefs().talks || {};
+    return id !== null && typeof talks[String(id)] === 'string' ? talks[String(id)] : '';
+  }
+  function knownDid() {
+    const did = readPublishPrefs().did;
+    return typeof did === 'string' && did.startsWith('did:') ? did : null;
+  }
+
+  const EYE_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_CLOSED = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>';
+
+  // The modal, built here so the feature stays one file. Same DaisyUI
+  // modal-toggle idiom as the rest of the app: a11y.js wires the label
+  // buttons, Escape and the ✕ close it.
+  function ensurePublishModal() {
+    let toggle = document.getElementById('ionosphere-publish-modal');
+    if (toggle !== null) return toggle;
+    const frag = document.createElement('div');
+    frag.innerHTML =
+      '<input type="checkbox" id="ionosphere-publish-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />'
+      + '<div class="modal"><div class="modal-box relative" style="max-width:28rem">'
+      + '<label for="ionosphere-publish-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>'
+      + '<h3 class="text-lg font-bold">Publish to your PDS</h3>'
+      + '<p style="margin-top:8px; font-size:0.9rem; opacity:0.75">Writes this transcript to your AT Protocol repository as ionosphere records, under your own account. Sign in with an app password, not your main one — you can make one in your account settings and revoke it at any time. It is used for this publish only and never stored.</p>'
+      + '<form id="ionosphere-publish-form" style="display:flex; flex-direction:column; gap:12px; margin-top:16px">'
+      + '<input id="ionosphere-handle" type="text" autocomplete="username" placeholder="Handle, e.g. you.bsky.social" class="input input-bordered w-full" />'
+      + '<div class="key-field" style="max-width:none"><input id="ionosphere-app-password" type="password" autocomplete="current-password" placeholder="App password" class="input input-bordered w-full" />'
+      + '<button type="button" class="key-eye" id="ionosphere-eye" aria-label="Show password" tabindex="-1"><span class="eye-open">' + EYE_OPEN + '</span><span class="eye-closed" style="display:none">' + EYE_CLOSED + '</span></button></div>'
+      + '<input id="ionosphere-title" type="text" placeholder="Talk title (optional)" class="input input-bordered w-full" />'
+      + '<p id="ionosphere-publish-status" role="status" aria-live="polite" style="min-height:1.4em; font-size:0.9rem; margin:0"></p>'
+      + '<div class="modal-action" style="margin-top:4px"><label for="ionosphere-publish-modal" class="btn">Cancel</label>'
+      + '<button type="submit" id="ionosphere-publish-btn" class="btn btn-primary">Publish</button></div>'
+      + '<div style="margin-top:8px; padding-top:12px; border-top:1px solid oklch(var(--bc) / 0.12)">'
+      + '<p style="font-size:0.9rem; opacity:0.75; margin:0 0 8px">Unpublish removes every record of a talk from your repository. Sign in above, then give the talk\u2019s URI — the one just published, or this project\u2019s last one, is filled in.</p>'
+      + '<div style="display:flex; gap:8px; align-items:center"><input id="ionosphere-talk-uri" type="text" placeholder="at://did:plc:…/tv.ionosphere.talk/…" class="input input-bordered input-sm w-full" style="font-family:monospace" />'
+      + '<button type="button" id="ionosphere-unpublish-btn" class="btn btn-sm btn-outline btn-error" style="flex:0 0 auto">Unpublish</button></div>'
+      + '</div>'
+      + '</form></div></div>';
+    document.body.appendChild(frag);
+    toggle = document.getElementById('ionosphere-publish-modal');
+
+    const handleEl = document.getElementById('ionosphere-handle');
+    const passEl = document.getElementById('ionosphere-app-password');
+    const titleEl = document.getElementById('ionosphere-title');
+    const status = document.getElementById('ionosphere-publish-status');
+    const btn = document.getElementById('ionosphere-publish-btn');
+    const uriEl = document.getElementById('ionosphere-talk-uri');
+    const unpublishBtn = document.getElementById('ionosphere-unpublish-btn');
+
+    document.getElementById('ionosphere-eye').addEventListener('click', (e) => {
+      const reveal = passEl.type === 'password';
+      passEl.type = reveal ? 'text' : 'password';
+      e.currentTarget.querySelector('.eye-open').style.display = reveal ? 'none' : '';
+      e.currentTarget.querySelector('.eye-closed').style.display = reveal ? '' : 'none';
+      e.currentTarget.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
+    });
+
+    // Opening: prefill the handle and the title; the password is always empty.
+    toggle.addEventListener('change', () => {
+      if (!toggle.checked) return;
+      handleEl.value = readPublishPrefs().handle || '';
+      passEl.value = '';
+      const save = window.HyperaudioSave;
+      titleEl.value = save && typeof save.getProjectTitle === 'function' ? (save.getProjectTitle() || '') : '';
+      status.textContent = '';
+      status.style.color = '';
+      btn.disabled = false;
+      uriEl.value = rememberedTalk();
+      unpublishBtn.disabled = false;
+    });
+
+    unpublishBtn.addEventListener('click', async () => {
+      if (!handleEl.value.trim() || !passEl.value) {
+        status.style.color = '';
+        status.textContent = 'Enter your handle and an app password.';
+        return;
+      }
+      if (!uriEl.value.trim()) {
+        status.style.color = '';
+        status.textContent = 'Enter the talk URI to unpublish.';
+        return;
+      }
+      unpublishBtn.disabled = true;
+      btn.disabled = true;
+      status.style.color = '';
+      try {
+        const result = await unpublish(uriEl.value, { identifier: handleEl.value, password: passEl.value }, (msg) => { status.textContent = msg; });
+        if (rememberedTalk() === result.talkUri) rememberTalk(null);
+        uriEl.value = '';
+        status.textContent = 'Unpublished: ' + result.deleted + ' records removed.';
+      } catch (err) {
+        status.style.color = 'oklch(var(--er))';
+        status.textContent = 'Could not unpublish: ' + (err && err.message ? err.message : String(err));
+      } finally {
+        passEl.value = '';
+        unpublishBtn.disabled = false;
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('ionosphere-publish-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const hypertranscript = document.getElementById('hypertranscript');
+      const data = hypertranscript !== null && typeof htmlToJSON === 'function' ? htmlToJSON(hypertranscript.innerHTML) : null;
+      if (!data || !data.words || data.words.length === 0) {
+        status.textContent = 'There is no transcript to publish.';
+        return;
+      }
+      if (!handleEl.value.trim() || !passEl.value) {
+        status.textContent = 'Enter your handle and an app password.';
+        return;
+      }
+      btn.disabled = true;
+      status.style.color = '';
+      try {
+        const result = await publish(data, {
+          identifier: handleEl.value,
+          password: passEl.value,
+          title: titleEl.value.trim(),
+        }, (msg) => { status.textContent = msg; });
+        rememberIdentity(handleEl.value.trim().replace(/^@/, ''), result.did);
+        rememberTalk(result.talkUri);
+        uriEl.value = result.talkUri;   // ready to take back
+        status.textContent = 'Published ' + result.written + ' records. Talk: ' + result.talkUri;
+      } catch (err) {
+        status.style.color = 'oklch(var(--er))';
+        status.textContent = 'Could not publish: ' + (err && err.message ? err.message : String(err));
+        btn.disabled = false;
+      } finally {
+        passEl.value = ''; // never kept beyond the attempt
+      }
+    });
+    return toggle;
+  }
+
+  class PublishIonosphere extends HTMLElement {
+    connectedCallback() {
+      ensurePublishModal();
+      this.innerHTML = '<label for="ionosphere-publish-modal">Publish to PDS…</label>';
+    }
+  }
+  customElements.define('publish-ionosphere', PublishIonosphere);
+
   function downloadJsonFile(obj, filename) {
     const dataStr =
       'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(obj, null, 2));
@@ -237,7 +602,7 @@
         return;
       }
       const out = transcriptJsonToIonosphere(data, {
-        did: PLACEHOLDER_DID,
+        did: knownDid() || PLACEHOLDER_DID,   // the user's own did once a publish has resolved it
         rkey: generateTid(),
         createdAt: new Date().toISOString(),
       });
@@ -252,6 +617,8 @@
 
   customElements.define('export-ionosphere', ExportIonosphere);
 
-  // Expose the pure serializer for reuse/testing without the DOM/menu.
+  // Expose the pure serializer for reuse/testing without the DOM/menu, and
+  // the publish pieces for the same reason.
   window.transcriptJsonToIonosphere = transcriptJsonToIonosphere;
+  window.IonospherePublish = Object.freeze({ resolveDid, resolvePds, createSession, applyWrites, publish, unpublish, fetchTalk, parseTalkUri, knownDid, WRITES_PER_CALL });
 })();

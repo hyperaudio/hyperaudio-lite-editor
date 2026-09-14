@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.16 — last changed in release 1.3.16
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -53,6 +53,7 @@
     ...DISMISSAL_KEYS,
     'hyperaudioTranscribePrefs',  // transcribe-prefs.js
     'hyperaudioExportOptions',    // media-export.js (#616)
+    'hyperaudioIonospherePublish', // transcript-to-ionosphere.js: the remembered handle (#346)
     'hyperaudioHasProjects',      // hyperaudio-save.js boot hint (#473)
     'hyperaudioWorkPresent',      // retired hint, removed on sight
   ]);
