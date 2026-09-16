@@ -28,9 +28,32 @@ http.createServer((req, res) => {
     try { stat = statSync(file); } catch (e) { res.writeHead(404).end(); return; }
     if (stat.isDirectory()) { res.writeHead(404).end(); return; }
   }
+  // Range requests, as any real media host serves them: the editor sniffs a
+  // URL by its first bytes and mediabunny reads an audio track by ranges
+  // (#627), so a server that ignores Range tests neither.
+  const type = TYPES[extname(file)] || 'application/octet-stream';
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (range !== null && stat.size > 0) {
+    const start = range[1] === '' ? Math.max(0, stat.size - Number(range[2])) : Number(range[1]);
+    const end = range[1] === '' || range[2] === '' ? stat.size - 1 : Math.min(Number(range[2]), stat.size - 1);
+    if (start >= stat.size || start > end) {
+      res.writeHead(416, { 'content-range': `bytes */${stat.size}` }).end();
+      return;
+    }
+    res.writeHead(206, {
+      'content-type': type,
+      'content-length': end - start + 1,
+      'content-range': `bytes ${start}-${end}/${stat.size}`,
+      'accept-ranges': 'bytes',
+      'cache-control': 'no-store',
+    });
+    createReadStream(file, { start, end }).pipe(res);
+    return;
+  }
   res.writeHead(200, {
-    'content-type': TYPES[extname(file)] || 'application/octet-stream',
+    'content-type': type,
     'content-length': stat.size,
+    'accept-ranges': 'bytes',
     'cache-control': 'no-store',
   });
   createReadStream(file).pipe(res);

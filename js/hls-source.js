@@ -1,7 +1,7 @@
 /**
  * hls-source.js
  * (C) The Hyperaudio Project
- * @version 0.8.10 — last changed in release 0.8.10
+ * @version 1.3.17 — last changed in release 1.3.17
  * @license MIT
  *
  * Transcribe from a remote media URL — including HLS VOD (.m3u8) — by resolving
@@ -62,6 +62,76 @@ function looksLikeM3u8(arrayBuffer) {
 // content type / body. Returns { isHls, bytes, url } where `url` is the URL that
 // actually worked (see the double-encoding recovery below) and `bytes` is the
 // fetched body for a non-HLS URL (so the caller need not fetch it again).
+// Sniffing needs the head of the file, not the file. Reading the whole body
+// here is what killed the tab on a 5.85 GB video (#627): the bytes were
+// fetched in full, held in memory, and then handed to a decoder that needed
+// its own copy. A range request gets the head; where the server ignores
+// Range and streams the lot, the reader is cancelled after the first chunks,
+// so nothing more arrives either way.
+const SNIFF_BYTES = 65536;
+
+async function readPrefix(response, limit) {
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    const whole = new Uint8Array(await response.arrayBuffer());
+    return whole.subarray(0, limit);
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (total < limit) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+    }
+  } finally {
+    try { await reader.cancel(); } catch (e) { /* already closed */ }
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  chunks.forEach((c) => { out.set(c, at); at += c.length; });
+  return out;
+}
+
+// The size of the whole resource, from Content-Range on a partial response
+// (where Content-Length is only the slice) or Content-Length on a full one.
+// Cross-origin, Content-Range is hidden unless the host exposes it, so this
+// answers null often enough that nothing may depend on it alone — hence the
+// HEAD probe below and the capped read in the fallback.
+function totalLengthOf(response) {
+  const range = response.headers.get('content-range');
+  if (range) {
+    const match = /\/(\d+)\s*$/.exec(range);
+    if (match) return Number(match[1]);
+  }
+  if (response.status !== 206) {
+    const length = Number(response.headers.get('content-length'));
+    if (Number.isFinite(length) && length > 0) return length;
+  }
+  return null; // on a 206, Content-Length is the slice, not the file
+}
+
+// One cheap request to learn a size the partial response would not tell us.
+// Content-Length is CORS-safelisted, so this works where Content-Range does
+// not. Null when the host refuses HEAD or hides it anyway.
+async function headLengthOf(url) {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    if (!response.ok) return null;
+    const length = Number(response.headers.get('content-length'));
+    return Number.isFinite(length) && length > 0 ? length : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function describeSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 'very large';
+  if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+  return Math.round(bytes / 1e6) + ' MB';
+}
+
 async function classifyMediaUrl(url) {
   // A URL never contains literal whitespace; strip any that crept in from
   // copy/paste (e.g. a long URL that wrapped across lines) so it doesn't break
@@ -72,8 +142,9 @@ async function classifyMediaUrl(url) {
     return { isHls: true, bytes: null, url };
   }
 
+  const sniffInit = { headers: { Range: `bytes=0-${SNIFF_BYTES - 1}` } };
   let workingUrl = url;
-  let response = await fetch(url).catch(() => null);
+  let response = await fetch(url, sniffInit).catch(() => null);
 
   // Recover from a double-percent-encoded URL (e.g. an already-encoded link
   // re-copied through an address bar: %3A → %253A), which servers reject as a
@@ -81,7 +152,7 @@ async function classifyMediaUrl(url) {
   // correctly single-encoded URL untouched. Retry once with that.
   if ((response === null || !response.ok) && /%25/i.test(url)) {
     const collapsed = url.replace(/%25/gi, '%');
-    const retry = await fetch(collapsed).catch(() => null);
+    const retry = await fetch(collapsed, sniffInit).catch(() => null);
     if (retry !== null && retry.ok) {
       response = retry;
       workingUrl = collapsed;
@@ -107,9 +178,11 @@ async function classifyMediaUrl(url) {
   }
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
-  const bytes = await response.arrayBuffer();
-  const isHls = contentType.includes('mpegurl') || looksLikeM3u8(bytes);
-  return { isHls, bytes, url: workingUrl };
+  const prefix = await readPrefix(response, SNIFF_BYTES);
+  const isHls = contentType.includes('mpegurl') || looksLikeM3u8(prefix.buffer);
+  let contentLength = totalLengthOf(response);
+  if (contentLength === null && !isHls) contentLength = await headLengthOf(workingUrl);
+  return { isHls, url: workingUrl, contentLength };
 }
 
 // From a MASTER playlist that declares a separate audio rendition
@@ -199,14 +272,83 @@ async function attachMediaPlayback(videoEl, url, isHls) {
  * is called during HLS download when known.
  */
 async function readAudioFromUrl(url, videoEl, onProgress) {
-  const { isHls, bytes, url: workingUrl } = await classifyMediaUrl(url);
+  const { isHls, url: workingUrl, contentLength } = await classifyMediaUrl(url);
 
   if (videoEl) {
     // playback is secondary to transcription — don't fail the run if it can't attach
     try { await attachMediaPlayback(videoEl, workingUrl, isHls); } catch (e) { console.warn(e); }
   }
 
-  return isHls ? readAudioFromHls(workingUrl, onProgress) : decodeToMono16k(bytes);
+  return isHls
+    ? readAudioFromHls(workingUrl, onProgress)
+    : readAudioFromPlainUrl(workingUrl, contentLength, onProgress);
+}
+
+// Above this, a whole-file fetch is not a fallback worth attempting: the bytes
+// alone would exceed what a tab can hold, and the decoder needs its own copy
+// on top. Well under the hard allocation ceiling, because failing honestly
+// beats a tab that dies with the transcription in it.
+const MAX_WHOLE_FILE_BYTES = 250 * 1024 * 1024;
+
+function tooLargeError(size, cause) {
+  const because = cause && cause.message ? ` (${cause.message})` : '';
+  return new Error(
+    `This media is ${size}, too large for the browser to load in one piece, `
+    + `and its audio track could not be read on its own${because}. `
+    + `Transcribe a local copy instead, or use the stream's .m3u8 URL if the host offers one.`);
+}
+
+// Read a response body, refusing as soon as it passes the cap rather than
+// after it has been allocated. Headers cannot be relied on for this: a
+// cross-origin partial response hides the real size, which is how a 5.85 GB
+// file reached the decoder with nothing having noticed (#627).
+async function readCapped(response, limit, cause) {
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    const whole = await response.arrayBuffer();
+    if (whole.byteLength > limit) throw tooLargeError(describeSize(whole.byteLength), cause);
+    return whole;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > limit) {
+      try { await reader.cancel(); } catch (e) { /* already closed */ }
+      throw tooLargeError(`over ${describeSize(limit)}`, cause);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  chunks.forEach((c) => { out.set(c, at); at += c.length; });
+  return out.buffer;
+}
+
+/**
+ * Audio from a plain (non-HLS) media URL. The audio track alone is read over
+ * range requests (#627); only if that fails does the old whole-file decode
+ * run, and then only within a cap — by the declared size where the host gives
+ * one, and by the bytes actually read where it does not.
+ */
+async function readAudioFromPlainUrl(url, contentLength, onProgress) {
+  let extractionError = null;
+  if (typeof decodeAudioOnlyFromUrl === 'function') {
+    try {
+      return await decodeAudioOnlyFromUrl(url, onProgress);
+    } catch (e) {
+      extractionError = e;
+      console.warn('hls-source: audio-only extraction failed, falling back to a whole-file decode', e);
+    }
+  }
+  if (Number.isFinite(contentLength) && contentLength > MAX_WHOLE_FILE_BYTES) {
+    throw tooLargeError(describeSize(contentLength), extractionError);
+  }
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Could not fetch the media (HTTP ${response.status}).`);
+  return decodeToMono16k(await readCapped(response, MAX_WHOLE_FILE_BYTES, extractionError));
 }
 
 

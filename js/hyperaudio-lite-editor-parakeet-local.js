@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.17 — last changed in release 1.3.17
  * @license MIT
  */
 
@@ -228,13 +228,16 @@ function loadParakeetClient(modal, workerBaseUrl) {
       // Since #529 the worker suppresses its own uncaught runtime errors
       // (the request's try/catch reports real failures via {type:"error"}),
       // so reaching here means the worker script itself failed to load or
-      // parse — that IS fatal, nothing will ever answer.
+      // parse — that IS fatal, nothing will ever answer. The browser killing
+      // the worker under memory pressure arrives the same way, with no
+      // message, which is why the fallback text below names memory rather
+      // than blaming the script (#627).
       console.error(event);
       // a worker that can't even load has nothing worth keeping — retire it
       // now so a retry starts from a fresh one
       worker.terminate();
       if (webWorker === worker) webWorker = null;
-      handleError(event.message || "The transcription worker crashed.");
+      handleError(event.message || "Transcription stopped unexpectedly. With long media this is usually the browser running out of memory — try a shorter file, or a local copy rather than a URL.");
     };
 
     return worker;
