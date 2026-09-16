@@ -1805,3 +1805,24 @@ html.ha-transcribing #upload-transcribe-btn {
   overflow-y: auto;
   flex-wrap: nowrap;   /* daisyUI's .menu wraps a column that hits its max-height into a second column beside it — scroll instead */
 }
+
+/* The audio poster WebKit stops painting (#629). Safari leaves poster display
+   mode as soon as playback starts — even for audio, where no frame is coming
+   and the attribute is still set — so the player went to a bare box for the
+   rest of the play. media-first-frame paints the same picture again as an
+   <img> behind the player, which WebKit has no reason to stop drawing.
+   `isolation` gives the frame its own stacking context, so the negative
+   z-index stays above the frame's background rather than disappearing behind
+   the page; behind the player is what keeps native captions and the play
+   overlay on top. */
+#player-frame { isolation: isolate; }
+#audio-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  z-index: -1;
+  pointer-events: none;
+}
