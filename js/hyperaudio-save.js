@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.17 — last changed in release 1.3.17
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1402,8 +1402,21 @@
     return state;
   }
 
+  // The transcript area is showing a MESSAGE, not a document (#628): a
+  // transcription loader, or an engine's error card, painted there by
+  // showTranscriptNotice. What is on screen then belongs to no project, so no
+  // state write may capture it. Without this, pressing Save after a failed
+  // transcription wrote the card — with zero words — straight over the open
+  // project's transcript, and an autosave did the same on the next keystroke
+  // anywhere in the project.
+  function transcriptIsNotice() {
+    const t = document.getElementById('hypertranscript');
+    return t !== null && t.querySelector('[data-transcript-notice]') !== null;
+  }
+
   async function writeDraftNow() {
     if (!opfsAvailable || !session.active || !hasProjectLock || session.projectId === null) return;
+    if (transcriptIsNotice()) return;
     autosavePending = false;
     const projectId = session.projectId;
     try {
@@ -1536,6 +1549,12 @@
       }
       if (!session.active || session.projectId === null) {
         await projectAlert('There is no project to save yet — transcribe or import something first.');
+        return false;
+      }
+      // Saving what a message left on screen would replace the project's
+      // transcript with the message (#628). Refuse, and say how to get back.
+      if (transcriptIsNotice()) {
+        await projectAlert('Nothing was saved: the transcript area is showing a message, not a transcript. Open the project again from Recents to get it back.');
         return false;
       }
       const identityAtStart = identityGeneration;
