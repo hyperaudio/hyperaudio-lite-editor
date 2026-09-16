@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.15 — last changed in release 1.3.15
+ * @version 1.3.17 — last changed in release 1.3.17
  * @license MIT
  *
  * First-frame display for video media (#556). A <video> shows its poster —
@@ -144,6 +144,7 @@
 
     function reveal() {
       if (player.videoWidth <= 0) return; // audio, or dimensions not known yet
+      hideAudioPoster();                  // video paints its own frames (#629)
       player.style.aspectRatio = player.videoWidth + ' / ' + player.videoHeight;
       // A transcription's medium (#619): the session's project — whose capture the
       // stored-poster pass below would fetch — is still the PREVIOUS one, so
@@ -208,9 +209,66 @@
     // so a project looks the same wherever you meet it. Order: an embedder's
     // poster still wins, then the glyph, then the markup poster as before, so
     // nothing regresses if the glyph cannot be made.
+    /* ---- The audio poster WebKit stops painting (#629) ---------------------
+     * Safari leaves poster display mode the moment playback starts, even for
+     * audio, where no frame is coming and the attribute is still set: the
+     * player goes to a bare box for the rest of the play, and the element's
+     * intrinsic size falls back to 300x150, so the layout jumps with it.
+     * Blink keeps the poster, which is why the same page looks right in
+     * Chrome. Nothing in the #575 discipline helps — the attribute IS intact.
+     *
+     * So for audio the same picture is painted a second time, as an <img>
+     * BEHIND the player, which WebKit has no reason to stop drawing. Behind,
+     * not over, so native captions and the play overlay stay on top
+     * (#player-frame carries isolation:isolate, which keeps the negative
+     * z-index above the frame's own background). The <img> mirrors the
+     * poster attribute, so a stored capture, the glyph, or an embedder's
+     * poster all follow it without this having to know which is which.
+     * --------------------------------------------------------------------- */
+    let audioPosterEl = null;
+    function audioPoster() {
+      if (audioPosterEl !== null) return audioPosterEl;
+      const frame = document.getElementById('player-frame');
+      if (frame === null) return null;
+      audioPosterEl = document.createElement('img');
+      audioPosterEl.id = 'audio-poster';
+      audioPosterEl.alt = '';            // decorative: it duplicates the poster
+      audioPosterEl.hidden = true;
+      // NOT pinned to the picture's aspect: #556 uses the CLEARED pin as the
+      // signal that a medium was recognised as audio, and pinning it here
+      // breaks that. The duplicate is absolutely positioned in the frame, so
+      // it keeps its size whatever the element's intrinsic size does. If a
+      // real Safari ever shows the 300x150 collapse the issue describes, it
+      // needs a rule that does not take #556's signal away.
+      frame.appendChild(audioPosterEl);
+      return audioPosterEl;
+    }
+
+    function showAudioPoster() {
+      const img = audioPoster();
+      if (img === null) return;
+      const poster = player.getAttribute('poster') || '';
+      if (poster === '') { hideAudioPoster(); return; }
+      if (img.getAttribute('src') !== poster) img.setAttribute('src', poster);
+      img.hidden = false;
+    }
+
+    function hideAudioPoster() {
+      if (audioPosterEl === null) return;
+      audioPosterEl.hidden = true;
+      audioPosterEl.removeAttribute('src');
+    }
+
+    // Whatever changes the poster — a capture arriving, the glyph re-seeded,
+    // an embedder answering late — the duplicate follows it.
+    new MutationObserver(() => {
+      if (audioPosterEl !== null && !audioPosterEl.hidden) showAudioPoster();
+    }).observe(player, { attributes: true, attributeFilter: ['poster'] });
+
     function settleAudio() {
       if (player.videoWidth > 0) return;
       player.style.aspectRatio = '';
+      showAudioPoster();
       const token = loadToken;
       applyStoredPoster(token, false).then(async (applied) => {
         if (applied || token !== loadToken) return;
@@ -223,7 +281,7 @@
           return;
         }
         if (defaultPoster !== null) player.setAttribute('poster', defaultPoster);
-      });
+      }).then(() => { if (player.videoWidth === 0) showAudioPoster(); });
     }
     player.addEventListener('loadedmetadata', settleAudio);
 
