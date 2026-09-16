@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.17 — last changed in release 1.3.17
+ * @version 1.3.18 — last changed in release 1.3.18
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1888,6 +1888,33 @@
     }
   }
 
+  // Part 4 of #356/#287 (#636), the one the import path fell through.
+  //
+  // A caption swap is written BEFORE the new media arrives — the VTT/SRT
+  // import sets the track from its own FileReader while the media is still
+  // loading from another — so the flush above runs against the OUTGOING
+  // media. When the new media then loads, the picture is re-composited but
+  // the native caption overlay is not: the previous document's cue stays
+  // painted over the new video, unchanging, while the real captions come and
+  // go above it. Reloading the page clears it, which is what a stale
+  // compositing layer looks like from the outside.
+  //
+  // So the flush is repeated once each time the media actually changes.
+  // flushCaptionPaint only acts on a track that is already 'showing', so this
+  // cannot reveal captions meant to stay hidden (mp3/m4a), and a media change
+  // is rare enough that a mode toggle costs nothing.
+  function flushCaptionPaintOnMediaChange(videoDomId = 'hyperplayer') {
+    const video = document.getElementById(videoDomId);
+    if (video === null) return;
+    let lastSrc = video.currentSrc || video.src || '';
+    video.addEventListener('loadeddata', () => {
+      const src = video.currentSrc || video.src || '';
+      if (src === lastSrc) return;   // a seek or a re-decode, not a new document
+      lastSrc = src;
+      flushCaptionPaint(videoDomId);
+    });
+  }
+
   // THE one door for a caption swap that comes with a NEW document (#356/#287):
   // project open, Recents switch, SRT/VTT import, transcribe/regenerate. It does
   // both halves — fresh <track> element, then the paint flush — so no caller has
@@ -3532,6 +3559,8 @@
       return false;
     });
   }
+
+  flushCaptionPaintOnMediaChange();
 
   function boot() {
     injectUi();
