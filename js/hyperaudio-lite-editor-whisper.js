@@ -215,7 +215,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
       // now so a retry starts from a fresh one
       worker.terminate();
       if (webWorker === worker) webWorker = null;
-      handleError(event.message || "The transcription worker crashed.");
+      handleError(event.message || "Transcription stopped unexpectedly. With long media this is usually the browser running out of memory — try a shorter file, or a local copy rather than a URL.");
     };
 
     return worker;
