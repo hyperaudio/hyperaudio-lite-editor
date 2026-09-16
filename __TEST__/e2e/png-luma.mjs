@@ -3,7 +3,10 @@
 // perfectly uniform box — the element painting nothing and the page showing
 // through — which no DOM assertion can tell from a poster that IS painting.
 import zlib from 'node:zlib';
-export function pngLuma(buf) {
+
+// The decoded pixels: { w, h, channels, px } with px a Buffer of unfiltered
+// samples, row-major. Shared by the luma count and the colour sample below.
+export function decodePng(buf) {
   let pos = 8, w = 0, h = 0, bitDepth = 0, colorType = 0;
   const idat = [];
   while (pos < buf.length) {
@@ -42,6 +45,11 @@ export function pngLuma(buf) {
       cur[x] = v & 0xff;
     }
   }
+  return { w, h, channels, px: out };
+}
+
+export function pngLuma(buf) {
+  const { w, h, channels, px: out } = decodePng(buf);
   const seen = new Set();
   let min = 255, max = 0;
   for (let i = 0; i < out.length; i += channels) {
@@ -49,4 +57,19 @@ export function pngLuma(buf) {
     seen.add(lum); if (lum < min) min = lum; if (lum > max) max = lum;
   }
   return { w, h, distinctLuma: seen.size, min, max, spread: max - min };
+}
+
+// The mean colour of an image, and how far it is from grey: max channel minus
+// min channel. Used by the audio-poster test (#629), where a distinct-luma
+// count is fooled by whatever else sits in the frame — captions, the play
+// badge — but a corner of the glyph's pastel fill has chroma and the page
+// background showing through has none.
+export function pngMeanRGB(buf) {
+  const { w, h, channels, px } = decodePng(buf);
+  if (channels < 3) throw new Error('need an RGB(A) png, got ' + channels + ' channel(s)');
+  let r = 0, g = 0, b = 0;
+  const n = w * h;
+  for (let i = 0; i < px.length; i += channels) { r += px[i]; g += px[i + 1]; b += px[i + 2]; }
+  r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n);
+  return { r, g, b, spread: Math.max(r, g, b) - Math.min(r, g, b) };
 }

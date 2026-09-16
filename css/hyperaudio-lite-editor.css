@@ -257,6 +257,24 @@ dialog::backdrop {
   color: #fff;
 }
 
+/* Audio keeps its picture through playback (#629): the poster painted a second
+   time BEHIND #hyperplayer, because WebKit stops painting the poster attribute
+   once playback starts even when there is no video track. The frame is
+   isolated so z-index:-1 lands above the frame's own background rather than
+   behind it; the element paints on top, so captions and the play badge are
+   unaffected. Sized to the element's box, which for audio is the poster's. */
+#player-frame { isolation: isolate; }
+#media-poster-underlay {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  pointer-events: none;
+}
+
 .hyperaudio-transcript {
   position: absolute; 
   top: 10px; 

@@ -39,6 +39,16 @@
  * the embedder seam #567 asks for. Each load carries a token so a capture that
  * arrives late cannot repaint the project that replaced it.
  *
+ * Audio through playback (#629): WebKit stops painting the poster the moment
+ * playback starts, even when the medium has no video track and no frame will
+ * ever replace it — the attribute stays, the picture goes, and the player is
+ * a bare box until the end. Blink keeps the poster until a frame arrives, so
+ * Chrome never showed it. The picture is therefore painted a second time, as
+ * an <img> BEHIND the element that mirrors the poster attribute whenever the
+ * medium is audio: while WebKit paints the poster the two coincide, and when
+ * it stops the underlay shows through the element's transparent box. Behind
+ * rather than over, so native captions and the play badge stay on top.
+ *
  * Self-contained and removable: no other module depends on this file.
  */
 (function firstFrameForVideo() {
@@ -266,6 +276,38 @@
         if (player.getAttribute('poster') !== url) player.setAttribute('poster', url);
       });
     });
+
+    // The picture behind the element, for audio (#629). Shown only once
+    // metadata has said the medium is audio: before that videoWidth is 0 for
+    // everything, and an underlay behind a video would flash between projects
+    // — the very gap the frozen frame above exists to cover.
+    const frame = player.parentElement;
+    if (frame !== null) {
+      const underlay = document.createElement('img');
+      underlay.id = 'media-poster-underlay';
+      underlay.alt = '';
+      underlay.setAttribute('aria-hidden', 'true');
+      underlay.decoding = 'async';
+      underlay.hidden = true;
+      frame.insertBefore(underlay, player);
+      const isAudio = () => player.readyState >= 1 && player.videoWidth === 0;
+      const syncUnderlay = () => {
+        const poster = player.getAttribute('poster') || '';
+        if (!isAudio() || poster === '') { underlay.hidden = true; return; }
+        if (underlay.getAttribute('src') !== poster) underlay.src = poster;
+        underlay.hidden = false;
+      };
+      ['loadedmetadata', 'loadeddata', 'canplay', 'resize', 'play', 'playing'].forEach((ev) => {
+        player.addEventListener(ev, syncUnderlay);
+      });
+      // a new medium: hidden until its metadata says what it is
+      player.addEventListener('loadstart', () => { underlay.hidden = true; });
+      player.addEventListener('emptied', () => { underlay.hidden = true; });
+      // the poster changes asynchronously (a stored capture, the glyph, an
+      // embedder's answer, a re-seed): follow the attribute, whoever set it
+      new MutationObserver(syncUnderlay).observe(player, { attributes: true, attributeFilter: ['poster'] });
+      syncUnderlay();
+    }
 
     // Metadata that arrived before this module wired up (a cached medium in
     // the markup, #621): settle it now, as the event would have.
