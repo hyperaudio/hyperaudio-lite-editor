@@ -1203,6 +1203,36 @@
         };
       };
 
+      // Downloads are named after the project (#637). The four oldest links
+      // carry a fixed name in the markup, so every project's captions arrived
+      // as hyperaudio.vtt while everything newer — the document exports, the
+      // media export and its sidecars, the .hyperaudio itself — already used
+      // the title. Same rule as those, through the shared safeExportName, with
+      // the markup's own name as the fallback for an untitled project.
+      const DOWNLOAD_SUFFIX = {
+        'download-vtt': '.vtt',
+        'download-vtt-words': '.words.vtt',
+        'download-srt': '.srt',
+        'download-html': '.html',
+      };
+      const nameDownloadLinks = () => {
+        const save = window.HyperaudioSave;
+        const title = save && typeof save.getProjectTitle === 'function' ? save.getProjectTitle() : '';
+        const base = typeof window.safeExportName === 'function' ? window.safeExportName(title, '') : '';
+        if (base === '') return;   // untitled: leave the name the markup gives
+        Object.keys(DOWNLOAD_SUFFIX).forEach((id) => {
+          const link = document.getElementById(id);
+          if (link !== null) link.setAttribute('download', base + DOWNLOAD_SUFFIX[id]);
+        });
+      };
+      // on the way out, and whenever the library moves, so a rename lands
+      Object.keys(DOWNLOAD_SUFFIX).forEach((id) => {
+        const link = document.getElementById(id);
+        if (link !== null) link.addEventListener('click', nameDownloadLinks);
+      });
+      document.addEventListener('hyperaudioLibraryChanged', nameDownloadLinks);
+      nameDownloadLinks();
+
       ['download-html', 'download-vtt', 'download-srt', 'download-vtt-words',
         'download-hypertranscript'].forEach((id) => {
         const link = document.getElementById(id);
