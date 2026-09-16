@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.17 — last changed in release 1.3.17
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -223,6 +223,80 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  /* ---- The caption track is the source of truth for captions (#634) --------
+   * Exports used to REGENERATE captions from the transcript and, for burn-in,
+   * re-chunk it again by different rules — so a user's curated cues reached
+   * neither the files nor the picture, and the two outputs disagreed with
+   * each other. Both now come from the caption track.
+   *
+   * Cue TEXT is never rewritten. Only the times move, onto the edited
+   * timeline. If a strike came after the captions were edited, the cue keeps
+   * its words until the user regenerates: that is what the Regenerate button
+   * is for, and #633 is where a strike reaches generation.
+   * ---------------------------------------------------------------------- */
+
+  const cueTime = (text) => {
+    const m = /(\d{1,2}):(\d{2}):(\d{2})[.,](\d{1,3})/.exec(text)
+      || /(\d{2}):(\d{2})[.,](\d{1,3})/.exec(text);
+    if (m === null) return null;
+    return m.length === 5
+      ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000
+      : Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 1000;
+  };
+
+  // WebVTT -> [{ start, end, lines }]. Cue settings after the arrow, and any
+  // identifier line before it, are ignored: nothing downstream reads them.
+  const parseVttCues = (vtt) => {
+    const cues = [];
+    String(vtt || '').split(/\r?\n/).forEach((line) => {
+      const arrow = line.indexOf('-->');
+      if (arrow !== -1) {
+        const start = cueTime(line.slice(0, arrow));
+        const end = cueTime(line.slice(arrow + 3));
+        if (start !== null && end !== null) cues.push({ start, end, lines: [] });
+        return;
+      }
+      const cue = cues[cues.length - 1];
+      if (cue === undefined) return;               // WEBVTT header, NOTEs, blanks
+      if (line.trim() === '') return;              // blank line: end of this cue's text
+      cue.lines.push(line.trim());
+    });
+    return cues.filter((c) => c.lines.length > 0);
+  };
+
+  const pad = (n, width) => String(Math.floor(n)).padStart(width, '0');
+  const clockOf = (seconds) => {
+    const s = Math.max(0, seconds);
+    return { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60), sec: Math.floor(s % 60), ms: Math.round((s % 1) * 1000) };
+  };
+  const vttTime = (s) => { const c = clockOf(s); return `${pad(c.h, 2)}:${pad(c.m, 2)}:${pad(c.sec, 2)}.${pad(c.ms, 3)}`; };
+  const srtTime = (s) => { const c = clockOf(s); return `${pad(c.h, 2)}:${pad(c.m, 2)}:${pad(c.sec, 2)},${pad(c.ms, 3)}`; };
+
+  const cuesToVtt = (cues) => 'WEBVTT\n'
+    + cues.map((c) => `\n${vttTime(c.start)} --> ${vttTime(c.end)}\n${c.lines.join('\n')}\n`).join('');
+  const cuesToSrt = (cues) => cues
+    .map((c, i) => `\n${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.lines.join('\n')}\n`).join('');
+
+  // Cues onto the exported timeline. Times only — a cue whose words were cut
+  // away collapses to nothing and is dropped, but a cue that survives keeps
+  // every word it had.
+  const retimeCues = (cues, sections, rate) => cues
+    .map((c) => ({
+      start: mapTime(c.start, sections) / rate,
+      end: mapTime(c.end, sections) / rate,
+      lines: c.lines.slice(),
+    }))
+    .filter((c) => c.end - c.start > 0.05);
+
+  // The caption track as the export should carry it, or null when the project
+  // has no captions at all (nothing was ever generated).
+  const retimedCues = (sections, rate) => {
+    const save = window.HyperaudioSave;
+    const vtt = save && typeof save.getCaptionsVtt === 'function' ? save.getCaptionsVtt() : '';
+    const cues = retimeCues(parseVttCues(vtt), sections, rate);
+    return cues.length > 0 ? cues : null;
+  };
+
   // Re-timed WebVTT + SRT captions for the exported (edited) media. Generated
   // off a DETACHED copy of the re-timed transcript via the shared caption.js, so
   // struck words are dropped and times map onto the edited timeline. Passing a
@@ -230,6 +304,10 @@
   // track src, forcing captions to show) a no-op — the live editor is untouched.
   // Returns { vtt, srt } or null.
   const genRetimedCaptions = (sections, rate, dropStruck) => {
+    // the caption track first (#634); the generator below is the fallback for
+    // a project whose captions were never generated at all
+    const cues = retimedCues(sections, rate);
+    if (cues !== null) return { vtt: cuesToVtt(cues), srt: cuesToSrt(cues) };
     if (typeof caption !== 'function') return null;
     const inner = buildRetimedTranscriptHtml(sections, rate, dropStruck);
     if (inner === null) return null;
@@ -268,7 +346,66 @@
   // (word-vtt.js) yields chunks whose times line up with the `t` the video loop
   // stamps on each frame — no separate mapping needed here. Returns null when
   // there is no transcript, no words, or word-vtt.js isn't loaded.
+  // Contiguous vowel groups, the same estimate the editor's word-split uses;
+  // the editor's own copy is preferred when it is loaded, so the two cannot
+  // disagree about how a span's time divides.
+  const syllablesIn = (token) => (typeof window.estimateSyllables === 'function'
+    ? window.estimateSyllables(token)
+    : Math.max(1, (String(token).toLowerCase().match(/[aeiouyàáâäãèéêëìíîïòóôöõùúûüýÿ]+/g) || []).length));
+
+  // The words of the re-timed transcript, for lighting a cue word by word.
+  const retimedWords = (sections, rate, dropStruck) => {
+    const html = buildRetimedTranscriptHtml(sections, rate, dropStruck);
+    if (html === null) return [];
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return [...tmp.querySelectorAll('[data-m]')]
+      .filter((s) => !s.classList.contains('speaker'))
+      .map((s) => ({ text: s.textContent.trim(), start: parseInt(s.getAttribute('data-m'), 10) / 1000 }))
+      .filter((w) => w.text !== '');
+  };
+
+  // Burn-in chunks from the CUES (#634): their text, their line breaks, their
+  // in and out times. Only the read-along highlight needs word timings, and
+  // those come from the transcript where its words line up with the cue's —
+  // the normal case, since the cue was generated from them. Where they do not
+  // line up, because the cue was edited, the cue's own words share its span by
+  // syllable weight, so the highlight still tracks rather than freezing.
+  const cuesToChunks = (cues, words) => cues.map((cue) => {
+    const lines = cue.lines.map((line) => line.split(/\s+/).filter((t) => t !== ''));
+    const flat = [];
+    lines.forEach((line) => line.forEach((text) => flat.push({ text })));
+    if (flat.length === 0) return null;
+
+    const inCue = words.filter((w) => w.start >= cue.start - 0.001 && w.start < cue.end);
+    if (inCue.length === flat.length) {
+      flat.forEach((word, i) => { word.start = inCue[i].start; });
+    } else {
+      const weights = flat.map((word) => syllablesIn(word.text));
+      const total = weights.reduce((a, b) => a + b, 0);
+      let cursor = cue.start;
+      flat.forEach((word, i) => {
+        word.start = cursor;
+        cursor += (cue.end - cue.start) * (weights[i] / total);
+      });
+    }
+
+    let at = 0;
+    return {
+      start: cue.start,
+      end: cue.end,
+      lines: lines.map((line) => line.map(() => flat[at++])),
+    };
+  }).filter((c) => c !== null);
+
   const buildCaptionChunks = (sections, rate, dropStruck) => {
+    const cues = retimedCues(sections, rate);
+    if (cues !== null) {
+      const chunks = cuesToChunks(cues, retimedWords(sections, rate, dropStruck));
+      if (chunks.length) return chunks;
+    }
+    // no captions in the project: the karaoke chunker still gives the picture
+    // something to say, as it did before there was a caption track to follow
     if (typeof window.hyperaudioWordChunks !== 'function') return null;
     const html = buildRetimedTranscriptHtml(sections, rate, dropStruck);
     if (html === null) return null;
@@ -285,23 +422,41 @@
   const CAPTION_ACTIVE = '#ffe14d';
   const CAPTION_UNREAD = 'rgba(255,255,255,0.45)';
 
-  // Paint the active caption chunk onto the frame for output-timeline time `t`.
-  // Chunks are held until the next one starts so captions stay continuous.
+  // Paint the active caption onto the frame for output-timeline time `t`.
+  //
+  // A cue is drawn as the caption editor has it — its words, its line breaks,
+  // its in and out times (#634) — so the picture and the sidecar .vtt say the
+  // same thing. A line still too wide for the safe area is wrapped, since a
+  // cue written for a player's width cannot know the frame's. The karaoke
+  // fallback (a project with no captions) arrives as a plain array of words
+  // and is wrapped as it always was, held until the next chunk starts.
+  //
   // Legibility comes from a soft shadow + a THIN outline: a thick stroke eats
   // the fill on slender glyph strokes and bleeds into letter counters (the holes
   // in o/e/a/d), so it is kept small and the fill is drawn shadow-free on top.
   const drawCaptionOverlay = (ctx, t, chunks, w, h) => {
+    const startOf = (c) => (Array.isArray(c) ? c[0].start : c.start);
     let active = null;
     for (const c of chunks) {
-      if (c[0].start <= t) active = c; else break;
+      if (startOf(c) <= t) active = c; else break;
     }
     if (active === null) return;
+    // a cue ends when it says it ends; the fallback has no end and is held
+    if (!Array.isArray(active) && t >= active.end) return;
+
+    const sourceLines = Array.isArray(active) ? [active] : active.lines;
+    const words = Array.isArray(active) ? active : active.lines.flat();
 
     // Exactly one active word: the last whose start has been reached. Earlier
     // words are "read", later ones "unread".
-    let activeIdx = -1;
-    for (let i = 0; i < active.length; i++) {
-      if (active[i].start <= t) activeIdx = i; else break;
+    let activeWord = null;
+    for (const word of words) {
+      if (word.start <= t) activeWord = word; else break;
+    }
+    const seen = new Set();
+    for (const word of words) {
+      if (word === activeWord) break;
+      seen.add(word);
     }
 
     const fontSize = Math.max(16, Math.round(h * 0.055));
@@ -312,22 +467,23 @@
     const spaceW = ctx.measureText(' ').width;
     const maxWidth = w * 0.86;
 
-    // wrap the chunk's words into lines that fit the safe width, keeping each
-    // word's index within the chunk so its read/active/unread state is known
+    // the cue's own lines, each wrapped only if it overflows the safe width
     const lines = [];
-    let line = [];
-    let lineW = 0;
-    for (let i = 0; i < active.length; i++) {
-      const wW = ctx.measureText(active[i].text).width;
-      if (line.length && lineW + spaceW + wW > maxWidth) {
-        lines.push(line);
-        line = [];
-        lineW = 0;
+    for (const source of sourceLines) {
+      let line = [];
+      let lineW = 0;
+      for (const word of source) {
+        const wW = ctx.measureText(word.text).width;
+        if (line.length && lineW + spaceW + wW > maxWidth) {
+          lines.push(line);
+          line = [];
+          lineW = 0;
+        }
+        lineW += (line.length ? spaceW : 0) + wW;
+        line.push(word);
       }
-      lineW += (line.length ? spaceW : 0) + wW;
-      line.push({ text: active[i].text, index: i });
+      if (line.length) lines.push(line);
     }
-    if (line.length) lines.push(line);
 
     const lineH = fontSize * 1.25;
     const bottomMargin = h * 0.10;                       // lower-third, safe-area
@@ -339,7 +495,8 @@
       let x = (w - total) / 2;                            // centre each line
       for (let i = 0; i < ln.length; i++) {
         if (i) x += spaceW;
-        const { text, index } = ln[i];
+        const word = ln[i];
+        const text = word.text;
         // shadow halo + thin outline for legibility over any footage
         ctx.shadowColor = 'rgba(0,0,0,0.9)';
         ctx.shadowBlur = fontSize * 0.16;
@@ -349,8 +506,8 @@
         // crisp fill with the shadow disabled so interiors stay clean
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
-        ctx.fillStyle = index < activeIdx ? CAPTION_READ
-          : (index === activeIdx ? CAPTION_ACTIVE : CAPTION_UNREAD);
+        ctx.fillStyle = word === activeWord ? CAPTION_ACTIVE
+          : (seen.has(word) ? CAPTION_READ : CAPTION_UNREAD);
         ctx.fillText(text, x, y);
         x += ctx.measureText(text).width;
       }
@@ -1300,4 +1457,14 @@
     if (el !== null) el.addEventListener('change', saveExportOpts);
   });
   startBtn.addEventListener('click', runExport);
+
+  // The caption pipeline, exposed (#634). Exports are heavy to drive, and
+  // these are the pure parts of what an export says: what the cues are, where
+  // they land on the edited timeline, and how they become the picture's
+  // chunks. Also the handle to reach for when an export's captions look
+  // wrong, rather than inferring it from a finished file.
+  window.MediaExportCaptions = Object.freeze({
+    parseVttCues, retimeCues, cuesToVtt, cuesToSrt, cuesToChunks,
+    retimedCues, genRetimedCaptions, buildCaptionChunks, drawCaptionOverlay,
+  });
 })();
