@@ -1384,15 +1384,34 @@
     }
   }
 
+  // Captions are generated from what will be HEARD: a struck word is cut from
+  // the media, so it has no business in a cue (#633). caption.js takes every
+  // [data-m] it finds and knows nothing of strikes — and it is vendored, so
+  // the filtering happens here instead, by handing it a detached copy of the
+  // transcript with the struck spans removed. A copy, because the live
+  // transcript must not lose the words: a strike is reversible, and the
+  // transcript is what it is reversed in.
+  //
+  // Each word span carries its own trailing space, so dropping a span closes
+  // the gap behind it with nothing left over.
+  function captionSourceWithoutStruckWords() {
+    const live = document.querySelector('#hypertranscript');
+    const source = captionMode === true ? transcriptCache : live;
+    if (source === null || source === undefined) return null;
+    const host = document.createElement('div');
+    // caption.js parses parent.innerHTML and looks for #hypertranscript in it,
+    // so the copy has to carry that element, not just its contents
+    host.innerHTML = source === live ? live.outerHTML : source.innerHTML;
+    host.querySelectorAll('[data-m][style*="line-through"]').forEach((span) => span.remove());
+    return host;
+  }
+
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
     const cap1 = caption();
-    let subs = null;
-    
-    if (captionMode === true) {
-      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21', null, null, transcriptCache); 
-    } else {
-      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21');
-    }
+    // one route for both views: the only difference was which transcript to
+    // read, and that is what captionSourceWithoutStruckWords answers
+    let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21', null, null,
+      captionSourceWithoutStruckWords());
 
     document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
     document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
