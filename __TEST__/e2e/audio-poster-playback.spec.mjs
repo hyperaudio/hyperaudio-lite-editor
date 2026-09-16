@@ -50,6 +50,12 @@ for (const [engineName, engine] of [['WebKit', webkit], ['Chromium', chromium]])
       await page.goto('http://localhost:4173/index.html');
       await page.waitForSelector('#hypertranscript [data-m]');
       await loadAudio(page, AUDIO);
+      // Choosing a poster is asynchronous — the markup one is replaced by the
+      // project's glyph — so let it settle before sampling, or the comparison
+      // races the module's own upgrade rather than testing playback.
+      await expect.poll(async () => (await playerState(page)).imgSrcMatchesPoster).toBe(true);
+      await page.waitForTimeout(1000);
+      await expect.poll(async () => (await playerState(page)).imgSrcMatchesPoster).toBe(true);
 
       const before = await playerState(page);
       expect(before.videoWidth).toBe(0);                 // audio: no frame, ever
