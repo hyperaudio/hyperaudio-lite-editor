@@ -1052,10 +1052,13 @@
           /*let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
           document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));*/
 
+          // Once. This used to call generateCaptionsFromTranscript and then
+          // repeat caption().init directly, discarding the result — the whole
+          // generation run twice per settle, which on a long transcript was
+          // the larger half of the cost. The repeat was not harmless either:
+          // init forces the caption track to 'showing', undoing the
+          // mp3/m4a case that generateCaptionsFromTranscript had just hidden.
           generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
-          const cap2 = caption();
-          let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-          //populateCaptionEditor(subs.data);
         }
 
         if (isCaptionEditorFocused === true && updateCaptionsFromTranscript === false) {
@@ -1384,15 +1387,42 @@
     }
   }
 
+  // Captions are generated from what will be HEARD: a struck word is cut from
+  // the media, so it has no business in a cue (#633). caption.js takes every
+  // [data-m] it finds and knows nothing of strikes — and it is vendored, so
+  // the filtering happens here instead, by handing it a detached copy of the
+  // transcript with the struck spans removed. A copy, because the live
+  // transcript must not lose the words: a strike is reversible, and the
+  // transcript is what it is reversed in.
+  //
+  // Each word span carries its own trailing space, so dropping a span closes
+  // the gap behind it with nothing left over.
+  function captionSourceWithoutStruckWords() {
+    const live = document.querySelector('#hypertranscript');
+    const source = captionMode === true ? transcriptCache : live;
+    if (source === null || source === undefined) return null;
+    // caption.js parses parent.innerHTML and looks for #hypertranscript in
+    // it, so the copy has to carry that element, not just its contents.
+    // cloneNode rather than an innerHTML round trip: caption.js serialises and
+    // parses this host itself, and paying for a second parse here doubled the
+    // copy's cost on a long transcript.
+    let host;
+    if (source === live) {
+      host = document.createElement('div');
+      host.appendChild(live.cloneNode(true));
+    } else {
+      host = source.cloneNode(true);   // the cached holder already contains it
+    }
+    host.querySelectorAll('[data-m][style*="line-through"]').forEach((span) => span.remove());
+    return host;
+  }
+
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
     const cap1 = caption();
-    let subs = null;
-    
-    if (captionMode === true) {
-      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21', null, null, transcriptCache); 
-    } else {
-      subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21');
-    }
+    // one route for both views: the only difference was which transcript to
+    // read, and that is what captionSourceWithoutStruckWords answers
+    let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21', null, null,
+      captionSourceWithoutStruckWords());
 
     document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
     document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
