@@ -44,6 +44,22 @@
       if (el !== null) el.addEventListener('click', () => { el.value = ''; });
     });
 
+  // A card in the transcript area — a loader, or an error — is a message, not
+  // a document (#628). The engines each hand-rolled their own and painted it
+  // straight into the editable transcript: after a failure `setTranscriptBusy`
+  // has just restored contenteditable, so the error was typeable, and any
+  // keystroke in it scheduled an autosave that wrote the card over the open
+  // project's transcript. Painting through here marks the card
+  // contenteditable="false" and tags it, which the capture path reads.
+  function showTranscriptNotice(html) {
+    const transcript = document.getElementById("hypertranscript");
+    if (transcript === null) {
+      return;
+    }
+    transcript.innerHTML =
+      '<div data-transcript-notice="1" contenteditable="false">' + html + '</div>';
+  }
+
   function setTranscriptBusy(busy) {
     const transcript = document.getElementById("hypertranscript");
     if (transcript === null) {

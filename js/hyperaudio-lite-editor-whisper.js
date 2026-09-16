@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.17 — last changed in release 1.3.17
  * @license MIT
  */
 
@@ -266,8 +266,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
     }
     console.error("Whisper error: " + message);
     const detail = message ? '<br/><span style="font-size:80%; opacity:0.7">'+String(message).slice(0, 200)+'</span>' : '';
-    document.getElementById("hypertranscript").innerHTML =
-      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Try a smaller model or reload the page.'+detail+'</center></div>';
+    showTranscriptNotice(
+      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Try a smaller model or reload the page.'+detail+'</center></div>');
   }
 
   function handleInferenceDone(results) {
@@ -378,7 +378,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     }
 
     const loadingMessageContainer = document.getElementById("hypertranscript");
-    loadingMessageContainer.innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
+    showTranscriptNotice('<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>');
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(true);
     }
