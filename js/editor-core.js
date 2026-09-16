@@ -1052,10 +1052,13 @@
           /*let hypertranscript = rootnode.innerHTML.replace(/ class=".*?"/g, '');
           document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));*/
 
+          // Once. This used to call generateCaptionsFromTranscript and then
+          // repeat caption().init directly, discarding the result — the whole
+          // generation run twice per settle, which on a long transcript was
+          // the larger half of the cost. The repeat was not harmless either:
+          // init forces the caption track to 'showing', undoing the
+          // mp3/m4a case that generateCaptionsFromTranscript had just hidden.
           generateCaptionsFromTranscript(hypertranscript, sourceMedia, track);
-          const cap2 = caption();
-          let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
-          //populateCaptionEditor(subs.data);
         }
 
         if (isCaptionEditorFocused === true && updateCaptionsFromTranscript === false) {
@@ -1398,10 +1401,18 @@
     const live = document.querySelector('#hypertranscript');
     const source = captionMode === true ? transcriptCache : live;
     if (source === null || source === undefined) return null;
-    const host = document.createElement('div');
-    // caption.js parses parent.innerHTML and looks for #hypertranscript in it,
-    // so the copy has to carry that element, not just its contents
-    host.innerHTML = source === live ? live.outerHTML : source.innerHTML;
+    // caption.js parses parent.innerHTML and looks for #hypertranscript in
+    // it, so the copy has to carry that element, not just its contents.
+    // cloneNode rather than an innerHTML round trip: caption.js serialises and
+    // parses this host itself, and paying for a second parse here doubled the
+    // copy's cost on a long transcript.
+    let host;
+    if (source === live) {
+      host = document.createElement('div');
+      host.appendChild(live.cloneNode(true));
+    } else {
+      host = source.cloneNode(true);   // the cached holder already contains it
+    }
     host.querySelectorAll('[data-m][style*="line-through"]').forEach((span) => span.remove());
     return host;
   }
