@@ -94,3 +94,51 @@ test('a caption with no duration or no words shows nothing rather than a nonsens
   await page.fill(`${firstCaption} .end`, '00:00:0');
   await expect.poll(async () => (await rates(page))[0]).toBe('');
 });
+
+test('clicking a rate switches the measure for every caption (#639)', async ({ page }) => {
+  await openCaptions(page);
+  const before = await rates(page);
+  before.forEach((r) => expect(r).toMatch(/cps$/));
+
+  await page.click(`${firstCaption} .caption-rate`);
+  await expect.poll(async () => (await rates(page))[0]).toMatch(/^\d+ wpm$/);
+  // all of them, not just the one clicked: it is one editorial standard
+  (await rates(page)).forEach((r) => expect(r).toMatch(/wpm$/));
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hyperaudioSettings')).captionRate)).toBe('wpm');
+
+  await page.click(`${firstCaption} .caption-rate`);
+  await expect.poll(async () => (await rates(page))[0]).toMatch(/cps$/);
+
+  // and the tooltip says what a click will do
+  expect(await page.getAttribute(`${firstCaption} .caption-rate`, 'title'))
+    .toMatch(/click to show words per minute$/);
+});
+
+test('the Settings choice includes None, which hides the rates (#639)', async ({ page }) => {
+  await openCaptions(page);
+  expect(await page.evaluate(() =>
+    [...document.querySelectorAll('#setting-caption-rate option')].map((o) => o.value)))
+    .toEqual(['cps', 'wpm', 'none']);
+
+  await page.evaluate(() => {
+    const m = document.getElementById('settings-modal');
+    m.checked = true;
+    m.dispatchEvent(new Event('change'));
+  });
+  await page.selectOption('#setting-caption-rate', 'none');
+  await expect.poll(async () => page.evaluate(() =>
+    [...document.querySelectorAll('#captions-display .caption-rate')].every((el) => el.hidden))).toBe(true);
+
+  // and back again
+  await page.selectOption('#setting-caption-rate', 'cps');
+  await expect.poll(async () => (await rates(page))[0]).toMatch(/cps$/);
+});
+
+test('the choice survives a reload, None included (#639)', async ({ page }) => {
+  await page.evaluate(() => window.HyperaudioSettings.set('captionRate', 'none'));
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await openCaptions(page);
+  expect(await page.evaluate(() =>
+    [...document.querySelectorAll('#captions-display .caption-rate')].every((el) => el.hidden))).toBe(true);
+});

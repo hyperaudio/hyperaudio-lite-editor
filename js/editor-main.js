@@ -19,11 +19,34 @@
      * or a re-worded line has to show up straight away, and those fields are
      * the only place it exists until the caption is committed.
      * ---------------------------------------------------------------------- */
+    const CAPTION_RATE_MEASURES = ['cps', 'wpm', 'none'];
     function captionRateMeasure() {
       const settings = window.HyperaudioSettings;
       const choice = settings && typeof settings.get === 'function' ? settings.get('captionRate') : 'cps';
-      return choice === 'wpm' ? 'wpm' : 'cps';
+      return CAPTION_RATE_MEASURES.indexOf(choice) === -1 ? 'cps' : choice;
     }
+
+    // Clicking a rate switches the measure, for every caption at once: it is
+    // one editorial standard, not a per-caption choice, and reading two
+    // scales down the same column would tell you nothing. Only between the
+    // two measures — 'none' is chosen in Settings, since a hidden rate leaves
+    // nothing to click back with.
+    function toggleCaptionRateMeasure() {
+      const settings = window.HyperaudioSettings;
+      if (!settings || typeof settings.set !== 'function') return;
+      const next = captionRateMeasure() === 'cps' ? 'wpm' : 'cps';
+      settings.set('captionRate', next);
+      const select = document.getElementById('setting-caption-rate');
+      if (select !== null) select.value = next;   // Settings may be open behind
+      updateCaptionRates();
+    }
+    window.toggleCaptionRateMeasure = toggleCaptionRateMeasure;
+
+    // Delegated, because the rows are rebuilt on every populate.
+    document.addEventListener('click', (event) => {
+      const el = event.target && event.target.closest ? event.target.closest('.caption-rate') : null;
+      if (el !== null) toggleCaptionRateMeasure();
+    });
 
     // "00:00:01.000" or "00:01.000" -> seconds. NaN for anything else, which
     // is what a timecode being typed looks like half of the time.
@@ -38,9 +61,17 @@
 
     function updateCaptionRates() {
       const measure = captionRateMeasure();
+      const other = measure === 'cps' ? 'words per minute' : 'characters per second';
       document.querySelectorAll('#captions-display .caption').forEach((caption) => {
         const out = caption.querySelector('.caption-rate');
         if (out === null) return;
+        if (measure === 'none') {          // switched off in Settings
+          out.hidden = true;
+          out.textContent = '';
+          out.setAttribute('title', '');
+          return;
+        }
+        out.hidden = false;
         const startEl = caption.querySelector('.start');
         const endEl = caption.querySelector('.end');
         const line1 = caption.querySelector('.line1');
@@ -59,11 +90,11 @@
         if (measure === 'wpm') {
           const words = text.split(/\s+/).filter((word) => word !== '').length;
           out.textContent = Math.round((words / seconds) * 60) + ' wpm';
-          out.setAttribute('title', `${words} words in ${seconds.toFixed(2)}s`);
+          out.setAttribute('title', `${words} words in ${seconds.toFixed(2)}s — click to show ${other}`);
         } else {
           const characters = text.length;   // including the spaces, as the standards count them
           out.textContent = (characters / seconds).toFixed(1) + ' cps';
-          out.setAttribute('title', `${characters} characters in ${seconds.toFixed(2)}s`);
+          out.setAttribute('title', `${characters} characters in ${seconds.toFixed(2)}s — click to show ${other}`);
         }
       });
     }

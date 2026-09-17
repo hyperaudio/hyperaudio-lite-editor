@@ -1856,9 +1856,27 @@ html.ha-transcribing #upload-transcribe-btn {
   justify-content: space-between;
   gap: 12px;
 }
+/* The rate is a control — clicking it switches the measure — but it reads as
+   a label: no button chrome, just the number, with the affordance on hover
+   and a real focus ring for the keyboard. */
 .caption-rate {
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
   color: oklch(var(--bc) / 0.6);
   white-space: nowrap;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.caption-rate:hover {
+  color: oklch(var(--bc) / 0.9);
+  background: oklch(var(--bc) / 0.06);
+}
+.caption-rate:focus-visible {
+  outline: 2px solid oklch(var(--p));
+  outline-offset: 1px;
 }

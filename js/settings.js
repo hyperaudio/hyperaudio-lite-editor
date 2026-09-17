@@ -36,9 +36,10 @@
   const KEY = 'hyperaudioSettings';
   const DEFAULTS = Object.freeze({
     playOnDoubleClick: false,   // a double-click moves the playhead; does it also play? (#441, #541)
-    // Which reading rate the caption editor shows (#639). Characters per
-    // second is the streaming convention and the stricter of the two, so it
-    // is the default; words per minute is what broadcast works in.
+    // Which reading rate the caption editor shows (#639): 'cps', 'wpm' or
+    // 'none'. Characters per second is the streaming convention and the
+    // stricter of the two, so it is the default; words per minute is what
+    // broadcast works in. Clicking a rate switches between those two.
     captionRate: 'cps',
   });
 
@@ -264,9 +265,10 @@
 
     const rate = byId('setting-caption-rate');
     if (rate !== null) {
-      rate.value = get('captionRate') === 'wpm' ? 'wpm' : 'cps';
+      const known = (value) => (['cps', 'wpm', 'none'].indexOf(value) === -1 ? 'cps' : value);
+      rate.value = known(get('captionRate'));
       rate.addEventListener('change', () => {
-        set('captionRate', rate.value === 'wpm' ? 'wpm' : 'cps');
+        set('captionRate', known(rate.value));
         // the caption editor may be open behind the modal
         if (typeof window.updateCaptionRates === 'function') window.updateCaptionRates();
       });

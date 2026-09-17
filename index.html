@@ -341,7 +341,7 @@ If you are creating an open source application under a license compatible with t
     <div id="caption-template" class="caption">
       <div class="caption-row caption-row-top">
         <button class="play btn btn-primary btn-sm" onclick="playClip(this)">play clip <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>
-        <span class="caption-rate" title=""></span>
+        <button type="button" class="caption-rate" title=""></button>
       </div>
       <div class="caption-row">
         <button class="play-start btn btn-outline btn-xs" onclick="seekTo(this)" style="margin-right:4px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="start" value="" oninput="captionChange()">(In)
@@ -585,11 +585,12 @@ If you are creating an open source application under a license compatible with t
                 <label class="settings-row" for="setting-caption-rate">
                   <span class="settings-text">
                     Reading rate on each caption
-                    <span class="settings-hint">Characters per second is the streaming convention, words per minute the broadcast one.</span>
+                    <span class="settings-hint">Characters per second is the streaming convention, words per minute the broadcast one. Clicking a rate in the caption editor switches between the two.</span>
                   </span>
                   <select id="setting-caption-rate" class="select select-bordered select-sm">
                     <option value="cps">Characters per second</option>
                     <option value="wpm">Words per minute</option>
+                    <option value="none">None</option>
                   </select>
                 </label>
               </div>
