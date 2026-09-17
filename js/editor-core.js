@@ -1451,7 +1451,9 @@
     const cap1 = caption();
     // one route for both views: the only difference was which transcript to
     // read, and that is what captionSourceWithoutStruckWords answers
-    let subs = cap1.init("hypertranscript", "hyperplayer", '37' , '21', null, null,
+    // how long a generated line may be, from Settings (default 32)
+    const lines = typeof captionLineLengths === 'function' ? captionLineLengths() : { max: 32, min: 21 };
+    let subs = cap1.init("hypertranscript", "hyperplayer", String(lines.max), String(lines.min), null, null,
       captionSourceWithoutStruckWords());
 
     document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));

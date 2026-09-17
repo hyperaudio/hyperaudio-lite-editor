@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.16 — last changed in release 1.3.16
+ * @version 1.3.19 — last changed in release 1.3.19
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -36,7 +36,36 @@
   const KEY = 'hyperaudioSettings';
   const DEFAULTS = Object.freeze({
     playOnDoubleClick: false,   // a double-click moves the playhead; does it also play? (#441, #541)
+    // Which reading rate the caption editor shows (#639): 'cps', 'wpm' or
+    // 'none'. Characters per second is the streaming convention and the
+    // stricter of the two, so it is the default; words per minute is what
+    // broadcast works in. Clicking a rate switches between those two.
+    captionRate: 'cps',
+    // The longest a generated caption line should be. caption.js shipped with
+    // 37; 32 reads more comfortably and is what the editor now generates to.
+    captionLineLength: 32,
+    // The reading rates past which a caption is flagged (#641). One per
+    // measure, because the two do not convert cleanly: 17 is Netflix's figure
+    // for English, 180 the upper end of broadcast practice.
+    captionMaxCps: 17,
+    captionMaxWpm: 180,
   });
+
+  // caption.js takes a maximum AND a minimum line length: the minimum is the
+  // point past which a mid-sentence break is allowed, so a minimum at or above
+  // the maximum makes a break impossible. The shipped 21 is kept wherever
+  // there is room for it, and follows the maximum down when there is not.
+  const CAPTION_LINE_MIN = 16;
+  const CAPTION_LINE_MAX = 80;
+  function captionLineLengths() {
+    const raw = Number(readAll().captionLineLength);
+    // blank, zero or nonsense means "the default", not "the smallest allowed":
+    // an emptied field should give the value back, not the tightest wrap there is
+    const max = Number.isFinite(raw) && raw > 0
+      ? Math.min(CAPTION_LINE_MAX, Math.max(CAPTION_LINE_MIN, Math.round(raw)))
+      : DEFAULTS.captionLineLength;
+    return { max, min: Math.min(21, Math.max(8, max - 8)) };
+  }
 
   // Every "don't show this again" the app can persist. A flag added anywhere
   // else without being listed here is the trap #615 describes: dismissable
@@ -258,6 +287,48 @@
       });
     }
 
+    const rate = byId('setting-caption-rate');
+    if (rate !== null) {
+      const known = (value) => (['cps', 'wpm', 'none'].indexOf(value) === -1 ? 'cps' : value);
+      rate.value = known(get('captionRate'));
+      rate.addEventListener('change', () => {
+        set('captionRate', known(rate.value));
+        // the caption editor may be open behind the modal
+        if (typeof window.updateCaptionRates === 'function') window.updateCaptionRates();
+      });
+    }
+
+    const lineLength = byId('setting-caption-line-length');
+    if (lineLength !== null) {
+      lineLength.value = String(captionLineLengths().max);
+      lineLength.addEventListener('change', () => {
+        const typed = String(lineLength.value).trim();
+        const asked = typed === '' ? NaN : Number(typed);
+        const clamped = Number.isFinite(asked) && asked > 0
+          ? Math.min(CAPTION_LINE_MAX, Math.max(CAPTION_LINE_MIN, Math.round(asked)))
+          : DEFAULTS.captionLineLength;
+        set('captionLineLength', clamped);
+        lineLength.value = String(clamped);   // show what was actually taken
+      });
+    }
+
+    [['setting-caption-max-cps', 'captionMaxCps', 1, 60], ['setting-caption-max-wpm', 'captionMaxWpm', 20, 400]]
+      .forEach(([id, key, low, high]) => {
+        const field = byId(id);
+        if (field === null) return;
+        field.value = String(get(key));
+        field.addEventListener('change', () => {
+          const typed = String(field.value).trim();
+          const asked = typed === '' ? NaN : Number(typed);
+          const clamped = Number.isFinite(asked) && asked > 0
+            ? Math.min(high, Math.max(low, Math.round(asked)))
+            : DEFAULTS[key];
+          set(key, clamped);
+          field.value = String(clamped);
+          if (typeof window.updateCaptionRates === 'function') window.updateCaptionRates();
+        });
+      });
+
     const modal = byId('settings-modal');
     if (modal !== null) modal.addEventListener('change', () => { if (modal.checked) refresh(); });
 
@@ -299,7 +370,26 @@
     }
   }
 
-  window.HyperaudioSettings = Object.freeze({ get, set, DISMISSAL_KEYS, APP_STORAGE_KEYS, refresh, measureModels, removeModel, removeModels });
+  // The limit for whichever measure is showing, or null when rates are off.
+  // A limit of zero or less means "do not flag", which is how someone keeps
+  // the number without the judgement.
+  function captionRateLimit() {
+    const all = readAll();
+    const measure = ['cps', 'wpm', 'none'].indexOf(all.captionRate) === -1 ? 'cps' : all.captionRate;
+    if (measure === 'none') return null;
+    const raw = Number(measure === 'wpm' ? all.captionMaxWpm : all.captionMaxCps);
+    if (!Number.isFinite(raw) || raw <= 0) return null;
+    return { measure, limit: raw };
+  }
+
+  window.HyperaudioSettings = Object.freeze({
+    get, set, DISMISSAL_KEYS, APP_STORAGE_KEYS, refresh,
+    measureModels, removeModel, removeModels, captionLineLengths, captionRateLimit,
+  });
+  window.captionRateLimit = captionRateLimit;
+  // The caption generators reach this by name, as they do the other shared
+  // helpers: one place decides how long a generated line may be.
+  window.captionLineLengths = captionLineLengths;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wire);
