@@ -1780,7 +1780,7 @@ html.ha-transcribing #upload-transcribe-btn {
 #settings-modal + .modal .settings-tabs { margin-top: 12px; }
 #settings-modal + .modal .settings-tabs > .tab { white-space: nowrap; }
 #settings-modal + .modal .settings-panel {
-  height: 24rem;
+  height: 30rem;
   overflow-y: auto;
   padding: 0 20px 16px;
 }
