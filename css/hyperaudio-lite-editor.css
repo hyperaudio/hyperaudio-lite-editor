@@ -1826,3 +1826,20 @@ html.ha-transcribing #upload-transcribe-btn {
   z-index: -1;
   pointer-events: none;
 }
+
+/* Reading rate on each caption (#639): the top row of a caption carries the
+   play button on the left and the rate on the right, so it needs no absolute
+   positioning and stays clear of the line inputs below. Tabular figures keep
+   the number from shifting as it changes under the caret. */
+.caption-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.caption-rate {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 0.6);
+  white-space: nowrap;
+}

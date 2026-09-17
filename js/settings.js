@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.16 — last changed in release 1.3.16
+ * @version 1.3.19 — last changed in release 1.3.19
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -36,6 +36,10 @@
   const KEY = 'hyperaudioSettings';
   const DEFAULTS = Object.freeze({
     playOnDoubleClick: false,   // a double-click moves the playhead; does it also play? (#441, #541)
+    // Which reading rate the caption editor shows (#639). Characters per
+    // second is the streaming convention and the stricter of the two, so it
+    // is the default; words per minute is what broadcast works in.
+    captionRate: 'cps',
   });
 
   // Every "don't show this again" the app can persist. A flag added anywhere
@@ -255,6 +259,16 @@
         // live, on the running instance; editor-core reads the stored value
         // at every re-init so it also survives a transcript reload
         if (window.hyperaudioInstance) window.hyperaudioInstance.playOnClick = toggle.checked;
+      });
+    }
+
+    const rate = byId('setting-caption-rate');
+    if (rate !== null) {
+      rate.value = get('captionRate') === 'wpm' ? 'wpm' : 'cps';
+      rate.addEventListener('change', () => {
+        set('captionRate', rate.value === 'wpm' ? 'wpm' : 'cps');
+        // the caption editor may be open behind the modal
+        if (typeof window.updateCaptionRates === 'function') window.updateCaptionRates();
       });
     }
 

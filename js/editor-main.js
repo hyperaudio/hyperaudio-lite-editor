@@ -8,6 +8,69 @@
       hyperaudio();
     }
 
+    /* ---- Reading rate per caption (#639) ------------------------------------
+     * Editing captions well means knowing whether a cue can be read in the
+     * time it is on screen, and the standards differ by trade: characters per
+     * second for streaming (Netflix allows 17 in English), words per minute
+     * for broadcast (the BBC works to about 160-180). Which one is shown is
+     * the user's choice, in Settings.
+     *
+     * Read from the INPUTS, not from any cached model: a half-typed timecode
+     * or a re-worded line has to show up straight away, and those fields are
+     * the only place it exists until the caption is committed.
+     * ---------------------------------------------------------------------- */
+    function captionRateMeasure() {
+      const settings = window.HyperaudioSettings;
+      const choice = settings && typeof settings.get === 'function' ? settings.get('captionRate') : 'cps';
+      return choice === 'wpm' ? 'wpm' : 'cps';
+    }
+
+    // "00:00:01.000" or "00:01.000" -> seconds. NaN for anything else, which
+    // is what a timecode being typed looks like half of the time.
+    function captionTimecodeSeconds(value) {
+      const text = String(value === undefined || value === null ? '' : value).trim();
+      const m = /^(?:(\d{1,3}):)?(\d{1,2}):(\d{1,2})(?:[.,](\d{1,3}))?$/.exec(text);
+      if (m === null) return NaN;
+      const hours = m[1] === undefined ? 0 : Number(m[1]);
+      return hours * 3600 + Number(m[2]) * 60 + Number(m[3])
+        + (m[4] === undefined ? 0 : Number(m[4].padEnd(3, '0')) / 1000);
+    }
+
+    function updateCaptionRates() {
+      const measure = captionRateMeasure();
+      document.querySelectorAll('#captions-display .caption').forEach((caption) => {
+        const out = caption.querySelector('.caption-rate');
+        if (out === null) return;
+        const startEl = caption.querySelector('.start');
+        const endEl = caption.querySelector('.end');
+        const line1 = caption.querySelector('.line1');
+        const line2 = caption.querySelector('.line2');
+        if (startEl === null || endEl === null) return;
+        const text = [line1 === null ? '' : line1.value, line2 === null ? '' : line2.value]
+          .map((line) => String(line || '').trim()).filter((line) => line !== '').join(' ');
+        const seconds = captionTimecodeSeconds(endEl.value) - captionTimecodeSeconds(startEl.value);
+        // nothing to say about an empty caption, or about a duration that is
+        // zero, negative or still being typed
+        if (!Number.isFinite(seconds) || seconds <= 0 || text === '') {
+          out.textContent = '';
+          out.setAttribute('title', '');
+          return;
+        }
+        if (measure === 'wpm') {
+          const words = text.split(/\s+/).filter((word) => word !== '').length;
+          out.textContent = Math.round((words / seconds) * 60) + ' wpm';
+          out.setAttribute('title', `${words} words in ${seconds.toFixed(2)}s`);
+        } else {
+          const characters = text.length;   // including the spaces, as the standards count them
+          out.textContent = (characters / seconds).toFixed(1) + ' cps';
+          out.setAttribute('title', `${characters} characters in ${seconds.toFixed(2)}s`);
+        }
+      });
+    }
+    // Settings reaches this when the measure changes, and so does anything
+    // else that rewrites the rows.
+    window.updateCaptionRates = updateCaptionRates;
+
     function populateCaptionEditor(data) {
 
       let holder = null;
@@ -81,7 +144,8 @@
           generateCaptionsFromCaptionEditor();
         });
       }
-      
+
+      updateCaptionRates();   // freshly built rows, or the cache restored (#639)
     } 
 
     function captureCaptions(holder) {
@@ -470,6 +534,7 @@
     // looking clean and were lost on close (#505). Announcing it here covers
     // all four in one place rather than chasing three onclick handlers.
     function makeCaptionEditorActive() {
+      updateCaptionRates();   // a word added or cut, a time changed, a merge (#639)
       updateCaptionsFromTranscript = false;
       document.querySelector('#regenerate-btn').classList.remove("btn-disabled");
       generateCaptionsFromCaptionEditor();
