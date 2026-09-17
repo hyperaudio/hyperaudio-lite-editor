@@ -971,6 +971,13 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
   z-index: 20;
   background-color: #ffffff;
 }
+/* It sits at the right edge, so a centred tooltip would run off-screen —
+   the mirror of the left-edge rule the player controls use (#546). */
+#regenerate-float-btn.tooltip::before {
+  left: auto;
+  right: 0;
+  transform: none;
+}
 #regenerate-float-btn:hover {
   background-color: oklch(var(--p));
 }

@@ -84,7 +84,10 @@
       }
       
 
-      holder.innerHTML = '<div class="modal-action"><label id="regenerate-float-btn" for="regenerate-captions-modal" class="fixed top-20 right-8 btn btn-outline btn-primary" >Regenerate <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
+      // Icon only, with the words in a tooltip: the button sits over the
+      // caption rows, and a label that wide covers them for no gain — the
+      // confirmation modal it opens says what it does in full.
+      holder.innerHTML = '<div class="modal-action"><label id="regenerate-float-btn" for="regenerate-captions-modal" class="fixed top-20 right-8 btn btn-square btn-outline btn-primary tooltip" data-tip="Regenerate captions from transcript" aria-label="Regenerate captions from transcript"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
 
       // The cache exists to preserve HAND-EDITED captions across view
       // switches. While captions are machine-synced from the transcript it
