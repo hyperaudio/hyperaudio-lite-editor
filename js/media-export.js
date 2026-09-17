@@ -317,7 +317,10 @@
     t.innerHTML = inner;
     host.appendChild(t);
     try {
-      return caption().init('hypertranscript', 'media-export-no-player', '37', '21', null, null, host);
+      const lines = typeof window.captionLineLengths === 'function'
+        ? window.captionLineLengths() : { max: 32, min: 21 };
+      return caption().init('hypertranscript', 'media-export-no-player',
+        String(lines.max), String(lines.min), null, null, host);
     } catch (e) {
       console.warn('Caption generation for export failed:', e);
       return null;

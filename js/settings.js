@@ -41,7 +41,26 @@
     // stricter of the two, so it is the default; words per minute is what
     // broadcast works in. Clicking a rate switches between those two.
     captionRate: 'cps',
+    // The longest a generated caption line should be. caption.js shipped with
+    // 37; 32 reads more comfortably and is what the editor now generates to.
+    captionLineLength: 32,
   });
+
+  // caption.js takes a maximum AND a minimum line length: the minimum is the
+  // point past which a mid-sentence break is allowed, so a minimum at or above
+  // the maximum makes a break impossible. The shipped 21 is kept wherever
+  // there is room for it, and follows the maximum down when there is not.
+  const CAPTION_LINE_MIN = 16;
+  const CAPTION_LINE_MAX = 80;
+  function captionLineLengths() {
+    const raw = Number(readAll().captionLineLength);
+    // blank, zero or nonsense means "the default", not "the smallest allowed":
+    // an emptied field should give the value back, not the tightest wrap there is
+    const max = Number.isFinite(raw) && raw > 0
+      ? Math.min(CAPTION_LINE_MAX, Math.max(CAPTION_LINE_MIN, Math.round(raw)))
+      : DEFAULTS.captionLineLength;
+    return { max, min: Math.min(21, Math.max(8, max - 8)) };
+  }
 
   // Every "don't show this again" the app can persist. A flag added anywhere
   // else without being listed here is the trap #615 describes: dismissable
@@ -274,6 +293,20 @@
       });
     }
 
+    const lineLength = byId('setting-caption-line-length');
+    if (lineLength !== null) {
+      lineLength.value = String(captionLineLengths().max);
+      lineLength.addEventListener('change', () => {
+        const typed = String(lineLength.value).trim();
+        const asked = typed === '' ? NaN : Number(typed);
+        const clamped = Number.isFinite(asked) && asked > 0
+          ? Math.min(CAPTION_LINE_MAX, Math.max(CAPTION_LINE_MIN, Math.round(asked)))
+          : DEFAULTS.captionLineLength;
+        set('captionLineLength', clamped);
+        lineLength.value = String(clamped);   // show what was actually taken
+      });
+    }
+
     const modal = byId('settings-modal');
     if (modal !== null) modal.addEventListener('change', () => { if (modal.checked) refresh(); });
 
@@ -315,7 +348,13 @@
     }
   }
 
-  window.HyperaudioSettings = Object.freeze({ get, set, DISMISSAL_KEYS, APP_STORAGE_KEYS, refresh, measureModels, removeModel, removeModels });
+  window.HyperaudioSettings = Object.freeze({
+    get, set, DISMISSAL_KEYS, APP_STORAGE_KEYS, refresh,
+    measureModels, removeModel, removeModels, captionLineLengths,
+  });
+  // The caption generators reach this by name, as they do the other shared
+  // helpers: one place decides how long a generated line may be.
+  window.captionLineLengths = captionLineLengths;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wire);
