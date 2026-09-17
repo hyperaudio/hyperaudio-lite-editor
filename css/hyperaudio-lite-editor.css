@@ -960,8 +960,20 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
 /* The caption editor's floating Regenerate button is injected as
    fixed top-20 right-8 with no z-index, so positioned content (the caption
    rows / transcript holder) painted over it. Lift it above content, below
-   the drawer (45) and navbar (60). */
-#regenerate-float-btn { z-index: 20; }
+   the drawer (45) and navbar (60).
+
+   Solid, not the outline button's transparent fill: it floats over the
+   caption rows, which scroll underneath it, and text showing through a
+   button is unreadable on both counts. White matches the card it sits on.
+   Hover keeps DaisyUI's filled-primary inversion, so the affordance is
+   unchanged. */
+#regenerate-float-btn {
+  z-index: 20;
+  background-color: #ffffff;
+}
+#regenerate-float-btn:hover {
+  background-color: oklch(var(--p));
+}
 
 /* Video collapse (audio-only button), desktop: slide the frame shut instead
    of a display:none pop, at the same 0.5s ease as the sidebar slide so all
