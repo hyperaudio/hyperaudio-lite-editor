@@ -5,14 +5,14 @@
 // escape hatches (un-dismiss warnings, forget API keys, reset the editor).
 import { test, expect } from '@playwright/test';
 
-const openSettings = (page) => page.evaluate(() => {
+const openSettings = (page, tab = 'application') => page.evaluate((name) => {
   const m = document.getElementById('settings-modal');
   m.checked = true;
   m.dispatchEvent(new Event('change'));
-  // Playback and Captions collapse by default; a test reaching a control
-  // inside one opens it, as a user does
-  document.querySelectorAll('#settings-modal + .modal details').forEach((d) => { d.open = true; });
-});
+  // one tab is in view at a time; a test reaching a control on another
+  // selects that tab first, as a user does
+  document.getElementById(`settings-tab-${name}`).checked = true;
+}, tab);
 
 const rows = (page) => page.evaluate(async () =>
   (await window.HyperaudioSave.library.list()).map((e) => e.name));
@@ -58,7 +58,7 @@ test('double-click to play is off by default, takes effect live, and survives a 
   await page.dblclick(word);
   expect(await page.evaluate(() => window.__played)).toBe(0);   // moved the playhead, did not play
 
-  await openSettings(page);
+  await openSettings(page, 'playback');
   await page.click('label[for="setting-play-on-dblclick"]');
   expect(await page.evaluate(() => ({
     live: window.hyperaudioInstance.playOnClick,
@@ -212,43 +212,43 @@ test('reset asks first, keeps everything on cancel, and brings the intro back on
   }))).toEqual({ dismissed: null, settings: null, playOnClick: false });
 });
 
-test('the sections collapse, with Application first and open (#615)', async ({ page }) => {
+test('the settings split into tabs, Application first and selected (#615)', async ({ page }) => {
   await page.evaluate(() => {
     const m = document.getElementById('settings-modal');
     m.checked = true;
     m.dispatchEvent(new Event('change'));
   });
-  const sections = await page.evaluate(() =>
-    [...document.querySelectorAll('#settings-modal + .modal details.settings-section')]
-      .map((d) => ({ name: d.querySelector('summary').textContent.trim(), open: d.open })));
-  expect(sections).toEqual([
-    { name: 'Application', open: true },
-    { name: 'Playback', open: false },
-    { name: 'Captions', open: false },
-  ]);
+  expect(await page.evaluate(() =>
+    [...document.querySelectorAll('#settings-modal + .modal .settings-tabs label')].map((l) => l.textContent.trim())))
+    .toEqual(['Application', 'Playback', 'Captions']);
 
   // what is in view on opening is Application's own rows
   expect(await page.locator('#settings-app-version').isVisible()).toBe(true);
   expect(await page.locator('#setting-play-on-dblclick').isVisible()).toBe(false);
   expect(await page.locator('#setting-caption-rate').isVisible()).toBe(false);
 
-  // and a collapsed one opens on its summary, keyboard included
-  await page.click('#settings-modal + .modal details:nth-of-type(2) summary').catch(async () => {
-    await page.evaluate(() => { document.querySelectorAll('#settings-modal + .modal details')[1].open = true; });
-  });
+  // and a tab swaps the panel on a click of its label, no script involved
+  await page.click('#settings-modal + .modal .settings-tabs label[for="settings-tab-playback"]');
   await expect.poll(() => page.locator('#setting-play-on-dblclick').isVisible()).toBe(true);
+  expect(await page.locator('#settings-app-version').isVisible()).toBe(false);
+
+  await page.click('#settings-modal + .modal .settings-tabs label[for="settings-tab-captions"]');
+  await expect.poll(() => page.locator('#setting-caption-rate').isVisible()).toBe(true);
+  expect(await page.locator('#setting-play-on-dblclick').isVisible()).toBe(false);
 });
 
-test('every settings control still lives in exactly one section (#615)', async ({ page }) => {
+test('every settings control still lives in exactly one tab panel (#615)', async ({ page }) => {
   const placed = await page.evaluate(() => {
     const box = document.querySelector('#settings-modal + .modal .modal-box');
+    const name = (panel) =>
+      box.querySelector(`.settings-tabs label[for="settings-tab-${panel.id.replace('settings-panel-', '')}"]`).textContent.trim();
     const ids = ['settings-app-version', 'settings-storage', 'settings-models', 'settings-undismiss',
       'settings-forget-keys', 'settings-reset', 'setting-play-on-dblclick', 'setting-caption-rate',
-      'setting-caption-line-length'];
+      'setting-caption-max-cps', 'setting-caption-max-wpm', 'setting-caption-line-length'];
     return ids.map((id) => {
       const el = document.getElementById(id);
-      const section = el === null ? null : el.closest('details.settings-section');
-      return { id, section: section === null ? null : section.querySelector('summary').textContent.trim() };
+      const panels = el === null ? [] : [...box.querySelectorAll('.settings-panel')].filter((p) => p.contains(el));
+      return { id, section: panels.length === 1 ? name(panels[0]) : `in ${panels.length} panels` };
     }).concat([{ id: 'stray rows', section: String(box.querySelectorAll(':scope > .settings-row').length) }]);
   });
   expect(placed).toEqual([
@@ -260,6 +260,8 @@ test('every settings control still lives in exactly one section (#615)', async (
     { id: 'settings-reset', section: 'Application' },
     { id: 'setting-play-on-dblclick', section: 'Playback' },
     { id: 'setting-caption-rate', section: 'Captions' },
+    { id: 'setting-caption-max-cps', section: 'Captions' },
+    { id: 'setting-caption-max-wpm', section: 'Captions' },
     { id: 'setting-caption-line-length', section: 'Captions' },
     { id: 'stray rows', section: '0' },
   ]);

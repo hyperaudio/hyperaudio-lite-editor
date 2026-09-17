@@ -45,7 +45,7 @@ test('the measure follows the setting, and switching updates what is on screen (
     m.dispatchEvent(new Event('change'));
     // the sections collapse now; a test reaching a control has to open it,
     // as a user does
-    document.querySelectorAll('#settings-modal + .modal details').forEach((d) => { d.open = true; });
+    document.getElementById('settings-tab-captions').checked = true;
   });
   await page.selectOption('#setting-caption-rate', 'wpm');
   await expect.poll(async () => (await rates(page))[0]).toMatch(/^\d+ wpm$/);
@@ -129,7 +129,7 @@ test('the Settings choice includes None, which hides the rates (#639)', async ({
     m.dispatchEvent(new Event('change'));
     // the sections collapse now; a test reaching a control has to open it,
     // as a user does
-    document.querySelectorAll('#settings-modal + .modal details').forEach((d) => { d.open = true; });
+    document.getElementById('settings-tab-captions').checked = true;
   });
   await page.selectOption('#setting-caption-rate', 'none');
   await expect.poll(async () => page.evaluate(() =>

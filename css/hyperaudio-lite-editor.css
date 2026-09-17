@@ -1772,31 +1772,53 @@ html.ha-transcribing #upload-transcribe-btn {
 
 /* Settings modal (#615): the Info modal's section idiom, with rows that put
    the control on the right and a muted hint under the label. */
-#settings-modal + .modal .settings-section { margin-top: 16px; }
-/* The sections collapse, so the modal opens at a readable length and the
-   Application rows — version, storage, the escape hatches — are the ones in
-   view. <details> gives the behaviour, the marker and the keyboard for free. */
-#settings-modal + .modal summary.settings-section-label {
+/* Tabs (the Transcribe modal's radio idiom): the radios are hidden but
+   focusable, so the keyboard gets arrow-key movement for free and the focus
+   ring is drawn on the label the radio controls. */
+#settings-modal + .modal .settings-tab-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+#settings-modal + .modal .settings-tabs {
+  display: inline-flex;
+  gap: 3px;
+  margin: 16px 0 4px;
+  padding: 3px;
+  border: 1px solid oklch(var(--bc) / 0.2);
+  border-radius: 9999px;
+}
+#settings-modal + .modal .settings-tabs label {
+  padding: 5px 16px;
+  border-radius: 9999px;
   cursor: pointer;
-  list-style-position: outside;
-  padding: 2px 0;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  user-select: none;
 }
-#settings-modal + .modal summary.settings-section-label::marker {
-  color: oklch(var(--bc) / 0.45);
+#settings-tab-application:checked ~ .settings-tabs label[for="settings-tab-application"],
+#settings-tab-playback:checked ~ .settings-tabs label[for="settings-tab-playback"],
+#settings-tab-captions:checked ~ .settings-tabs label[for="settings-tab-captions"] {
+  background-color: oklch(var(--p));
+  color: oklch(var(--pc));
 }
-#settings-modal + .modal summary.settings-section-label:focus-visible {
+#settings-tab-application:focus-visible ~ .settings-tabs label[for="settings-tab-application"],
+#settings-tab-playback:focus-visible ~ .settings-tabs label[for="settings-tab-playback"],
+#settings-tab-captions:focus-visible ~ .settings-tabs label[for="settings-tab-captions"] {
   outline: 2px solid oklch(var(--p));
   outline-offset: 2px;
-  border-radius: 4px;
 }
-#settings-modal + .modal .settings-section-label {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: oklch(var(--bc) / 0.55);
-}
+#settings-modal + .modal .settings-panel { display: none; }
+#settings-tab-application:checked ~ #settings-panel-application,
+#settings-tab-playback:checked ~ #settings-panel-playback,
+#settings-tab-captions:checked ~ #settings-panel-captions { display: block; }
+
 #settings-modal + .modal .settings-row {
   display: flex;
   align-items: center;
@@ -1806,7 +1828,7 @@ html.ha-transcribing #upload-transcribe-btn {
   border-top: 1px solid oklch(var(--bc) / 0.08);
   line-height: 1.4;
 }
-#settings-modal + .modal .settings-section-label + .settings-row { border-top: none; }
+#settings-modal + .modal .settings-panel > .settings-row:first-child { border-top: none; }
 #settings-modal + .modal .settings-row-toggle { cursor: pointer; }
 #settings-modal + .modal .settings-text { flex: 1 1 auto; min-width: 0; }
 #settings-modal + .modal .settings-hint {

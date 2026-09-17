@@ -570,8 +570,21 @@ If you are creating an open source application under a license compatible with t
             <div class="modal-box relative" style="max-width:28rem">
               <label for="settings-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
               <h3 class="text-lg font-bold">Settings</h3>
-              <details class="settings-section" open>
-                <summary class="settings-section-label">Application</summary>
+              <!-- Tabs, the same CSS-only radio idiom the Transcribe modal
+                   uses: no script, arrow keys for free from the radio group,
+                   and one panel at a time now there are enough settings to
+                   make a single column long. Application leads because its
+                   rows — version, storage, the escape hatches — are what
+                   someone opening Settings is usually after. -->
+              <input type="radio" name="settings-tab" id="settings-tab-application" class="settings-tab-radio" checked />
+              <input type="radio" name="settings-tab" id="settings-tab-playback" class="settings-tab-radio" />
+              <input type="radio" name="settings-tab" id="settings-tab-captions" class="settings-tab-radio" />
+              <div class="settings-tabs">
+                <label for="settings-tab-application">Application</label>
+                <label for="settings-tab-playback">Playback</label>
+                <label for="settings-tab-captions">Captions</label>
+              </div>
+              <div class="settings-panel" id="settings-panel-application">
                 <div class="settings-row">
                   <span class="settings-text">Version</span>
                   <span id="settings-app-version" class="settings-value"></span>
@@ -610,9 +623,8 @@ If you are creating an open source application under a license compatible with t
                   </span>
                   <button type="button" id="settings-reset" class="btn btn-sm btn-outline btn-error">Reset…</button>
                 </div>
-              </details>
-              <details class="settings-section">
-                <summary class="settings-section-label">Playback</summary>
+              </div>
+              <div class="settings-panel" id="settings-panel-playback">
                 <label class="settings-row settings-row-toggle" for="setting-play-on-dblclick">
                   <span class="settings-text">
                     Double-click a word to play from it
@@ -620,9 +632,8 @@ If you are creating an open source application under a license compatible with t
                   </span>
                   <input type="checkbox" id="setting-play-on-dblclick" class="toggle toggle-primary" />
                 </label>
-              </details>
-              <details class="settings-section">
-                <summary class="settings-section-label">Captions</summary>
+              </div>
+              <div class="settings-panel" id="settings-panel-captions">
                 <label class="settings-row" for="setting-caption-rate">
                   <span class="settings-text">
                     Reading rate on each caption
@@ -655,7 +666,7 @@ If you are creating an open source application under a license compatible with t
                   </span>
                   <input id="setting-caption-line-length" type="number" min="16" max="80" step="1" class="input input-bordered input-sm" style="width:6rem" />
                 </label>
-              </details>
+              </div>
             </div>
           </div>
         </div>

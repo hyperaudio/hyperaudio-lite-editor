@@ -68,7 +68,7 @@ test('the field clamps what it is given rather than trusting it', async ({ page 
     m.dispatchEvent(new Event('change'));
     // the sections collapse now; a test reaching a control has to open it,
     // as a user does
-    document.querySelectorAll('#settings-modal + .modal details').forEach((d) => { d.open = true; });
+    document.getElementById('settings-tab-captions').checked = true;
   });
   const field = page.locator('#setting-caption-line-length');
   await expect(field).toHaveValue('32');
