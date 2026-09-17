@@ -1773,6 +1773,22 @@ html.ha-transcribing #upload-transcribe-btn {
 /* Settings modal (#615): the Info modal's section idiom, with rows that put
    the control on the right and a muted hint under the label. */
 #settings-modal + .modal .settings-section { margin-top: 16px; }
+/* The sections collapse, so the modal opens at a readable length and the
+   Application rows — version, storage, the escape hatches — are the ones in
+   view. <details> gives the behaviour, the marker and the keyboard for free. */
+#settings-modal + .modal summary.settings-section-label {
+  cursor: pointer;
+  list-style-position: outside;
+  padding: 2px 0;
+}
+#settings-modal + .modal summary.settings-section-label::marker {
+  color: oklch(var(--bc) / 0.45);
+}
+#settings-modal + .modal summary.settings-section-label:focus-visible {
+  outline: 2px solid oklch(var(--p));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 #settings-modal + .modal .settings-section-label {
   margin: 0 0 4px;
   font-weight: 600;

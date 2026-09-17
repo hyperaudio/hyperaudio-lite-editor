@@ -9,6 +9,9 @@ const openSettings = (page) => page.evaluate(() => {
   const m = document.getElementById('settings-modal');
   m.checked = true;
   m.dispatchEvent(new Event('change'));
+  // Playback and Captions collapse by default; a test reaching a control
+  // inside one opens it, as a user does
+  document.querySelectorAll('#settings-modal + .modal details').forEach((d) => { d.open = true; });
 });
 
 const rows = (page) => page.evaluate(async () =>
@@ -207,4 +210,57 @@ test('reset asks first, keeps everything on cancel, and brings the intro back on
     settings: localStorage.getItem('hyperaudioSettings'),
     playOnClick: window.hyperaudioInstance.playOnClick,
   }))).toEqual({ dismissed: null, settings: null, playOnClick: false });
+});
+
+test('the sections collapse, with Application first and open (#615)', async ({ page }) => {
+  await page.evaluate(() => {
+    const m = document.getElementById('settings-modal');
+    m.checked = true;
+    m.dispatchEvent(new Event('change'));
+  });
+  const sections = await page.evaluate(() =>
+    [...document.querySelectorAll('#settings-modal + .modal details.settings-section')]
+      .map((d) => ({ name: d.querySelector('summary').textContent.trim(), open: d.open })));
+  expect(sections).toEqual([
+    { name: 'Application', open: true },
+    { name: 'Playback', open: false },
+    { name: 'Captions', open: false },
+  ]);
+
+  // what is in view on opening is Application's own rows
+  expect(await page.locator('#settings-app-version').isVisible()).toBe(true);
+  expect(await page.locator('#setting-play-on-dblclick').isVisible()).toBe(false);
+  expect(await page.locator('#setting-caption-rate').isVisible()).toBe(false);
+
+  // and a collapsed one opens on its summary, keyboard included
+  await page.click('#settings-modal + .modal details:nth-of-type(2) summary').catch(async () => {
+    await page.evaluate(() => { document.querySelectorAll('#settings-modal + .modal details')[1].open = true; });
+  });
+  await expect.poll(() => page.locator('#setting-play-on-dblclick').isVisible()).toBe(true);
+});
+
+test('every settings control still lives in exactly one section (#615)', async ({ page }) => {
+  const placed = await page.evaluate(() => {
+    const box = document.querySelector('#settings-modal + .modal .modal-box');
+    const ids = ['settings-app-version', 'settings-storage', 'settings-models', 'settings-undismiss',
+      'settings-forget-keys', 'settings-reset', 'setting-play-on-dblclick', 'setting-caption-rate',
+      'setting-caption-line-length'];
+    return ids.map((id) => {
+      const el = document.getElementById(id);
+      const section = el === null ? null : el.closest('details.settings-section');
+      return { id, section: section === null ? null : section.querySelector('summary').textContent.trim() };
+    }).concat([{ id: 'stray rows', section: String(box.querySelectorAll(':scope > .settings-row').length) }]);
+  });
+  expect(placed).toEqual([
+    { id: 'settings-app-version', section: 'Application' },
+    { id: 'settings-storage', section: 'Application' },
+    { id: 'settings-models', section: 'Application' },
+    { id: 'settings-undismiss', section: 'Application' },
+    { id: 'settings-forget-keys', section: 'Application' },
+    { id: 'settings-reset', section: 'Application' },
+    { id: 'setting-play-on-dblclick', section: 'Playback' },
+    { id: 'setting-caption-rate', section: 'Captions' },
+    { id: 'setting-caption-line-length', section: 'Captions' },
+    { id: 'stray rows', section: '0' },
+  ]);
 });

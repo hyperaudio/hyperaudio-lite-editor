@@ -570,39 +570,8 @@ If you are creating an open source application under a license compatible with t
             <div class="modal-box relative" style="max-width:28rem">
               <label for="settings-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
               <h3 class="text-lg font-bold">Settings</h3>
-              <div class="settings-section">
-                <h4 class="settings-section-label">Playback</h4>
-                <label class="settings-row settings-row-toggle" for="setting-play-on-dblclick">
-                  <span class="settings-text">
-                    Double-click a word to play from it
-                    <span class="settings-hint">Off: a double-click only moves the playhead there.</span>
-                  </span>
-                  <input type="checkbox" id="setting-play-on-dblclick" class="toggle toggle-primary" />
-                </label>
-              </div>
-              <div class="settings-section">
-                <h4 class="settings-section-label">Captions</h4>
-                <label class="settings-row" for="setting-caption-rate">
-                  <span class="settings-text">
-                    Reading rate on each caption
-                    <span class="settings-hint">Characters per second is the streaming convention, words per minute the broadcast one. Clicking a rate in the caption editor switches between the two.</span>
-                  </span>
-                  <select id="setting-caption-rate" class="select select-bordered select-sm">
-                    <option value="cps">Characters per second</option>
-                    <option value="wpm">Words per minute</option>
-                    <option value="none">None</option>
-                  </select>
-                </label>
-                <label class="settings-row" for="setting-caption-line-length">
-                  <span class="settings-text">
-                    Characters per line
-                    <span class="settings-hint">The longest a caption line may be when captions are generated. Applies to the next generation, so existing captions are left alone.</span>
-                  </span>
-                  <input id="setting-caption-line-length" type="number" min="16" max="80" step="1" class="input input-bordered input-sm" style="width:6rem" />
-                </label>
-              </div>
-              <div class="settings-section">
-                <h4 class="settings-section-label">Application</h4>
+              <details class="settings-section" open>
+                <summary class="settings-section-label">Application</summary>
                 <div class="settings-row">
                   <span class="settings-text">Version</span>
                   <span id="settings-app-version" class="settings-value"></span>
@@ -641,7 +610,38 @@ If you are creating an open source application under a license compatible with t
                   </span>
                   <button type="button" id="settings-reset" class="btn btn-sm btn-outline btn-error">Reset…</button>
                 </div>
-              </div>
+              </details>
+              <details class="settings-section">
+                <summary class="settings-section-label">Playback</summary>
+                <label class="settings-row settings-row-toggle" for="setting-play-on-dblclick">
+                  <span class="settings-text">
+                    Double-click a word to play from it
+                    <span class="settings-hint">Off: a double-click only moves the playhead there.</span>
+                  </span>
+                  <input type="checkbox" id="setting-play-on-dblclick" class="toggle toggle-primary" />
+                </label>
+              </details>
+              <details class="settings-section">
+                <summary class="settings-section-label">Captions</summary>
+                <label class="settings-row" for="setting-caption-rate">
+                  <span class="settings-text">
+                    Reading rate on each caption
+                    <span class="settings-hint">Characters per second is the streaming convention, words per minute the broadcast one.</span>
+                  </span>
+                  <select id="setting-caption-rate" class="select select-bordered select-sm">
+                    <option value="cps">Characters per second</option>
+                    <option value="wpm">Words per minute</option>
+                    <option value="none">None</option>
+                  </select>
+                </label>
+                <label class="settings-row" for="setting-caption-line-length">
+                  <span class="settings-text">
+                    Characters per line
+                    <span class="settings-hint">The longest a caption line may be when captions are generated. Applies to the next generation, so existing captions are left alone.</span>
+                  </span>
+                  <input id="setting-caption-line-length" type="number" min="16" max="80" step="1" class="input input-bordered input-sm" style="width:6rem" />
+                </label>
+              </details>
             </div>
           </div>
         </div>
