@@ -219,20 +219,31 @@ test('the settings split into tabs, Application first and selected (#615)', asyn
     m.dispatchEvent(new Event('change'));
   });
   expect(await page.evaluate(() =>
-    [...document.querySelectorAll('#settings-modal + .modal .settings-tabs label')].map((l) => l.textContent.trim())))
-    .toEqual(['Application', 'Playback', 'Captions']);
+    [...document.querySelectorAll('#settings-modal + .modal .settings-tabs > .tab')].map((t) => t.getAttribute('aria-label'))))
+    .toEqual(['Application', 'Captions', 'Playback']);
+
+  // and it is one height whichever tab is showing, so the modal does not jump
+  const heights = [];
+  for (const tab of ['application', 'captions', 'playback']) {
+    await page.evaluate((name) => { document.getElementById(`settings-tab-${name}`).checked = true; }, tab);
+    await expect.poll(() => page.locator(`#settings-panel-${tab}`).isVisible()).toBe(true);
+    heights.push(await page.evaluate(() =>
+      Math.round(document.querySelector('#settings-modal + .modal .modal-box').getBoundingClientRect().height)));
+  }
+  expect(new Set(heights).size).toBe(1);
+  await page.evaluate(() => { document.getElementById('settings-tab-application').checked = true; });
 
   // what is in view on opening is Application's own rows
   expect(await page.locator('#settings-app-version').isVisible()).toBe(true);
   expect(await page.locator('#setting-play-on-dblclick').isVisible()).toBe(false);
   expect(await page.locator('#setting-caption-rate').isVisible()).toBe(false);
 
-  // and a tab swaps the panel on a click of its label, no script involved
-  await page.click('#settings-modal + .modal .settings-tabs label[for="settings-tab-playback"]');
+  // and a tab swaps the panel on a click, no script involved
+  await page.click('#settings-tab-playback');
   await expect.poll(() => page.locator('#setting-play-on-dblclick').isVisible()).toBe(true);
   expect(await page.locator('#settings-app-version').isVisible()).toBe(false);
 
-  await page.click('#settings-modal + .modal .settings-tabs label[for="settings-tab-captions"]');
+  await page.click('#settings-tab-captions');
   await expect.poll(() => page.locator('#setting-caption-rate').isVisible()).toBe(true);
   expect(await page.locator('#setting-play-on-dblclick').isVisible()).toBe(false);
 });
@@ -241,10 +252,10 @@ test('every settings control still lives in exactly one tab panel (#615)', async
   const placed = await page.evaluate(() => {
     const box = document.querySelector('#settings-modal + .modal .modal-box');
     const name = (panel) =>
-      box.querySelector(`.settings-tabs label[for="settings-tab-${panel.id.replace('settings-panel-', '')}"]`).textContent.trim();
+      box.querySelector(`#settings-tab-${panel.id.replace('settings-panel-', '')}`).getAttribute('aria-label');
     const ids = ['settings-app-version', 'settings-storage', 'settings-models', 'settings-undismiss',
-      'settings-forget-keys', 'settings-reset', 'setting-play-on-dblclick', 'setting-caption-rate',
-      'setting-caption-max-cps', 'setting-caption-max-wpm', 'setting-caption-line-length'];
+      'settings-forget-keys', 'settings-reset', 'setting-caption-rate', 'setting-caption-max-cps',
+      'setting-caption-max-wpm', 'setting-caption-line-length', 'setting-play-on-dblclick'];
     return ids.map((id) => {
       const el = document.getElementById(id);
       const panels = el === null ? [] : [...box.querySelectorAll('.settings-panel')].filter((p) => p.contains(el));
@@ -258,11 +269,11 @@ test('every settings control still lives in exactly one tab panel (#615)', async
     { id: 'settings-undismiss', section: 'Application' },
     { id: 'settings-forget-keys', section: 'Application' },
     { id: 'settings-reset', section: 'Application' },
-    { id: 'setting-play-on-dblclick', section: 'Playback' },
     { id: 'setting-caption-rate', section: 'Captions' },
     { id: 'setting-caption-max-cps', section: 'Captions' },
     { id: 'setting-caption-max-wpm', section: 'Captions' },
     { id: 'setting-caption-line-length', section: 'Captions' },
+    { id: 'setting-play-on-dblclick', section: 'Playback' },
     { id: 'stray rows', section: '0' },
   ]);
 });

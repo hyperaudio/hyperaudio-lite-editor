@@ -1772,52 +1772,18 @@ html.ha-transcribing #upload-transcribe-btn {
 
 /* Settings modal (#615): the Info modal's section idiom, with rows that put
    the control on the right and a muted hint under the label. */
-/* Tabs (the Transcribe modal's radio idiom): the radios are hidden but
-   focusable, so the keyboard gets arrow-key movement for free and the focus
-   ring is drawn on the label the radio controls. */
-#settings-modal + .modal .settings-tab-radio {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+/* Tabs: DaisyUI's lifted tabs, the same ones the Transcribe modal uses for
+   its engines, so Settings looks like the rest of the app. The radio inputs
+   are the tabs, so the keyboard comes with them and DaisyUI shows the checked
+   tab's panel. The panel is a fixed height, so the modal stays put as tabs
+   change and a tall tab scrolls inside instead. */
+#settings-modal + .modal .settings-tabs { margin-top: 12px; }
+#settings-modal + .modal .settings-tabs > .tab { white-space: nowrap; }
+#settings-modal + .modal .settings-panel {
+  height: 24rem;
+  overflow-y: auto;
+  padding: 0 20px 16px;
 }
-#settings-modal + .modal .settings-tabs {
-  display: inline-flex;
-  gap: 3px;
-  margin: 16px 0 4px;
-  padding: 3px;
-  border: 1px solid oklch(var(--bc) / 0.2);
-  border-radius: 9999px;
-}
-#settings-modal + .modal .settings-tabs label {
-  padding: 5px 16px;
-  border-radius: 9999px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  line-height: 1.2;
-  user-select: none;
-}
-#settings-tab-application:checked ~ .settings-tabs label[for="settings-tab-application"],
-#settings-tab-playback:checked ~ .settings-tabs label[for="settings-tab-playback"],
-#settings-tab-captions:checked ~ .settings-tabs label[for="settings-tab-captions"] {
-  background-color: oklch(var(--p));
-  color: oklch(var(--pc));
-}
-#settings-tab-application:focus-visible ~ .settings-tabs label[for="settings-tab-application"],
-#settings-tab-playback:focus-visible ~ .settings-tabs label[for="settings-tab-playback"],
-#settings-tab-captions:focus-visible ~ .settings-tabs label[for="settings-tab-captions"] {
-  outline: 2px solid oklch(var(--p));
-  outline-offset: 2px;
-}
-#settings-modal + .modal .settings-panel { display: none; }
-#settings-tab-application:checked ~ #settings-panel-application,
-#settings-tab-playback:checked ~ #settings-panel-playback,
-#settings-tab-captions:checked ~ #settings-panel-captions { display: block; }
 
 #settings-modal + .modal .settings-row {
   display: flex;
