@@ -634,6 +634,20 @@ If you are creating an open source application under a license compatible with t
                     <option value="none">None</option>
                   </select>
                 </label>
+                <label class="settings-row" for="setting-caption-max-cps">
+                  <span class="settings-text">
+                    Flag above (characters per second)
+                    <span class="settings-hint">17 is the usual limit for English. Advisory only — nothing is blocked.</span>
+                  </span>
+                  <input id="setting-caption-max-cps" type="number" min="1" max="60" step="1" class="input input-bordered input-sm" style="width:6rem" />
+                </label>
+                <label class="settings-row" for="setting-caption-max-wpm">
+                  <span class="settings-text">
+                    Flag above (words per minute)
+                    <span class="settings-hint">180 is the upper end of broadcast practice.</span>
+                  </span>
+                  <input id="setting-caption-max-wpm" type="number" min="20" max="400" step="5" class="input input-bordered input-sm" style="width:6rem" />
+                </label>
                 <label class="settings-row" for="setting-caption-line-length">
                   <span class="settings-text">
                     Characters per line

@@ -1888,6 +1888,15 @@ html.ha-transcribing #upload-transcribe-btn {
   cursor: pointer;
   font-family: inherit;
 }
+/* Over the limit (#641): colour, and weight so it does not depend on colour. */
+.caption-rate-over {
+  color: oklch(var(--er));
+  font-weight: 700;
+}
+.caption-rate-over:hover {
+  color: oklch(var(--er));
+  background: oklch(var(--er) / 0.10);
+}
 .caption-rate:hover {
   color: oklch(var(--bc) / 0.9);
   background: oklch(var(--bc) / 0.06);

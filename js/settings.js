@@ -44,6 +44,11 @@
     // The longest a generated caption line should be. caption.js shipped with
     // 37; 32 reads more comfortably and is what the editor now generates to.
     captionLineLength: 32,
+    // The reading rates past which a caption is flagged (#641). One per
+    // measure, because the two do not convert cleanly: 17 is Netflix's figure
+    // for English, 180 the upper end of broadcast practice.
+    captionMaxCps: 17,
+    captionMaxWpm: 180,
   });
 
   // caption.js takes a maximum AND a minimum line length: the minimum is the
@@ -307,6 +312,23 @@
       });
     }
 
+    [['setting-caption-max-cps', 'captionMaxCps', 1, 60], ['setting-caption-max-wpm', 'captionMaxWpm', 20, 400]]
+      .forEach(([id, key, low, high]) => {
+        const field = byId(id);
+        if (field === null) return;
+        field.value = String(get(key));
+        field.addEventListener('change', () => {
+          const typed = String(field.value).trim();
+          const asked = typed === '' ? NaN : Number(typed);
+          const clamped = Number.isFinite(asked) && asked > 0
+            ? Math.min(high, Math.max(low, Math.round(asked)))
+            : DEFAULTS[key];
+          set(key, clamped);
+          field.value = String(clamped);
+          if (typeof window.updateCaptionRates === 'function') window.updateCaptionRates();
+        });
+      });
+
     const modal = byId('settings-modal');
     if (modal !== null) modal.addEventListener('change', () => { if (modal.checked) refresh(); });
 
@@ -348,10 +370,23 @@
     }
   }
 
+  // The limit for whichever measure is showing, or null when rates are off.
+  // A limit of zero or less means "do not flag", which is how someone keeps
+  // the number without the judgement.
+  function captionRateLimit() {
+    const all = readAll();
+    const measure = ['cps', 'wpm', 'none'].indexOf(all.captionRate) === -1 ? 'cps' : all.captionRate;
+    if (measure === 'none') return null;
+    const raw = Number(measure === 'wpm' ? all.captionMaxWpm : all.captionMaxCps);
+    if (!Number.isFinite(raw) || raw <= 0) return null;
+    return { measure, limit: raw };
+  }
+
   window.HyperaudioSettings = Object.freeze({
     get, set, DISMISSAL_KEYS, APP_STORAGE_KEYS, refresh,
-    measureModels, removeModel, removeModels, captionLineLengths,
+    measureModels, removeModel, removeModels, captionLineLengths, captionRateLimit,
   });
+  window.captionRateLimit = captionRateLimit;
   // The caption generators reach this by name, as they do the other shared
   // helpers: one place decides how long a generated line may be.
   window.captionLineLengths = captionLineLengths;

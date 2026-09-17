@@ -62,12 +62,17 @@
     function updateCaptionRates() {
       const measure = captionRateMeasure();
       const other = measure === 'cps' ? 'words per minute' : 'characters per second';
+      // The limit this measure is judged against, or null when there is none
+      // to judge by (#641).
+      const bound = typeof captionRateLimit === 'function' ? captionRateLimit() : null;
+      const limit = bound !== null && bound.measure === measure ? bound.limit : null;
       document.querySelectorAll('#captions-display .caption').forEach((caption) => {
         const out = caption.querySelector('.caption-rate');
         if (out === null) return;
         if (measure === 'none') {          // switched off in Settings
           out.hidden = true;
           out.textContent = '';
+          out.classList.remove('caption-rate-over');
           out.setAttribute('title', '');
           return;
         }
@@ -87,15 +92,30 @@
           out.setAttribute('title', '');
           return;
         }
+        // Judged on the number as SHOWN, not the one behind it: a caption
+        // reading 17.0 flagged against a limit of 17 looks like a bug, and
+        // arguing that it was really 17.04 helps nobody.
+        let shown;
+        let counted;
         if (measure === 'wpm') {
           const words = text.split(/\s+/).filter((word) => word !== '').length;
-          out.textContent = Math.round((words / seconds) * 60) + ' wpm';
-          out.setAttribute('title', `${words} words in ${seconds.toFixed(2)}s — click to show ${other}`);
+          shown = Math.round((words / seconds) * 60);
+          out.textContent = shown + ' wpm';
+          counted = `${words} words in ${seconds.toFixed(2)}s`;
         } else {
           const characters = text.length;   // including the spaces, as the standards count them
-          out.textContent = (characters / seconds).toFixed(1) + ' cps';
-          out.setAttribute('title', `${characters} characters in ${seconds.toFixed(2)}s — click to show ${other}`);
+          shown = Math.round((characters / seconds) * 10) / 10;
+          out.textContent = shown.toFixed(1) + ' cps';
+          counted = `${characters} characters in ${seconds.toFixed(2)}s`;
         }
+        // Over the limit is said three ways — colour, weight, and words in the
+        // tooltip — so it survives a colour-blind reader and a screenshot.
+        // Advisory: nothing is blocked and nothing is rewritten (#641).
+        const over = limit !== null && shown > limit;
+        out.classList.toggle('caption-rate-over', over);
+        out.setAttribute('title', over
+          ? `${counted} — over the ${limit} ${measure} limit. Click to show ${other}`
+          : `${counted} — click to show ${other}`);
       });
     }
     // Settings reaches this when the measure changes, and so does anything
