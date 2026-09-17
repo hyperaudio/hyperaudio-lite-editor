@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.17 — last changed in release 1.3.17
+ * @version 1.3.19 — last changed in release 1.3.19
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -317,7 +317,10 @@
     t.innerHTML = inner;
     host.appendChild(t);
     try {
-      return caption().init('hypertranscript', 'media-export-no-player', '37', '21', null, null, host);
+      const lines = typeof window.captionLineLengths === 'function'
+        ? window.captionLineLengths() : { max: 32, min: 21 };
+      return caption().init('hypertranscript', 'media-export-no-player',
+        String(lines.max), String(lines.min), null, null, host);
     } catch (e) {
       console.warn('Caption generation for export failed:', e);
       return null;

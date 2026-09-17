@@ -5,11 +5,14 @@
 // escape hatches (un-dismiss warnings, forget API keys, reset the editor).
 import { test, expect } from '@playwright/test';
 
-const openSettings = (page) => page.evaluate(() => {
+const openSettings = (page, tab = 'application') => page.evaluate((name) => {
   const m = document.getElementById('settings-modal');
   m.checked = true;
   m.dispatchEvent(new Event('change'));
-});
+  // one tab is in view at a time; a test reaching a control on another
+  // selects that tab first, as a user does
+  document.getElementById(`settings-tab-${name}`).checked = true;
+}, tab);
 
 const rows = (page) => page.evaluate(async () =>
   (await window.HyperaudioSave.library.list()).map((e) => e.name));
@@ -55,7 +58,7 @@ test('double-click to play is off by default, takes effect live, and survives a 
   await page.dblclick(word);
   expect(await page.evaluate(() => window.__played)).toBe(0);   // moved the playhead, did not play
 
-  await openSettings(page);
+  await openSettings(page, 'playback');
   await page.click('label[for="setting-play-on-dblclick"]');
   expect(await page.evaluate(() => ({
     live: window.hyperaudioInstance.playOnClick,
@@ -207,4 +210,70 @@ test('reset asks first, keeps everything on cancel, and brings the intro back on
     settings: localStorage.getItem('hyperaudioSettings'),
     playOnClick: window.hyperaudioInstance.playOnClick,
   }))).toEqual({ dismissed: null, settings: null, playOnClick: false });
+});
+
+test('the settings split into tabs, Application first and selected (#615)', async ({ page }) => {
+  await page.evaluate(() => {
+    const m = document.getElementById('settings-modal');
+    m.checked = true;
+    m.dispatchEvent(new Event('change'));
+  });
+  expect(await page.evaluate(() =>
+    [...document.querySelectorAll('#settings-modal + .modal .settings-tabs > .tab')].map((t) => t.getAttribute('aria-label'))))
+    .toEqual(['Application', 'Captions', 'Playback']);
+
+  // and it is one height whichever tab is showing, so the modal does not jump
+  const heights = [];
+  for (const tab of ['application', 'captions', 'playback']) {
+    await page.evaluate((name) => { document.getElementById(`settings-tab-${name}`).checked = true; }, tab);
+    await expect.poll(() => page.locator(`#settings-panel-${tab}`).isVisible()).toBe(true);
+    heights.push(await page.evaluate(() =>
+      Math.round(document.querySelector('#settings-modal + .modal .modal-box').getBoundingClientRect().height)));
+  }
+  expect(new Set(heights).size).toBe(1);
+  await page.evaluate(() => { document.getElementById('settings-tab-application').checked = true; });
+
+  // what is in view on opening is Application's own rows
+  expect(await page.locator('#settings-app-version').isVisible()).toBe(true);
+  expect(await page.locator('#setting-play-on-dblclick').isVisible()).toBe(false);
+  expect(await page.locator('#setting-caption-rate').isVisible()).toBe(false);
+
+  // and a tab swaps the panel on a click, no script involved
+  await page.click('#settings-tab-playback');
+  await expect.poll(() => page.locator('#setting-play-on-dblclick').isVisible()).toBe(true);
+  expect(await page.locator('#settings-app-version').isVisible()).toBe(false);
+
+  await page.click('#settings-tab-captions');
+  await expect.poll(() => page.locator('#setting-caption-rate').isVisible()).toBe(true);
+  expect(await page.locator('#setting-play-on-dblclick').isVisible()).toBe(false);
+});
+
+test('every settings control still lives in exactly one tab panel (#615)', async ({ page }) => {
+  const placed = await page.evaluate(() => {
+    const box = document.querySelector('#settings-modal + .modal .modal-box');
+    const name = (panel) =>
+      box.querySelector(`#settings-tab-${panel.id.replace('settings-panel-', '')}`).getAttribute('aria-label');
+    const ids = ['settings-app-version', 'settings-storage', 'settings-models', 'settings-undismiss',
+      'settings-forget-keys', 'settings-reset', 'setting-caption-rate', 'setting-caption-max-cps',
+      'setting-caption-max-wpm', 'setting-caption-line-length', 'setting-play-on-dblclick'];
+    return ids.map((id) => {
+      const el = document.getElementById(id);
+      const panels = el === null ? [] : [...box.querySelectorAll('.settings-panel')].filter((p) => p.contains(el));
+      return { id, section: panels.length === 1 ? name(panels[0]) : `in ${panels.length} panels` };
+    }).concat([{ id: 'stray rows', section: String(box.querySelectorAll(':scope > .settings-row').length) }]);
+  });
+  expect(placed).toEqual([
+    { id: 'settings-app-version', section: 'Application' },
+    { id: 'settings-storage', section: 'Application' },
+    { id: 'settings-models', section: 'Application' },
+    { id: 'settings-undismiss', section: 'Application' },
+    { id: 'settings-forget-keys', section: 'Application' },
+    { id: 'settings-reset', section: 'Application' },
+    { id: 'setting-caption-rate', section: 'Captions' },
+    { id: 'setting-caption-max-cps', section: 'Captions' },
+    { id: 'setting-caption-max-wpm', section: 'Captions' },
+    { id: 'setting-caption-line-length', section: 'Captions' },
+    { id: 'setting-play-on-dblclick', section: 'Playback' },
+    { id: 'stray rows', section: '0' },
+  ]);
 });

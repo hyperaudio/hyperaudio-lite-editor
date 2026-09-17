@@ -8,6 +8,120 @@
       hyperaudio();
     }
 
+    /* ---- Reading rate per caption (#639) ------------------------------------
+     * Editing captions well means knowing whether a cue can be read in the
+     * time it is on screen, and the standards differ by trade: characters per
+     * second for streaming (Netflix allows 17 in English), words per minute
+     * for broadcast (the BBC works to about 160-180). Which one is shown is
+     * the user's choice, in Settings.
+     *
+     * Read from the INPUTS, not from any cached model: a half-typed timecode
+     * or a re-worded line has to show up straight away, and those fields are
+     * the only place it exists until the caption is committed.
+     * ---------------------------------------------------------------------- */
+    const CAPTION_RATE_MEASURES = ['cps', 'wpm', 'none'];
+    function captionRateMeasure() {
+      const settings = window.HyperaudioSettings;
+      const choice = settings && typeof settings.get === 'function' ? settings.get('captionRate') : 'cps';
+      return CAPTION_RATE_MEASURES.indexOf(choice) === -1 ? 'cps' : choice;
+    }
+
+    // Clicking a rate switches the measure, for every caption at once: it is
+    // one editorial standard, not a per-caption choice, and reading two
+    // scales down the same column would tell you nothing. Only between the
+    // two measures — 'none' is chosen in Settings, since a hidden rate leaves
+    // nothing to click back with.
+    function toggleCaptionRateMeasure() {
+      const settings = window.HyperaudioSettings;
+      if (!settings || typeof settings.set !== 'function') return;
+      const next = captionRateMeasure() === 'cps' ? 'wpm' : 'cps';
+      settings.set('captionRate', next);
+      const select = document.getElementById('setting-caption-rate');
+      if (select !== null) select.value = next;   // Settings may be open behind
+      updateCaptionRates();
+    }
+    window.toggleCaptionRateMeasure = toggleCaptionRateMeasure;
+
+    // Delegated, because the rows are rebuilt on every populate.
+    document.addEventListener('click', (event) => {
+      const el = event.target && event.target.closest ? event.target.closest('.caption-rate') : null;
+      if (el !== null) toggleCaptionRateMeasure();
+    });
+
+    // "00:00:01.000" or "00:01.000" -> seconds. NaN for anything else, which
+    // is what a timecode being typed looks like half of the time.
+    function captionTimecodeSeconds(value) {
+      const text = String(value === undefined || value === null ? '' : value).trim();
+      const m = /^(?:(\d{1,3}):)?(\d{1,2}):(\d{1,2})(?:[.,](\d{1,3}))?$/.exec(text);
+      if (m === null) return NaN;
+      const hours = m[1] === undefined ? 0 : Number(m[1]);
+      return hours * 3600 + Number(m[2]) * 60 + Number(m[3])
+        + (m[4] === undefined ? 0 : Number(m[4].padEnd(3, '0')) / 1000);
+    }
+
+    function updateCaptionRates() {
+      const measure = captionRateMeasure();
+      const other = measure === 'cps' ? 'words per minute' : 'characters per second';
+      // The limit this measure is judged against, or null when there is none
+      // to judge by (#641).
+      const bound = typeof captionRateLimit === 'function' ? captionRateLimit() : null;
+      const limit = bound !== null && bound.measure === measure ? bound.limit : null;
+      document.querySelectorAll('#captions-display .caption').forEach((caption) => {
+        const out = caption.querySelector('.caption-rate');
+        if (out === null) return;
+        if (measure === 'none') {          // switched off in Settings
+          out.hidden = true;
+          out.textContent = '';
+          out.classList.remove('caption-rate-over');
+          out.setAttribute('title', '');
+          return;
+        }
+        out.hidden = false;
+        const startEl = caption.querySelector('.start');
+        const endEl = caption.querySelector('.end');
+        const line1 = caption.querySelector('.line1');
+        const line2 = caption.querySelector('.line2');
+        if (startEl === null || endEl === null) return;
+        const text = [line1 === null ? '' : line1.value, line2 === null ? '' : line2.value]
+          .map((line) => String(line || '').trim()).filter((line) => line !== '').join(' ');
+        const seconds = captionTimecodeSeconds(endEl.value) - captionTimecodeSeconds(startEl.value);
+        // nothing to say about an empty caption, or about a duration that is
+        // zero, negative or still being typed
+        if (!Number.isFinite(seconds) || seconds <= 0 || text === '') {
+          out.textContent = '';
+          out.setAttribute('title', '');
+          return;
+        }
+        // Judged on the number as SHOWN, not the one behind it: a caption
+        // reading 17.0 flagged against a limit of 17 looks like a bug, and
+        // arguing that it was really 17.04 helps nobody.
+        let shown;
+        let counted;
+        if (measure === 'wpm') {
+          const words = text.split(/\s+/).filter((word) => word !== '').length;
+          shown = Math.round((words / seconds) * 60);
+          out.textContent = shown + ' wpm';
+          counted = `${words} words in ${seconds.toFixed(2)}s`;
+        } else {
+          const characters = text.length;   // including the spaces, as the standards count them
+          shown = Math.round((characters / seconds) * 10) / 10;
+          out.textContent = shown.toFixed(1) + ' cps';
+          counted = `${characters} characters in ${seconds.toFixed(2)}s`;
+        }
+        // Over the limit is said three ways — colour, weight, and words in the
+        // tooltip — so it survives a colour-blind reader and a screenshot.
+        // Advisory: nothing is blocked and nothing is rewritten (#641).
+        const over = limit !== null && shown > limit;
+        out.classList.toggle('caption-rate-over', over);
+        out.setAttribute('title', over
+          ? `${counted} — over the ${limit} ${measure} limit. Click to show ${other}`
+          : `${counted} — click to show ${other}`);
+      });
+    }
+    // Settings reaches this when the measure changes, and so does anything
+    // else that rewrites the rows.
+    window.updateCaptionRates = updateCaptionRates;
+
     function populateCaptionEditor(data) {
 
       let holder = null;
@@ -21,7 +135,10 @@
       }
       
 
-      holder.innerHTML = '<div class="modal-action"><label id="regenerate-float-btn" for="regenerate-captions-modal" class="fixed top-20 right-8 btn btn-outline btn-primary" >Regenerate <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
+      // Icon only, with the words in a tooltip: the button sits over the
+      // caption rows, and a label that wide covers them for no gain — the
+      // confirmation modal it opens says what it does in full.
+      holder.innerHTML = '<div class="modal-action"><label id="regenerate-float-btn" for="regenerate-captions-modal" class="fixed top-20 right-8 btn btn-square btn-outline btn-primary tooltip" data-tip="Regenerate captions from transcript" aria-label="Regenerate captions from transcript"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></label></div>';
 
       // The cache exists to preserve HAND-EDITED captions across view
       // switches. While captions are machine-synced from the transcript it
@@ -81,7 +198,8 @@
           generateCaptionsFromCaptionEditor();
         });
       }
-      
+
+      updateCaptionRates();   // freshly built rows, or the cache restored (#639)
     } 
 
     function captureCaptions(holder) {
@@ -167,7 +285,8 @@
     }
 
     const cap2 = caption();
-    let subs = cap2.init("hypertranscript", "hyperplayer", '37' , '21'); // transcript Id, player Id, max chars, min chars for caption line
+    const bootLines = typeof captionLineLengths === 'function' ? captionLineLengths() : { max: 32, min: 21 };
+    let subs = cap2.init("hypertranscript", "hyperplayer", String(bootLines.max), String(bootLines.min)); // transcript Id, player Id, max chars, min chars for caption line
     
     const countSeconds = (str) => {
       const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
@@ -470,6 +589,7 @@
     // looking clean and were lost on close (#505). Announcing it here covers
     // all four in one place rather than chasing three onclick handlers.
     function makeCaptionEditorActive() {
+      updateCaptionRates();   // a word added or cut, a time changed, a merge (#639)
       updateCaptionsFromTranscript = false;
       document.querySelector('#regenerate-btn').classList.remove("btn-disabled");
       generateCaptionsFromCaptionEditor();

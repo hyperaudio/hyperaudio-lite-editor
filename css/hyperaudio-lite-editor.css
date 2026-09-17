@@ -960,8 +960,27 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
 /* The caption editor's floating Regenerate button is injected as
    fixed top-20 right-8 with no z-index, so positioned content (the caption
    rows / transcript holder) painted over it. Lift it above content, below
-   the drawer (45) and navbar (60). */
-#regenerate-float-btn { z-index: 20; }
+   the drawer (45) and navbar (60).
+
+   Solid, not the outline button's transparent fill: it floats over the
+   caption rows, which scroll underneath it, and text showing through a
+   button is unreadable on both counts. White matches the card it sits on.
+   Hover keeps DaisyUI's filled-primary inversion, so the affordance is
+   unchanged. */
+#regenerate-float-btn {
+  z-index: 20;
+  background-color: #ffffff;
+}
+/* It sits at the right edge, so a centred tooltip would run off-screen —
+   the mirror of the left-edge rule the player controls use (#546). */
+#regenerate-float-btn.tooltip::before {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+#regenerate-float-btn:hover {
+  background-color: oklch(var(--p));
+}
 
 /* Video collapse (audio-only button), desktop: slide the frame shut instead
    of a display:none pop, at the same 0.5s ease as the sidebar slide so all
@@ -1753,15 +1772,19 @@ html.ha-transcribing #upload-transcribe-btn {
 
 /* Settings modal (#615): the Info modal's section idiom, with rows that put
    the control on the right and a muted hint under the label. */
-#settings-modal + .modal .settings-section { margin-top: 16px; }
-#settings-modal + .modal .settings-section-label {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: oklch(var(--bc) / 0.55);
+/* Tabs: DaisyUI's lifted tabs, the same ones the Transcribe modal uses for
+   its engines, so Settings looks like the rest of the app. The radio inputs
+   are the tabs, so the keyboard comes with them and DaisyUI shows the checked
+   tab's panel. The panel is a fixed height, so the modal stays put as tabs
+   change and a tall tab scrolls inside instead. */
+#settings-modal + .modal .settings-tabs { margin-top: 12px; }
+#settings-modal + .modal .settings-tabs > .tab { white-space: nowrap; }
+#settings-modal + .modal .settings-panel {
+  height: 30rem;
+  overflow-y: auto;
+  padding: 0 20px 16px;
 }
+
 #settings-modal + .modal .settings-row {
   display: flex;
   align-items: center;
@@ -1771,7 +1794,7 @@ html.ha-transcribing #upload-transcribe-btn {
   border-top: 1px solid oklch(var(--bc) / 0.08);
   line-height: 1.4;
 }
-#settings-modal + .modal .settings-section-label + .settings-row { border-top: none; }
+#settings-modal + .modal .settings-panel > .settings-row:first-child { border-top: none; }
 #settings-modal + .modal .settings-row-toggle { cursor: pointer; }
 #settings-modal + .modal .settings-text { flex: 1 1 auto; min-width: 0; }
 #settings-modal + .modal .settings-hint {
@@ -1825,4 +1848,48 @@ html.ha-transcribing #upload-transcribe-btn {
   border-radius: 0.5rem;
   z-index: -1;
   pointer-events: none;
+}
+
+/* Reading rate on each caption (#639): the top row of a caption carries the
+   play button on the left and the rate on the right, so it needs no absolute
+   positioning and stays clear of the line inputs below. Tabular figures keep
+   the number from shifting as it changes under the caret. */
+.caption-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+/* The rate is a control — clicking it switches the measure — but it reads as
+   a label: no button chrome, just the number, with the affordance on hover
+   and a real focus ring for the keyboard. */
+.caption-rate {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 0.6);
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+}
+/* Over the limit (#641): colour, and weight so it does not depend on colour. */
+.caption-rate-over {
+  color: oklch(var(--er));
+  font-weight: 700;
+}
+.caption-rate-over:hover {
+  color: oklch(var(--er));
+  background: oklch(var(--er) / 0.10);
+}
+.caption-rate:hover {
+  color: oklch(var(--bc) / 0.9);
+  background: oklch(var(--bc) / 0.06);
+}
+.caption-rate:focus-visible {
+  outline: 2px solid oklch(var(--p));
+  outline-offset: 1px;
 }
