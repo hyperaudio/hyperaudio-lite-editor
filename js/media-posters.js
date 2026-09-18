@@ -100,26 +100,32 @@
     return !!(entry && typeof entry === 'object' && entry.media && entry.media.hasVideo === true);
   }
 
-  // A strip of film for a video that has no picture of its own — a link the
-  // server will not let a canvas read — so it is not drawn as a soundwave.
-  // Two bands of sprocket holes top and bottom, the frame between them left
-  // open where the play badge sits.
+  // A short length of film for a video that has no picture of its own — a
+  // link the server will not let a canvas read — so it is not drawn as a
+  // soundwave. Centred, on the wave's footprint, so it reads the same way
+  // the wave does with the play badge sitting over the middle of it.
   function filmStripSvg(W, H, fill) {
+    const span = 240;                       // the wave's width
+    const left = (W - span) / 2;
+    const stripH = 150;
+    const top = (H - stripH) / 2;
+    const band = 26;                        // the sprocket bands, top and bottom
+    const holeW = 16;
+    const holeH = 11;
+    const count = 8;
+    const gap = span / count;
     const holes = [];
-    const holeW = 22;
-    const holeH = 14;
-    const count = 12;
-    const gap = W / count;
     for (let i = 0; i < count; i += 1) {
-      const x = Math.round(i * gap + (gap - holeW) / 2);
-      holes.push('<rect x="' + x + '" y="34" width="' + holeW + '" height="' + holeH + '" rx="3"/>');
-      holes.push('<rect x="' + x + '" y="' + (H - 34 - holeH) + '" width="' + holeW + '" height="' + holeH + '" rx="3"/>');
+      const x = Math.round(left + i * gap + (gap - holeW) / 2);
+      holes.push('<rect x="' + x + '" y="' + (top + (band - holeH) / 2) + '" width="' + holeW + '" height="' + holeH + '" rx="2.5"/>');
+      holes.push('<rect x="' + x + '" y="' + (top + stripH - band + (band - holeH) / 2) + '" width="' + holeW + '" height="' + holeH + '" rx="2.5"/>');
     }
     return '<rect width="' + W + '" height="' + H + '" fill="' + fill + '"/>'
-      + '<g fill="' + GLYPH_STROKE + '" opacity="0.28">'
-      + '<rect x="0" y="0" width="' + W + '" height="82"/>'
-      + '<rect x="0" y="' + (H - 82) + '" width="' + W + '" height="82"/></g>'
-      + '<g fill="' + fill + '" opacity="0.9">' + holes.join('') + '</g>';
+      + '<g fill="' + GLYPH_STROKE + '" opacity="0.75">'
+      + '<rect x="' + left + '" y="' + top + '" width="' + span + '" height="' + band + '" rx="4"/>'
+      + '<rect x="' + left + '" y="' + (top + stripH - band) + '" width="' + span + '" height="' + band + '" rx="4"/>'
+      + '<rect x="' + left + '" y="' + (top + band) + '" width="' + span + '" height="' + (stripH - 2 * band) + '" opacity="0.25"/></g>'
+      + '<g fill="' + fill + '">' + holes.join('') + '</g>';
   }
 
   function glyphUrl(entry) {
@@ -376,12 +382,19 @@
     return url;
   }
 
+  // The capture's URL if it has been read this session, synchronously: what
+  // loadstart needs to cover a project switch with the right picture at once
+  // rather than with a glyph the capture then replaces a frame later.
+  function cachedUrlFor(id) {
+    return urlCache.has(id) ? urlCache.get(id) : null;
+  }
+
   document.addEventListener('hyperaudioLibraryChanged', () => {
     const lib = window.HyperaudioSave && window.HyperaudioSave.library;
     if (lib && typeof lib.currentId === 'function') ensureProjectPoster(lib.currentId());
   });
 
   window.MediaPosters = Object.freeze({
-    ensureProjectPoster, urlFor, captureFrameBlob, captureCandidates, glyphUrl, glyphHue, glyphSeed, glyphFill, glyphIsVideo,
+    ensureProjectPoster, urlFor, cachedUrlFor, captureFrameBlob, captureCandidates, glyphUrl, glyphHue, glyphSeed, glyphFill, glyphIsVideo,
   });
 })();

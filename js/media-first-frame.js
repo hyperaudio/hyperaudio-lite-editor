@@ -107,6 +107,29 @@
       // start, or audio, where the poster IS the display — whatever is
       // already showing is left alone, which is the same continuity.
       loadToken += 1;
+      // A different project's medium arriving: the picture up is the outgoing
+      // project's, and for the length of a slow load that is the wrong
+      // project's face over this one's transcript. Cover the gap with this
+      // project's own glyph — provisional, so a capture or a frame replaces
+      // it the moment either exists. Within one project the outgoing frame
+      // still covers the gap, which keeps the continuity a reload had.
+      const id = currentProjectId();
+      if (id !== null && applied.project !== null && applied.project !== id) {
+        const posters = window.MediaPosters;
+        if (posters && typeof posters.glyphUrl === 'function') {
+          const token = loadToken;
+          // a capture read earlier this session is the answer at once
+          const seen = typeof posters.cachedUrlFor === 'function' ? posters.cachedUrlFor(id) : null;
+          if (seen !== null) { setPoster(seen, true, id, false); return; }
+          setPoster(posters.glyphUrl(id), true, id);   // seeded by id now, re-seeded from the entry below
+          currentEntry(id).then((entry) => {
+            if (token !== loadToken || applied.project !== id || applied.provisional !== true) return;
+            const url = posters.glyphUrl(entry);
+            if (player.getAttribute('poster') !== url) setPoster(url, true, id);
+          });
+          return;
+        }
+      }
       const frozen = freezeFrame();
       // the OUTGOING medium's frame, covering the gap — not this one's
       if (frozen !== null) setPoster(frozen, false);
@@ -222,10 +245,24 @@
       // by this one's capture; failing that, the markup's poster is a better
       // answer than another project's picture.
       const token = loadToken;
-      applyStoredPoster(token, true).then((applied) => {
-        if (applied || token !== loadToken) return;
-        const showing = player.getAttribute('poster');
-        if (defaultPoster !== null && showing !== null && showing.startsWith('data:')) {
+      applyStoredPoster(token, true).then(async (upgraded) => {
+        if (upgraded || token !== loadToken) return;
+        // No capture. What is showing is either this project's own picture —
+        // its glyph, put up at loadstart or by the library change — which
+        // stays, or a foreign one, which gives way to the glyph. It used to
+        // give way to the MARKUP poster whenever it was a data: URL, which
+        // painted the logo over the project's own glyph for the length of a
+        // slow load, and the logo is branding, not this project's picture
+        // (#603).
+        const showing = player.getAttribute('poster') || '';
+        if (!isForeign(showing)) return;
+        const posters = window.MediaPosters;
+        const id = currentProjectId();
+        if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
+          const entry = await currentEntry(id);
+          if (token !== loadToken) return;
+          setPoster(posters.glyphUrl(entry), true, id);
+        } else if (defaultPoster !== null) {
           setPoster(defaultPoster, true);
         }
       });
@@ -389,9 +426,14 @@
     // markup and starts loading before any script, so a cached mp3 can
     // report metadata before this module has a listener to hear it.
     document.addEventListener('hyperaudioLibraryChanged', () => {
+      // Before metadata a video reports no width and looks like audio: this
+      // re-seeded a glyph over a video project's capture for one frame at
+      // every switch. settleAudio runs on loadedmetadata and will do this
+      // properly once the medium is known.
+      if (player.readyState < 1) return;
       if (player.videoWidth > 0) return;
       const showing = player.getAttribute('poster') || '';
-      if (showing === defaultPoster && player.readyState >= 1) { settleAudio(); return; }
+      if (showing === defaultPoster) { settleAudio(); return; }
       if (!showing.startsWith('data:image/svg')) return;
       const posters = window.MediaPosters;
       const id = currentProjectId();
