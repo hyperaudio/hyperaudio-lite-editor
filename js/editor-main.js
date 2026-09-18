@@ -258,6 +258,13 @@
     // the project then exports uncoloured until the next Regenerate.
     function populateCaptionEditorFromVtt(vtt, speakers) {
       const data = [];
+      // The file we were handed IS the captions from here, so both download
+      // links follow it — the SRT included, which neither the restore nor the
+      // import route ever wrote. Kept before the parsing below strips the
+      // header and collapses the blank lines out of this very string.
+      if (typeof window.setCaptionDownloadLinks === 'function') {
+        window.setCaptionDownloadLinks(vtt);
+      }
       vtt = vtt.replace("WEBVTT\n\n","");
       vtt = vtt.replaceAll("\n\n","\n");
 

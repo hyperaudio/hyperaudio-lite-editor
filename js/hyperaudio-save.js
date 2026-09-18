@@ -1329,8 +1329,12 @@
           ? options.captions.updateFromTranscript !== false : true;
       }
       if (loaded.captionsVtt && track !== null) {
-        const vttLink = document.querySelector('#download-vtt');
-        if (vttLink !== null) vttLink.setAttribute('href', 'data:text/vtt,' + encodeURIComponent(loaded.captionsVtt));
+        // both caption links, through the one writer (editor-core): this used
+        // to set the WebVTT link alone, leaving a restored project with an
+        // empty .srt download
+        if (typeof window.setCaptionDownloadLinks === 'function') {
+          window.setCaptionDownloadLinks(loaded.captionsVtt);
+        }
         if (typeof populateCaptionEditorFromVtt === 'function') {
           if (typeof captionCache !== 'undefined') captionCache = null;
           // the speakers this project recorded for its cues (#536); a list

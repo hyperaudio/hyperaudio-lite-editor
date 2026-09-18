@@ -1233,6 +1233,55 @@
       document.addEventListener('hyperaudioLibraryChanged', nameDownloadLinks);
       nameDownloadLinks();
 
+      // Both caption links took their address from the two caption WRITERS
+      // alone, which run on transcription, caption-editor entry, regenerate
+      // and sanitise. None of them runs at boot — the boot pass builds the
+      // TRACK straight from the generator — and the project-restore and
+      // VTT-import routes wrote at most the WebVTT link. So a fresh page
+      // handed you an empty .vtt and .srt, and a reloaded project an empty
+      // .srt, with no sign anything was wrong. The captions themselves were
+      // never missing: the live track has had them all along.
+      //
+      // One helper writes both, from whatever VTT its caller holds. The SRT
+      // is the same cues in the other format, which media-export already
+      // knows how to write, so there is no second serialiser here.
+      const setCaptionDownloadLinks = (vtt) => {
+        if (typeof vtt !== 'string' || vtt.trim() === '') return false;
+        const vttLink = document.getElementById('download-vtt');
+        if (vttLink !== null) {
+          vttLink.setAttribute('href', 'data:text/vtt,' + encodeURIComponent(vtt));
+        }
+        const srtLink = document.getElementById('download-srt');
+        const captions = window.MediaExportCaptions;
+        if (srtLink !== null && captions !== undefined) {
+          const srt = captions.cuesToSrt(captions.parseVttCues(vtt)).replace(/^\n/, '');
+          if (srt.trim() !== '') {
+            srtLink.setAttribute('href', 'data:text/srt,' + encodeURIComponent(srt));
+          }
+        }
+        return true;
+      };
+      window.setCaptionDownloadLinks = setCaptionDownloadLinks;
+
+      // The backstop, for any route that leaves a link empty: on the way out,
+      // fill from the live track, which is the captions whatever produced
+      // them. Capture phase, so anything reading the address later in the
+      // same click — the speaker colouring (#536) — sees the real file.
+      const fillEmptyCaptionLinks = () => {
+        const empty = (id) => {
+          const link = document.getElementById(id);
+          return link !== null && (link.getAttribute('href') || '').length === 0;
+        };
+        if (!empty('download-vtt') && !empty('download-srt')) return;
+        const save = window.HyperaudioSave;
+        setCaptionDownloadLinks(save && typeof save.getCaptionsVtt === 'function'
+          ? save.getCaptionsVtt() : '');
+      };
+      ['download-vtt', 'download-srt'].forEach((id) => {
+        const link = document.getElementById(id);
+        if (link !== null) link.addEventListener('click', fillEmptyCaptionLinks, true);
+      });
+
       ['download-html', 'download-vtt', 'download-srt', 'download-vtt-words',
         'download-hypertranscript'].forEach((id) => {
         const link = document.getElementById(id);
@@ -1501,6 +1550,19 @@
     });
     return captions;
   }
+
+  // When the caption editor has never been built there is nothing recorded and
+  // nothing edited, so the transcript is still the whole truth and the speakers
+  // for a set of cue times can be read straight off it. ONLY for that case:
+  // once captions exist they carry their own speakers, and reading the
+  // transcript again is exactly what would let a later transcript edit
+  // recolour captions someone had already finished.
+  function captionSpeakersForCues(starts) {
+    const cues = (Array.isArray(starts) ? starts : []).map((start) => ({ start }));
+    attachCaptionSpeakers(cues, captionSourceWithoutStruckWords());
+    return cues.map((c) => (typeof c.speaker === 'string' ? c.speaker : ''));
+  }
+  window.captionSpeakersForCues = captionSpeakersForCues;
 
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
     const cap1 = caption();

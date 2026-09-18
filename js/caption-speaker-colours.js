@@ -175,8 +175,25 @@
     return !!(s && typeof s.get === 'function' && s.get('captionColourSpeakers') === true);
   };
 
-  const speakerList = () =>
-    (typeof window.captionSpeakerList === 'function' ? window.captionSpeakerList() : []);
+  // Every cue's start time, in the order the cues appear.
+  function cueStarts(text) {
+    return splitBlocks(text)
+      .map((block) => block.split('\n').find(isTimingLine))
+      .filter((line) => line !== undefined)
+      .map((line) => line.slice(0, line.indexOf(' --> ')).trim());
+  }
+
+  // What the captions recorded when they were generated. Empty means the
+  // caption editor has never been built — a download straight from a freshly
+  // opened page — in which case no caption has been edited and the transcript
+  // is still the whole truth, so it is read for this one export rather than
+  // handing back a plain file. Every other time the recorded list wins.
+  const speakerList = (plain) => {
+    const recorded = typeof window.captionSpeakerList === 'function' ? window.captionSpeakerList() : [];
+    if (recorded.length > 0) return recorded;
+    if (typeof window.captionSpeakersForCues !== 'function') return [];
+    return window.captionSpeakersForCues(cueStarts(plain));
+  };
 
   // The existing link already carries a current data: URL of the plain file,
   // written by whichever caption writer ran last. Reading it back is what keeps
@@ -203,7 +220,7 @@
       if (!enabled()) return;                 // plain download, untouched
       const plain = textFromLink(link);
       if (plain === null) return;
-      const speakers = speakerList();
+      const speakers = speakerList(plain);
       if (speakers.length === 0) return;      // no speakers recorded: nothing to colour
       const decorated = decorate(plain, speakers);
       if (decorated === plain) return;
@@ -230,11 +247,11 @@
       wire();
     }
     window.CaptionSpeakerColours = Object.freeze({
-      PALETTE, decorateVtt, decorateSrt, assignColours, escapeCueText, sanitiseName,
+      PALETTE, decorateVtt, decorateSrt, assignColours, escapeCueText, sanitiseName, cueStarts,
     });
   }
 
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { PALETTE, decorateVtt, decorateSrt, assignColours, escapeCueText, sanitiseName };
+    module.exports = { PALETTE, decorateVtt, decorateSrt, assignColours, escapeCueText, sanitiseName, cueStarts };
   }
 })();

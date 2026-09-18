@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { PALETTE, decorateVtt, decorateSrt, assignColours, escapeCueText, sanitiseName } =
+const { PALETTE, decorateVtt, decorateSrt, assignColours, escapeCueText, sanitiseName, cueStarts } =
   require('../../js/caption-speaker-colours.js');
 
 const VTT = [
@@ -145,4 +145,11 @@ test('a NOTE block does not consume a speaker, so cues stay aligned', () => {
 test('the trailing newline of the input is kept', () => {
   assert.ok(decorateVtt(VTT, ['Ada', 'Ada', 'Grace']).endsWith('</v>\n'));
   assert.ok(decorateSrt(SRT, ['Ada', 'Grace']).endsWith('</font>\n'));
+});
+
+test('cueStarts: one start per cue, in order, headers and notes skipped', () => {
+  assert.deepEqual(cueStarts(VTT), ['00:00:00.320', '00:00:03.840', '00:00:08.000']);
+  assert.deepEqual(cueStarts(SRT), ['00:00:00,320', '00:00:03,840']);
+  assert.deepEqual(cueStarts('WEBVTT\n\nNOTE nothing here\n'), []);
+  assert.deepEqual(cueStarts(''), []);
 });
