@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.9 — last changed in release 0.6.9
+ * @version 0.6.10 — last changed in release 0.6.10
  * @license MIT
  */
 
@@ -336,6 +336,51 @@ function fetchDataLocal(token, file, language, model) {
   });
 }
 
+// Deepgram's own speaker flags around each change, against the words as they
+// were spoken: a label that looks mid-sentence is either theirs, in which case
+// the flag really does flip there, or ours, in which case it does not. Prints
+// the words either side, the gap before each, and whether the flip lasts.
+// hyperaudioSpeakerDebug() in the console after a Deepgram transcription.
+window.hyperaudioSpeakerDebug = function hyperaudioSpeakerDebug(limit) {
+  const json = window.hyperaudioLastDeepgram;
+  if (!json) {
+    console.log('No Deepgram response this session — transcribe again, then run this.');
+    return null;
+  }
+  const words = json.results.channels[0].alternatives[0].words || [];
+  const textOf = (w) => (typeof w.punctuated_word === 'string' && w.punctuated_word !== '' ? w.punctuated_word : w.word);
+  const gap = (i) => (i === 0 ? 0 : Number((words[i].start - words[i - 1].end).toFixed(2)));
+  // how many words this speaker holds before the next change
+  const runFrom = (i) => {
+    let n = 0;
+    while (i + n < words.length && words[i + n].speaker === words[i].speaker) n += 1;
+    return n;
+  };
+  const changes = [];
+  for (let i = 1; i < words.length; i += 1) {
+    if (words[i].speaker !== words[i - 1].speaker) changes.push(i);
+  }
+  const lines = changes.slice(0, limit || 12).map((i) => {
+    const before = words.slice(Math.max(0, i - 5), i).map(textOf).join(' ');
+    const after = words.slice(i, i + 5).map(textOf).join(' ');
+    const endsSentence = /[.?!]$/.test(textOf(words[i - 1]) || '');
+    return '  ...' + before + '  [speaker-' + words[i].speaker + ']  ' + after + '...'
+      + '\n     gap ' + gap(i) + 's | prev ends sentence: ' + endsSentence
+      + ' | this speaker holds ' + runFrom(i) + ' word(s)';
+  });
+  const report = {
+    words: words.length,
+    speakers: [...new Set(words.map((w) => w.speaker))].sort(),
+    changes: changes.length,
+    changesMidSentence: changes.filter((i) => !/[.?!]$/.test(textOf(words[i - 1]) || '')).length,
+    oneWordTurns: changes.filter((i) => runFrom(i) === 1).length,
+    model: (json.metadata && json.metadata.models) || null,
+  };
+  console.log(JSON.stringify(report, null, 1));
+  console.log(lines.join('\n'));
+  return report;
+};
+
 function getApiUrl(language, model) {
   const languageParam = (language === "xx") ? "&detect_language=true" : `&language=${language}`;
   return `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=v2&topics=true&smart_format=true`;
@@ -397,6 +442,10 @@ function parseData(json) {
   const significantGapInSeconds = 4.0;
 
   const wordData = json.results.channels[0].alternatives[0].words;
+  // Kept for hyperaudioSpeakerDebug(): where a speaker label looks wrong, the
+  // question is whether Deepgram said the speaker changed there, and only
+  // their own flags answer it.
+  window.hyperaudioLastDeepgram = json;
   // The visible text comes off each word, beside that word's own timing and
   // speaker. It used to come from a SECOND list — the formatted transcript
   // split on spaces — matched to the word array by position alone, with
