@@ -1564,6 +1564,20 @@
   }
   window.captionSpeakersForCues = captionSpeakersForCues;
 
+  // The transcript to READ, wherever it currently lives. In caption mode the
+  // element is out of the document — held in the cache while the caption rows
+  // have the screen — so anything that reaches for #hypertranscript directly
+  // finds nothing. The word-level VTT did, and wrote a bare header. One answer
+  // for every reader outside this module, matching the rule
+  // captionSourceWithoutStruckWords already follows.
+  window.currentTranscriptRoot = function currentTranscriptRoot() {
+    const live = document.querySelector('#hypertranscript');
+    if (captionMode !== true) return live;
+    const cached = (transcriptCache === null || transcriptCache === undefined)
+      ? null : transcriptCache.querySelector('#hypertranscript');
+    return cached !== null ? cached : live;
+  };
+
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
     const cap1 = caption();
     // one route for both views: the only difference was which transcript to

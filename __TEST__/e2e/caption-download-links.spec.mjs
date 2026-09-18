@@ -100,3 +100,20 @@ test('speaker colours reach a download taken before the captions are built (#536
   const srt = await download(page, 'download-srt');
   expect(srt).toMatch(/<font color="#[0-9a-f]{6}">/);
 });
+
+test('the word-level WebVTT is the same file from either view', async ({ page }) => {
+  // It always read the transcript element straight out of the document, and in
+  // caption mode the transcript is not there — so reaching the menu from the
+  // caption editor downloaded a header with no cues under it.
+  const fromTranscript = await download(page, 'download-vtt-words');
+  expect(cueCount(fromTranscript)).toBeGreaterThan(3);
+
+  await page.click('#caption-editor-btn');
+  await page.waitForSelector('#captions-display .caption');
+  const fromCaptions = await download(page, 'download-vtt-words');
+  expect(fromCaptions).toBe(fromTranscript);
+
+  await page.click('#transcript-editor-btn');
+  await expect.poll(() => page.locator('#hypertranscript').isVisible()).toBe(true);
+  expect(await download(page, 'download-vtt-words')).toBe(fromTranscript);
+});
