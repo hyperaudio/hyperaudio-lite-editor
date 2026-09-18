@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.10 — last changed in release 0.6.10
+ * @version 0.6.11 — last changed in release 0.6.11
  * @license MIT
  */
 
@@ -369,6 +369,8 @@ window.hyperaudioSpeakerDebug = function hyperaudioSpeakerDebug(limit) {
       + ' | this speaker holds ' + runFrom(i) + ' word(s)';
   });
   const report = {
+    speakersFrom: (json.results && json.results.utterances) ? 'utterances' : 'per-word flags',
+    utterances: ((json.results && json.results.utterances) || []).length || 0,
     words: words.length,
     speakers: [...new Set(words.map((w) => w.speaker))].sort(),
     changes: changes.length,
@@ -383,7 +385,10 @@ window.hyperaudioSpeakerDebug = function hyperaudioSpeakerDebug(limit) {
 
 function getApiUrl(language, model) {
   const languageParam = (language === "xx") ? "&detect_language=true" : `&language=${language}`;
-  return `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=v2&topics=true&smart_format=true`;
+  // utterances: speaker-tagged segments, cut on pauses and turns, which is
+  // what makes a speaker label land at the start of what someone said rather
+  // than a few words into it (see applySpeakersFromUtterances)
+  return `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&utterances=true&summarize=v2&topics=true&smart_format=true`;
 }
 
 function displayAppropriateErrorMessage(error) {
@@ -459,10 +464,57 @@ function parseData(json) {
   console.log("wordData...");
   console.log(wordData);
 
+  // Deepgram's `diarize` tags every word on its own, with no regard for what
+  // was being said, so a boundary lands a few words short of where the turn
+  // actually ended and the next speaker is credited with the tail of the
+  // previous one's sentence — the label then reads as mid-sentence. Measured
+  // on a six-way debate: eight or nine of about thirty changes fell inside a
+  // sentence, where AssemblyAI, which returns speaker-tagged utterances, had
+  // essentially none.
+  //
+  // `utterances` is Deepgram's equivalent: segments cut on pauses and turns,
+  // each with one speaker. Taking the speaker from the utterance a word
+  // belongs to moves every boundary onto the edge of something someone said.
+  // Words are matched by their own start time, so nothing depends on the two
+  // lists being the same length or in step.
+  //
+  // Best-effort by design: an older account, a model without utterance
+  // support, or any response that does not carry them leaves the per-word
+  // flags exactly as they were.
+  function applySpeakersFromUtterances(words, utterances) {
+    if (!Array.isArray(utterances) || utterances.length === 0) return 0;
+    const spans = utterances
+      .filter((u) => u && typeof u.speaker === 'number'
+        && Number.isFinite(u.start) && Number.isFinite(u.end))
+      .sort((a, b) => a.start - b.start);
+    if (spans.length === 0) return 0;
+    let moved = 0;
+    let at = 0;
+    words.forEach((w) => {
+      if (!Number.isFinite(w.start)) return;
+      // the utterance this word starts within, or the last one that began
+      // before it — the walk only goes forward, both lists being in time order
+      while (at + 1 < spans.length && spans[at + 1].start <= w.start) at += 1;
+      const span = spans[at];
+      const inside = w.start >= span.start - 0.001 && w.start <= span.end + 0.001;
+      if (!inside) return;                   // a gap between utterances: leave it be
+      if (w.speaker !== span.speaker) moved += 1;
+      w.speaker = span.speaker;
+    });
+    return moved;
+  }
+  const utterances = (json.results && json.results.utterances) || json.utterances || null;
+  const movedByUtterances = applySpeakersFromUtterances(wordData, utterances);
+  console.log(utterances === null
+    ? 'Deepgram: no utterances in the response — speakers as tagged per word'
+    : `Deepgram: speakers taken from ${utterances.length} utterances (${movedByUtterances} word(s) re-assigned)`);
+
   // Fix Deepgram diarization edge case where the last word of a speaker turn
   // gets attached to the next speaker. Signature: the word starts essentially
   // on top of the previous speaker's word, but the next word from this "new"
-  // speaker is far away. In that case, reassign the word back.
+  // speaker is far away. In that case, reassign the word back. Only needed
+  // where utterances did not settle it: it is the same fault, patched a word
+  // at a time.
   const speakerReassignGap = 0.3;
   for (let i = 1; i < wordData.length - 1; i++) {
     const prev = wordData[i - 1];
