@@ -1,7 +1,7 @@
 /**
  * media-posters.js
  * (C) The Hyperaudio Project
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.20 — last changed in release 1.3.20
  * @license MIT
  *
  * Project posters (#523 phase A): a first-frame JPEG captured from each
@@ -92,24 +92,66 @@
 
   // 16:9 to match the popout's thumb, and so the player keeps the shape it has
   // with the markup poster rather than going square.
+  // Whether an entry (or a state) is known to carry a picture. Recorded on
+  // the library entry from the player once metadata is in; entries from
+  // before the field existed, and links whose metadata never arrived, are
+  // unknown and draw as audio, which is what they always did.
+  function glyphIsVideo(entry) {
+    return !!(entry && typeof entry === 'object' && entry.media && entry.media.hasVideo === true);
+  }
+
+  // A short length of film for a video that has no picture of its own — a
+  // link the server will not let a canvas read — so it is not drawn as a
+  // soundwave. Centred, on the wave's footprint, so it reads the same way
+  // the wave does with the play badge sitting over the middle of it.
+  function filmStripSvg(W, H, fill) {
+    const span = 240;                       // the wave's width
+    const left = (W - span) / 2;
+    const stripH = 150;
+    const top = (H - stripH) / 2;
+    const band = 26;                        // the sprocket bands, top and bottom
+    const holeW = 16;
+    const holeH = 11;
+    const count = 8;
+    const gap = span / count;
+    const holes = [];
+    for (let i = 0; i < count; i += 1) {
+      const x = Math.round(left + i * gap + (gap - holeW) / 2);
+      holes.push('<rect x="' + x + '" y="' + (top + (band - holeH) / 2) + '" width="' + holeW + '" height="' + holeH + '" rx="2.5"/>');
+      holes.push('<rect x="' + x + '" y="' + (top + stripH - band + (band - holeH) / 2) + '" width="' + holeW + '" height="' + holeH + '" rx="2.5"/>');
+    }
+    return '<rect width="' + W + '" height="' + H + '" fill="' + fill + '"/>'
+      + '<g fill="' + GLYPH_STROKE + '" opacity="0.75">'
+      + '<rect x="' + left + '" y="' + top + '" width="' + span + '" height="' + band + '" rx="4"/>'
+      + '<rect x="' + left + '" y="' + (top + stripH - band) + '" width="' + span + '" height="' + band + '" rx="4"/>'
+      + '<rect x="' + left + '" y="' + (top + band) + '" width="' + span + '" height="' + (stripH - 2 * band) + '" opacity="0.25"/></g>'
+      + '<g fill="' + fill + '">' + holes.join('') + '</g>';
+  }
+
   function glyphUrl(entry) {
     const W = 640;
     const H = 360;
-    const span = 240;              // the bars' width: well clear of the play badge
-    const left = (W - span) / 2;
-    const mid = H / 2;
-    const maxHalf = 70;
-    const step = span / (WAVE_BARS.length - 1);
-    const bars = WAVE_BARS.map((f, i) => {
-      const x = Math.round(left + i * step);
-      const half = Math.round(maxHalf * f);
-      return '<path d="M' + x + ' ' + (mid - half) + 'V' + (mid + half) + '"/>';
-    }).join('');
+    const fill = glyphFill(entry);
+    let body;
+    if (glyphIsVideo(entry)) {
+      body = filmStripSvg(W, H, fill);
+    } else {
+      const span = 240;              // the bars' width: well clear of the play badge
+      const left = (W - span) / 2;
+      const mid = H / 2;
+      const maxHalf = 70;
+      const step = span / (WAVE_BARS.length - 1);
+      const bars = WAVE_BARS.map((f, i) => {
+        const x = Math.round(left + i * step);
+        const half = Math.round(maxHalf * f);
+        return '<path d="M' + x + ' ' + (mid - half) + 'V' + (mid + half) + '"/>';
+      }).join('');
+      body = '<rect width="' + W + '" height="' + H + '" fill="' + fill + '"/>'
+        + '<g fill="none" stroke="' + GLYPH_STROKE + '" stroke-width="7"'
+        + ' stroke-linecap="round" opacity="0.75">' + bars + '</g>';
+    }
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '"'
-      + ' viewBox="0 0 ' + W + ' ' + H + '">'
-      + '<rect width="' + W + '" height="' + H + '" fill="' + glyphFill(entry) + '"/>'
-      + '<g fill="none" stroke="' + GLYPH_STROKE + '" stroke-width="7"'
-      + ' stroke-linecap="round" opacity="0.75">' + bars + '</g></svg>';
+      + ' viewBox="0 0 ' + W + ' ' + H + '">' + body + '</svg>';
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
@@ -180,12 +222,18 @@
   // Poster capture. Resolves null for audio (videoWidth 0), decode failure,
   // CORS taint, timeout, or a clip that is flat black at every candidate —
   // null means "no poster", never throws.
-  function captureFrameBlob(objectUrl) {
+  // `options.crossOrigin` asks the server for a CORS-readable copy: the only
+  // way a canvas may read a frame of a remote video. Asked on THIS detached
+  // element only, never on the live player — a server that does not allow it
+  // makes the element fail to load, which here resolves null and costs
+  // nothing, and on the player would have stopped the video playing.
+  function captureFrameBlob(objectUrl, options) {
     return new Promise((resolve) => {
       const video = document.createElement('video');
       video.muted = true;
       video.playsInline = true;
       video.preload = 'auto';
+      if (options && options.crossOrigin === true) video.crossOrigin = 'anonymous';
       let settled = false;
       const done = (blob) => {
         if (settled) return;
@@ -258,6 +306,27 @@
     }
   }
 
+  // The remote URL a link project plays from, off its library entry — when
+  // there is any point asking: an audio link has no frame, and a URL whose
+  // server has refused once this session is not asked again. ensureProjectPoster
+  // runs on every library change, and without this the intro's mp3 was asked
+  // for a cross-origin copy on each one, refused on each one.
+  const linkRefused = new Set();
+  async function linkUrlFor(id) {
+    const lib = window.HyperaudioSave && window.HyperaudioSave.library;
+    if (!lib || typeof lib.list !== 'function') return null;
+    try {
+      const entry = (await lib.list()).find((e) => String(e.id) === String(id));
+      if (!entry || !entry.media || entry.media.kind !== 'link') return null;
+      if (entry.media.hasVideo === false) return null;   // audio: nothing to capture
+      const url = entry.media.url;
+      if (typeof url !== 'string' || !/^https?:/i.test(url) || linkRefused.has(url)) return null;
+      return url;
+    } catch (e) {
+      return null;
+    }
+  }
+
   let ensureChain = Promise.resolve(); // captures serialize; they're heavy
   function ensureProjectPoster(id) {
     ensureChain = ensureChain.then(async () => {
@@ -265,19 +334,32 @@
       const existing = await readPoster(id);
       if (existing !== null && !(await storedPosterIsFlatBlack(id, existing))) return; // once is enough
       const media = await firstMediaFile(id);
-      if (media === null) return;
-      const url = URL.createObjectURL(media);
-      try {
-        const blob = await captureFrameBlob(url);
-        if (blob === null) return; // audio or uncapturable — the glyph serves
-        const s = store();
-        if (s === null) return;
-        const dir = await s.projectDir(id, false);
-        await s.writeFile(dir, POSTER_NAME, blob);
-        urlCache.delete(id); // next urlFor sees the fresh file
-      } finally {
-        URL.revokeObjectURL(url);
+      let url;
+      let blob;
+      if (media !== null) {
+        url = URL.createObjectURL(media);
+        try {
+          blob = await captureFrameBlob(url);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      } else {
+        // A link project stores no file. Its picture, if the server permits
+        // a cross-origin read, is captured from the URL itself: the same
+        // candidates, the same black-frame refusal, with the CORS request
+        // made on the detached copy only. A server that refuses resolves
+        // null, and the glyph serves as before.
+        const link = await linkUrlFor(id);
+        if (link === null) return;
+        blob = await captureFrameBlob(link, { crossOrigin: true });
+        if (blob === null) linkRefused.add(link);   // refused, or nothing worth keeping: once is enough
       }
+      if (blob === null || blob === undefined) return; // audio or uncapturable — the glyph serves
+      const s = store();
+      if (s === null) return;
+      const dir = await s.projectDir(id, false);
+      await s.writeFile(dir, POSTER_NAME, blob);
+      urlCache.delete(id); // next urlFor sees the fresh file
     }).catch(() => { /* ensure never breaks a caller */ });
     return ensureChain;
   }
@@ -300,12 +382,19 @@
     return url;
   }
 
+  // The capture's URL if it has been read this session, synchronously: what
+  // loadstart needs to cover a project switch with the right picture at once
+  // rather than with a glyph the capture then replaces a frame later.
+  function cachedUrlFor(id) {
+    return urlCache.has(id) ? urlCache.get(id) : null;
+  }
+
   document.addEventListener('hyperaudioLibraryChanged', () => {
     const lib = window.HyperaudioSave && window.HyperaudioSave.library;
     if (lib && typeof lib.currentId === 'function') ensureProjectPoster(lib.currentId());
   });
 
   window.MediaPosters = Object.freeze({
-    ensureProjectPoster, urlFor, captureFrameBlob, captureCandidates, glyphUrl, glyphHue, glyphSeed, glyphFill,
+    ensureProjectPoster, urlFor, cachedUrlFor, captureFrameBlob, captureCandidates, glyphUrl, glyphHue, glyphSeed, glyphFill, glyphIsVideo,
   });
 })();

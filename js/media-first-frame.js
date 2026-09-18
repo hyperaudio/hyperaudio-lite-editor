@@ -81,6 +81,37 @@
     // `provisional` marks a picture a real capture may still improve on — a
     // glyph, a first frame, a stand-in — which is what lets #619's upgrade
     // keep working. A stored capture is final.
+    // What a VIDEO project wears in the player when it has no picture of its
+    // own: black. A glyph here was a flash of colour on every switch before
+    // the capture landed, and for a link the server will not let a canvas
+    // read it was the picture for good; black is what an empty player looks
+    // like and is what a frame arrives over. The poster attribute is never
+    // removed to get there (#575: WebKit never leaves the display mode a
+    // posterless element enters). The film glyph stays for Recents.
+    const BLACK_POSTER = 'data:image/svg+xml,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">'
+      + '<rect width="640" height="360" fill="#000"/></svg>');
+    // The library as last announced, for the one moment — loadstart — that
+    // cannot wait for a read: whether the incoming project is audio or video
+    // decides between the wave and black.
+    const entriesById = new Map();
+    const rememberEntries = async () => {
+      const lib = window.HyperaudioSave && window.HyperaudioSave.library;
+      if (!lib || typeof lib.list !== 'function') return;
+      try { (await lib.list()).forEach((e) => entriesById.set(String(e.id), e)); } catch (e) { /* keep what we have */ }
+    };
+    document.addEventListener('hyperaudioLibraryChanged', rememberEntries);
+    rememberEntries();
+    const knownVideo = (entry) => !!(entry && entry.media && entry.media.hasVideo === true);
+    const knownAudio = (entry) => !!(entry && entry.media && entry.media.hasVideo === false);
+    // the cover for a project with no picture: black for video, the wave for
+    // audio, black while it is not yet known
+    const coverFor = (entry, id) => {
+      const posters = window.MediaPosters;
+      if (knownAudio(entry) && posters && typeof posters.glyphUrl === 'function') return posters.glyphUrl(entry || id);
+      return BLACK_POSTER;
+    };
+
     let applied = { url: null, token: -1, own: false, project: null, provisional: true };
     const setPoster = (url, own, project, provisional) => {
       applied = {
@@ -107,6 +138,21 @@
       // start, or audio, where the poster IS the display — whatever is
       // already showing is left alone, which is the same continuity.
       loadToken += 1;
+      // A different project's medium arriving: the picture up is the outgoing
+      // project's, and for the length of a slow load that is the wrong
+      // project's face over this one's transcript. Cover the gap with this
+      // project's own glyph — provisional, so a capture or a frame replaces
+      // it the moment either exists. Within one project the outgoing frame
+      // still covers the gap, which keeps the continuity a reload had.
+      const id = currentProjectId();
+      if (id !== null && applied.project !== null && applied.project !== id) {
+        const posters = window.MediaPosters;
+        // a capture read earlier this session is the answer at once
+        const seen = posters && typeof posters.cachedUrlFor === 'function' ? posters.cachedUrlFor(id) : null;
+        if (seen !== null) { setPoster(seen, true, id, false); return; }
+        setPoster(coverFor(entriesById.get(String(id)) || null, id), true, id);
+        return;
+      }
       const frozen = freezeFrame();
       // the OUTGOING medium's frame, covering the gap — not this one's
       if (frozen !== null) setPoster(frozen, false);
@@ -205,7 +251,9 @@
             const token = loadToken;
             const src = player.currentSrc || player.src;
             if (posters && typeof posters.captureFrameBlob === 'function' && src) {
-              posters.captureFrameBlob(src).then((blob) => {
+              // a remote URL is asked for a CORS-readable copy, on the
+              // detached element only; a server that refuses leaves frame 1
+              posters.captureFrameBlob(src, { crossOrigin: /^https?:/i.test(src) }).then((blob) => {
                 if (blob === null || token !== loadToken || !loaderOwnsScreen()) return;
                 setStandIn(URL.createObjectURL(blob));
               }).catch(() => { /* frame 1 stays */ });
@@ -220,12 +268,18 @@
       // by this one's capture; failing that, the markup's poster is a better
       // answer than another project's picture.
       const token = loadToken;
-      applyStoredPoster(token, true).then((applied) => {
-        if (applied || token !== loadToken) return;
-        const showing = player.getAttribute('poster');
-        if (defaultPoster !== null && showing !== null && showing.startsWith('data:')) {
-          setPoster(defaultPoster, true);
-        }
+      applyStoredPoster(token, true).then(async (upgraded) => {
+        if (upgraded || token !== loadToken) return;
+        // No capture. What is showing is either this project's own picture —
+        // its glyph, put up at loadstart or by the library change — which
+        // stays, or a foreign one, which gives way to the glyph. It used to
+        // give way to the MARKUP poster whenever it was a data: URL, which
+        // painted the logo over the project's own glyph for the length of a
+        // slow load, and the logo is branding, not this project's picture
+        // (#603).
+        const showing = player.getAttribute('poster') || '';
+        if (!isForeign(showing)) return;
+        setPoster(BLACK_POSTER, true, currentProjectId());
       });
     }
     ['loadedmetadata', 'loadeddata', 'resize', 'canplay'].forEach((ev) => {
@@ -350,15 +404,26 @@
       const token = loadToken;
       applyStoredPoster(token, player.videoWidth > 0).then(async (upgraded) => {
         if (upgraded || token !== loadToken || loaderOwnsScreen()) return;
-        // no capture to be had; a provisional picture of this medium's own is
-        // still better than a glyph, so only a foreign one is replaced
-        if (!isForeign(player.getAttribute('poster') || '')) return;
-        const posters = window.MediaPosters;
+        const showing = player.getAttribute('poster') || '';
         const id = currentProjectId();
-        if (!posters || typeof posters.glyphUrl !== 'function' || id === null) return;
+        if (id === null) return;
+        // A cover of this project's, put up before the entry knew whether the
+        // medium had a picture: black may now be owed a wave, or a wave black.
+        // Redraw from the entry as it stands; a frame of the medium's own is
+        // not a cover and stays.
+        if (!isForeign(showing) && applied.provisional === true && showing.startsWith('data:image/svg')) {
+          const entry = await currentEntry(id);
+          if (token !== loadToken) return;
+          const fresh = player.videoWidth > 0 ? BLACK_POSTER : coverFor(entry, id);
+          if (fresh !== showing) setPoster(fresh, true, id);
+          return;
+        }
+        // no capture to be had; a provisional picture of this medium's own is
+        // still better than a cover, so only a foreign one is replaced
+        if (!isForeign(showing)) return;
         const entry = await currentEntry(id);
         if (token !== loadToken) return;
-        setPoster(posters.glyphUrl(entry), true, id);
+        setPoster(player.videoWidth > 0 ? BLACK_POSTER : coverFor(entry, id), true, id);
       });
     });
 
@@ -372,9 +437,14 @@
     // markup and starts loading before any script, so a cached mp3 can
     // report metadata before this module has a listener to hear it.
     document.addEventListener('hyperaudioLibraryChanged', () => {
+      // Before metadata a video reports no width and looks like audio: this
+      // re-seeded a glyph over a video project's capture for one frame at
+      // every switch. settleAudio runs on loadedmetadata and will do this
+      // properly once the medium is known.
+      if (player.readyState < 1) return;
       if (player.videoWidth > 0) return;
       const showing = player.getAttribute('poster') || '';
-      if (showing === defaultPoster && player.readyState >= 1) { settleAudio(); return; }
+      if (showing === defaultPoster) { settleAudio(); return; }
       if (!showing.startsWith('data:image/svg')) return;
       const posters = window.MediaPosters;
       const id = currentProjectId();
@@ -409,12 +479,13 @@
       const meta = document.querySelector('meta[name="version"]');
       const report = {
         version: meta !== null ? meta.content : null,
-        poster: showing === '' ? '(none)' : showing.slice(0, 40),
+        poster: showing === '' ? '(none)' : (showing === BLACK_POSTER ? '(black cover)' : showing.slice(0, 40)),
         applied: {
           url: applied.url === null ? null : applied.url.slice(0, 40),
           token: applied.token, own: applied.own, project: applied.project, provisional: applied.provisional,
         },
         loadToken,
+        blackCover: showing === BLACK_POSTER,
         loaderOwnsScreen: loaderOwnsScreen(),
         currentProjectId: currentProjectId(),
         player: { readyState: player.readyState, videoWidth: player.videoWidth, src: (player.currentSrc || player.src || '').slice(0, 80) },

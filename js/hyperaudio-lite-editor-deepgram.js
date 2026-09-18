@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.8 — last changed in release 0.6.8
+ * @version 0.6.13 — last changed in release 0.6.13
  * @license MIT
  */
 
@@ -336,6 +336,51 @@ function fetchDataLocal(token, file, language, model) {
   });
 }
 
+// Deepgram's own speaker flags around each change, against the words as they
+// were spoken: a label that looks mid-sentence is either theirs, in which case
+// the flag really does flip there, or ours, in which case it does not. Prints
+// the words either side, the gap before each, and whether the flip lasts.
+// hyperaudioSpeakerDebug() in the console after a Deepgram transcription.
+window.hyperaudioSpeakerDebug = function hyperaudioSpeakerDebug(limit) {
+  const json = window.hyperaudioLastDeepgram;
+  if (!json) {
+    console.log('No Deepgram response this session — transcribe again, then run this.');
+    return null;
+  }
+  const words = json.results.channels[0].alternatives[0].words || [];
+  const textOf = (w) => (typeof w.punctuated_word === 'string' && w.punctuated_word !== '' ? w.punctuated_word : w.word);
+  const gap = (i) => (i === 0 ? 0 : Number((words[i].start - words[i - 1].end).toFixed(2)));
+  // how many words this speaker holds before the next change
+  const runFrom = (i) => {
+    let n = 0;
+    while (i + n < words.length && words[i + n].speaker === words[i].speaker) n += 1;
+    return n;
+  };
+  const changes = [];
+  for (let i = 1; i < words.length; i += 1) {
+    if (words[i].speaker !== words[i - 1].speaker) changes.push(i);
+  }
+  const lines = changes.slice(0, limit || 12).map((i) => {
+    const before = words.slice(Math.max(0, i - 5), i).map(textOf).join(' ');
+    const after = words.slice(i, i + 5).map(textOf).join(' ');
+    const endsSentence = /[.?!]$/.test(textOf(words[i - 1]) || '');
+    return '  ...' + before + '  [speaker-' + words[i].speaker + ']  ' + after + '...'
+      + '\n     gap ' + gap(i) + 's | prev ends sentence: ' + endsSentence
+      + ' | this speaker holds ' + runFrom(i) + ' word(s)';
+  });
+  const report = {
+    words: words.length,
+    speakers: [...new Set(words.map((w) => w.speaker))].sort(),
+    changes: changes.length,
+    changesMidSentence: changes.filter((i) => !/[.?!]$/.test(textOf(words[i - 1]) || '')).length,
+    oneWordTurns: changes.filter((i) => runFrom(i) === 1).length,
+    model: (json.metadata && json.metadata.models) || null,
+  };
+  console.log(JSON.stringify(report, null, 1));
+  console.log(lines.join('\n'));
+  return report;
+};
+
 function getApiUrl(language, model) {
   const languageParam = (language === "xx") ? "&detect_language=true" : `&language=${language}`;
   return `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=v2&topics=true&smart_format=true`;
@@ -396,15 +441,57 @@ function parseData(json) {
   const maxWordsInPara = 100;
   const significantGapInSeconds = 4.0;
 
-  const punctuatedWords = json.results.channels[0].alternatives[0].transcript.split(' ');
   const wordData = json.results.channels[0].alternatives[0].words;
+  // Kept for hyperaudioSpeakerDebug(): where a speaker label looks wrong, the
+  // question is whether Deepgram said the speaker changed there, and only
+  // their own flags answer it.
+  window.hyperaudioLastDeepgram = json;
+  // The visible text comes off each word, beside that word's own timing and
+  // speaker. It used to come from a SECOND list — the formatted transcript
+  // split on spaces — matched to the word array by position alone, with
+  // nothing checking the two were the same length. smart_format is exactly
+  // what breaks that: it rewrites spoken numbers and the like into forms with
+  // a different token count, and from the first mismatch every word after it
+  // is drawn from the wrong slot, so labels land against the wrong text. The
+  // formatted word is already on the object smart_format put it there for.
+  const textOf = (w) => (typeof w.punctuated_word === 'string' && w.punctuated_word !== ''
+    ? w.punctuated_word : w.word);
   console.log("wordData...");
   console.log(wordData);
+
+  // Deepgram's `diarize` tags every word on its own, with no regard for what
+  // was being said, so a boundary lands a few words short of where the turn
+  // actually ended and the next speaker is credited with the tail of the
+  // previous one's sentence: the label reads as mid-sentence. Measured on a
+  // six-way debate, eight or nine of about thirty changes fell inside a
+  // sentence, against essentially none from AssemblyAI on the same audio.
+  //
+  // Two attempts to correct it here were tried against that audio and both
+  // failed, so the speakers are left exactly as Deepgram reports them:
+  //
+  //   Taking each word's speaker from the `utterances` segment it falls in
+  //   merged distinct speakers — 374 words moved, the host swallowed into the
+  //   answer before it. Their segmentation runs through a speaker change when
+  //   the pause is short, so it is coarser than their own per-word flags.
+  //
+  //   Moving each change onto the nearest utterance edge, keeping every
+  //   change and only correcting its position, moved 16 of them and changed
+  //   nothing anyone could see. With about one utterance every nine seconds
+  //   the edges are too sparse to land on, and where one is near it is
+  //   generally mid-sentence too, being cut from the same diarization.
+  //
+  // The single-word repair below stays: it is narrow, it predates this, and
+  // it addresses a signature that is demonstrably theirs. Anything broader
+  // needs better data than the API gives us, and AssemblyAI, which returns
+  // speaker-tagged utterances, is the engine to reach for on diarized
+  // material. hyperaudioSpeakerDebug() reports what their flags actually say.
 
   // Fix Deepgram diarization edge case where the last word of a speaker turn
   // gets attached to the next speaker. Signature: the word starts essentially
   // on top of the previous speaker's word, but the next word from this "new"
-  // speaker is far away. In that case, reassign the word back.
+  // speaker is far away. In that case, reassign the word back. The same fault
+  // as the snap above addresses, patched a word at a time, and it still earns
+  // its place where a response carries no utterances.
   const speakerReassignGap = 0.3;
   for (let i = 1; i < wordData.length - 1; i++) {
     const prev = wordData[i - 1];
@@ -441,13 +528,13 @@ function parseData(json) {
 
   wordData.forEach((element, index) => {
 
-    let currentWord = punctuatedWords[index];
+    let currentWord = textOf(element);
     wordsInPara++;
 
     // if there's a gap longer than half a second consider splitting into new para
 
     if (previousElementEnd !== 0 && (element.start - previousElementEnd) > significantGapInSeconds || wordsInPara > maxWordsInPara){
-      let previousWord = punctuatedWords[index-1];
+      let previousWord = textOf(wordData[index-1]);
       let previousWordLastChar = previousWord.charAt(previousWord.length-1);
       if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
         hyperTranscript += "\n  </p>\n  <p>\n   ";
