@@ -89,3 +89,49 @@ test('a recording that does decode a frame keeps that frame, not a glyph', async
   expect(size).not.toBe('?');
   expect(size.startsWith('320x')).toBe(true);
 });
+
+test('a project reopened from Recents does not lend its picture to the next recording', async ({ page }) => {
+  // The case the first fix missed. A project opened from Recents wears its
+  // STORED capture, not a stand-in, and the library changes before
+  // library.currentId() moves on — so the capture fetched in that window was
+  // the previous project's, applied over the new recording.
+  const video = readFileSync(join(FIXTURES, 'video-320x240.mp4'));
+  await page.route(CLOUD_URL, async (route) => {
+    await new Promise((r) => setTimeout(r, 6000));
+    await route.fulfill({ status: 200, contentType: 'video/mp4', body: video });
+  });
+
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  // a LOCAL file, so the project stores its media and a capture can be made
+  await page.evaluate(async () => {
+    const res = await fetch('/__TEST__/fixtures/video-640x360.mp4');
+    const dt = new DataTransfer();
+    dt.items.add(new File([await res.blob()], 'local-clip.mp4', { type: 'video/mp4' }));
+    const input = document.querySelector('#deepgram-file');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    document.querySelector('#hypertranscript').innerHTML = '<div>Transcribing….</div>';
+    window.setTranscriptBusy(true);
+    await new Promise((r) => setTimeout(r, 900));
+    document.querySelector('#hypertranscript').innerHTML =
+      "<article><section><p><span data-m='0' data-d='400'>Local </span>"
+      + "<span data-m='400' data-d='400'>clip </span></p></section></article>";
+    window.setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  await expect.poll(async () => (await posterOwner(page)).current).toBe('local-clip.mp4');
+
+  // reopen it, so its own stored capture is what the player wears
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect.poll(async () => (await posterOwner(page)).scheme).toBe('blob:');
+  const lent = await page.evaluate(() => document.getElementById('hyperplayer').getAttribute('poster'));
+
+  await transcribe(page, CLOUD_URL, 'Second');
+  await expect.poll(async () => (await posterOwner(page)).current).toBe('cloud-recording.mp4');
+  await expect.poll(async () => (await posterOwner(page)).glyphOf).toBe('cloud-recording.mp4');
+  expect(await page.evaluate(() => document.getElementById('hyperplayer').getAttribute('poster'))).not.toBe(lent);
+});

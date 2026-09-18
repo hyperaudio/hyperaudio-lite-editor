@@ -66,6 +66,40 @@
       }
     }
 
+    // Every poster this module writes, recorded with the load it was written
+    // for and whether it belongs to THAT medium. The question the handlers
+    // below actually need is "is this picture the current medium's?", and only
+    // the recorded values answer it: a frozen outgoing frame, a medium's own
+    // frame, a project's stored capture and a glyph are all just URLs on the
+    // element, and a capture in particular is indistinguishable by sight.
+    // `project` is the id a stored capture was fetched for. The library
+    // changes before library.currentId() moves on, so a capture fetched during
+    // that window belongs to the project the user was on, not the one now
+    // owning the medium — and applying it is how the previous recording's
+    // picture kept ending up over a new transcription. Recorded, so the next
+    // change sees it is not this project's and asks again.
+    // `provisional` marks a picture a real capture may still improve on — a
+    // glyph, a first frame, a stand-in — which is what lets #619's upgrade
+    // keep working. A stored capture is final.
+    let applied = { url: null, token: -1, own: false, project: null, provisional: true };
+    const setPoster = (url, own, project, provisional) => {
+      applied = {
+        url,
+        token: loadToken,
+        own: own === true,
+        project: project === undefined ? null : project,
+        provisional: provisional !== false,
+      };
+      player.setAttribute('poster', url);
+    };
+    // Not this medium's, and not this project's: the frozen frame of the one
+    // before it, or a capture fetched for the project that was open a moment
+    // ago. Either way it has no business over what is on the player now.
+    const isForeign = (showing) => !(
+      applied.own === true && applied.token === loadToken && applied.url === showing
+      && (applied.project === null || applied.project === currentProjectId())
+    );
+
     player.addEventListener('loadstart', () => {
       // A new medium is loading. The aspect pin STAYS so the box keeps its
       // size, and the picture stays with it: the outgoing frame becomes the
@@ -74,7 +108,8 @@
       // already showing is left alone, which is the same continuity.
       loadToken += 1;
       const frozen = freezeFrame();
-      if (frozen !== null) player.setAttribute('poster', frozen);
+      // the OUTGOING medium's frame, covering the gap — not this one's
+      if (frozen !== null) setPoster(frozen, false);
     });
 
     const currentProjectId = () => {
@@ -120,7 +155,7 @@
         // arrived late, after a transcription took the screen (#619): the
         // session's project is not what is on the player any more
         if (loaderOwnsScreen()) return false;
-        player.setAttribute('poster', url);
+        setPoster(url, true, id, false);   // a real capture: nothing improves on it
         return true;
       } catch (e) {
         return false;
@@ -134,22 +169,12 @@
       return t !== null && t.getAttribute('aria-busy') === 'true';
     };
     let ownFrameToken = -1; // the load whose own first frame is already the poster
-    let ownFrameUrl = null; // and the picture it put up, to tell it from the outgoing freeze
     let standInUrl = null;  // an object URL this module made for a transcription's stand-in
-    let standInToken = -1;  // the load that stand-in was made for
     const setStandIn = (url) => {
       if (standInUrl !== null) URL.revokeObjectURL(standInUrl);
       standInUrl = url;
-      standInToken = loadToken;
-      player.setAttribute('poster', url);
+      setPoster(url, true);
     };
-    const isStandIn = (showing) => showing.startsWith('data:') || (standInUrl !== null && showing === standInUrl);
-    // Whether what is showing came from the medium NOW on the player, rather
-    // than from the one before it. Both are data: JPEGs or object URLs, so
-    // only the recorded values and their load tokens tell them apart.
-    const showsThisMedium = (showing) =>
-      (standInToken === loadToken && standInUrl !== null && showing === standInUrl)
-      || (ownFrameToken === loadToken && ownFrameUrl !== null && showing === ownFrameUrl);
 
     function reveal() {
       if (player.videoWidth <= 0) return; // audio, or dimensions not known yet
@@ -168,9 +193,8 @@
         if (player.readyState >= 2 && ownFrameToken !== loadToken) {
           const own = freezeFrame();
           if (own !== null) {
-            player.setAttribute('poster', own);
+            setPoster(own, true);
             ownFrameToken = loadToken;
-            ownFrameUrl = own;
             // Frame 1 is the likeliest black frame in the clip (#582), so
             // once it is up, ask the capture pipeline — which seeks a
             // detached copy to the 5s mark and refuses flat frames — for a
@@ -200,7 +224,7 @@
         if (applied || token !== loadToken) return;
         const showing = player.getAttribute('poster');
         if (defaultPoster !== null && showing !== null && showing.startsWith('data:')) {
-          player.setAttribute('poster', defaultPoster);
+          setPoster(defaultPoster, true);
         }
       });
     }
@@ -287,10 +311,10 @@
         if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
           const entry = await currentEntry(id);
           if (token !== loadToken) return;   // the library moved on meanwhile
-          player.setAttribute('poster', posters.glyphUrl(entry));
+          setPoster(posters.glyphUrl(entry), true, id);
           return;
         }
-        if (defaultPoster !== null) player.setAttribute('poster', defaultPoster);
+        if (defaultPoster !== null) setPoster(defaultPoster, true);
       }).then(() => { if (player.videoWidth === 0) showAudioPoster(); });
     }
     player.addEventListener('loadedmetadata', settleAudio);
@@ -321,19 +345,20 @@
     // it, because there is nothing to grab without a frame (#603).
     document.addEventListener('hyperaudioLibraryChanged', () => {
       if (loaderOwnsScreen()) return;
-      const startedWith = player.getAttribute('poster') || '';
-      if (!isStandIn(startedWith)) return;
+      // a real capture for the project that owns the medium: nothing to do
+      if (!isForeign(player.getAttribute('poster') || '') && applied.provisional === false) return;
       const token = loadToken;
-      applyStoredPoster(token, player.videoWidth > 0).then(async (applied) => {
-        if (applied || token !== loadToken || loaderOwnsScreen()) return;
-        const showing = player.getAttribute('poster') || '';
-        if (!isStandIn(showing) || showsThisMedium(showing)) return;
+      applyStoredPoster(token, player.videoWidth > 0).then(async (upgraded) => {
+        if (upgraded || token !== loadToken || loaderOwnsScreen()) return;
+        // no capture to be had; a provisional picture of this medium's own is
+        // still better than a glyph, so only a foreign one is replaced
+        if (!isForeign(player.getAttribute('poster') || '')) return;
         const posters = window.MediaPosters;
         const id = currentProjectId();
         if (!posters || typeof posters.glyphUrl !== 'function' || id === null) return;
         const entry = await currentEntry(id);
         if (token !== loadToken) return;
-        player.setAttribute('poster', posters.glyphUrl(entry));
+        setPoster(posters.glyphUrl(entry), true, id);
       });
     });
 
@@ -358,7 +383,7 @@
       currentEntry(id).then((entry) => {
         if (token !== loadToken) return;
         const url = posters.glyphUrl(entry);
-        if (player.getAttribute('poster') !== url) player.setAttribute('poster', url);
+        if (player.getAttribute('poster') !== url) setPoster(url, true);
       });
     });
 
