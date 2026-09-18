@@ -1,7 +1,7 @@
 /**
  * word-vtt.js
  * (C) The Hyperaudio Project
- * @version 1.1.6 — last changed in release 1.1.6
+ * @version 1.1.7 — last changed in release 1.1.7
  * @license MIT
  *
  * Word-level ("karaoke") WebVTT export (#387, part 1).
@@ -89,7 +89,18 @@
 
   // Resolve options.source (a selector string, an element, or unset → default
   // selector) to a transcript root element, or a falsy value if none.
+  //
+  // With no source of its own, ask the editor where the transcript is rather
+  // than assuming it is in the document: in caption mode it is not, and this
+  // export wrote a header with no cues under it for anyone who reached the
+  // menu from the caption editor. A caller that names a source still gets
+  // exactly that one — the burn-in renderer passes its own re-timed copy.
   function resolveRoot(opts) {
+    if (opts.source == null && typeof window !== 'undefined'
+        && typeof window.currentTranscriptRoot === 'function') {
+      const root = window.currentTranscriptRoot();
+      if (root) return root;
+    }
     if (typeof opts.source === 'string' || opts.source == null) {
       return typeof document !== 'undefined' && document.querySelector(opts.source || opts.selector);
     }
