@@ -581,96 +581,96 @@ If you are creating an open source application under a license compatible with t
               <div class="tabs tabs-lifted settings-tabs">
                 <input type="radio" name="settings-tab" id="settings-tab-application" class="tab" aria-label="Application" checked />
                 <div class="tab-content settings-panel bg-base-100 border-base-300 rounded-box" id="settings-panel-application">
-              <div class="settings-row">
-                <span class="settings-text">Version</span>
-                <span id="settings-app-version" class="settings-value"></span>
-              </div>
-              <div class="settings-row">
-                <span class="settings-text">
-                  Storage
-                  <span id="settings-storage" class="settings-hint">Measuring…</span>
-                </span>
-              </div>
-              <div class="settings-row settings-row-stack">
-                <span class="settings-text">
-                  Downloaded models
-                  <span id="settings-models-hint" class="settings-hint">Measuring…</span>
-                </span>
-                <ul id="settings-models" class="settings-models" aria-label="Downloaded models"></ul>
-              </div>
-              <div class="settings-row">
-                <span class="settings-text">
-                  Warnings you asked not to see again
-                  <span id="settings-undismiss-hint" class="settings-hint"></span>
-                </span>
-                <button type="button" id="settings-undismiss" class="btn btn-sm btn-outline">Show again</button>
-              </div>
-              <div class="settings-row">
-                <span class="settings-text">
-                  API keys remembered by Transcribe
-                  <span id="settings-forget-keys-hint" class="settings-hint"></span>
-                </span>
-                <button type="button" id="settings-forget-keys" class="btn btn-sm btn-outline">Forget</button>
-              </div>
-              <div class="settings-row">
-                <span class="settings-text">
-                  Reset the editor
-                  <span class="settings-hint">Removes every project and every remembered choice, and brings the intro back.</span>
-                </span>
-                <button type="button" id="settings-reset" class="btn btn-sm btn-outline btn-error">Reset…</button>
-              </div>
+                  <div class="settings-row">
+                    <span class="settings-text">Version</span>
+                    <span id="settings-app-version" class="settings-value"></span>
+                  </div>
+                  <div class="settings-row">
+                    <span class="settings-text">
+                      Storage
+                      <span id="settings-storage" class="settings-hint">Measuring…</span>
+                    </span>
+                  </div>
+                  <div class="settings-row settings-row-stack">
+                    <span class="settings-text">
+                      Downloaded models
+                      <span id="settings-models-hint" class="settings-hint">Measuring…</span>
+                    </span>
+                    <ul id="settings-models" class="settings-models" aria-label="Downloaded models"></ul>
+                  </div>
+                  <div class="settings-row">
+                    <span class="settings-text">
+                      Warnings you asked not to see again
+                      <span id="settings-undismiss-hint" class="settings-hint"></span>
+                    </span>
+                    <button type="button" id="settings-undismiss" class="btn btn-sm btn-outline">Show again</button>
+                  </div>
+                  <div class="settings-row">
+                    <span class="settings-text">
+                      API keys remembered by Transcribe
+                      <span id="settings-forget-keys-hint" class="settings-hint"></span>
+                    </span>
+                    <button type="button" id="settings-forget-keys" class="btn btn-sm btn-outline">Forget</button>
+                  </div>
+                  <div class="settings-row">
+                    <span class="settings-text">
+                      Reset the editor
+                      <span class="settings-hint">Removes every project and every remembered choice, and brings the intro back.</span>
+                    </span>
+                    <button type="button" id="settings-reset" class="btn btn-sm btn-outline btn-error">Reset…</button>
+                  </div>
                 </div>
                 <input type="radio" name="settings-tab" id="settings-tab-captions" class="tab" aria-label="Captions" />
                 <div class="tab-content settings-panel bg-base-100 border-base-300 rounded-box" id="settings-panel-captions">
-              <label class="settings-row" for="setting-caption-rate">
-                <span class="settings-text">
-                  Reading rate on each caption
-                  <span class="settings-hint">Characters per second is the streaming convention, words per minute the broadcast one.</span>
-                </span>
-                <select id="setting-caption-rate" class="select select-bordered select-sm">
-                  <option value="cps">Characters per second</option>
-                  <option value="wpm">Words per minute</option>
-                  <option value="none">None</option>
-                </select>
-              </label>
-              <label class="settings-row" for="setting-caption-max-cps">
-                <span class="settings-text">
-                  Flag above (characters per second)
-                  <span class="settings-hint">17 is the usual limit for English. Advisory only — nothing is blocked.</span>
-                </span>
-                <input id="setting-caption-max-cps" type="number" min="1" max="60" step="1" class="input input-bordered input-sm" style="width:6rem" />
-              </label>
-              <label class="settings-row" for="setting-caption-max-wpm">
-                <span class="settings-text">
-                  Flag above (words per minute)
-                  <span class="settings-hint">180 is the upper end of broadcast practice.</span>
-                </span>
-                <input id="setting-caption-max-wpm" type="number" min="20" max="400" step="5" class="input input-bordered input-sm" style="width:6rem" />
-              </label>
-              <label class="settings-row" for="setting-caption-line-length">
-                <span class="settings-text">
-                  Characters per line
-                  <span class="settings-hint">The longest a caption line may be when captions are generated. Applies to the next generation, so existing captions are left alone.</span>
-                </span>
-                <input id="setting-caption-line-length" type="number" min="16" max="80" step="1" class="input input-bordered input-sm" style="width:6rem" />
-              </label>
-              <label class="settings-row settings-row-toggle" for="setting-caption-colour-speakers">
-                <span class="settings-text">
-                  Colour-code speakers in exported captions
-                  <span class="settings-hint">The WebVTT and SRT downloads only. Chrome and Safari show the colours, Firefox does not, and SRT colour depends on the player.</span>
-                </span>
-                <input type="checkbox" id="setting-caption-colour-speakers" class="toggle toggle-primary" />
-              </label>
+                  <label class="settings-row" for="setting-caption-rate">
+                    <span class="settings-text">
+                      Reading rate on each caption
+                      <span class="settings-hint">Characters per second is the streaming convention, words per minute the broadcast one.</span>
+                    </span>
+                    <select id="setting-caption-rate" class="select select-bordered select-sm">
+                      <option value="cps">Characters per second</option>
+                      <option value="wpm">Words per minute</option>
+                      <option value="none">None</option>
+                    </select>
+                  </label>
+                  <label class="settings-row" for="setting-caption-max-cps">
+                    <span class="settings-text">
+                      Flag above (characters per second)
+                      <span class="settings-hint">17 is the usual limit for English. Advisory only — nothing is blocked.</span>
+                    </span>
+                    <input id="setting-caption-max-cps" type="number" min="1" max="60" step="1" class="input input-bordered input-sm" style="width:6rem" />
+                  </label>
+                  <label class="settings-row" for="setting-caption-max-wpm">
+                    <span class="settings-text">
+                      Flag above (words per minute)
+                      <span class="settings-hint">180 is the upper end of broadcast practice.</span>
+                    </span>
+                    <input id="setting-caption-max-wpm" type="number" min="20" max="400" step="5" class="input input-bordered input-sm" style="width:6rem" />
+                  </label>
+                  <label class="settings-row" for="setting-caption-line-length">
+                    <span class="settings-text">
+                      Characters per line
+                      <span class="settings-hint">The longest a caption line may be when captions are generated. Applies to the next generation, so existing captions are left alone.</span>
+                    </span>
+                    <input id="setting-caption-line-length" type="number" min="16" max="80" step="1" class="input input-bordered input-sm" style="width:6rem" />
+                  </label>
+                  <label class="settings-row settings-row-toggle" for="setting-caption-colour-speakers">
+                    <span class="settings-text">
+                      Colour-code speakers in exported captions
+                      <span class="settings-hint">The WebVTT and SRT downloads only. Chrome and Safari show the colours, Firefox does not, and SRT colour depends on the player.</span>
+                    </span>
+                    <input type="checkbox" id="setting-caption-colour-speakers" class="toggle toggle-primary" />
+                  </label>
                 </div>
                 <input type="radio" name="settings-tab" id="settings-tab-playback" class="tab" aria-label="Playback" />
                 <div class="tab-content settings-panel bg-base-100 border-base-300 rounded-box" id="settings-panel-playback">
-              <label class="settings-row settings-row-toggle" for="setting-play-on-dblclick">
-                <span class="settings-text">
-                  Double-click a word to play from it
-                  <span class="settings-hint">Off: a double-click only moves the playhead there.</span>
-                </span>
-                <input type="checkbox" id="setting-play-on-dblclick" class="toggle toggle-primary" />
-              </label>
+                  <label class="settings-row settings-row-toggle" for="setting-play-on-dblclick">
+                    <span class="settings-text">
+                      Double-click a word to play from it
+                      <span class="settings-hint">Off: a double-click only moves the playhead there.</span>
+                    </span>
+                    <input type="checkbox" id="setting-play-on-dblclick" class="toggle toggle-primary" />
+                  </label>
                 </div>
               </div>
             </div>
