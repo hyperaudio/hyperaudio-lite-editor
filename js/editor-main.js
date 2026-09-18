@@ -181,6 +181,13 @@
           captionTempl.querySelector('.end').value = cap.stop;
           captionTempl.querySelector('.line1').value = line1;
           captionTempl.querySelector('.line2').value = line2;
+          // The speaker this caption was generated from (#536). It rides on
+          // the row, not in the text, so it survives every edit without ever
+          // showing up in a text box or counting against the reading rate.
+          // captureCaptions serialises the row, so the cache carries it too.
+          if (typeof cap.speaker === 'string' && cap.speaker !== '') {
+            captionTempl.setAttribute('data-speaker', cap.speaker);
+          }
 
           holder.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
         });
@@ -245,7 +252,11 @@
       return formHTML;
     }
 
-    function populateCaptionEditorFromVtt(vtt) {
+    // `speakers` is the list a project saved alongside its captions (#536),
+    // one name per cue in cue order. An import has none. A list that does not
+    // match the cue count is dropped rather than applied to the wrong lines:
+    // the project then exports uncoloured until the next Regenerate.
+    function populateCaptionEditorFromVtt(vtt, speakers) {
       const data = [];
       vtt = vtt.replace("WEBVTT\n\n","");
       vtt = vtt.replaceAll("\n\n","\n");
@@ -274,6 +285,12 @@
       // from, so the dropped cue vanished for good on the next save.
       if (start !== undefined) {
         data.push({start, stop, text});
+      }
+
+      if (Array.isArray(speakers) && speakers.length === data.length) {
+        data.forEach((cap, i) => {
+          if (typeof speakers[i] === 'string' && speakers[i] !== '') cap.speaker = speakers[i];
+        });
       }
 
       populateCaptionEditor(data);
@@ -549,7 +566,14 @@
       captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
       captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
       captionTempl.classList.add('caption-new');
-      elem.parentElement.parentNode.insertAdjacentElement('afterend', captionTempl);
+      // Inherit the speaker of the row this one is inserted after (#536): a
+      // caption added inside someone's turn belongs to them. Merge needs no
+      // such rule — the surviving row keeps its own, and a cue can only be one
+      // colour — and delete none at all.
+      const above = elem.parentElement.parentNode;
+      const inherited = above.getAttribute('data-speaker');
+      if (inherited !== null && inherited !== '') captionTempl.setAttribute('data-speaker', inherited);
+      above.insertAdjacentElement('afterend', captionTempl);
       // Remove animation class after animation completes
       setTimeout(() => {
         captionTempl.classList.remove('caption-new');
@@ -626,6 +650,36 @@
       document.querySelector('#download-vtt').setAttribute('href', "data:text/vtt,"+encodeURIComponent(vttCaptions));
       document.querySelector('#download-srt').setAttribute('href', "data:text/srt,"+encodeURIComponent(srtCaptions));
     }
+
+    // The speaker of each caption, in cue order (#536), for the coloured
+    // download and for the project to save. Rows are skipped exactly as the
+    // writer above skips them — no in time, no cue — so the list always lines
+    // up index for index with the cues in the file.
+    //
+    // Live rows when the caption editor is on screen; otherwise the cache,
+    // which is the same markup as a string (the caption pass at transcription
+    // time builds its rows in a detached holder). A caption with no recorded
+    // speaker contributes an empty string, so its position is still held.
+    function captionSpeakerList() {
+      let rows = document.querySelectorAll('#captions-display .caption');
+      if (rows.length === 0 && typeof captionCache === 'string' && captionCache !== '') {
+        try {
+          rows = new DOMParser().parseFromString(captionCache, 'text/html')
+            .querySelectorAll('#captions-display .caption');
+        } catch (e) {
+          return [];
+        }
+      }
+      const out = [];
+      rows.forEach((row) => {
+        const start = row.querySelector('.start');
+        const value = start === null ? '' : (start.value || start.getAttribute('value') || '');
+        if (String(value).length === 0) return;
+        out.push(row.getAttribute('data-speaker') || '');
+      });
+      return out;
+    }
+    window.captionSpeakerList = captionSpeakerList;
 
     function getTranscriptData() {
       let transcriptElement = document.querySelector('#hypertranscript');

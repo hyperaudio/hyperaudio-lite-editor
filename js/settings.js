@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.19 — last changed in release 1.3.19
+ * @version 1.3.20 — last changed in release 1.3.20
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -49,6 +49,10 @@
     // for English, 180 the upper end of broadcast practice.
     captionMaxCps: 17,
     captionMaxWpm: 180,
+    // Colour the exported captions by speaker (#536). Off, because a voice
+    // tag and a STYLE block are more than some caption tools accept, and
+    // because SRT colour has no standard behind it at all.
+    captionColourSpeakers: false,
   });
 
   // caption.js takes a maximum AND a minimum line length: the minimum is the
@@ -295,6 +299,14 @@
         set('captionRate', known(rate.value));
         // the caption editor may be open behind the modal
         if (typeof window.updateCaptionRates === 'function') window.updateCaptionRates();
+      });
+    }
+
+    const colourSpeakers = byId('setting-caption-colour-speakers');
+    if (colourSpeakers !== null) {
+      colourSpeakers.checked = get('captionColourSpeakers') === true;
+      colourSpeakers.addEventListener('change', () => {
+        set('captionColourSpeakers', colourSpeakers.checked);
       });
     }
 
