@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.7 — last changed in release 0.6.7
+ * @version 0.6.8 — last changed in release 0.6.8
  * @license MIT
  */
 
@@ -128,9 +128,6 @@ class DeepgramService extends HTMLElement {
     // #transcript-editor-btn's handler no-ops when already in transcript mode.
     document.querySelector('#transcript-editor-btn')?.click();
     document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><center>Transcribing....</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
-    if (typeof setTranscriptBusy === 'function') {
-      setTranscriptBusy(true);
-    }
     const language = document.querySelector('#language').value;
     const model = document.querySelector('#language-model').value;
     let media =  document.querySelector('#deepgram-media').value;
@@ -148,13 +145,28 @@ class DeepgramService extends HTMLElement {
       media = "https://"+media;
     }
 
+    // The transcription's media goes on the player BEFORE the busy signal.
+    // hyperaudio-save captures what is being transcribed at that signal — the
+    // player's media and the File behind it — so that a completion arriving
+    // while the user has switched away is filed against the right project. A
+    // URL set afterwards was too late: the capture took the OUTGOING project's
+    // media, named the new project after it, and put its src back on the
+    // player when the transcript landed.
+    // A local file is already on the player: the file picker's own change
+    // handler put it there when the file was chosen.
     if (file !== undefined) {
+      if (typeof setTranscriptBusy === 'function') {
+        setTranscriptBusy(true);
+      }
       fetchDataLocal(token, file, language, model);
       document.querySelector('#deepgram-media').value = "";
     } else {
       if (media !== "" || token !== "") {
         let player = document.querySelector("#hyperplayer");
         player.src = media;
+        if (typeof setTranscriptBusy === 'function') {
+          setTranscriptBusy(true);
+        }
         fetchData(token, media, language, model);
       } else {
         document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
