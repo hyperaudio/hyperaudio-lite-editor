@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.18 — last changed in release 1.3.18
+ * @version 1.3.20 — last changed in release 1.3.20
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -271,7 +271,10 @@
       media: state.media,
       options: Object.assign({}, baseOptions, {
         gapRemoval: state.options.gapRemoval,
-        captions: Object.assign({}, baseOptions.captions, { updateFromTranscript: state.options.updateCaptionsFromTranscript !== false }),
+        captions: Object.assign({}, baseOptions.captions, {
+          updateFromTranscript: state.options.updateCaptionsFromTranscript !== false,
+          speakers: Array.isArray(state.options.captionSpeakers) ? state.options.captionSpeakers : [],
+        }),
         view: Object.assign({}, baseOptions.view, state.options.view),
       }),
       texts: Object.assign({}, baseTexts, {
@@ -941,6 +944,8 @@
     const duration = player && Number.isFinite(player.duration)
       ? Math.round(player.duration * 1000) / 1000 : 0;
     const src = player !== null ? player.src : '';
+    // audio or video, once the player knows (metadata in); null until then
+    const hasVideo = player !== null && player.readyState >= 1 ? player.videoWidth > 0 : null;
     if (isLinkUrl(src)) { // http(s) or a declared embedder scheme
       // The player is on a remote URL (URL-mode transcription): a File captured
       // for a PREVIOUS project is stale — the URL wins. The exception is a file
@@ -956,13 +961,14 @@
           mimeType: session.mediaFile.type || '',
           durationSeconds: duration,
           sizeBytes: session.mediaFile.size,
+          hasVideo,
         };
       }
       // Name link media from its URL leaf — otherwise a link-kind birth
       // falls through gather()'s title chain (title field → session.title →
       // media.filename → 'project') and every URL-mode transcription is
       // christened "project".
-      return { kind: 'link', path: null, url: src, filename: mediaDisplayName2(src) || '', mimeType: '', durationSeconds: duration, sizeBytes: 0 };
+      return { kind: 'link', path: null, url: src, filename: mediaDisplayName2(src) || '', mimeType: '', durationSeconds: duration, sizeBytes: 0, hasVideo };
     }
     if (session.mediaFile !== null) {
       const safeName = sanitizeMediaFilename(session.mediaFile.name);
@@ -974,6 +980,7 @@
         mimeType: session.mediaFile.type || '',
         durationSeconds: duration,
         sizeBytes: session.mediaFile.size,
+        hasVideo,
       };
     }
     if (src === '') {
@@ -983,7 +990,7 @@
     }
     // Local media playing from a blob:/data: URL that we haven't captured yet
     // (e.g. a legacy Recents load) — resolveMediaFile() materialises it lazily.
-    return { kind: 'original', path: MEDIA_DIR + 'media', url: null, filename: 'media', mimeType: '', durationSeconds: duration, sizeBytes: 0 };
+    return { kind: 'original', path: MEDIA_DIR + 'media', url: null, filename: 'media', mimeType: '', durationSeconds: duration, sizeBytes: 0, hasVideo };
   }
 
   // Make sure we hold the media as a File. Captured at import normally; for
@@ -1035,6 +1042,12 @@
           : { enabled: false, thresholdMs: 500, bufferMs: 100 },
         updateCaptionsFromTranscript: typeof updateCaptionsFromTranscript !== 'undefined'
           ? updateCaptionsFromTranscript : true,
+        // One speaker name per cue, in cue order (#536). The rows carry this
+        // as an attribute and the captions file itself stays plain, so the
+        // list has to travel beside it or a reload would lose it: the rows are
+        // rebuilt from the saved VTT and the row cache is dropped.
+        captionSpeakers: typeof window.captionSpeakerList === 'function'
+          ? window.captionSpeakerList() : [],
         view: {
           showSpeakers: !!(document.querySelector('#show-speakers') || {}).checked,
           showTimecodes: !!(document.querySelector('#show-timecodes') || {}).checked,
@@ -1320,11 +1333,19 @@
           ? options.captions.updateFromTranscript !== false : true;
       }
       if (loaded.captionsVtt && track !== null) {
-        const vttLink = document.querySelector('#download-vtt');
-        if (vttLink !== null) vttLink.setAttribute('href', 'data:text/vtt,' + encodeURIComponent(loaded.captionsVtt));
+        // both caption links, through the one writer (editor-core): this used
+        // to set the WebVTT link alone, leaving a restored project with an
+        // empty .srt download
+        if (typeof window.setCaptionDownloadLinks === 'function') {
+          window.setCaptionDownloadLinks(loaded.captionsVtt);
+        }
         if (typeof populateCaptionEditorFromVtt === 'function') {
           if (typeof captionCache !== 'undefined') captionCache = null;
-          populateCaptionEditorFromVtt(loaded.captionsVtt);
+          // the speakers this project recorded for its cues (#536); a list
+          // that does not match the cue count is dropped there, not here
+          const speakers = options && options.captions && Array.isArray(options.captions.speakers)
+            ? options.captions.speakers : null;
+          populateCaptionEditorFromVtt(loaded.captionsVtt, speakers);
         }
       } else {
         document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
@@ -1437,6 +1458,40 @@
     return snapshotChain;
   }
 
+  // Whether the medium has a picture is known only once metadata is in, which
+  // for a remote recording is often after the birth committed the entry — so
+  // the entry says "unknown" and the project draws as audio until the next
+  // save, which an untouched project never makes. Record it as soon as the
+  // player knows, for the project that owns the medium: not while a
+  // transcription has the screen, when the session still points at the
+  // project the user was on.
+  function recordMediaHasVideo() {
+    const player = document.getElementById('hyperplayer');
+    if (player === null || player.readyState < 1) return;
+    if (!opfsAvailable || !session.active || session.projectId === null) return;
+    const t = document.getElementById('hypertranscript');
+    if ((t !== null && t.getAttribute('aria-busy') === 'true') || pendingTranscription !== null) return;
+    const id = session.projectId;
+    const hasVideo = player.videoWidth > 0;
+    // Read before writing: updateLibrary writes and notifies unconditionally,
+    // and this runs on the notification — an unconditional write here was a
+    // loop that fired thousands of library changes a second.
+    readLibrary().then((lib) => {
+      const entry = lib.projects.find((p) => p.id === id);
+      if (entry === undefined || !entry.media || entry.media.hasVideo === hasVideo) return null;
+      return updateLibrary((fresh) => {
+        const e = fresh.projects.find((p) => p.id === id);
+        if (e !== undefined && e.media) e.media.hasVideo = hasVideo;
+      });
+    }).catch(() => { /* best-effort */ });
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const player = document.getElementById('hyperplayer');
+    if (player !== null) player.addEventListener('loadedmetadata', recordMediaHasVideo);
+  });
+  // the birth commits its entry before this can have run: ask again when it lands
+  document.addEventListener('hyperaudioLibraryChanged', () => { setTimeout(recordMediaHasVideo, 0); });
+
   // Every state write refreshes the project's index entry — name (the title
   // Save uses), order timestamp, the dirty timestamps, media meta and the
   // hover-preview texts, so the panel renders from the index alone.
@@ -1466,6 +1521,13 @@
         kind: state.media.kind,
         filename: state.media.filename || '',
         durationSeconds: state.media.durationSeconds || 0,
+        // Whether the medium has a picture, so a link project can be drawn
+        // as video rather than as a soundwave, and its URL, so the poster
+        // pipeline can try a capture from it where the server allows one.
+        // Unknown (metadata not yet in) is left unknown; gather() runs on
+        // every save, so the next one settles it.
+        hasVideo: state.media.hasVideo === true ? true : (state.media.hasVideo === false ? false : null),
+        url: state.media.kind === 'link' ? (state.media.url || '') : '',
       };
       // The document's own timeline (last word's end): the glance duration
       // for projects with no media — text-only imports, the benchmark —
@@ -1616,6 +1678,12 @@
 
   async function writeMediaOnce() {
     if (!opfsAvailable || session.mediaFile === null || !hasProjectLock || session.projectId === null) return;
+    // never a File that is not this medium's: URL-mode keeps the URL
+    {
+      const player = document.querySelector('#hyperplayer');
+      const src = player !== null ? player.src : '';
+      if (isLinkUrl(src) && session.mediaFileFromUrl !== src) return;
+    }
     try {
       const mediaDir = await pruneMediaExcept(session.projectId, session.mediaFile.name);
       if (mediaDir !== null) await writeFileTo(mediaDir, session.mediaFile.name, session.mediaFile);
@@ -1690,6 +1758,18 @@
     {
       const player = document.querySelector('#hyperplayer');
       if (player === null || !player.getAttribute('src')) session.mediaFile = null;
+      // A URL on the player is URL-mode: a File captured for a PREVIOUS
+      // project is stale and the URL wins (the rule currentMediaDescriptor
+      // already applies). It used to survive here and be WRITTEN as this
+      // project's media — a copy of the last recording in a project that
+      // plays from a link — and the poster pipeline then captured that file,
+      // so the new project wore the previous recording's picture, in the
+      // player and in Recents alike. The one exception stays: a file fetched
+      // from this very URL is this project's media.
+      else if (isLinkUrl(player.src) && session.mediaFileFromUrl !== player.src) {
+        session.mediaFile = null;
+        session.mediaFileFromUrl = null;
+      }
     }
     session.pendingReconcile = null;
     session.title = '';
@@ -2628,10 +2708,16 @@
             // other project's media. Captured here, restored at the birth.
             const player = document.getElementById('hyperplayer');
             pendingTranscription = { name: mediaDisplayName(), loaderHtml: t.innerHTML };
+            // A URL transcription's identity is the URL: the File in the
+            // session belongs to the project that was open, and restoring it
+            // at the birth is how that project's media and picture were
+            // written into the new one.
+            const playerSrc = player !== null ? player.src : '';
+            const fileIsThisMediums = !isLinkUrl(playerSrc) || session.mediaFileFromUrl === playerSrc;
             pendingIdentity = {
-              file: session.mediaFile,
-              fromUrl: session.mediaFileFromUrl,
-              playerSrc: player !== null ? player.src : '',
+              file: fileIsThisMediums ? session.mediaFile : null,
+              fromUrl: fileIsThisMediums ? session.mediaFileFromUrl : null,
+              playerSrc,
             };
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /
