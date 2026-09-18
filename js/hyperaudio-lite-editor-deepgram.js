@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.8 — last changed in release 0.6.8
+ * @version 0.6.9 — last changed in release 0.6.9
  * @license MIT
  */
 
@@ -396,8 +396,17 @@ function parseData(json) {
   const maxWordsInPara = 100;
   const significantGapInSeconds = 4.0;
 
-  const punctuatedWords = json.results.channels[0].alternatives[0].transcript.split(' ');
   const wordData = json.results.channels[0].alternatives[0].words;
+  // The visible text comes off each word, beside that word's own timing and
+  // speaker. It used to come from a SECOND list — the formatted transcript
+  // split on spaces — matched to the word array by position alone, with
+  // nothing checking the two were the same length. smart_format is exactly
+  // what breaks that: it rewrites spoken numbers and the like into forms with
+  // a different token count, and from the first mismatch every word after it
+  // is drawn from the wrong slot, so labels land against the wrong text. The
+  // formatted word is already on the object smart_format put it there for.
+  const textOf = (w) => (typeof w.punctuated_word === 'string' && w.punctuated_word !== ''
+    ? w.punctuated_word : w.word);
   console.log("wordData...");
   console.log(wordData);
 
@@ -441,13 +450,13 @@ function parseData(json) {
 
   wordData.forEach((element, index) => {
 
-    let currentWord = punctuatedWords[index];
+    let currentWord = textOf(element);
     wordsInPara++;
 
     // if there's a gap longer than half a second consider splitting into new para
 
     if (previousElementEnd !== 0 && (element.start - previousElementEnd) > significantGapInSeconds || wordsInPara > maxWordsInPara){
-      let previousWord = punctuatedWords[index-1];
+      let previousWord = textOf(wordData[index-1]);
       let previousWordLastChar = previousWord.charAt(previousWord.length-1);
       if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
         hyperTranscript += "\n  </p>\n  <p>\n   ";
