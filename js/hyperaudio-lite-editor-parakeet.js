@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 0.8.2 — last changed in release 0.8.2
+ * @version 0.8.3 — last changed in release 0.8.3
  * @license MIT
  *
  * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
@@ -82,9 +82,6 @@ class ParakeetHFService extends HTMLElement {
     document.querySelector('#transcript-editor-btn')?.click();
     document.querySelector('#hypertranscript').innerHTML =
       '<div class="vertically-centre"><center>Transcribing….</center><br/><img src="' + transcribingSvg + '" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
-    if (typeof setTranscriptBusy === 'function') {
-      setTranscriptBusy(true);
-    }
 
     const apiKey = document.querySelector('#parakeet-hf-key').value.trim();
     const language = document.querySelector('#parakeet-hf-language').value;
@@ -117,6 +114,17 @@ class ParakeetHFService extends HTMLElement {
     } else {
       player.src = media;
       document.querySelector('#parakeet-hf-media').value = "";
+    }
+
+    // The transcription's media goes on the player BEFORE the busy signal.
+    // hyperaudio-save captures what is being transcribed at that signal — the
+    // player's media and the File behind it — so that a completion arriving
+    // while the user has switched away is filed against the right project. A
+    // URL set afterwards was too late: the capture took the OUTGOING project's
+    // media, named the new project after it, and put its src back on the
+    // player when the transcript landed.
+    if (typeof setTranscriptBusy === 'function') {
+      setTranscriptBusy(true);
     }
 
     runParakeetHF(apiKey, file, media, { language }).catch(displayParakeetHfError);

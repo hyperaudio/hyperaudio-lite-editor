@@ -1233,6 +1233,55 @@
       document.addEventListener('hyperaudioLibraryChanged', nameDownloadLinks);
       nameDownloadLinks();
 
+      // Both caption links took their address from the two caption WRITERS
+      // alone, which run on transcription, caption-editor entry, regenerate
+      // and sanitise. None of them runs at boot — the boot pass builds the
+      // TRACK straight from the generator — and the project-restore and
+      // VTT-import routes wrote at most the WebVTT link. So a fresh page
+      // handed you an empty .vtt and .srt, and a reloaded project an empty
+      // .srt, with no sign anything was wrong. The captions themselves were
+      // never missing: the live track has had them all along.
+      //
+      // One helper writes both, from whatever VTT its caller holds. The SRT
+      // is the same cues in the other format, which media-export already
+      // knows how to write, so there is no second serialiser here.
+      const setCaptionDownloadLinks = (vtt) => {
+        if (typeof vtt !== 'string' || vtt.trim() === '') return false;
+        const vttLink = document.getElementById('download-vtt');
+        if (vttLink !== null) {
+          vttLink.setAttribute('href', 'data:text/vtt,' + encodeURIComponent(vtt));
+        }
+        const srtLink = document.getElementById('download-srt');
+        const captions = window.MediaExportCaptions;
+        if (srtLink !== null && captions !== undefined) {
+          const srt = captions.cuesToSrt(captions.parseVttCues(vtt)).replace(/^\n/, '');
+          if (srt.trim() !== '') {
+            srtLink.setAttribute('href', 'data:text/srt,' + encodeURIComponent(srt));
+          }
+        }
+        return true;
+      };
+      window.setCaptionDownloadLinks = setCaptionDownloadLinks;
+
+      // The backstop, for any route that leaves a link empty: on the way out,
+      // fill from the live track, which is the captions whatever produced
+      // them. Capture phase, so anything reading the address later in the
+      // same click — the speaker colouring (#536) — sees the real file.
+      const fillEmptyCaptionLinks = () => {
+        const empty = (id) => {
+          const link = document.getElementById(id);
+          return link !== null && (link.getAttribute('href') || '').length === 0;
+        };
+        if (!empty('download-vtt') && !empty('download-srt')) return;
+        const save = window.HyperaudioSave;
+        setCaptionDownloadLinks(save && typeof save.getCaptionsVtt === 'function'
+          ? save.getCaptionsVtt() : '');
+      };
+      ['download-vtt', 'download-srt'].forEach((id) => {
+        const link = document.getElementById(id);
+        if (link !== null) link.addEventListener('click', fillEmptyCaptionLinks, true);
+      });
+
       ['download-html', 'download-vtt', 'download-srt', 'download-vtt-words',
         'download-hypertranscript'].forEach((id) => {
         const link = document.getElementById(id);
@@ -1447,14 +1496,83 @@
     return host;
   }
 
+  // Which speaker each generated caption belongs to (#536). Recorded at
+  // generation rather than looked up when the file is downloaded: captions
+  // diverge from the transcript on the first edit, and from then on the
+  // transcript is irrelevant until Regenerate — so a later transcript edit
+  // must not silently recolour captions the user had already finished.
+  //
+  // caption.js starts a new segment on every speaker change, so each cue lies
+  // entirely inside one speaker's run. It drops segment.speaker before
+  // returning and it is vendored, so the run is re-derived here from the very
+  // transcript copy the cues were built from — struck words and struck
+  // speaker labels already removed, because neither is heard.
+  function captionSpeakerBoundaries(host) {
+    if (host === null || host === undefined) return [];
+    const out = [];
+    host.querySelectorAll('span.speaker[data-m]').forEach((span) => {
+      const ms = Number(span.getAttribute('data-m'));
+      if (!Number.isFinite(ms)) return;
+      const text = span.textContent.trim();
+      // "[Name]" is the convention everywhere, including the label the
+      // sanitiser mints from anything the user types in square brackets;
+      // "Name:" is the legacy form older documents carry.
+      const bracketed = /^\[([^\]]+)\]/.exec(text);
+      const trailing = bracketed === null ? /^([^:]+):$/.exec(text) : null;
+      const name = bracketed !== null ? bracketed[1].trim() : (trailing !== null ? trailing[1].trim() : '');
+      if (name !== '') out.push({ seconds: ms / 1000, name });
+    });
+    return out.sort((a, b) => a.seconds - b.seconds);
+  }
+
+  // "00:00:01.320" (or an SRT comma) to seconds; NaN for anything else.
+  function captionStartSeconds(value) {
+    const m = /^(\d+):(\d\d):(\d\d)[.,](\d+)$/.exec(String(value).trim());
+    return m === null ? NaN
+      : Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number('0.' + m[4]);
+  }
+
+  // A cue starting exactly on a boundary belongs to the NEW speaker: the label
+  // span carries the same data-m as the first word after it, and the cue start
+  // is that word's time rounded to milliseconds, so the comparison needs a
+  // hair of tolerance to land on the right side.
+  function attachCaptionSpeakers(captions, host) {
+    const bounds = captionSpeakerBoundaries(host);
+    if (!Array.isArray(captions) || bounds.length === 0) return captions;
+    captions.forEach((cap) => {
+      const at = captionStartSeconds(cap.start);
+      if (!Number.isFinite(at)) return;
+      let name = '';
+      for (let i = 0; i < bounds.length && bounds[i].seconds <= at + 0.001; i += 1) {
+        name = bounds[i].name;
+      }
+      if (name !== '') cap.speaker = name;
+    });
+    return captions;
+  }
+
+  // When the caption editor has never been built there is nothing recorded and
+  // nothing edited, so the transcript is still the whole truth and the speakers
+  // for a set of cue times can be read straight off it. ONLY for that case:
+  // once captions exist they carry their own speakers, and reading the
+  // transcript again is exactly what would let a later transcript edit
+  // recolour captions someone had already finished.
+  function captionSpeakersForCues(starts) {
+    const cues = (Array.isArray(starts) ? starts : []).map((start) => ({ start }));
+    attachCaptionSpeakers(cues, captionSourceWithoutStruckWords());
+    return cues.map((c) => (typeof c.speaker === 'string' ? c.speaker : ''));
+  }
+  window.captionSpeakersForCues = captionSpeakersForCues;
+
   function generateCaptionsFromTranscript(hypertranscript, sourceMedia, track) {
     const cap1 = caption();
     // one route for both views: the only difference was which transcript to
     // read, and that is what captionSourceWithoutStruckWords answers
     // how long a generated line may be, from Settings (default 32)
     const lines = typeof captionLineLengths === 'function' ? captionLineLengths() : { max: 32, min: 21 };
+    const captionSource = captionSourceWithoutStruckWords();
     let subs = cap1.init("hypertranscript", "hyperplayer", String(lines.max), String(lines.min), null, null,
-      captionSourceWithoutStruckWords());
+      captionSource);
 
     document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
     document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
@@ -1480,7 +1598,7 @@
     if (typeof window.guardCurrentCaptionWrite === 'function') {
       window.guardCurrentCaptionWrite();
     }
-    return subs.data;
+    return attachCaptionSpeakers(subs.data, captionSource);
   }
 
   function hasParent(element, parent) {

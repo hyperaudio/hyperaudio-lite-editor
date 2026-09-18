@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.18 — last changed in release 1.3.18
+ * @version 1.3.20 — last changed in release 1.3.20
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -271,7 +271,10 @@
       media: state.media,
       options: Object.assign({}, baseOptions, {
         gapRemoval: state.options.gapRemoval,
-        captions: Object.assign({}, baseOptions.captions, { updateFromTranscript: state.options.updateCaptionsFromTranscript !== false }),
+        captions: Object.assign({}, baseOptions.captions, {
+          updateFromTranscript: state.options.updateCaptionsFromTranscript !== false,
+          speakers: Array.isArray(state.options.captionSpeakers) ? state.options.captionSpeakers : [],
+        }),
         view: Object.assign({}, baseOptions.view, state.options.view),
       }),
       texts: Object.assign({}, baseTexts, {
@@ -1035,6 +1038,12 @@
           : { enabled: false, thresholdMs: 500, bufferMs: 100 },
         updateCaptionsFromTranscript: typeof updateCaptionsFromTranscript !== 'undefined'
           ? updateCaptionsFromTranscript : true,
+        // One speaker name per cue, in cue order (#536). The rows carry this
+        // as an attribute and the captions file itself stays plain, so the
+        // list has to travel beside it or a reload would lose it: the rows are
+        // rebuilt from the saved VTT and the row cache is dropped.
+        captionSpeakers: typeof window.captionSpeakerList === 'function'
+          ? window.captionSpeakerList() : [],
         view: {
           showSpeakers: !!(document.querySelector('#show-speakers') || {}).checked,
           showTimecodes: !!(document.querySelector('#show-timecodes') || {}).checked,
@@ -1320,11 +1329,19 @@
           ? options.captions.updateFromTranscript !== false : true;
       }
       if (loaded.captionsVtt && track !== null) {
-        const vttLink = document.querySelector('#download-vtt');
-        if (vttLink !== null) vttLink.setAttribute('href', 'data:text/vtt,' + encodeURIComponent(loaded.captionsVtt));
+        // both caption links, through the one writer (editor-core): this used
+        // to set the WebVTT link alone, leaving a restored project with an
+        // empty .srt download
+        if (typeof window.setCaptionDownloadLinks === 'function') {
+          window.setCaptionDownloadLinks(loaded.captionsVtt);
+        }
         if (typeof populateCaptionEditorFromVtt === 'function') {
           if (typeof captionCache !== 'undefined') captionCache = null;
-          populateCaptionEditorFromVtt(loaded.captionsVtt);
+          // the speakers this project recorded for its cues (#536); a list
+          // that does not match the cue count is dropped there, not here
+          const speakers = options && options.captions && Array.isArray(options.captions.speakers)
+            ? options.captions.speakers : null;
+          populateCaptionEditorFromVtt(loaded.captionsVtt, speakers);
         }
       } else {
         document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));

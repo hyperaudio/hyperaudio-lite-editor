@@ -227,8 +227,10 @@ test('the settings split into tabs, Application first and selected (#615)', asyn
   for (const tab of ['application', 'captions', 'playback']) {
     await page.evaluate((name) => { document.getElementById(`settings-tab-${name}`).checked = true; }, tab);
     await expect.poll(() => page.locator(`#settings-panel-${tab}`).isVisible()).toBe(true);
+    // offsetHeight, not a bounding rect: the modal scales up as it opens, and
+    // a rect measured mid-transition reports the transform rather than the layout
     heights.push(await page.evaluate(() =>
-      Math.round(document.querySelector('#settings-modal + .modal .modal-box').getBoundingClientRect().height)));
+      document.querySelector('#settings-modal + .modal .modal-box').offsetHeight));
   }
   expect(new Set(heights).size).toBe(1);
   await page.evaluate(() => { document.getElementById('settings-tab-application').checked = true; });
@@ -255,7 +257,8 @@ test('every settings control still lives in exactly one tab panel (#615)', async
       box.querySelector(`#settings-tab-${panel.id.replace('settings-panel-', '')}`).getAttribute('aria-label');
     const ids = ['settings-app-version', 'settings-storage', 'settings-models', 'settings-undismiss',
       'settings-forget-keys', 'settings-reset', 'setting-caption-rate', 'setting-caption-max-cps',
-      'setting-caption-max-wpm', 'setting-caption-line-length', 'setting-play-on-dblclick'];
+      'setting-caption-max-wpm', 'setting-caption-line-length', 'setting-caption-colour-speakers',
+      'setting-play-on-dblclick'];
     return ids.map((id) => {
       const el = document.getElementById(id);
       const panels = el === null ? [] : [...box.querySelectorAll('.settings-panel')].filter((p) => p.contains(el));
@@ -273,6 +276,7 @@ test('every settings control still lives in exactly one tab panel (#615)', async
     { id: 'setting-caption-max-cps', section: 'Captions' },
     { id: 'setting-caption-max-wpm', section: 'Captions' },
     { id: 'setting-caption-line-length', section: 'Captions' },
+    { id: 'setting-caption-colour-speakers', section: 'Captions' },
     { id: 'setting-play-on-dblclick', section: 'Playback' },
     { id: 'stray rows', section: '0' },
   ]);

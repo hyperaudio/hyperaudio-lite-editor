@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 0.8.1 — last changed in release 0.8.1
+ * @version 0.8.2 — last changed in release 0.8.2
  * @license MIT
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -76,9 +76,6 @@ class AssemblyAIService extends HTMLElement {
     document.querySelector('#transcript-editor-btn')?.click();
     document.querySelector('#hypertranscript').innerHTML =
       '<div class="vertically-centre"><center>Transcribing….</center><br/><img src="' + transcribingSvg + '" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
-    if (typeof setTranscriptBusy === 'function') {
-      setTranscriptBusy(true);
-    }
 
     const apiKey = document.querySelector('#assemblyai-key').value.trim();
     const language = document.querySelector('#assemblyai-language').value;
@@ -113,6 +110,17 @@ class AssemblyAIService extends HTMLElement {
     } else {
       player.src = media;
       document.querySelector('#assemblyai-media').value = "";
+    }
+
+    // The transcription's media goes on the player BEFORE the busy signal.
+    // hyperaudio-save captures what is being transcribed at that signal — the
+    // player's media and the File behind it — so that a completion arriving
+    // while the user has switched away is filed against the right project. A
+    // URL set afterwards was too late: the capture took the OUTGOING project's
+    // media, named the new project after it, and put its src back on the
+    // player when the transcript landed.
+    if (typeof setTranscriptBusy === 'function') {
+      setTranscriptBusy(true);
     }
 
     runAssemblyAI(apiKey, file, media, { language, model }).catch(displayAssemblyAIError);
