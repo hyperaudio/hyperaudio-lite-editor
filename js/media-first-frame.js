@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.17 — last changed in release 1.3.17
+ * @version 1.3.20 — last changed in release 1.3.20
  * @license MIT
  *
  * First-frame display for video media (#556). A <video> shows its poster —
@@ -134,13 +134,22 @@
       return t !== null && t.getAttribute('aria-busy') === 'true';
     };
     let ownFrameToken = -1; // the load whose own first frame is already the poster
+    let ownFrameUrl = null; // and the picture it put up, to tell it from the outgoing freeze
     let standInUrl = null;  // an object URL this module made for a transcription's stand-in
+    let standInToken = -1;  // the load that stand-in was made for
     const setStandIn = (url) => {
       if (standInUrl !== null) URL.revokeObjectURL(standInUrl);
       standInUrl = url;
+      standInToken = loadToken;
       player.setAttribute('poster', url);
     };
     const isStandIn = (showing) => showing.startsWith('data:') || (standInUrl !== null && showing === standInUrl);
+    // Whether what is showing came from the medium NOW on the player, rather
+    // than from the one before it. Both are data: JPEGs or object URLs, so
+    // only the recorded values and their load tokens tell them apart.
+    const showsThisMedium = (showing) =>
+      (standInToken === loadToken && standInUrl !== null && showing === standInUrl)
+      || (ownFrameToken === loadToken && ownFrameUrl !== null && showing === ownFrameUrl);
 
     function reveal() {
       if (player.videoWidth <= 0) return; // audio, or dimensions not known yet
@@ -161,6 +170,7 @@
           if (own !== null) {
             player.setAttribute('poster', own);
             ownFrameToken = loadToken;
+            ownFrameUrl = own;
             // Frame 1 is the likeliest black frame in the clip (#582), so
             // once it is up, ask the capture pipeline — which seeks a
             // detached copy to the 5s mark and refuses flat frames — for a
@@ -294,10 +304,37 @@
     // project's stored capture — waiting for the capture that same change
     // has just set going. A stored capture or an embedder's poster already
     // showing is left alone (#619).
+    //
+    // A medium that never decodes a frame — a cloud recording still arriving,
+    // which is most of them while the transcription runs — leaves the picture
+    // frozen at loadstart in place: the PREVIOUS project's. Nothing replaced
+    // it afterwards either, because URL media stores no file for the capture
+    // pipeline to read, so applyStoredPoster can never answer. The project
+    // then wore the last recording's picture for good, while Recents drew its
+    // glyph beside it. The glyph is the fallback here too, so the two agree —
+    // the same answer settleAudio already gives audio with no capture.
+    //
+    // Only a picture belonging to ANOTHER medium gives way: this medium's own
+    // frame, when it managed to draw one, is the better answer and stays.
+    // Not gated on videoWidth: a medium still arriving reports none, which is
+    // exactly the case this exists for. Waiting for a capture stays gated on
+    // it, because there is nothing to grab without a frame (#603).
     document.addEventListener('hyperaudioLibraryChanged', () => {
-      if (player.videoWidth <= 0 || loaderOwnsScreen()) return;
-      if (!isStandIn(player.getAttribute('poster') || '')) return;
-      applyStoredPoster(loadToken, true);
+      if (loaderOwnsScreen()) return;
+      const startedWith = player.getAttribute('poster') || '';
+      if (!isStandIn(startedWith)) return;
+      const token = loadToken;
+      applyStoredPoster(token, player.videoWidth > 0).then(async (applied) => {
+        if (applied || token !== loadToken || loaderOwnsScreen()) return;
+        const showing = player.getAttribute('poster') || '';
+        if (!isStandIn(showing) || showsThisMedium(showing)) return;
+        const posters = window.MediaPosters;
+        const id = currentProjectId();
+        if (!posters || typeof posters.glyphUrl !== 'function' || id === null) return;
+        const entry = await currentEntry(id);
+        if (token !== loadToken) return;
+        player.setAttribute('poster', posters.glyphUrl(entry));
+      });
     });
 
     // A project born on this player — a dropped file, a transcription — gets
