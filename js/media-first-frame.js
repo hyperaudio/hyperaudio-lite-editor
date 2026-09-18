@@ -81,6 +81,37 @@
     // `provisional` marks a picture a real capture may still improve on — a
     // glyph, a first frame, a stand-in — which is what lets #619's upgrade
     // keep working. A stored capture is final.
+    // What a VIDEO project wears in the player when it has no picture of its
+    // own: black. A glyph here was a flash of colour on every switch before
+    // the capture landed, and for a link the server will not let a canvas
+    // read it was the picture for good; black is what an empty player looks
+    // like and is what a frame arrives over. The poster attribute is never
+    // removed to get there (#575: WebKit never leaves the display mode a
+    // posterless element enters). The film glyph stays for Recents.
+    const BLACK_POSTER = 'data:image/svg+xml,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">'
+      + '<rect width="640" height="360" fill="#000"/></svg>');
+    // The library as last announced, for the one moment — loadstart — that
+    // cannot wait for a read: whether the incoming project is audio or video
+    // decides between the wave and black.
+    const entriesById = new Map();
+    const rememberEntries = async () => {
+      const lib = window.HyperaudioSave && window.HyperaudioSave.library;
+      if (!lib || typeof lib.list !== 'function') return;
+      try { (await lib.list()).forEach((e) => entriesById.set(String(e.id), e)); } catch (e) { /* keep what we have */ }
+    };
+    document.addEventListener('hyperaudioLibraryChanged', rememberEntries);
+    rememberEntries();
+    const knownVideo = (entry) => !!(entry && entry.media && entry.media.hasVideo === true);
+    const knownAudio = (entry) => !!(entry && entry.media && entry.media.hasVideo === false);
+    // the cover for a project with no picture: black for video, the wave for
+    // audio, black while it is not yet known
+    const coverFor = (entry, id) => {
+      const posters = window.MediaPosters;
+      if (knownAudio(entry) && posters && typeof posters.glyphUrl === 'function') return posters.glyphUrl(entry || id);
+      return BLACK_POSTER;
+    };
+
     let applied = { url: null, token: -1, own: false, project: null, provisional: true };
     const setPoster = (url, own, project, provisional) => {
       applied = {
@@ -116,19 +147,11 @@
       const id = currentProjectId();
       if (id !== null && applied.project !== null && applied.project !== id) {
         const posters = window.MediaPosters;
-        if (posters && typeof posters.glyphUrl === 'function') {
-          const token = loadToken;
-          // a capture read earlier this session is the answer at once
-          const seen = typeof posters.cachedUrlFor === 'function' ? posters.cachedUrlFor(id) : null;
-          if (seen !== null) { setPoster(seen, true, id, false); return; }
-          setPoster(posters.glyphUrl(id), true, id);   // seeded by id now, re-seeded from the entry below
-          currentEntry(id).then((entry) => {
-            if (token !== loadToken || applied.project !== id || applied.provisional !== true) return;
-            const url = posters.glyphUrl(entry);
-            if (player.getAttribute('poster') !== url) setPoster(url, true, id);
-          });
-          return;
-        }
+        // a capture read earlier this session is the answer at once
+        const seen = posters && typeof posters.cachedUrlFor === 'function' ? posters.cachedUrlFor(id) : null;
+        if (seen !== null) { setPoster(seen, true, id, false); return; }
+        setPoster(coverFor(entriesById.get(String(id)) || null, id), true, id);
+        return;
       }
       const frozen = freezeFrame();
       // the OUTGOING medium's frame, covering the gap — not this one's
@@ -256,15 +279,7 @@
         // (#603).
         const showing = player.getAttribute('poster') || '';
         if (!isForeign(showing)) return;
-        const posters = window.MediaPosters;
-        const id = currentProjectId();
-        if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
-          const entry = await currentEntry(id);
-          if (token !== loadToken) return;
-          setPoster(posters.glyphUrl(entry), true, id);
-        } else if (defaultPoster !== null) {
-          setPoster(defaultPoster, true);
-        }
+        setPoster(BLACK_POSTER, true, currentProjectId());
       });
     }
     ['loadedmetadata', 'loadeddata', 'resize', 'canplay'].forEach((ev) => {
@@ -390,29 +405,25 @@
       applyStoredPoster(token, player.videoWidth > 0).then(async (upgraded) => {
         if (upgraded || token !== loadToken || loaderOwnsScreen()) return;
         const showing = player.getAttribute('poster') || '';
-        // A glyph of this project's, drawn before the entry knew whether the
-        // medium had a picture: the entry may now say video where the glyph
-        // says audio. Redraw from the entry as it stands.
+        const id = currentProjectId();
+        if (id === null) return;
+        // A cover of this project's, put up before the entry knew whether the
+        // medium had a picture: black may now be owed a wave, or a wave black.
+        // Redraw from the entry as it stands; a frame of the medium's own is
+        // not a cover and stays.
         if (!isForeign(showing) && applied.provisional === true && showing.startsWith('data:image/svg')) {
-          const posters = window.MediaPosters;
-          const id = currentProjectId();
-          if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
-            const entry = await currentEntry(id);
-            if (token !== loadToken) return;
-            const fresh = posters.glyphUrl(entry);
-            if (fresh !== showing) setPoster(fresh, true, id);
-          }
+          const entry = await currentEntry(id);
+          if (token !== loadToken) return;
+          const fresh = player.videoWidth > 0 ? BLACK_POSTER : coverFor(entry, id);
+          if (fresh !== showing) setPoster(fresh, true, id);
           return;
         }
         // no capture to be had; a provisional picture of this medium's own is
-        // still better than a glyph, so only a foreign one is replaced
+        // still better than a cover, so only a foreign one is replaced
         if (!isForeign(showing)) return;
-        const posters = window.MediaPosters;
-        const id = currentProjectId();
-        if (!posters || typeof posters.glyphUrl !== 'function' || id === null) return;
         const entry = await currentEntry(id);
         if (token !== loadToken) return;
-        setPoster(posters.glyphUrl(entry), true, id);
+        setPoster(player.videoWidth > 0 ? BLACK_POSTER : coverFor(entry, id), true, id);
       });
     });
 
@@ -468,12 +479,13 @@
       const meta = document.querySelector('meta[name="version"]');
       const report = {
         version: meta !== null ? meta.content : null,
-        poster: showing === '' ? '(none)' : showing.slice(0, 40),
+        poster: showing === '' ? '(none)' : (showing === BLACK_POSTER ? '(black cover)' : showing.slice(0, 40)),
         applied: {
           url: applied.url === null ? null : applied.url.slice(0, 40),
           token: applied.token, own: applied.own, project: applied.project, provisional: applied.provisional,
         },
         loadToken,
+        blackCover: showing === BLACK_POSTER,
         loaderOwnsScreen: loaderOwnsScreen(),
         currentProjectId: currentProjectId(),
         player: { readyState: player.readyState, videoWidth: player.videoWidth, src: (player.currentSrc || player.src || '').slice(0, 80) },

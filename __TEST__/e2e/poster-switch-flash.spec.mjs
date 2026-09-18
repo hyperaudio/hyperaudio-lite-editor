@@ -74,7 +74,7 @@ test('switching projects never shows the logo, a wrong glyph, or another project
   await expect.poll(() => page.evaluate(async () => {
     const save = window.HyperaudioSave;
     const cur = (await save.library.list()).find((e) => String(e.id) === String(save.library.currentId()));
-    return cur && cur.media.hasVideo === true && window.MediaPosters.glyphUrl(cur) === document.getElementById('hyperplayer').getAttribute('poster');
+    return cur && cur.media.hasVideo === true && (await window.hyperaudioPosterDebug()).blackCover;
   }), { timeout: 15000 }).toBe(true);
 
   // record every poster write from here, named by whose picture it is
@@ -108,6 +108,7 @@ test('switching projects never shows the logo, a wrong glyph, or another project
     return window.__writes.map((w) => {
       const own = byId(w.current);
       if (w.value === captures[w.current]) return 'own capture';
+      if (/fill%3D%22%23000%22/.test(w.value)) return 'black cover';
       if (own && P.glyphUrl(own) === w.value) return P.glyphIsVideo(own) ? 'own film glyph' : 'own wave glyph';
       const other = list.find((e) => e.id !== w.current && (captures[e.id] === w.value || P.glyphUrl(e) === w.value));
       if (other) return 'ANOTHER PROJECT (' + other.name + ')';
@@ -119,8 +120,8 @@ test('switching projects never shows the logo, a wrong glyph, or another project
   expect(judged.length).toBeGreaterThan(0);
   expect(judged.filter((j) => j === 'THE LOGO')).toEqual([]);
   expect(judged.filter((j) => j.startsWith('ANOTHER PROJECT'))).toEqual([]);
-  // the local project is video: never a soundwave for it
-  expect(judged.filter((j) => j === 'own wave glyph')).toEqual([]);
+  // no glyph of any kind in the player: the film glyph is for Recents
+  expect(judged.filter((j) => j.endsWith('glyph'))).toEqual([]);
   // and the two end states are the right pictures
   const final = await page.evaluate(async () => {
     const save = window.HyperaudioSave;

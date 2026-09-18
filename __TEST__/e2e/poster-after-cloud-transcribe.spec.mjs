@@ -61,9 +61,9 @@ test('a cloud recording that never decodes a frame does not keep the last projec
   await transcribe(page, CLOUD_URL, 'Second');
   await expect.poll(async () => (await posterOwner(page)).current).toBe('cloud-recording.mp4');
 
-  // the new project wears its own glyph, the picture Recents draws for it,
-  // rather than the previous recording's frame
-  await expect.poll(async () => (await posterOwner(page)).glyphOf).toBe('cloud-recording.mp4');
+  // the new project wears black — a video with no picture of its own — rather
+  // than the previous recording's frame; Recents draws its film glyph
+  await expect.poll(() => page.evaluate(async () => (await window.hyperaudioPosterDebug()).blackCover)).toBe(true);
   expect(await page.evaluate(() => document.getElementById('hyperplayer').getAttribute('poster'))).not.toBe(first);
   expect(await page.evaluate(() => document.getElementById('hyperplayer').readyState)).toBe(0);
 });
@@ -132,6 +132,6 @@ test('a project reopened from Recents does not lend its picture to the next reco
 
   await transcribe(page, CLOUD_URL, 'Second');
   await expect.poll(async () => (await posterOwner(page)).current).toBe('cloud-recording.mp4');
-  await expect.poll(async () => (await posterOwner(page)).glyphOf).toBe('cloud-recording.mp4');
+  await expect.poll(() => page.evaluate(async () => (await window.hyperaudioPosterDebug()).blackCover)).toBe(true);
   expect(await page.evaluate(() => document.getElementById('hyperplayer').getAttribute('poster'))).not.toBe(lent);
 });

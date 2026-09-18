@@ -95,27 +95,29 @@ test('a link video whose server allows cross-origin reads gets a real capture', 
   expect(s.hasVideo).toBe(true);
 });
 
-test('a link video whose server refuses stores nothing, is known as video, and still plays', async ({ page }) => {
+test('a link video whose server refuses stores nothing, is known as video, wears black, and still plays', async ({ page }) => {
   await transcribe(page, CLOSED_URL, 'Closed');
   await expect.poll(async () => (await state(page)).hasVideo, { timeout: 15000 }).toBe(true);
   await page.waitForTimeout(2500);   // long enough for a refused capture to have resolved
   const s = await state(page);
   expect(s.stored).toBe(false);          // nothing could be captured from the URL
   expect(s.readyState).toBeGreaterThan(0); // the live player was never asked for CORS
-  // the entry draws as film, and whatever the player wears is this recording's
-  // own: its film glyph, or — where the browser lets the live player's frame be
-  // read, as this harness does and real Chrome does not — its own first frame.
-  // Never a soundwave, never another project's picture.
+  // the entry draws as film for Recents; the player wears black — or, where
+  // the browser lets the live player's frame be read, as this harness does and
+  // real Chrome does not, its own first frame. Never a glyph in the player,
+  // never another project's picture, and the poster attribute never removed.
   const worn = await page.evaluate(async () => {
     const save = window.HyperaudioSave;
     const cur = (await save.library.list()).find((e) => String(e.id) === String(save.library.currentId()));
-    const showing = document.getElementById('hyperplayer').getAttribute('poster') || '';
-    return { film: window.MediaPosters.glyphIsVideo(cur), wearsFilm: window.MediaPosters.glyphUrl(cur) === showing,
-      wearsOwnFrame: showing.startsWith('data:image/jpeg'), wearsWave: showing.startsWith('data:image/svg') && window.MediaPosters.glyphUrl(cur) !== showing };
+    const d = await window.hyperaudioPosterDebug();
+    const showing = document.getElementById('hyperplayer').getAttribute('poster');
+    return { film: window.MediaPosters.glyphIsVideo(cur), black: d.blackCover, ownFrame: (showing || '').startsWith('data:image/jpeg'),
+      glyphInPlayer: window.MediaPosters.glyphUrl(cur) === showing, attributePresent: showing !== null && showing !== '' };
   });
   expect(worn.film).toBe(true);
-  expect(worn.wearsFilm || worn.wearsOwnFrame).toBe(true);
-  expect(worn.wearsWave).toBe(false);
+  expect(worn.black || worn.ownFrame).toBe(true);
+  expect(worn.glyphInPlayer).toBe(false);
+  expect(worn.attributePresent).toBe(true);
 });
 
 test('a link audio draws as a soundwave, as before', async ({ page }) => {

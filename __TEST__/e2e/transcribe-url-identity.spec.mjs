@@ -181,7 +181,7 @@ test('a URL transcription after a local-file project stores no media of its own,
     const list = await save.library.list();
     const cur = list.find((e) => String(e.id) === String(save.library.currentId()));
     const local = list.find((e) => e.name === 'local-clip.mp4');
-    const ownGlyph = window.MediaPosters.glyphUrl(cur) === showing;
+    const ownGlyph = (await window.hyperaudioPosterDebug()).blackCover;   // a video with no picture wears black
     const ownCapture = (await window.MediaPosters.urlFor(cur.id, cur)) === showing;
     const localCapture = (await window.MediaPosters.urlFor(local.id, local)) === showing;
     return localCapture ? 'the local clip' : ((ownGlyph || ownCapture) ? 'its own' : showing.slice(0, 12));
