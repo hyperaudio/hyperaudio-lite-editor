@@ -1,9 +1,10 @@
 // Deepgram's `diarize` tags each word on its own, so a speaker boundary lands
 // a few words short of where the turn ended and the next speaker is credited
 // with the tail of the previous one's sentence — the label then reads as
-// mid-sentence. `utterances` gives segments cut on pauses and turns, each with
-// one speaker, which is the same kind of data AssemblyAI returns and why its
-// labels land cleanly. Speakers are taken from those, matched by time.
+// mid-sentence. `utterances` gives segments cut on pauses and turns, and their
+// EDGES are used to move each change onto a pause. Their speakers are not
+// used: taking those wholesale merged distinct speakers on real material, so
+// every word-level change is kept and only its position is corrected.
 import { test, expect } from '@playwright/test';
 
 // The real shape of the fault, from a six-way debate: the speaker flag flips
@@ -22,11 +23,12 @@ const words = SAID.map(([word, speaker], i) => ({
   end: Number((i * 0.3 + 0.25).toFixed(2)),
   speaker,
 }));
-// what utterances says: speaker 0 holds the whole first sentence, speaker 1
-// begins at "There"
+// the segments: one ends with the sentence, the next begins at "There". Only
+// the edges matter — the speakers on them are deliberately WRONG here, to
+// prove they are not read.
 const utterances = [
-  { speaker: 0, start: 0, end: words[19].end, transcript: 'We could be there…potential.' },
-  { speaker: 1, start: words[20].start, end: words[24].end, transcript: 'There has to be more.' },
+  { speaker: 9, start: 0, end: words[19].end, transcript: 'We could be there…potential.' },
+  { speaker: 9, start: words[20].start, end: words[24].end, transcript: 'There has to be more.' },
 ];
 
 const respond = (page, body) => page.route('https://api.deepgram.com/**', (route) =>
@@ -57,7 +59,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForSelector('#hypertranscript [data-m]');
 });
 
-test('the speaker label lands where the turn ends, not four words early', async ({ page }) => {
+test('the speaker label moves onto the pause, not four words early', async ({ page }) => {
   await respond(page, shape({ utterances }));
   await transcribe(page);
   await expect.poll(() => paragraphs(page).then((p) => p.length)).toBe(2);
@@ -83,17 +85,29 @@ test('a response without utterances keeps the per-word flags, and still works', 
   expect(paras[1].startsWith('[speaker-1] well if you tap into that potential.')).toBe(true);
 });
 
-test('a word in no utterance keeps the speaker it had', async ({ page }) => {
-  // a gap in the utterance list: the words between are left alone rather than
-  // swept into whichever segment happens to be nearest
-  const gapped = [Object.assign({}, utterances[0], { end: words[10].end }), utterances[1]];
-  await respond(page, shape({ utterances: gapped }));
+test('a change with no edge near it is left where it fell', async ({ page }) => {
+  // the only edges are far from the change, so nothing is moved: a boundary
+  // may be corrected, never invented
+  const far = [{ speaker: 0, start: 0, end: 0.2 }, { speaker: 1, start: 60, end: 61 }];
+  await respond(page, shape({ utterances: far }));
   await transcribe(page);
-  await expect.poll(() => paragraphs(page).then((p) => p.length)).toBeGreaterThan(1);
+  await expect.poll(() => paragraphs(page).then((p) => p.length)).toBe(2);
 
   const paras = await paragraphs(page);
-  // "revolution as" kept speaker 0 from its own flag; "well…" kept speaker 1
   expect(paras[0]).toBe('[speaker-0] We could be there at the start of this new industrial revolution as');
+  expect(paras[1].startsWith('[speaker-1] well if')).toBe(true);
+});
+
+test('segments that run through a speaker change never merge the two', async ({ page }) => {
+  // what went wrong when the utterance SPEAKER was trusted: one segment
+  // covering both turns. Using only its edges, both speakers survive.
+  const coarse = [{ speaker: 0, start: 0, end: words[24].end, transcript: 'everything' }];
+  await respond(page, shape({ utterances: coarse }));
+  await transcribe(page);
+  await expect.poll(() => paragraphs(page).then((p) => p.length)).toBe(2);
+
+  const paras = await paragraphs(page);
+  expect(paras[0].startsWith('[speaker-0] We could be there')).toBe(true);
   expect(paras[1].startsWith('[speaker-1] well if')).toBe(true);
 });
 
@@ -102,7 +116,8 @@ test('the report says which source the speakers came from', async ({ page }) => 
   await transcribe(page);
   await expect.poll(() => paragraphs(page).then((p) => p.length)).toBe(2);
   const report = await page.evaluate(() => window.hyperaudioSpeakerDebug());
-  expect(report.speakersFrom).toBe('utterances');
+  expect(report.changesSnappedToUtterances).toBe(true);
   expect(report.utterances).toBe(2);
+  expect(report.changes).toBe(1);          // still exactly one change
   expect(report.changesMidSentence).toBe(0);
 });

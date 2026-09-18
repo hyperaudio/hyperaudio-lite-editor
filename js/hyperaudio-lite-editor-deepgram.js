@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.11 — last changed in release 0.6.11
+ * @version 0.6.12 — last changed in release 0.6.12
  * @license MIT
  */
 
@@ -369,7 +369,7 @@ window.hyperaudioSpeakerDebug = function hyperaudioSpeakerDebug(limit) {
       + ' | this speaker holds ' + runFrom(i) + ' word(s)';
   });
   const report = {
-    speakersFrom: (json.results && json.results.utterances) ? 'utterances' : 'per-word flags',
+    changesSnappedToUtterances: !!(json.results && json.results.utterances),
     utterances: ((json.results && json.results.utterances) || []).length || 0,
     words: words.length,
     speakers: [...new Set(words.map((w) => w.speaker))].sort(),
@@ -467,54 +467,81 @@ function parseData(json) {
   // Deepgram's `diarize` tags every word on its own, with no regard for what
   // was being said, so a boundary lands a few words short of where the turn
   // actually ended and the next speaker is credited with the tail of the
-  // previous one's sentence — the label then reads as mid-sentence. Measured
-  // on a six-way debate: eight or nine of about thirty changes fell inside a
-  // sentence, where AssemblyAI, which returns speaker-tagged utterances, had
-  // essentially none.
+  // previous one's sentence — the label then reads as mid-sentence.
   //
-  // `utterances` is Deepgram's equivalent: segments cut on pauses and turns,
-  // each with one speaker. Taking the speaker from the utterance a word
-  // belongs to moves every boundary onto the edge of something someone said.
-  // Words are matched by their own start time, so nothing depends on the two
-  // lists being the same length or in step.
+  // `utterances` gives segments cut on pauses and turns. Taking each word's
+  // speaker from the utterance it falls in was tried and was worse: on a
+  // six-way debate with heavy crosstalk their segments run straight through
+  // speaker changes, so 374 words moved and whole turns merged — the host
+  // swallowed into the previous answer. Their segmentation is coarser than
+  // their own per-word flags, and trusting it loses distinctions the flags
+  // had.
   //
-  // Best-effort by design: an older account, a model without utterance
-  // support, or any response that does not carry them leaves the per-word
-  // flags exactly as they were.
-  function applySpeakersFromUtterances(words, utterances) {
+  // What the segments are good for is WHERE, not WHO. Every word-level change
+  // is kept, exactly as many as before, and each is nudged onto the nearest
+  // utterance edge within a few seconds — an edge being a pause or a turn, so
+  // the label lands at the start of what someone said rather than four words
+  // in. A change with no edge near it is left alone, and no change may cross
+  // its neighbours, so this can move a boundary but never remove one and
+  // never merge two speakers.
+  function snapChangesToUtterances(words, utterances) {
     if (!Array.isArray(utterances) || utterances.length === 0) return 0;
-    const spans = utterances
-      .filter((u) => u && typeof u.speaker === 'number'
-        && Number.isFinite(u.start) && Number.isFinite(u.end))
-      .sort((a, b) => a.start - b.start);
-    if (spans.length === 0) return 0;
+    const edges = utterances
+      .filter((u) => u && Number.isFinite(u.start))
+      .map((u) => u.start)
+      .sort((a, b) => a - b);
+    if (edges.length === 0) return 0;
+
+    const changes = [];
+    for (let i = 1; i < words.length; i += 1) {
+      if (words[i].speaker !== words[i - 1].speaker) changes.push(i);
+    }
+
+    const WINDOW_SECONDS = 3;
     let moved = 0;
-    let at = 0;
-    words.forEach((w) => {
-      if (!Number.isFinite(w.start)) return;
-      // the utterance this word starts within, or the last one that began
-      // before it — the walk only goes forward, both lists being in time order
-      while (at + 1 < spans.length && spans[at + 1].start <= w.start) at += 1;
-      const span = spans[at];
-      const inside = w.start >= span.start - 0.001 && w.start <= span.end + 0.001;
-      if (!inside) return;                   // a gap between utterances: leave it be
-      if (w.speaker !== span.speaker) moved += 1;
-      w.speaker = span.speaker;
+    let floor = 1;                 // no change may move at or before the last one
+    changes.forEach((at, n) => {
+      const ceiling = n + 1 < changes.length ? changes[n + 1] : words.length;
+      const t = words[at].start;
+      if (!Number.isFinite(t)) { floor = at + 1; return; }
+      let edge = null;
+      for (let e = 0; e < edges.length; e += 1) {
+        const d = Math.abs(edges[e] - t);
+        if (d > WINDOW_SECONDS) continue;
+        if (edge === null || d < Math.abs(edge - t)) edge = edges[e];
+      }
+      if (edge === null) { floor = at + 1; return; }
+      let to = at;
+      if (edge > t) {
+        while (to < ceiling && words[to].start < edge - 0.001) to += 1;
+      } else {
+        while (to > floor && words[to - 1].start >= edge - 0.001) to -= 1;
+      }
+      if (to === at || to <= floor - 1 || to >= ceiling) { floor = at + 1; return; }
+      const before = words[at - 1].speaker;
+      const after = words[at].speaker;
+      if (to > at) {
+        for (let i = at; i < to; i += 1) words[i].speaker = before;   // the tail goes back
+      } else {
+        for (let i = to; i < at; i += 1) words[i].speaker = after;    // the head comes forward
+      }
+      moved += 1;
+      floor = to + 1;
     });
     return moved;
   }
   const utterances = (json.results && json.results.utterances) || json.utterances || null;
-  const movedByUtterances = applySpeakersFromUtterances(wordData, utterances);
+  const snapped = snapChangesToUtterances(wordData, utterances);
   console.log(utterances === null
-    ? 'Deepgram: no utterances in the response — speakers as tagged per word'
-    : `Deepgram: speakers taken from ${utterances.length} utterances (${movedByUtterances} word(s) re-assigned)`);
+    ? 'Deepgram: no utterances in the response — speaker changes left where they fell'
+    : `Deepgram: ${snapped} speaker change(s) moved onto an utterance edge, of ${utterances.length} utterances`);
 
   // Fix Deepgram diarization edge case where the last word of a speaker turn
   // gets attached to the next speaker. Signature: the word starts essentially
   // on top of the previous speaker's word, but the next word from this "new"
-  // speaker is far away. In that case, reassign the word back. Only needed
-  // where utterances did not settle it: it is the same fault, patched a word
-  // at a time.
+  // speaker is far away. In that case, reassign the word back. The same fault
+  // as the snap above addresses, patched a word at a time, and it still earns
+  // its place where a response carries no utterances.
   const speakerReassignGap = 0.3;
   for (let i = 1; i < wordData.length - 1; i++) {
     const prev = wordData[i - 1];
