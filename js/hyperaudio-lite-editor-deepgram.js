@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.12 — last changed in release 0.6.12
+ * @version 0.6.13 — last changed in release 0.6.13
  * @license MIT
  */
 
@@ -369,8 +369,6 @@ window.hyperaudioSpeakerDebug = function hyperaudioSpeakerDebug(limit) {
       + ' | this speaker holds ' + runFrom(i) + ' word(s)';
   });
   const report = {
-    changesSnappedToUtterances: !!(json.results && json.results.utterances),
-    utterances: ((json.results && json.results.utterances) || []).length || 0,
     words: words.length,
     speakers: [...new Set(words.map((w) => w.speaker))].sort(),
     changes: changes.length,
@@ -385,10 +383,7 @@ window.hyperaudioSpeakerDebug = function hyperaudioSpeakerDebug(limit) {
 
 function getApiUrl(language, model) {
   const languageParam = (language === "xx") ? "&detect_language=true" : `&language=${language}`;
-  // utterances: speaker-tagged segments, cut on pauses and turns, which is
-  // what makes a speaker label land at the start of what someone said rather
-  // than a few words into it (see applySpeakersFromUtterances)
-  return `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&utterances=true&summarize=v2&topics=true&smart_format=true`;
+  return `https://api.deepgram.com/v1/listen?model=${model}${languageParam}&diarize=true&summarize=v2&topics=true&smart_format=true`;
 }
 
 function displayAppropriateErrorMessage(error) {
@@ -467,74 +462,29 @@ function parseData(json) {
   // Deepgram's `diarize` tags every word on its own, with no regard for what
   // was being said, so a boundary lands a few words short of where the turn
   // actually ended and the next speaker is credited with the tail of the
-  // previous one's sentence — the label then reads as mid-sentence.
+  // previous one's sentence: the label reads as mid-sentence. Measured on a
+  // six-way debate, eight or nine of about thirty changes fell inside a
+  // sentence, against essentially none from AssemblyAI on the same audio.
   //
-  // `utterances` gives segments cut on pauses and turns. Taking each word's
-  // speaker from the utterance it falls in was tried and was worse: on a
-  // six-way debate with heavy crosstalk their segments run straight through
-  // speaker changes, so 374 words moved and whole turns merged — the host
-  // swallowed into the previous answer. Their segmentation is coarser than
-  // their own per-word flags, and trusting it loses distinctions the flags
-  // had.
+  // Two attempts to correct it here were tried against that audio and both
+  // failed, so the speakers are left exactly as Deepgram reports them:
   //
-  // What the segments are good for is WHERE, not WHO. Every word-level change
-  // is kept, exactly as many as before, and each is nudged onto the nearest
-  // utterance edge within a few seconds — an edge being a pause or a turn, so
-  // the label lands at the start of what someone said rather than four words
-  // in. A change with no edge near it is left alone, and no change may cross
-  // its neighbours, so this can move a boundary but never remove one and
-  // never merge two speakers.
-  function snapChangesToUtterances(words, utterances) {
-    if (!Array.isArray(utterances) || utterances.length === 0) return 0;
-    const edges = utterances
-      .filter((u) => u && Number.isFinite(u.start))
-      .map((u) => u.start)
-      .sort((a, b) => a - b);
-    if (edges.length === 0) return 0;
-
-    const changes = [];
-    for (let i = 1; i < words.length; i += 1) {
-      if (words[i].speaker !== words[i - 1].speaker) changes.push(i);
-    }
-
-    const WINDOW_SECONDS = 3;
-    let moved = 0;
-    let floor = 1;                 // no change may move at or before the last one
-    changes.forEach((at, n) => {
-      const ceiling = n + 1 < changes.length ? changes[n + 1] : words.length;
-      const t = words[at].start;
-      if (!Number.isFinite(t)) { floor = at + 1; return; }
-      let edge = null;
-      for (let e = 0; e < edges.length; e += 1) {
-        const d = Math.abs(edges[e] - t);
-        if (d > WINDOW_SECONDS) continue;
-        if (edge === null || d < Math.abs(edge - t)) edge = edges[e];
-      }
-      if (edge === null) { floor = at + 1; return; }
-      let to = at;
-      if (edge > t) {
-        while (to < ceiling && words[to].start < edge - 0.001) to += 1;
-      } else {
-        while (to > floor && words[to - 1].start >= edge - 0.001) to -= 1;
-      }
-      if (to === at || to <= floor - 1 || to >= ceiling) { floor = at + 1; return; }
-      const before = words[at - 1].speaker;
-      const after = words[at].speaker;
-      if (to > at) {
-        for (let i = at; i < to; i += 1) words[i].speaker = before;   // the tail goes back
-      } else {
-        for (let i = to; i < at; i += 1) words[i].speaker = after;    // the head comes forward
-      }
-      moved += 1;
-      floor = to + 1;
-    });
-    return moved;
-  }
-  const utterances = (json.results && json.results.utterances) || json.utterances || null;
-  const snapped = snapChangesToUtterances(wordData, utterances);
-  console.log(utterances === null
-    ? 'Deepgram: no utterances in the response — speaker changes left where they fell'
-    : `Deepgram: ${snapped} speaker change(s) moved onto an utterance edge, of ${utterances.length} utterances`);
+  //   Taking each word's speaker from the `utterances` segment it falls in
+  //   merged distinct speakers — 374 words moved, the host swallowed into the
+  //   answer before it. Their segmentation runs through a speaker change when
+  //   the pause is short, so it is coarser than their own per-word flags.
+  //
+  //   Moving each change onto the nearest utterance edge, keeping every
+  //   change and only correcting its position, moved 16 of them and changed
+  //   nothing anyone could see. With about one utterance every nine seconds
+  //   the edges are too sparse to land on, and where one is near it is
+  //   generally mid-sentence too, being cut from the same diarization.
+  //
+  // The single-word repair below stays: it is narrow, it predates this, and
+  // it addresses a signature that is demonstrably theirs. Anything broader
+  // needs better data than the API gives us, and AssemblyAI, which returns
+  // speaker-tagged utterances, is the engine to reach for on diarized
+  // material. hyperaudioSpeakerDebug() reports what their flags actually say.
 
   // Fix Deepgram diarization edge case where the last word of a speaker turn
   // gets attached to the next speaker. Signature: the word starts essentially
