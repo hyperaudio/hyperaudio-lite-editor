@@ -1633,6 +1633,12 @@
 
   async function writeMediaOnce() {
     if (!opfsAvailable || session.mediaFile === null || !hasProjectLock || session.projectId === null) return;
+    // never a File that is not this medium's: URL-mode keeps the URL
+    {
+      const player = document.querySelector('#hyperplayer');
+      const src = player !== null ? player.src : '';
+      if (isLinkUrl(src) && session.mediaFileFromUrl !== src) return;
+    }
     try {
       const mediaDir = await pruneMediaExcept(session.projectId, session.mediaFile.name);
       if (mediaDir !== null) await writeFileTo(mediaDir, session.mediaFile.name, session.mediaFile);
@@ -1707,6 +1713,18 @@
     {
       const player = document.querySelector('#hyperplayer');
       if (player === null || !player.getAttribute('src')) session.mediaFile = null;
+      // A URL on the player is URL-mode: a File captured for a PREVIOUS
+      // project is stale and the URL wins (the rule currentMediaDescriptor
+      // already applies). It used to survive here and be WRITTEN as this
+      // project's media — a copy of the last recording in a project that
+      // plays from a link — and the poster pipeline then captured that file,
+      // so the new project wore the previous recording's picture, in the
+      // player and in Recents alike. The one exception stays: a file fetched
+      // from this very URL is this project's media.
+      else if (isLinkUrl(player.src) && session.mediaFileFromUrl !== player.src) {
+        session.mediaFile = null;
+        session.mediaFileFromUrl = null;
+      }
     }
     session.pendingReconcile = null;
     session.title = '';
@@ -2645,10 +2663,16 @@
             // other project's media. Captured here, restored at the birth.
             const player = document.getElementById('hyperplayer');
             pendingTranscription = { name: mediaDisplayName(), loaderHtml: t.innerHTML };
+            // A URL transcription's identity is the URL: the File in the
+            // session belongs to the project that was open, and restoring it
+            // at the birth is how that project's media and picture were
+            // written into the new one.
+            const playerSrc = player !== null ? player.src : '';
+            const fileIsThisMediums = !isLinkUrl(playerSrc) || session.mediaFileFromUrl === playerSrc;
             pendingIdentity = {
-              file: session.mediaFile,
-              fromUrl: session.mediaFileFromUrl,
-              playerSrc: player !== null ? player.src : '',
+              file: fileIsThisMediums ? session.mediaFile : null,
+              fromUrl: fileIsThisMediums ? session.mediaFileFromUrl : null,
+              playerSrc,
             };
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /

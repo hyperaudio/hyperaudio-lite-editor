@@ -103,3 +103,75 @@ test('the engines put the media on the player before they signal busy', async ({
 
   engines.forEach((e) => expect(`${e.name}: ${e.srcAtBusy}`).toBe(`${e.name}: ${MEDIA_URL}`));
 });
+
+// The File half of the same leak. #643 fixed the NAME and the player src, but
+// the previous project's File still sat in the session through a URL-mode
+// birth and was written as the new project's media — a copy of the last
+// recording inside a project that plays from a link. The poster pipeline then
+// captured that file, so the new project wore the previous recording's
+// picture in the player and in Recents alike, and no poster-side rule could
+// tell: it was, by every record, the new project's own capture.
+test('a URL transcription after a local-file project stores no media of its own, and wears its own picture', async ({ page }) => {
+  // project A: a local file through the Deepgram picker, as a user would
+  await page.evaluate(async () => {
+    const res = await fetch('/__TEST__/fixtures/video-640x360.mp4');
+    const dt = new DataTransfer();
+    dt.items.add(new File([await res.blob()], 'local-clip.mp4', { type: 'video/mp4' }));
+    const input = document.querySelector('#deepgram-file');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    document.querySelector('#hypertranscript').innerHTML = '<div>Transcribing….</div>';
+    window.setTranscriptBusy(true);
+    await new Promise((r) => setTimeout(r, 800));
+    document.querySelector('#hypertranscript').innerHTML =
+      "<article><section><p><span data-m='0' data-d='400'>Local </span>"
+      + "<span data-m='400' data-d='400'>clip </span></p></section></article>";
+    window.setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  await expect.poll(() => libraryNames(page)).toContain('local-clip.mp4');
+  // and it has a capture of its own, which is what used to leak
+  await expect.poll(() => page.evaluate(async () => {
+    const save = window.HyperaudioSave;
+    try { const d = await save.storage.projectDir(save.library.currentId()); await d.getFileHandle('poster.jpg'); return true; } catch (e) { return false; }
+  })).toBe(true);
+
+  // then a URL, in the engines' order, from a video that loads fully
+  await page.evaluate(async () => {
+    document.querySelector('#hypertranscript').innerHTML = '<div>Transcribing….</div>';
+    document.getElementById('hyperplayer').src = '/__TEST__/fixtures/video-320x240.mp4';
+    window.setTranscriptBusy(true);
+    await new Promise((r) => setTimeout(r, 1200));
+    document.querySelector('#hypertranscript').innerHTML =
+      "<article><section><p><span data-m='0' data-d='400'>Cloud </span>"
+      + "<span data-m='400' data-d='400'>two </span></p></section></article>";
+    window.setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  await expect.poll(() => libraryNames(page)).toEqual(['video-320x240.mp4', 'local-clip.mp4', 'How to use the Editor']);
+
+  const stored = await page.evaluate(async () => {
+    const save = window.HyperaudioSave;
+    const dir = await save.storage.projectDir(save.library.currentId());
+    const media = [];
+    try { const m = await dir.getDirectoryHandle('media'); for await (const [n] of m.entries()) media.push(n); } catch (e) { /* none */ }
+    let poster = false;
+    try { await dir.getFileHandle('poster.jpg'); poster = true; } catch (e) { /* none */ }
+    return { media, poster };
+  });
+  // a link project keeps the link: no copy of another project's file, and so
+  // nothing for the poster pipeline to capture
+  expect(stored.media).toEqual([]);
+  expect(stored.poster).toBe(false);
+
+  // and the player wears this project's own glyph, not the local clip's capture
+  await expect.poll(() => page.evaluate(async () => {
+    const showing = document.getElementById('hyperplayer').getAttribute('poster') || '';
+    const list = await window.HyperaudioSave.library.list();
+    const g = list.find((e) => window.MediaPosters.glyphUrl(e) === showing);
+    return g ? g.name : (showing.startsWith('blob:') ? 'a capture' : showing.slice(0, 12));
+  })).toBe('video-320x240.mp4');
+});
