@@ -40,19 +40,21 @@
  */
 
 (function () {
-  // Light enough to read on the translucent black ground browsers paint behind
-  // captions, distinguishable from each other, and deliberately not red-then-
-  // green: the commonest colour blindness would make that pair the hardest two
-  // speakers to tell apart.
+  // Bright on the translucent black ground browsers paint behind captions, and
+  // distinguishable from each other. Every one clears 9.7:1 against black and
+  // the set averages 12.6:1, measured. Deliberately not red-then-green: the
+  // commonest colour blindness would make that pair the hardest two speakers
+  // to tell apart. The two blues sit at either end, so a conversation has to
+  // reach eight speakers before they meet.
   const PALETTE = Object.freeze([
-    '#4fc3f7',   // light blue
-    '#ffd54f',   // amber
-    '#aed581',   // light green
-    '#ff8a65',   // coral
-    '#b39ddb',   // lavender
-    '#4db6ac',   // teal
-    '#f06292',   // pink
-    '#fff176',   // pale yellow
+    '#5cd5ff',   // sky
+    '#ffe45c',   // yellow
+    '#9dff70',   // lime
+    '#ffa06b',   // orange
+    '#c9a3ff',   // violet
+    '#5cead4',   // turquoise
+    '#ff8ac2',   // pink
+    '#8fb8ff',   // periwinkle
   ]);
 
   // Cue text is written raw by both VTT writers. Inside <v> markup that is
