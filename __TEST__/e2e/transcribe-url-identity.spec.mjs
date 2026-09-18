@@ -155,23 +155,35 @@ test('a URL transcription after a local-file project stores no media of its own,
 
   const stored = await page.evaluate(async () => {
     const save = window.HyperaudioSave;
-    const dir = await save.storage.projectDir(save.library.currentId());
+    const list = await save.library.list();
+    const cur = list.find((e) => String(e.id) === String(save.library.currentId()));
+    const local = list.find((e) => e.name === 'local-clip.mp4');
+    const dir = await save.storage.projectDir(cur.id);
     const media = [];
     try { const m = await dir.getDirectoryHandle('media'); for await (const [n] of m.entries()) media.push(n); } catch (e) { /* none */ }
-    let poster = false;
-    try { await dir.getFileHandle('poster.jpg'); poster = true; } catch (e) { /* none */ }
-    return { media, poster };
+    const bytes = async (id) => {
+      try { const d = await save.storage.projectDir(id); const f = await (await d.getFileHandle('poster.jpg')).getFile(); return f.size; } catch (e) { return null; }
+    };
+    return { media, posterBytes: await bytes(cur.id), localPosterBytes: await bytes(local.id) };
   });
-  // a link project keeps the link: no copy of another project's file, and so
-  // nothing for the poster pipeline to capture
+  // a link project keeps the link: no copy of another project's file
   expect(stored.media).toEqual([]);
-  expect(stored.poster).toBe(false);
+  // a poster it may have — captured from its own URL, where the server allows
+  // a cross-origin read — is its own, never the local clip's frame
+  expect(stored.localPosterBytes).not.toBe(null);
+  if (stored.posterBytes !== null) expect(stored.posterBytes).not.toBe(stored.localPosterBytes);
 
-  // and the player wears this project's own glyph, not the local clip's capture
+  // and the player wears this project's own picture — its capture or its
+  // glyph — and not the local clip's
   await expect.poll(() => page.evaluate(async () => {
     const showing = document.getElementById('hyperplayer').getAttribute('poster') || '';
-    const list = await window.HyperaudioSave.library.list();
-    const g = list.find((e) => window.MediaPosters.glyphUrl(e) === showing);
-    return g ? g.name : (showing.startsWith('blob:') ? 'a capture' : showing.slice(0, 12));
-  })).toBe('video-320x240.mp4');
+    const save = window.HyperaudioSave;
+    const list = await save.library.list();
+    const cur = list.find((e) => String(e.id) === String(save.library.currentId()));
+    const local = list.find((e) => e.name === 'local-clip.mp4');
+    const ownGlyph = window.MediaPosters.glyphUrl(cur) === showing;
+    const ownCapture = (await window.MediaPosters.urlFor(cur.id, cur)) === showing;
+    const localCapture = (await window.MediaPosters.urlFor(local.id, local)) === showing;
+    return localCapture ? 'the local clip' : ((ownGlyph || ownCapture) ? 'its own' : showing.slice(0, 12));
+  })).toBe('its own');
 });

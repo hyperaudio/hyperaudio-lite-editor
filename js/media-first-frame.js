@@ -205,7 +205,9 @@
             const token = loadToken;
             const src = player.currentSrc || player.src;
             if (posters && typeof posters.captureFrameBlob === 'function' && src) {
-              posters.captureFrameBlob(src).then((blob) => {
+              // a remote URL is asked for a CORS-readable copy, on the
+              // detached element only; a server that refuses leaves frame 1
+              posters.captureFrameBlob(src, { crossOrigin: /^https?:/i.test(src) }).then((blob) => {
                 if (blob === null || token !== loadToken || !loaderOwnsScreen()) return;
                 setStandIn(URL.createObjectURL(blob));
               }).catch(() => { /* frame 1 stays */ });
@@ -350,9 +352,24 @@
       const token = loadToken;
       applyStoredPoster(token, player.videoWidth > 0).then(async (upgraded) => {
         if (upgraded || token !== loadToken || loaderOwnsScreen()) return;
+        const showing = player.getAttribute('poster') || '';
+        // A glyph of this project's, drawn before the entry knew whether the
+        // medium had a picture: the entry may now say video where the glyph
+        // says audio. Redraw from the entry as it stands.
+        if (!isForeign(showing) && applied.provisional === true && showing.startsWith('data:image/svg')) {
+          const posters = window.MediaPosters;
+          const id = currentProjectId();
+          if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
+            const entry = await currentEntry(id);
+            if (token !== loadToken) return;
+            const fresh = posters.glyphUrl(entry);
+            if (fresh !== showing) setPoster(fresh, true, id);
+          }
+          return;
+        }
         // no capture to be had; a provisional picture of this medium's own is
         // still better than a glyph, so only a foreign one is replaced
-        if (!isForeign(player.getAttribute('poster') || '')) return;
+        if (!isForeign(showing)) return;
         const posters = window.MediaPosters;
         const id = currentProjectId();
         if (!posters || typeof posters.glyphUrl !== 'function' || id === null) return;
