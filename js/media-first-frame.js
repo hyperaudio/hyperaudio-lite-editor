@@ -387,6 +387,43 @@
       });
     });
 
+    // What the poster is and why, for a bug report from a real session: the
+    // state above is closed over and a stale picture cannot be diagnosed from
+    // the element alone. hyperaudioPosterDebug() in the console.
+    window.hyperaudioPosterDebug = async function hyperaudioPosterDebug() {
+      const showing = player.getAttribute('poster') || '';
+      const posters = window.MediaPosters;
+      const lib = window.HyperaudioSave && window.HyperaudioSave.library;
+      const entries = lib && typeof lib.list === 'function' ? await lib.list() : [];
+      const projects = [];
+      for (const e of entries) {
+        let capture = null;
+        try { capture = posters && typeof posters.urlFor === 'function' ? await posters.urlFor(e.id, e) : null; } catch (err) { capture = null; }
+        projects.push({
+          name: e.name,
+          current: String(e.id) === String(currentProjectId()),
+          showingItsGlyph: !!(posters && posters.glyphUrl && posters.glyphUrl(e) === showing),
+          showingItsCapture: capture !== null && capture === showing,
+        });
+      }
+      const meta = document.querySelector('meta[name="version"]');
+      const report = {
+        version: meta !== null ? meta.content : null,
+        poster: showing === '' ? '(none)' : showing.slice(0, 40),
+        applied: {
+          url: applied.url === null ? null : applied.url.slice(0, 40),
+          token: applied.token, own: applied.own, project: applied.project, provisional: applied.provisional,
+        },
+        loadToken,
+        loaderOwnsScreen: loaderOwnsScreen(),
+        currentProjectId: currentProjectId(),
+        player: { readyState: player.readyState, videoWidth: player.videoWidth, src: (player.currentSrc || player.src || '').slice(0, 80) },
+        projects,
+      };
+      console.log(JSON.stringify(report, null, 1));
+      return report;
+    };
+
     // Metadata that arrived before this module wired up (a cached medium in
     // the markup, #621): settle it now, as the event would have.
     if (player.readyState >= 1) {
