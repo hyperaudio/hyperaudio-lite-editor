@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.14 — last changed in release 1.3.14
+ * @version 1.3.21 — last changed in release 1.3.21
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -244,9 +244,18 @@
       closeMenu();
       startRename(entry);
     });
-    menu.querySelector('.recents-menu-duplicate').addEventListener('click', () => {
+    menu.querySelector('.recents-menu-duplicate').addEventListener('click', async () => {
       closeMenu();
-      lib().duplicate(entry.id);
+      // Duplicate validates its copy and answers null when it could not make
+      // one (#655); a fire-and-forget call turned that into silence, with
+      // the user left to notice a row that never appeared
+      let copyId = null;
+      try { copyId = await lib().duplicate(entry.id); } catch (e) { copyId = null; }
+      if (copyId === null && window.HyperaudioSave && typeof window.HyperaudioSave.dialog === 'function') {
+        await window.HyperaudioSave.dialog(
+          'The project could not be copied — nothing was written to Recents. The original is untouched.',
+          { title: 'Copy failed', warning: true, cancelButton: false, confirmLabel: 'OK' });
+      }
     });
     // two-step delete lives inside the menu: first click arms ("Delete?"),
     // the second executes; closing the menu by any route disarms it
