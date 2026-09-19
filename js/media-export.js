@@ -295,11 +295,16 @@
 
   // The caption track as the export should carry it, or null when the project
   // has no captions at all (nothing was ever generated).
+  // null: the project has no caption track at all. []: it has one, and no cue
+  // of it survives the cuts (#658). The two used to collapse into null, so a
+  // curated track cut away entirely fell through to REGENERATING captions
+  // from the transcript — the very thing #634 stopped exports doing once a
+  // track exists. A present, emptied track stays empty.
   const retimedCues = (sections, rate) => {
     const save = window.HyperaudioSave;
     const vtt = save && typeof save.getCaptionsVtt === 'function' ? save.getCaptionsVtt() : '';
-    const cues = retimeCues(parseVttCues(vtt), sections, rate);
-    return cues.length > 0 ? cues : null;
+    if (parseVttCues(vtt).length === 0) return null;   // no track, or one with no cues to begin with
+    return retimeCues(parseVttCues(vtt), sections, rate);
   };
 
   // Re-timed WebVTT + SRT captions for the exported (edited) media. Generated
@@ -312,6 +317,9 @@
     // the caption track first (#634); the generator below is the fallback for
     // a project whose captions were never generated at all
     const cues = retimedCues(sections, rate);
+    // a track whose every cue was cut ships as a header-only track, and no
+    // SRT (an empty SRT is not a file anyone wants): the sidecar says
+    // honestly that nothing survived, rather than inventing cues (#658)
     if (cues !== null) return { vtt: cuesToVtt(cues), srt: cuesToSrt(cues) };
     if (typeof caption !== 'function') return null;
     const inner = buildRetimedTranscriptHtml(sections, rate, dropStruck);
@@ -408,10 +416,9 @@
 
   const buildCaptionChunks = (sections, rate, dropStruck) => {
     const cues = retimedCues(sections, rate);
-    if (cues !== null) {
-      const chunks = cuesToChunks(cues, retimedWords(sections, rate, dropStruck));
-      if (chunks.length) return chunks;
-    }
+    // a present track burns exactly its cues — none, when none survive the
+    // cuts (#658) — and never falls through to the chunker below
+    if (cues !== null) return cuesToChunks(cues, retimedWords(sections, rate, dropStruck));
     // no captions in the project: the karaoke chunker still gives the picture
     // something to say, as it did before there was a caption track to follow
     if (typeof window.hyperaudioWordChunks !== 'function') return null;

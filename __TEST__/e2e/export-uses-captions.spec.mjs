@@ -101,3 +101,32 @@ test('with no captions at all, burn-in still falls back to the word chunker (#63
   expect(chunks.length).toBeGreaterThan(0);
   expect(Array.isArray(chunks[0])).toBe(true);        // the old format: a bare array of words
 });
+
+// ---- #658: a present track whose every cue is cut stays empty --------------
+test('a curated track cut away entirely is not replaced by regenerated captions (#658)', async ({ page }) => {
+  // one curated cue, sitting wholly inside the cut second 3..4
+  await setCaptions(page, 'WEBVTT\n\n00:00:03.000 --> 00:00:04.000\nONLY CUE\n');
+  const out = await page.evaluate(() => {
+    const sections = [{ start: 0, end: 3 }, { start: 4, end: 600 }];   // 3..4 removed
+    const C = window.MediaExportCaptions;
+    return { subs: C.genRetimedCaptions(sections, 1, true), chunks: C.buildCaptionChunks(sections, 1, true) };
+  });
+  // header only, no invented cues, and no SRT to ship
+  expect(out.subs.vtt.trim()).toBe('WEBVTT');
+  expect(out.subs.vtt).not.toContain('-->');
+  expect(out.subs.srt).toBe('');
+  // and the burn-in paints nothing rather than the transcript's words
+  expect(out.chunks).toEqual([]);
+});
+
+test('with no track at all, captions are still generated from the transcript (#658)', async ({ page }) => {
+  await page.evaluate(() => { document.getElementById('hyperplayer-vtt').src = ''; });
+  const out = await page.evaluate(() => {
+    const whole = [{ start: 0, end: 600 }];
+    const C = window.MediaExportCaptions;
+    return { subs: C.genRetimedCaptions(whole, 1, false), chunks: C.buildCaptionChunks(whole, 1, false) };
+  });
+  expect(out.subs).not.toBe(null);
+  expect(out.subs.vtt).toContain('-->');            // the fallback still does its job
+  expect(out.chunks.length).toBeGreaterThan(0);
+});
