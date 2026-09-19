@@ -38,10 +38,18 @@ body[data-theme="light"] {
      the document, letting the whole page (and the fixed top bar) scroll — and
      a restored scroll position could stick it off-screen. A fixed body of the
      exact viewport size removes any document scroll while keeping every
-     absolute panel in place (a fixed body is still their containing block). */
+     absolute panel in place (a fixed body is still their containing block).
+     `clip`, not `hidden` (#632): while a modal is open daisyUI puts
+     overflow:hidden on the root, which stops this box's overflow propagating
+     to the viewport and makes the body its own scroll container — with the
+     ~18px of bleed above to spend — and WebKit never revokes that once the
+     root is visible again. The next scrollIntoView (a project open restoring
+     its scroll anchor) then moved the whole page, fixed navbar included, up
+     18px with no scrollbar to bring it back. A clipped box is never a scroll
+     container, whatever the root is doing. */
   position: fixed;
   inset: 0;
-  overflow: hidden;
+  overflow: clip;
   overscroll-behavior: none;
 }
 
