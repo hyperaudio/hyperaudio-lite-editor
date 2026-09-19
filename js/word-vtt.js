@@ -1,7 +1,7 @@
 /**
  * word-vtt.js
  * (C) The Hyperaudio Project
- * @version 1.1.7 — last changed in release 1.1.7
+ * @version 1.1.8 — last changed in release 1.1.8
  * @license MIT
  *
  * Word-level ("karaoke") WebVTT export (#387, part 1).
@@ -44,10 +44,14 @@
 
   // Pull the ordered word list out of a transcript root. Speaker labels carry a
   // data-m too, so they are skipped; empty/whitespace spans are ignored.
-  function readWords(root) {
+  function readWords(root, options) {
+    const dropStruck = !!(options && options.dropStruck);
     const words = [];
     root.querySelectorAll('[data-m]').forEach((span) => {
       if (span.classList.contains('speaker')) return;
+      // a struck word is cut from the media and is not in the captions (#633),
+      // so the karaoke file must not carry it either
+      if (dropStruck && /line-through/.test(span.getAttribute('style') || '')) return;
       const text = (span.textContent || '').trim();
       if (!text) return;
       const start = parseInt(span.getAttribute('data-m'), 10) / 1000;
@@ -139,7 +143,58 @@
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // The karaoke file is the CAPTION file with word timings inside it: the same
+  // cues, the same line breaks, the same words — each one wrapped so a player
+  // can light it as it is spoken. It used to chunk the transcript into fives
+  // of its own, which put a different set of words on screen from the captions
+  // and cut across sentences: at 0:50 of a debate the captions read "that it's
+  // actually a real offer / and option for everybody in this country" while
+  // this file read "in this country. When I".
+  //
+  // Following the captions also inherits their timing. A chunk of five words
+  // ended at its last word's end, so where a transcript packs words together —
+  // seven inside 0.12s at a crosstalk, in the file that showed this — the cue
+  // was on screen for a twenty-fifth of a second and never seen. A caption cue
+  // runs to the start of the next one and rides over the same data.
+  //
+  // Word times still come from the transcript; only the cues are the
+  // captions'. media-export already pairs the two for its burn-in, matching by
+  // time and falling back to a syllable-weighted estimate when the counts
+  // disagree, so that is reused rather than written twice.
+  function captionChunks() {
+    const captions = window.MediaExportCaptions;
+    const save = window.HyperaudioSave;
+    if (!captions || typeof captions.parseVttCues !== 'function'
+        || typeof captions.cuesToChunks !== 'function'
+        || !save || typeof save.getCaptionsVtt !== 'function') return null;
+    const cues = captions.parseVttCues(save.getCaptionsVtt());
+    if (cues.length === 0) return null;
+    const root = typeof window.currentTranscriptRoot === 'function'
+      ? window.currentTranscriptRoot() : null;
+    if (!root) return null;
+    const chunks = captions.cuesToChunks(cues, readWords(root, { dropStruck: true }));
+    return chunks.length > 0 ? chunks : null;
+  }
+
   function generateWordVtt(options) {
+    // a caller naming its own source wants exactly that source chunked; only
+    // the menu's own export follows the captions
+    if (options === undefined || options === null || options.source == null) {
+      const following = captionChunks();
+      if (following !== null) {
+        let out = 'WEBVTT\n';
+        following.forEach((chunk) => {
+          const lines = chunk.lines
+            .map((line) => line
+              .map((w) => `<${formatTimestamp(w.start)}><c>${escapeVttText(w.text)}</c>`)
+              .join(' '))
+            .join('\n');
+          out += `\n${formatTimestamp(chunk.start)} --> ${formatTimestamp(chunk.end)}\n${lines}\n`;
+        });
+        return out;
+      }
+      // no captions yet: the transcript's own chunking still gives a file
+    }
     const chunks = buildWordChunks(options);
     let vtt = 'WEBVTT\n';
     chunks.forEach((chunk) => {
