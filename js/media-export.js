@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.19 — last changed in release 1.3.19
+ * @version 1.3.21 — last changed in release 1.3.21
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -265,9 +265,14 @@
   };
 
   const pad = (n, width) => String(Math.floor(n)).padStart(width, '0');
+  // Round the whole timestamp to integer milliseconds FIRST, then derive the
+  // clock fields from that integer (#657). Flooring hours, minutes and seconds
+  // separately and rounding the fraction on its own let a fraction that
+  // rounds up to a whole second land in the millisecond field: 1.9995 s
+  // became 00:00:01.1000, a four-digit field no player reads as a time.
   const clockOf = (seconds) => {
-    const s = Math.max(0, seconds);
-    return { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60), sec: Math.floor(s % 60), ms: Math.round((s % 1) * 1000) };
+    const total = Math.round(Math.max(0, seconds) * 1000);
+    return { h: Math.floor(total / 3600000), m: Math.floor((total % 3600000) / 60000), sec: Math.floor((total % 60000) / 1000), ms: total % 1000 };
   };
   const vttTime = (s) => { const c = clockOf(s); return `${pad(c.h, 2)}:${pad(c.m, 2)}:${pad(c.sec, 2)}.${pad(c.ms, 3)}`; };
   const srtTime = (s) => { const c = clockOf(s); return `${pad(c.h, 2)}:${pad(c.m, 2)}:${pad(c.sec, 2)},${pad(c.ms, 3)}`; };

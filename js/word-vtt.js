@@ -1,7 +1,7 @@
 /**
  * word-vtt.js
  * (C) The Hyperaudio Project
- * @version 1.1.8 — last changed in release 1.1.8
+ * @version 1.1.9 — last changed in release 1.1.9
  * @license MIT
  *
  * Word-level ("karaoke") WebVTT export (#387, part 1).
@@ -34,10 +34,13 @@
   // seconds -> HH:MM:SS.mmm
   function formatTimestamp(t) {
     if (!(t >= 0)) t = 0;
-    const hh = Math.floor(t / 3600);
-    const mm = Math.floor((t % 3600) / 60);
-    const ss = Math.floor(t % 60);
-    const ms = Math.round((t - Math.floor(t)) * 1000);
+    // integer milliseconds first, so a fraction that rounds up carries into
+    // the seconds rather than printing as a four-digit field (#657)
+    const total = Math.round(t * 1000);
+    const hh = Math.floor(total / 3600000);
+    const mm = Math.floor((total % 3600000) / 60000);
+    const ss = Math.floor((total % 60000) / 1000);
+    const ms = total % 1000;
     const pad = (n, w) => String(n).padStart(w, '0');
     return `${pad(hh, 2)}:${pad(mm, 2)}:${pad(ss, 2)}.${pad(ms, 3)}`;
   }
