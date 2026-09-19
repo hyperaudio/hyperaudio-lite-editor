@@ -2160,3 +2160,78 @@ test('the Recents Duplicate button reports a failed copy (#655)', async ({ page,
   await page.click('#project-dialog-confirm');
   expect((await libraryState(page)).entries.length).toBe(1);
 });
+
+// ---- #659: a failed draft write is not reported as success ----------------
+test('a draft that could not be written keeps the document here, unless you choose to leave (#659)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const first = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  // a second project to switch to
+  await page.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML = "<article><section><p><span data-m='0' data-d='400'>Other </span><span data-m='400' data-d='400'>one </span></p></section></article>";
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await pollPage(page, async () => (await window.HyperaudioSave.library.list()).length === 2);
+  const second = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), first);
+  await expect(page.locator('#hypertranscript')).toContainText('Benvenuti');
+
+  await editFirstWord(page, 'NEWEST-EDIT');
+  // the draft cannot be written from here on
+  await page.evaluate(() => {
+    const original = FileSystemFileHandle.prototype.createWritable;
+    FileSystemFileHandle.prototype.createWritable = async function (...args) {
+      if (this.name === 'draft.json') throw new DOMException('Injected quota', 'QuotaExceededError');
+      return original.apply(this, args);
+    };
+  });
+  expect(await page.evaluate(() => window.HyperaudioSave.autosaveNow())).toBe('failed');
+
+  // switching asks, and Stay keeps the edit on screen
+  await page.evaluate((id) => { window.__switch = window.HyperaudioSave.library.open(id); }, second);
+  await awaitModal(page);
+  expect(await projectModal(page)).toContain('could not be saved as a draft');
+  await page.click('#project-dialog-cancel');
+  expect(await page.evaluate(() => window.__switch)).toBe(false);
+  await expect(page.locator('#hypertranscript')).toContainText('NEWEST-EDIT');
+
+  // Leave anyway does leave
+  await page.evaluate((id) => { window.__switch = window.HyperaudioSave.library.open(id); }, second);
+  await awaitModal(page);
+  await page.click('#project-dialog-confirm');
+  expect(await page.evaluate(() => window.__switch)).toBe(true);
+  await expect(page.locator('#hypertranscript')).toContainText('Other');
+});
+
+test('a save whose draft could not be retired is not reported clean, and restore does not roll back (#659)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  await editFirstWord(page, 'OLDER-DRAFT');
+  expect(await page.evaluate(() => window.HyperaudioSave.autosaveNow())).toBe('persisted');
+  await editFirstWord(page, 'NEWER-SAVE');
+  const stampBefore = (await readCurrentProject(page)).entry.lastSavedAt;
+  // the draft cannot be removed
+  await page.evaluate(() => {
+    const original = FileSystemDirectoryHandle.prototype.removeEntry;
+    FileSystemDirectoryHandle.prototype.removeEntry = async function (name, opts) {
+      if (name === 'draft.json') throw new DOMException('Injected', 'NoModificationAllowedError');
+      return original.call(this, name, opts);
+    };
+  });
+  await page.evaluate(() => { window.__save = window.HyperaudioSave.saveProject(); });
+  await awaitModal(page);                                    // "Saving the project failed…"
+  await page.click('#project-dialog-confirm');
+  expect(await page.evaluate(() => window.__save)).toBe(false);
+  const files = await readCurrentProject(page);
+  expect(files.draft.html).toContain('OLDER-DRAFT');         // the stale draft is still there
+  expect(files.saved.html).toContain('NEWER-SAVE');          // beside the newer save
+  expect(files.entry.lastSavedAt).toBe(stampBefore);         // and the index was not stamped saved
+
+  // a reload restores the newer of the two, not the stale draft
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect(page.locator('#hypertranscript')).toContainText('NEWER-SAVE');
+  await expect(page.locator('#hypertranscript')).not.toContainText('OLDER-DRAFT');
+});

@@ -559,6 +559,14 @@
     await writable.close();
   }
 
+  async function fileOrNull(dir, name) {
+    try {
+      return await (await dir.getFileHandle(name)).getFile();
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function readTextFrom(dir, name) {
     try {
       const handle = await dir.getFileHandle(name);
@@ -666,6 +674,16 @@
       const dir = await getProjectDir(id, false);
       await dir.removeEntry(name, options || undefined);
     } catch (e) { /* nothing to delete */ }
+  }
+  // Absent is fine; anything else is the caller's failure to handle (#659).
+  async function deleteProjectEntryStrict(id, name) {
+    const dir = await getProjectDir(id, false);
+    try {
+      await dir.removeEntry(name);
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') return;
+      throw e;
+    }
   }
 
   /* --------------------------------------------------------------------------
@@ -1445,16 +1463,26 @@
     return t !== null && t.querySelector('[data-transcript-notice]') !== null;
   }
 
+  // Resolves to what happened (#659): 'persisted', 'skipped' (nothing to
+  // write, or this tab may not), or 'failed'. A failure used to be swallowed
+  // into silence: the pending flag was cleared, the flush resolved, and a
+  // project switch went ahead and replaced the document — the newest edit
+  // gone, its recovery copy never written. On failure the pending state is
+  // kept, so a retry can still land it, and callers that leave the document
+  // can ask first.
   async function writeDraftNow() {
-    if (!opfsAvailable || !session.active || !hasProjectLock || session.projectId === null) return;
-    if (transcriptIsNotice()) return;
+    if (!opfsAvailable || !session.active || !hasProjectLock || session.projectId === null) return 'skipped';
+    if (transcriptIsNotice()) return 'skipped';
     autosavePending = false;
     const projectId = session.projectId;
     try {
       const state = await writeStateFile(projectId, DRAFT_FILE);
       await touchLibraryEntry(projectId, state, { draft: true });
+      return 'persisted';
     } catch (e) {
       console.warn('hyperaudio-save: draft autosave failed', e);
+      if (session.projectId === projectId) autosavePending = true;   // still owed
+      return 'failed';
     }
   }
 
@@ -1572,14 +1600,26 @@
   // the edits, the dirty state stays honest). Await-ing the chain also lets
   // an in-flight write finish — its state was gathered before the call, so it
   // is still the outgoing document's.
+  // Resolves to the write's outcome, 'skipped' when nothing was pending.
   async function flushPendingDraft() {
     clearTimeout(autosaveTimer);
     autosaveTimer = null;
     if (autosavePending) {
-      await writeDraft();
-    } else {
-      await snapshotChain;
+      return await writeDraft();
     }
+    await snapshotChain;
+    return 'skipped';
+  }
+
+  // Before leaving a document: flush its draft, and if that FAILED, ask
+  // rather than walk away from the newest edit (#659). true means go ahead.
+  async function flushOrConfirmLeaving() {
+    const outcome = await flushPendingDraft();
+    if (outcome !== 'failed') return true;
+    const leave = await projectDialog(
+      'Your latest changes could not be saved as a draft, so leaving now would lose them. Stay to try again, or leave anyway.',
+      { title: 'Draft not saved', warning: true, danger: true, confirmLabel: 'Leave anyway', cancelLabel: 'Stay' });
+    return leave === true;
   }
 
   // Manual Save (⌘S / the navbar button), Glider-matched: commit the live
@@ -1651,7 +1691,11 @@
       snapshotChain = snapshotChain.then(async () => {
         try {
           const state = await writeStateFile(projectId, SAVED_FILE);
-          await deleteProjectEntry(projectId, DRAFT_FILE);
+          // strictly (#659): a draft that could not be removed would be
+          // preferred on the next restore over the state just written, while
+          // the index said saved and clean. A missing draft is fine; any
+          // other failure is a failed save, reported as one.
+          await deleteProjectEntryStrict(projectId, DRAFT_FILE);
           await touchLibraryEntry(projectId, state, { saved: true });
           ok = true;
         } catch (e) {
@@ -2453,7 +2497,7 @@
     // No discard dialog (#456): the outgoing project's pending draft flushes
     // to its own directory and stays in the library — opening loses nothing.
     // The dialog existed only because there was one work slot.
-    await flushPendingDraft();
+    if (!(await flushOrConfirmLeaving())) return false;
 
     let reconcileNow = null; // § 7.3: original-kind container missing its media entry
     if (loaded.mediaData !== null && loaded.mediaEntryName !== null) {
@@ -2595,11 +2639,20 @@
   async function readProjectFiles(id) {
     try {
       const dir = await getProjectDir(id, false);
+      // The draft is the unsaved work and normally the newer file. Not
+      // always (#659): a save whose draft retirement failed, or a crash
+      // between writing the save and removing the draft, leaves an OLDER
+      // draft beside a newer save, and restoring the draft then rolls the
+      // document back. The files' own modification times decide.
       let fromDraft = true;
-      let stateText = await readTextFrom(dir, DRAFT_FILE);
-      if (stateText === null) {
+      let stateText = null;
+      const draftFile = await fileOrNull(dir, DRAFT_FILE);
+      const savedFile = await fileOrNull(dir, SAVED_FILE);
+      if (draftFile !== null && !(savedFile !== null && savedFile.lastModified > draftFile.lastModified)) {
+        stateText = await draftFile.text();
+      } else if (savedFile !== null) {
         fromDraft = false;
-        stateText = await readTextFrom(dir, SAVED_FILE);
+        stateText = await savedFile.text();
       }
       if (stateText === null) return null;
       let jsonText = null;
@@ -2842,7 +2895,7 @@
     const t = document.getElementById('hypertranscript');
     if (t === null) return false;
     if (t.getAttribute('aria-busy') === 'true') return true; // already watching
-    await flushPendingDraft();
+    if (!(await flushOrConfirmLeaving())) return false;
     releaseProjectLock();
     session.projectId = null;
     sessionEdited = false;
@@ -2919,7 +2972,7 @@
     captureResumePosition(); // where you are in the OUTGOING project (#587)
     const files = await readProjectFiles(id);
     if (files === null) return false;
-    await flushPendingDraft();
+    if (!(await flushOrConfirmLeaving())) return false;
     releaseProjectLock();
     suppressCapture = true;
     try {
