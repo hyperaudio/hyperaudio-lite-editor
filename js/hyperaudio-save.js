@@ -1407,15 +1407,25 @@
   // capture are synchronous, so the write is of ONE document to ITS OWN
   // directory even if a switch lands mid-write.
   async function writeStateFile(projectId, filename) {
+    // Every component is read and the payload serialised BEFORE the first
+    // await (#654). The captions used to be read after the directory lookup,
+    // so an edit landing during that await paired the earlier transcript with
+    // the later captions in one file — and gather() carries the per-cue
+    // speakers (#536), which then disagreed with the cues beside them.
+    // Writing one atomic file does not make separately timed reads one
+    // snapshot; reading them in one tick does. An edit that arrives during
+    // the storage wait is retained as newer work by the edit-generation
+    // check and the queued follow-up write; this file holds one revision.
     const state = gather();
-    const dir = await getProjectDir(projectId, true);
     const vtt = getCaptionsVtt();
     const json = serializeProjectJson(buildProjectJson(state));
-    await writeFileTo(dir, filename, JSON.stringify({
+    const payload = JSON.stringify({
       json,
       html: state.html,
       captionsVtt: vtt !== '' ? vtt : null,
-    }));
+    });
+    const dir = await getProjectDir(projectId, true);
+    await writeFileTo(dir, filename, payload);
     // Every commit funnels through here (save, project birth, open-seeding),
     // so this is the one place the clean-state signature is captured — from
     // the parts actually written, not a re-gather that later edits could skew.

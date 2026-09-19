@@ -1991,3 +1991,64 @@ test('a lock this tab holds is not mistaken for another tab\'s (#652)', async ({
   })).toBe('Renamed by its own tab');
   await page.evaluate(() => window.__release());
 });
+
+// ---- #654: one state file, one revision ------------------------------------
+// writeStateFile gathered the transcript, awaited the directory lookup, then
+// read the caption track — so an edit during the await paired the earlier
+// transcript with the later captions in one file.
+test('a saved state file holds one revision, whatever lands during the write (#654)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  // curated captions with sync OFF: the caption track is its own document,
+  // so the test can move the transcript and the captions independently
+  await openFixture(page, testInfo, dialogs, null,
+    'WEBVTT\n\n00:00:00.320 --> 00:00:01.500\nCAPTION-ONE\n');
+  await awaitLibraryEntry(page);
+  await editFirstWord(page, 'TRANSCRIPT-ONE');
+
+  // a barrier on THIS project's directory lookup: Save is paused after it has
+  // gathered and before it would have read the captions
+  await page.evaluate((id) => {
+    const original = FileSystemDirectoryHandle.prototype.getDirectoryHandle;
+    window.__armed = true;
+    window.__atBarrier = new Promise((r) => { window.__reachedBarrier = r; });
+    window.__release = null;
+    FileSystemDirectoryHandle.prototype.getDirectoryHandle = async function (name, opts) {
+      if (window.__armed && name === id) {
+        window.__armed = false;
+        window.__reachedBarrier();
+        await new Promise((r) => { window.__release = r; });
+        FileSystemDirectoryHandle.prototype.getDirectoryHandle = original;
+      }
+      return original.call(this, name, opts);
+    };
+  }, await page.evaluate(() => window.HyperaudioSave.library.currentId()));
+
+  await page.evaluate(() => { window.__save = window.HyperaudioSave.saveProject(); });
+  await page.evaluate(() => window.__atBarrier);
+
+  // while Save waits on storage, both the transcript and the captions move on
+  await editFirstWord(page, 'TRANSCRIPT-TWO');
+  await page.evaluate(() => {
+    document.getElementById('hyperplayer-vtt').src =
+      'data:text/vtt,' + encodeURIComponent('WEBVTT\n\n00:00:00.320 --> 00:00:01.500\nCAPTION-TWO\n');
+  });
+  await page.evaluate(() => window.__release());
+  expect(await page.evaluate(() => window.__save)).toBe(true);
+
+  const saved = JSON.parse((await readCurrentProject(page)).saved && JSON.stringify((await readCurrentProject(page)).saved));
+  const transcript = JSON.parse(saved.json).transcript.words[0].text;
+  const html = saved.html.includes('TRANSCRIPT-ONE') ? 'TRANSCRIPT-ONE' : (saved.html.includes('TRANSCRIPT-TWO') ? 'TRANSCRIPT-TWO' : 'neither');
+  const captions = saved.captionsVtt.includes('CAPTION-ONE') ? 'ONE' : (saved.captionsVtt.includes('CAPTION-TWO') ? 'TWO' : 'neither');
+  // the file is the revision Save gathered, in every part
+  expect({ transcript, html, captions }).toEqual({ transcript: 'TRANSCRIPT-ONE', html: 'TRANSCRIPT-ONE', captions: 'ONE' });
+
+  // and the later revision is not lost: it is what the editor shows, the
+  // Save button still marks it unsaved (the index reads clean until the next
+  // draft, as #448 designed it), and the next write carries it
+  await expect(page.locator('#hypertranscript')).toContainText('TRANSCRIPT-TWO');
+  await expect.poll(() => page.evaluate(() => document.getElementById('project-save-btn').classList.contains('dirty'))).toBe(true);
+  await page.evaluate(() => window.HyperaudioSave.autosaveNow());
+  const draft = (await readCurrentProject(page)).draft;
+  expect(draft.html).toContain('TRANSCRIPT-TWO');
+  expect(draft.captionsVtt).toContain('CAPTION-TWO');
+});
