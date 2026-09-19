@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.20 — last changed in release 1.3.20
+ * @version 1.3.21 — last changed in release 1.3.21
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1619,6 +1619,16 @@
         await projectAlert('Nothing was saved: the transcript area is showing a message, not a transcript. Open the project again from Recents to get it back.');
         return false;
       }
+      // Only the holder of the project's lock may commit to its working copy
+      // (#652). Autosave already refused without it; Save did not, and a
+      // second tab's ⌘S overwrote the owner's saved state, deleted its draft
+      // and marked the shared index clean — with no race needed. Nothing
+      // below this line runs without ownership: no draft retirement, no index
+      // update, no dirty-state change, no bridge write-through.
+      if (!hasProjectLock) {
+        await projectAlert('This project is being edited in another tab, so it was not saved here. Close the other tab to take it over.');
+        return false;
+      }
       const identityAtStart = identityGeneration;
       const editAtGather = editGeneration;
       clearTimeout(autosaveTimer);
@@ -2934,9 +2944,51 @@
   // Rename IS the project title Save uses, so it lands everywhere the title
   // lives: the index entry, both stored state files, and — for the current
   // project — the live session.
+  // Whether ANOTHER tab holds a project's working-copy lock (#652). The Web
+  // Locks registry lists holders by client id without saying which is us, so
+  // this tab's own id is learned once, by holding a private lock and reading
+  // it back. Comparing ids is what tells a lock this tab is still in the
+  // middle of acquiring — a newborn project renamed straight after its birth,
+  // as the benchmark does — from a lock a different tab holds. Without Web
+  // Locks the answer is no, the same single-tab assumption the lock makes.
+  let ownLockClientId = null;
+  async function myLockClientId() {
+    if (ownLockClientId !== null) return ownLockClientId;
+    const probe = 'hyperaudio:self:' + Math.random().toString(36).slice(2);
+    let release = null;
+    const held = new Promise((r) => { release = r; });
+    navigator.locks.request(probe, () => held).catch(() => {});
+    try {
+      for (let i = 0; i < 20 && ownLockClientId === null; i += 1) {
+        const state = await navigator.locks.query();   // the grant is async: poll briefly
+        const mine = (state.held || []).find((l) => l.name === probe);
+        if (mine !== undefined) ownLockClientId = mine.clientId;
+      }
+    } catch (e) { /* stays null: treated below as unknowable */ }
+    if (release !== null) release();
+    return ownLockClientId;
+  }
+  async function lockedElsewhere(id) {
+    if (id === session.projectId && hasProjectLock) return false;
+    if (!('locks' in navigator) || typeof navigator.locks.query !== 'function') return false;
+    try {
+      const me = await myLockClientId();
+      const state = await navigator.locks.query();
+      return (state.held || []).some((l) => l.name === PROJECT_LOCK_PREFIX + id && (me === null || l.clientId !== me));
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function renameProject(id, newName) {
     const name = String(newName === null || newName === undefined ? '' : newName).trim();
     if (name === '') return;
+    // a rename rewrites both stored state files: another tab's working copy
+    // is not this tab's to rewrite (#652)
+    if (await lockedElsewhere(id)) {
+      await projectAlert('This project is being edited in another tab, so it was not renamed. Close the other tab first.');
+      return;
+    }
     try {
       const dir = await getProjectDir(id, false);
       await rewriteStateTitle(dir, DRAFT_FILE, name);
@@ -3005,6 +3057,12 @@
   // put another project on screen, since what stays there owns nothing and
   // autosaves nowhere. Returns { wasCurrent } to say whether that is needed.
   async function deleteProject(id) {
+    // deleting a project out from under the tab editing it would take its
+    // working copy away mid-session (#652)
+    if (await lockedElsewhere(id)) {
+      await projectAlert('This project is being edited in another tab, so it was not deleted. Close the other tab first.');
+      return { wasCurrent: false, refused: true };
+    }
     const wasCurrent = id === session.projectId;
     if (wasCurrent) {
       clearTimeout(autosaveTimer);
@@ -3277,7 +3335,9 @@
     // warning would be a lie. The one true loss case left is a document whose
     // library entry was deleted and lives only on screen — guard that.
     window.addEventListener('beforeunload', (event) => {
-      if (session.active && sessionEdited && (session.projectId === null || !opfsAvailable)) {
+      // ...and a document this tab does not own (#653): its edits cannot
+      // autosave, so leaving does lose them
+      if (session.active && sessionEdited && (session.projectId === null || !opfsAvailable || !hasProjectLock)) {
         event.preventDefault();
         event.returnValue = '';
       }
@@ -3562,6 +3622,59 @@
     }
   }
 
+  // A second tab on a project another tab owns is READ-ONLY until it owns it
+  // (#653), reversing #450's editable second tab. That was safe when Save
+  // produced an independent download; since #456 Save is a shared commit, and
+  // an editable non-owner could overwrite the owner's save, could not persist
+  // its own edits anywhere, and on promotion autosaved a stale document over
+  // the owner's newer one. Viewing removes the need to reconcile two copies.
+  //
+  // The gate is belt and braces with the write path: this stops the user,
+  // the ownership checks in saveProject/autosave stop everything else.
+  let readOnly = false;
+  const READ_ONLY_CONTROLS = [
+    '#project-save-btn', '#strikethrough', '#replace-box', '#replace-actions button',
+    '#show-speakers', '#show-timecodes', '#remove-gaps-enabled', '#remove-gaps-threshold',
+    '#remove-gaps-buffer', '#regenerate-btn', '#regenerate-float-btn',
+    '#captions-display input', '#captions-display button',
+  ];
+  // Idempotent by construction: it is called from setTranscriptBusy and from
+  // every caption-editor rebuild, and an attribute written to the value it
+  // already has is still a mutation to the transcript's observers — in the
+  // ordinary, single-tab case this must touch nothing at all.
+  function applyReadOnly() {
+    const t = document.getElementById('hypertranscript');
+    if (t !== null && t.getAttribute('aria-busy') !== 'true') {
+      const want = String(!readOnly);
+      if (t.getAttribute('contenteditable') !== want) t.setAttribute('contenteditable', want);
+    }
+    READ_ONLY_CONTROLS.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((el) => {
+        if (readOnly) {
+          if (el.dataset.readOnlyDisabled === '1') return;   // already gated
+          if (el.disabled) return;                          // disabled for its own reasons
+          el.dataset.readOnlyDisabled = '1';
+          el.disabled = true;
+          if (el.tagName === 'LABEL') el.classList.add('btn-disabled');
+        } else if (el.dataset.readOnlyDisabled === '1') {
+          delete el.dataset.readOnlyDisabled;
+          el.disabled = false;
+          if (el.tagName === 'LABEL') el.classList.remove('btn-disabled');
+        }
+      });
+    });
+    if (document.documentElement.classList.contains('ha-readonly') !== readOnly) {
+      document.documentElement.classList.toggle('ha-readonly', readOnly);
+    }
+  }
+  function setReadOnly(on) {
+    readOnly = on === true;
+    applyReadOnly();
+  }
+  // the caption editor rebuilds its rows, and the transcript is re-enabled by
+  // the loader on its way out: both re-apply the gate
+  window.hyperaudioApplyReadOnly = applyReadOnly;
+
   function showTabGuardBanner() {
     const anchor = document.getElementById('side-notices');
     if (anchor === null) return;
@@ -3570,7 +3683,7 @@
     el.id = 'tab-guard-banner';
     el.setAttribute('role', 'status');
     const text = document.createElement('span');
-    text.textContent = 'This project is open in another tab — autosave and crash recovery are active there. You can still edit and save here, or switch to a different project.';
+    text.textContent = 'This project is being edited in another tab. You can view and play it here; editing will be available when the other tab releases it, or switch to a different project.';
     // Dismissible per appearance: the condition is real, so no persistence —
     // contesting the same (or another) project later shows it again.
     const dismiss = document.createElement('button');
@@ -3602,14 +3715,18 @@
     }
     hasProjectLock = false;
     hideTabGuardBanner();
+    setReadOnly(false);
   }
 
   // Acquire a project's working-copy lock (#450, per-project since #456).
-  // First tab wins; a tab finding the project locked shows the banner, keeps
-  // FULL editing without the slot, and QUEUES — when the owner closes,
-  // crashes or switches away, the waiting tab is promoted: banner drops,
-  // captures enable from here on. No re-read on promotion — replacing a
-  // mid-session document would be worse than the recovery it offers.
+  // First tab wins; a tab finding the project locked shows the banner, is
+  // READ-ONLY (#653), and QUEUES — when the owner closes, crashes or switches
+  // away, the waiting tab is promoted. Promotion re-reads the project first:
+  // the owner may have saved since this tab loaded it, and becoming editable
+  // on the stale copy meant autosaving that copy over the owner's newer one.
+  // A read-only tab has no edits of its own to lose in the re-read; if it
+  // somehow has (an integration, an older build's edits), those are kept and
+  // the re-read is skipped rather than replacing someone's work silently.
   function acquireProjectLock(id) {
     if (!('locks' in navigator)) {
       hasProjectLock = true; // no Web Locks (pre-15.4 Safari): single-tab assumption
@@ -3632,18 +3749,45 @@
         resolve(true);
       });
     }).then((granted) => {
-      if (granted) return true;
+      if (granted) { setReadOnly(false); return true; }
       showTabGuardBanner();
-      projectLockQueue = new AbortController();
-      navigator.locks.request(lockName, { signal: projectLockQueue.signal }, () => {
-        projectLockQueue = null;
-        if (session.projectId !== id) return null; // switched away as the grant raced the abort
-        hasProjectLock = true;
-        hideTabGuardBanner();
-        return new Promise((release) => { projectLockRelease = release; });
-      }).catch(() => { /* aborted: switched away before promotion */ });
+      setReadOnly(true);
+      queuePromotion(id, lockName);
       return false;
     });
+  }
+
+  function queuePromotion(id, lockName) {
+    projectLockQueue = new AbortController();
+    navigator.locks.request(lockName, { signal: projectLockQueue.signal }, async () => {
+      projectLockQueue = null;
+      if (session.projectId !== id) return null; // switched away as the grant raced the abort
+      if (!sessionEdited) {
+        const files = await readProjectFiles(id);
+        if (session.projectId !== id) return null;
+        if (files === null) {
+          // could not load the latest state: stay read-only and keep waiting,
+          // rather than edit a copy that may be stale
+          queuePromotion(id, lockName);
+          return null;
+        }
+        suppressCapture = true;
+        try {
+          applyProjectFiles(id, files);
+        } finally {
+          suppressCapture = false;
+        }
+        const lib = await readLibrary();
+        const entry = lib.projects.find((p) => p.id === id);
+        sessionEdited = entry !== undefined ? isEntryDirty(entry) : files.fromDraft;
+        updateSaveIndicator();
+        notifyLibraryChanged(false);
+      }
+      hasProjectLock = true;
+      hideTabGuardBanner();
+      setReadOnly(false);
+      return new Promise((release) => { projectLockRelease = release; });
+    }).catch(() => { /* aborted: switched away before promotion */ });
   }
 
   flushCaptionPaintOnMediaChange();
