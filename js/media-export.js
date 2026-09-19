@@ -108,24 +108,27 @@
     return player !== null ? player.src : '';
   };
 
-  // The player src may be http(s), blob: or data: (local files restored from
-  // IndexedDB) — fetch handles all three; mediabunny reads the Blob.
-  // Read the media BYTES. The player's src is the obvious source but not a
-  // reliable one: an object URL made from an OPFS file is a snapshot, and
-  // once that file is rewritten (any save that re-writes media does) the URL
-  // still plays from buffered data yet fails to read back — "Failed to fetch"
-  // on some projects and not others. So the library's stored file wins when
-  // it exists, and the player's src is the fallback (URL-mode media, or no
-  // project at all). Both failing is a real error, reported for what it is.
-  const readMediaBlob = async () => {
+  // Read the media BYTES, for the project the run captured (#656). The
+  // player's src is the obvious source but not a reliable one: an object URL
+  // made from an OPFS file is a snapshot, and once that file is rewritten
+  // (any save that re-writes media does) the URL still plays from buffered
+  // data yet fails to read back — "Failed to fetch" on some projects and not
+  // others. So the library's stored file wins when it exists — the file of
+  // the project NAMED in the context, not whichever is current by the time
+  // this runs — then the File the session held at the click, then the src
+  // the player had then (URL-mode media, or no project at all). Nothing here
+  // reads the live page: a project opened during the run cannot lend its
+  // media. Both failing is a real error, reported for what it is.
+  const readMediaBlob = async (ctx) => {
     const save = window.HyperaudioSave;
-    if (save && typeof save.currentMediaFile === 'function') {
+    if (ctx.projectId !== null && save && typeof save.mediaFileFor === 'function') {
       try {
-        const file = await save.currentMediaFile();
+        const file = await save.mediaFileFor(ctx.projectId);
         if (file && file.size > 0) return file;
-      } catch (e) { /* fall through to the player's src */ }
+      } catch (e) { /* fall through */ }
     }
-    const src = playerSrc();
+    if (ctx.mediaFile !== null && ctx.mediaFile.size > 0) return ctx.mediaFile;
+    const src = ctx.mediaSrc;
     if (!src) throw new Error('No media is loaded.');
     let response;
     try {
@@ -141,14 +144,52 @@
     }
   };
 
-  const makeInput = async (mb) => {
-    const blob = await readMediaBlob();
+  const makeInput = async (mb, ctx) => {
+    const blob = await readMediaBlob(ctx);
     return new mb.Input({ formats: mb.ALL_FORMATS, source: new mb.BlobSource(blob) });
   };
 
   const sourceHasVideo = () => {
     const player = document.getElementById('hyperplayer');
     return player !== null && player.videoWidth > 0;
+  };
+
+  // ---------------------------------------------------------------------------
+  // The export context (#656)
+  // ---------------------------------------------------------------------------
+
+  // One immutable picture of what is being exported, taken when the run
+  // starts. A run used to read the LIVE editor at every step — the cuts and
+  // the name before the render, then the transcript, the cues, the title and
+  // the project metadata after it — so an edit made while the encoder ran,
+  // or another project opened from Recents meanwhile, put that text, those
+  // captions and that metadata beside the first project's media. Everything
+  // a run needs is captured here, detached from the document, and every
+  // output is derived from it; the live editor is not consulted again.
+  //
+  // sections/rate/dropStruck are the retiming inputs every helper below
+  // takes; withProject adds the project metadata the flattened container
+  // needs, which costs a transcript parse and is only read when asked for.
+  const captureContext = ({ sections, rate, dropStruck, withProject }) => {
+    const save = window.HyperaudioSave;
+    const root = typeof window.currentTranscriptRoot === 'function'
+      ? window.currentTranscriptRoot() : document.getElementById('hypertranscript');
+    return {
+      sections: sections.map((s) => ({ start: s.start, end: s.end })),
+      rate,
+      dropStruck: dropStruck === true,
+      transcript: root !== null && root !== undefined ? root.cloneNode(true) : null,
+      captionsVtt: save && typeof save.getCaptionsVtt === 'function' ? save.getCaptionsVtt() : '',
+      lineLengths: typeof window.captionLineLengths === 'function'
+        ? window.captionLineLengths() : { max: 32, min: 21 },
+      title: exportTitle(),
+      projectId: save && save.library && typeof save.library.currentId === 'function'
+        ? save.library.currentId() : null,
+      mediaFile: save && typeof save.sessionMediaFile === 'function' ? save.sessionMediaFile() : null,
+      mediaSrc: playerSrc(),
+      project: withProject === true && save && typeof save.captureState === 'function'
+        ? save.captureState() : null,
+    };
   };
 
   // ---------------------------------------------------------------------------
@@ -193,10 +234,10 @@
   // audible — so removing them would describe audio that is not what plays.
   // Retiming needs no such flag: Entire media passes whole-timeline sections,
   // which makes mapTime an identity of its own accord.
-  const buildRetimedTranscriptHtml = (sections, rate, dropStruck) => {
-    const transcript = document.getElementById('hypertranscript');
-    if (transcript === null) return null;
-    const clone = transcript.cloneNode(true);
+  const buildRetimedTranscriptHtml = (ctx) => {
+    if (ctx.transcript === null) return null;
+    const { sections, rate, dropStruck } = ctx;
+    const clone = ctx.transcript.cloneNode(true);
     clone.querySelectorAll('mark.search-mark').forEach((m) => m.replaceWith(document.createTextNode(m.textContent)));
     clone.querySelectorAll('[data-m]').forEach((span) => {
       if (dropStruck && (span.style.textDecoration || '').includes('line-through')) {
@@ -300,11 +341,10 @@
   // curated track cut away entirely fell through to REGENERATING captions
   // from the transcript — the very thing #634 stopped exports doing once a
   // track exists. A present, emptied track stays empty.
-  const retimedCues = (sections, rate) => {
-    const save = window.HyperaudioSave;
-    const vtt = save && typeof save.getCaptionsVtt === 'function' ? save.getCaptionsVtt() : '';
-    if (parseVttCues(vtt).length === 0) return null;   // no track, or one with no cues to begin with
-    return retimeCues(parseVttCues(vtt), sections, rate);
+  const retimedCues = (ctx) => {
+    const cues = parseVttCues(ctx.captionsVtt);
+    if (cues.length === 0) return null;   // no track, or one with no cues to begin with
+    return retimeCues(cues, ctx.sections, ctx.rate);
   };
 
   // Re-timed WebVTT + SRT captions for the exported (edited) media. Generated
@@ -313,16 +353,16 @@
   // non-existent playerId makes caption()'s player-side effects (setting the live
   // track src, forcing captions to show) a no-op — the live editor is untouched.
   // Returns { vtt, srt } or null.
-  const genRetimedCaptions = (sections, rate, dropStruck) => {
+  const genRetimedCaptions = (ctx) => {
     // the caption track first (#634); the generator below is the fallback for
     // a project whose captions were never generated at all
-    const cues = retimedCues(sections, rate);
+    const cues = retimedCues(ctx);
     // a track whose every cue was cut ships as a header-only track, and no
     // SRT (an empty SRT is not a file anyone wants): the sidecar says
     // honestly that nothing survived, rather than inventing cues (#658)
     if (cues !== null) return { vtt: cuesToVtt(cues), srt: cuesToSrt(cues) };
     if (typeof caption !== 'function') return null;
-    const inner = buildRetimedTranscriptHtml(sections, rate, dropStruck);
+    const inner = buildRetimedTranscriptHtml(ctx);
     if (inner === null) return null;
     const host = document.createElement('div');
     const t = document.createElement('div');
@@ -330,8 +370,7 @@
     t.innerHTML = inner;
     host.appendChild(t);
     try {
-      const lines = typeof window.captionLineLengths === 'function'
-        ? window.captionLineLengths() : { max: 32, min: 21 };
+      const lines = ctx.lineLengths;
       return caption().init('hypertranscript', 'media-export-no-player',
         String(lines.max), String(lines.min), null, null, host);
     } catch (e) {
@@ -344,16 +383,16 @@
   // links the exported media by its relative filename; the transcript is the
   // re-timed, struck-words-removed clone. trackSrc: a captions URL to link/embed,
   // or null to omit the <track> entirely (e.g. when captions are burned in).
-  const buildInteractiveExportHtml = (sections, rate, mediaSrc, trackSrc, dropStruck) => {
+  const buildInteractiveExportHtml = (ctx, mediaSrc, trackSrc) => {
     if (typeof hyperaudioTemplate !== 'string' || hyperaudioTemplate === '') return null;
-    const inner = buildRetimedTranscriptHtml(sections, rate, dropStruck);
+    const inner = buildRetimedTranscriptHtml(ctx);
     if (inner === null) return null;
     let html = hyperaudioTemplate
       .replace('{hypertranscript}', () => inner)
       .replace('{sourcemedia}', () => mediaSrc)
       .replace('{sourcevtt}', () => (trackSrc || ''));
     if (!trackSrc) html = html.replace(/<track[^>]*>/i, '');
-    return window.fillExportIdentity ? window.fillExportIdentity(html, inner) : html;
+    return fillExportIdentity(html, inner, ctx.title);
   };
 
   // Word chunks for burn-in, already mapped onto the EDITED/output timeline.
@@ -370,8 +409,8 @@
     : Math.max(1, (String(token).toLowerCase().match(/[aeiouyàáâäãèéêëìíîïòóôöõùúûüýÿ]+/g) || []).length));
 
   // The words of the re-timed transcript, for lighting a cue word by word.
-  const retimedWords = (sections, rate, dropStruck) => {
-    const html = buildRetimedTranscriptHtml(sections, rate, dropStruck);
+  const retimedWords = (ctx) => {
+    const html = buildRetimedTranscriptHtml(ctx);
     if (html === null) return [];
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
@@ -414,15 +453,15 @@
     };
   }).filter((c) => c !== null);
 
-  const buildCaptionChunks = (sections, rate, dropStruck) => {
-    const cues = retimedCues(sections, rate);
+  const buildCaptionChunks = (ctx) => {
+    const cues = retimedCues(ctx);
     // a present track burns exactly its cues — none, when none survive the
     // cuts (#658) — and never falls through to the chunker below
-    if (cues !== null) return cuesToChunks(cues, retimedWords(sections, rate, dropStruck));
+    if (cues !== null) return cuesToChunks(cues, retimedWords(ctx));
     // no captions in the project: the karaoke chunker still gives the picture
     // something to say, as it did before there was a caption track to follow
     if (typeof window.hyperaudioWordChunks !== 'function') return null;
-    const html = buildRetimedTranscriptHtml(sections, rate, dropStruck);
+    const html = buildRetimedTranscriptHtml(ctx);
     if (html === null) return null;
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
@@ -539,8 +578,8 @@
   const videoBitrate = (mb) => (mb.QUALITY_MEDIUM !== undefined ? mb.QUALITY_MEDIUM : 2.5e6);
 
   // Entire media: one straight conversion.
-  const exportEntire = async (mb, fmt, onProgress) => {
-    const input = await makeInput(mb);
+  const exportEntire = async (mb, fmt, ctx, onProgress) => {
+    const input = await makeInput(mb, ctx);
     const output = new mb.Output({ format: fmt.make(mb), target: new mb.BufferTarget() });
     const options = { input, output };
     if (fmt.kind === 'audio') options.video = { discard: true };
@@ -631,8 +670,9 @@
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
   // the sections concatenate without any timestamp bookkeeping.
-  const exportEditedAudio = async (mb, fmt, sections, rate, onProgress) => {
-    const input = await makeInput(mb);
+  const exportEditedAudio = async (mb, fmt, ctx, onProgress) => {
+    const { sections, rate } = ctx;
+    const input = await makeInput(mb, ctx);
     const track = await input.getPrimaryAudioTrack();
     if (!track) throw new Error('The media has no audio track.');
 
@@ -679,8 +719,9 @@
   // Edited media with video: decode frames per kept section and re-timestamp
   // them onto the edited timeline; audio as above (its appended timestamps
   // already match the edited timeline).
-  const exportEditedVideo = async (mb, fmt, sections, rate, onProgress, captions) => {
-    const input = await makeInput(mb);
+  const exportEditedVideo = async (mb, fmt, ctx, onProgress, captions) => {
+    const { sections, rate } = ctx;
+    const input = await makeInput(mb, ctx);
     const vTrack = await input.getPrimaryVideoTrack();
     const aTrack = await input.getPrimaryAudioTrack();
     if (!vTrack) throw new Error('The media has no video track.');
@@ -807,8 +848,10 @@
     return (lastSpace > 80 ? cut.slice(0, lastSpace) : cut) + '…';
   };
 
-  const fillExportIdentity = (html, transcriptHtml) => {
-    const title = exportTitle();
+  // title: the captured one during a run (#656); the live project's for the
+  // plain HTML export in editor-core, which reads the editor as it stands.
+  const fillExportIdentity = (html, transcriptHtml, title) => {
+    if (title === undefined) title = exportTitle();
     const description = openingWords(transcriptHtml);
     const pageTitle = title !== '' ? title : 'Hyperaudio – Interactive Transcript';
     return html
@@ -1297,31 +1340,36 @@
     startBtn.classList.add('btn-disabled');
     setProgress(0);
 
+    // Everything the run needs, read before its first await (#656): from here
+    // the editor may be edited or switched to another project, and none of
+    // that reaches the outputs.
+    const edited = sourceEdited.checked && !sourceEdited.disabled;
+    const rate = exportRate();
+    const rateLabel = +rate.toFixed(2);
+    const burn = fmt.kind === 'video' && burnRow !== null &&
+      burnRow.style.display !== 'none' && burnCheck.checked;
+    const wantRetime = retimeCheck.checked && retimeRow.style.display !== 'none';
+    const wantVtt = vttCheck !== null && vttCheck.checked && vttRow.style.display !== 'none';
+    const wantSrt = srtCheck !== null && srtCheck.checked && srtRow.style.display !== 'none';
+    const wantProject = projectCheck !== null && projectCheck.checked
+      && projectRow !== null && projectRow.style.display !== 'none';
+    const wantZip = zipCheck !== null && zipCheck.checked;
+    // user-chosen export name (verbatim, so the media file and the transcript's
+    // <video src> always agree); light sanitise for filename safety
+    const rawName = nameInput !== null ? nameInput.value.trim() : '';
+    // Sanitised once, here: the media file, the sidecar captions, the
+    // transcript page and the archive folder all derive from this, so the
+    // bundle stays internally consistent and needs no encoding (#560).
+    const baseName = safeExportName(rawName || exportBaseName(), 'export');
+
+    const player = document.getElementById('hyperplayer');
+    const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
+    const sections = edited ? editedSections(duration) : [{ start: 0, end: duration }];
+    const ctx = Object.freeze(captureContext({ sections, rate, dropStruck: edited, withProject: wantProject }));
+
     try {
       const mb = await loadMediabunny();
       if (fmt.needsMp3) await ensureMp3Encoder(mb);
-
-      const edited = sourceEdited.checked && !sourceEdited.disabled;
-      const rate = exportRate();
-      const rateLabel = +rate.toFixed(2);
-      const burn = fmt.kind === 'video' && burnRow !== null &&
-        burnRow.style.display !== 'none' && burnCheck.checked;
-      const wantRetime = retimeCheck.checked && retimeRow.style.display !== 'none';
-      const wantVtt = vttCheck !== null && vttCheck.checked && vttRow.style.display !== 'none';
-      const wantSrt = srtCheck !== null && srtCheck.checked && srtRow.style.display !== 'none';
-      const wantProject = projectCheck !== null && projectCheck.checked
-        && projectRow !== null && projectRow.style.display !== 'none';
-      // user-chosen export name (verbatim, so the media file and the transcript's
-      // <video src> always agree); light sanitise for filename safety
-      const rawName = nameInput !== null ? nameInput.value.trim() : '';
-      // Sanitised once, here: the media file, the sidecar captions, the
-      // transcript page and the archive folder all derive from this, so the
-      // bundle stays internally consistent and needs no encoding (#560).
-      const baseName = safeExportName(rawName || exportBaseName(), 'export');
-
-      const player = document.getElementById('hyperplayer');
-      const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
-      const sections = edited ? editedSections(duration) : [{ start: 0, end: duration }];
 
       // 1. the media file. Burning captions requires the frame-by-frame canvas
       // path, so it always routes through the section pipeline (as an applied
@@ -1330,20 +1378,20 @@
       const straightCopy = !edited && rate === 1 && !burn;
       if (straightCopy) {
         setStatus('Exporting entire media…');
-        blob = await exportEntire(mb, fmt, setProgress);
+        blob = await exportEntire(mb, fmt, ctx, setProgress);
       } else {
-        const captions = burn ? buildCaptionChunks(sections, rate, edited) : null;
+        const captions = burn ? buildCaptionChunks(ctx) : null;
         setStatus(burn ? 'Exporting with captions…' : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…` : 'Exporting edited media…'));
         blob = fmt.kind === 'video'
-          ? await exportEditedVideo(mb, fmt, sections, rate, setProgress, captions)
-          : await exportEditedAudio(mb, fmt, sections, rate, setProgress);
+          ? await exportEditedVideo(mb, fmt, ctx, setProgress, captions)
+          : await exportEditedAudio(mb, fmt, ctx, setProgress);
       }
       const mediaName = `${baseName}.${fmt.ext}`;
       const outputs = [{ blob, name: mediaName }];
 
       // 2. caption sidecars + interactive transcript, all re-timed to the export
       if (wantRetime || wantVtt || wantSrt) {
-        const subs = genRetimedCaptions(sections, rate, edited);
+        const subs = genRetimedCaptions(ctx);
         const vttName = `${baseName}.vtt`;
         const srtName = `${baseName}.srt`;
         // The interactive transcript's captions ride as a SIDECAR file, not an
@@ -1368,7 +1416,7 @@
           if (!burn) {
             if (needVtt) trackSrc = vttName; // sanitised already (#560): no encoding needed
           }
-          const html = buildInteractiveExportHtml(sections, rate, mediaName, trackSrc, edited);
+          const html = buildInteractiveExportHtml(ctx, mediaName, trackSrc);
           if (html !== null) {
             outputs.push({ blob: new Blob([html], { type: 'text/html' }), name: `${baseName}-transcript.html` });
           }
@@ -1382,9 +1430,9 @@
       // doc's § 1.1 caveat points to.
       if (wantProject) {
         setStatus('Building project container…');
-        const projHtml = buildRetimedTranscriptHtml(sections, rate, edited);
+        const projHtml = buildRetimedTranscriptHtml(ctx);
         if (projHtml !== null) {
-          const projSubs = genRetimedCaptions(sections, rate, edited);
+          const projSubs = genRetimedCaptions(ctx);
           const projDur = keptDuration(sections) / rate; // Infinity when metadata never loaded
           const projBlob = await window.HyperaudioSave.buildFlattenedProjectBlob({
             html: projHtml,
@@ -1396,6 +1444,7 @@
               durationSeconds: Number.isFinite(projDur) ? Math.round(projDur * 1000) / 1000 : 0,
             },
             title: baseName,
+            base: ctx.project,   // the metadata captured at the click, not the editor's now (#656)
           });
           outputs.push({ blob: projBlob, name: `${baseName}.hyperaudio` });
         }
@@ -1406,7 +1455,7 @@
       // Decided by what the run actually produced plus the toggle — NOT by the
       // row's visibility, which is presentation and can lag a programmatic
       // checkbox change that fired no 'change' event.
-      const asZip = outputs.length > 1 && zipCheck !== null && zipCheck.checked;
+      const asZip = outputs.length > 1 && wantZip;
       let zipped = false;
       if (asZip) {
         try {
@@ -1478,8 +1527,13 @@
   // they land on the edited timeline, and how they become the picture's
   // chunks. Also the handle to reach for when an export's captions look
   // wrong, rather than inferring it from a finished file.
+  // Outside a run there is no captured context: these read the editor as it
+  // stands, which is what an export started at that moment would capture.
+  const liveContext = (sections, rate, dropStruck) => captureContext({ sections, rate, dropStruck });
   window.MediaExportCaptions = Object.freeze({
-    parseVttCues, retimeCues, cuesToVtt, cuesToSrt, cuesToChunks,
-    retimedCues, genRetimedCaptions, buildCaptionChunks, drawCaptionOverlay,
+    parseVttCues, retimeCues, cuesToVtt, cuesToSrt, cuesToChunks, drawCaptionOverlay,
+    retimedCues: (sections, rate) => retimedCues(liveContext(sections, rate, false)),
+    genRetimedCaptions: (sections, rate, dropStruck) => genRetimedCaptions(liveContext(sections, rate, dropStruck)),
+    buildCaptionChunks: (sections, rate, dropStruck) => buildCaptionChunks(liveContext(sections, rate, dropStruck)),
   });
 })();

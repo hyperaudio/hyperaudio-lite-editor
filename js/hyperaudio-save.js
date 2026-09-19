@@ -2199,7 +2199,10 @@
   // parts: { html, captionsVtt, media: {name, data(Blob), mimeType,
   //          durationSeconds}, title }  →  Promise<Blob>
   async function buildFlattenedProjectBlob(parts) {
-    const base = gather();
+    // parts.base: the state captured when the export started (#656), so a
+    // container built after a long render describes the project that was
+    // exported, not whatever the editor holds by then.
+    const base = parts.base || gather();
     const transcript = htmlToJSON(parts.html);
     const safeName = sanitizeMediaFilename(parts.media.name);
     const now = nowIso();
@@ -3974,6 +3977,13 @@
       }
       return session.mediaFile;
     },
+    // What a media export captures at its start (#656): the stored media of
+    // a NAMED project, the File the session holds now, and the full state
+    // the flattened container is built from — a copy, so nothing that
+    // happens in the editor afterwards reaches it.
+    mediaFileFor: firstMediaFileOf,
+    sessionMediaFile: () => session.mediaFile,
+    captureState: () => structuredClone(gather()),
     openFromFile,
     autosaveNow: writeDraft,
     isDirty,
