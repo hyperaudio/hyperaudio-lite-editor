@@ -3027,6 +3027,43 @@
   // Duplicate: a new id sharing nothing — both state files, origin and media
   // are copied byte-for-byte. The copy is never the current project and
   // mirrors the source's dirty state (same draft/saved stamps).
+  // A strict read for duplication (#655): null means the entry is genuinely
+  // absent (NotFoundError); any other failure — permission, I/O, quota —
+  // throws. readTextFrom folds every failure into null, which is right for
+  // its optional-read callers and wrong here, where "absent" and "could not
+  // be read" must be told apart or an unreadable source yields a copy with
+  // nothing in it, published as a success.
+  async function readTextStrict(dir, name) {
+    let handle;
+    try {
+      handle = await dir.getFileHandle(name);
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') return null;
+      throw e;
+    }
+    return (await handle.getFile()).text();
+  }
+
+  // Duplicate: a new id sharing nothing — both state files, origin and media
+  // are copied byte-for-byte, then VALIDATED, and only then published (#655).
+  // The copy is never the current project and mirrors the source's dirty
+  // state (same draft/saved stamps).
+  //
+  // Before: every read error was "absent" and every media error was "no
+  // media to copy", so a source that could not be read produced a copy with
+  // no state, an unreadable media file a copy with no media, and a failed
+  // media write a zero-byte file — each with a normal Recents row and a
+  // "copy" name, indistinguishable from a good copy. The index entry was
+  // published outside the cleanup, and the button ignored the result.
+  //
+  // Now the directory is staged unindexed, the required contents are read
+  // strictly, media is validated against the descriptor — kind "original"
+  // needs the referenced file copied whole, and a zero-byte remnant of a
+  // failed write does not count; kind "none" and link projects, including an
+  // embedder's native links, legitimately store nothing — and the entry is
+  // published once, at the end. Failure returns null after cleanup; if the
+  // cleanup itself fails, an unindexed orphan directory is left rather than
+  // a published copy. Callers get an honest answer to report.
   async function duplicateProject(id) {
     const srcLib = await readLibrary();
     const srcEntry = srcLib.projects.find((p) => p.id === id);
@@ -3036,29 +3073,61 @@
     try {
       const src = await getProjectDir(id, false);
       const dst = await getProjectDir(newId, true);
-      for (const name of [DRAFT_FILE, SAVED_FILE, ENTRY.original]) {
-        const text = await readTextFrom(src, name);
-        if (text !== null) await writeFileTo(dst, name, text);
+
+      // required document state: at least one of draft/saved, read strictly
+      const draftText = await readTextStrict(src, DRAFT_FILE);
+      const savedText = await readTextStrict(src, SAVED_FILE);
+      if (draftText === null && savedText === null) {
+        throw new Error('the project has no readable state to copy');
       }
-      await copyMediaTo(src, newId);
+      const originText = await readTextStrict(src, ENTRY.original);
+      if (draftText !== null) await writeFileTo(dst, DRAFT_FILE, draftText);
+      if (savedText !== null) await writeFileTo(dst, SAVED_FILE, savedText);
+      if (originText !== null) await writeFileTo(dst, ENTRY.original, originText);
+
+      // media, by what the descriptor says the project has
+      const snapshot = JSON.parse(draftText !== null ? draftText : savedText);
+      const descriptor = (JSON.parse(snapshot.json).media) || { kind: 'none' };
+      if (descriptor.kind === 'original') {
+        const srcMedia = await src.getDirectoryHandle('media');   // throws NotFoundError: required, absent
+        let copied = 0;
+        for await (const [name, handle] of srcMedia.entries()) {
+          if (handle.kind !== 'file') continue;
+          const file = await handle.getFile();
+          const dstMedia = await getMediaDir(newId, true);
+          await writeFileTo(dstMedia, name, file);
+          const written = await (await (await dstMedia.getFileHandle(name)).getFile()).size;
+          if (written !== file.size) throw new Error('media copy incomplete: ' + written + ' of ' + file.size + ' bytes');
+          copied += 1;
+        }
+        if (copied === 0) throw new Error('the project says it has media, but its media directory is empty');
+      }
+
       // the copy carries its own title so a later switch doesn't resurrect the old one
       await rewriteStateTitle(dst, DRAFT_FILE, copyName);
       await rewriteStateTitle(dst, SAVED_FILE, copyName);
     } catch (e) {
       console.warn('hyperaudio-save: duplicate failed', e);
+      await deleteProjectDir(newId);   // best-effort: an orphan beats a published bad copy
+      return null;
+    }
+    // publish once, and only a validated copy
+    const now = Date.now();
+    try {
+      await updateLibrary((lib) => {
+        lib.projects.push(Object.assign({}, srcEntry, {
+          id: newId,
+          name: copyName,
+          starred: false,
+          createdAt: now,
+          modifiedAt: now,
+        }));
+      });
+    } catch (e) {
+      console.warn('hyperaudio-save: duplicate could not be indexed', e);
       await deleteProjectDir(newId);
       return null;
     }
-    const now = Date.now();
-    await updateLibrary((lib) => {
-      lib.projects.push(Object.assign({}, srcEntry, {
-        id: newId,
-        name: copyName,
-        starred: false,
-        createdAt: now,
-        modifiedAt: now,
-      }));
-    });
     return newId;
   }
 

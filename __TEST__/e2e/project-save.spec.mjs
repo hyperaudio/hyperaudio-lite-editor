@@ -2052,3 +2052,111 @@ test('a saved state file holds one revision, whatever lands during the write (#6
   expect(draft.html).toContain('TRANSCRIPT-TWO');
   expect(draft.captionsVtt).toContain('CAPTION-TWO');
 });
+
+// ---- #655: Duplicate publishes only a validated copy ----------------------
+// Every read error was "absent" and every media error "no media to copy", so
+// an unreadable source produced a copy with nothing in it, an unreadable media
+// file a copy with no media, and a failed media write a zero-byte file — each
+// with a normal Recents row and a "copy" name. The entry is now published
+// once, after validation, and a failure is reported rather than filed.
+
+const libraryState = (page) => page.evaluate(async () => {
+  const root = await navigator.storage.getDirectory();
+  const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
+  const work = await root.getDirectoryHandle('work');
+  const dirs = []; for await (const [name] of work.entries()) dirs.push(name);
+  const files = async (id) => {
+    const out = {};
+    try {
+      const dir = await work.getDirectoryHandle(id);
+      for (const name of ['draft.json', 'saved.json', 'transcript.original.json']) {
+        try { out[name] = (await (await (await dir.getFileHandle(name)).getFile()).text()).length; } catch (e) { out[name] = null; }
+      }
+      try { const m = await dir.getDirectoryHandle('media'); for await (const [n, h] of m.entries()) out['media/' + n] = (await h.getFile()).size; } catch (e) { /* none */ }
+    } catch (e) { return null; }
+    return out;
+  };
+  const byId = {}; for (const e of lib.projects) byId[e.id] = await files(e.id);
+  return { entries: lib.projects.map((e) => ({ id: e.id, name: e.name })), dirs, byId };
+});
+
+// inject one DOMException at one filesystem boundary for the duration of a call
+const withFault = (page, fault, run) => page.evaluate(async ([f, fn]) => {
+  const proto = f.on === 'file' ? FileSystemFileHandle.prototype : FileSystemDirectoryHandle.prototype;
+  const original = proto[f.method];
+  proto[f.method] = async function (...args) {
+    if (this.name === f.name) throw new DOMException('Injected ' + f.error, f.error);
+    return original.apply(this, args);
+  };
+  try { return await (new Function('return ' + fn))()(); } finally { proto[f.method] = original; }
+}, [fault, run]);
+
+test('a normal Duplicate is a complete, independent copy (#655)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs, null, undefined, 2);   // with two seconds of embedded media
+  await awaitLibraryEntry(page);
+  const before = await libraryState(page);
+  const sourceId = before.entries[0].id;
+  const copyId = await page.evaluate((id) => window.HyperaudioSave.library.duplicate(id), sourceId);
+  expect(copyId).not.toBe(null);
+  const after = await libraryState(page);
+  expect(after.entries.map((e) => e.name)).toEqual([before.entries[0].name, before.entries[0].name + ' copy']);
+  expect(after.byId[copyId]['media/tone.wav']).toBe(before.byId[sourceId]['media/tone.wav']);
+  expect(after.byId[copyId]['saved.json']).toBeGreaterThan(0);
+  expect(after.byId[copyId]['transcript.original.json']).toBe(before.byId[sourceId]['transcript.original.json']);
+  expect(after.byId[sourceId]).toEqual(before.byId[sourceId]);   // the source is untouched
+});
+
+for (const fault of [
+  { label: 'the source media cannot be read', on: 'file', method: 'getFile', name: 'tone.wav', error: 'NotReadableError' },
+  { label: 'the destination media cannot be written', on: 'file', method: 'createWritable', name: 'tone.wav', error: 'QuotaExceededError' },
+  { label: 'the source state cannot be read', on: 'file', method: 'getFile', name: 'saved.json', error: 'NotReadableError' },
+]) {
+  test(`Duplicate fails honestly when ${fault.label} (#655)`, async ({ page }, testInfo) => {
+    const dialogs = [];
+    await openFixture(page, testInfo, dialogs, null, undefined, 2);
+    await awaitLibraryEntry(page);
+    // a saved project with no draft, so "state cannot be read" has no fallback
+    await page.evaluate(() => window.HyperaudioSave.saveProject());
+    const before = await libraryState(page);
+    const sourceId = before.entries[0].id;
+
+    const copyId = await withFault(page, fault, `() => window.HyperaudioSave.library.duplicate(${JSON.stringify(sourceId)})`);
+    expect(copyId).toBe(null);
+
+    const after = await libraryState(page);
+    expect(after.entries).toEqual(before.entries);              // nothing published
+    expect(after.dirs.sort()).toEqual(before.dirs.sort());     // and nothing left behind
+    expect(after.byId[sourceId]).toEqual(before.byId[sourceId]);   // the source is intact
+  });
+}
+
+test('a project with no media duplicates without one (#655)', async ({ page }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs, (json) => { json.media = { kind: 'none', path: null, url: null, filename: '', mimeType: '', durationSeconds: 0, sizeBytes: 0 }; return json; }, undefined, 0);
+  await awaitLibraryEntry(page);
+  const before = await libraryState(page);
+  const copyId = await page.evaluate((id) => window.HyperaudioSave.library.duplicate(id), before.entries[0].id);
+  expect(copyId).not.toBe(null);
+  expect((await libraryState(page)).entries.length).toBe(2);
+});
+
+test('the Recents Duplicate button reports a failed copy (#655)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs, null, undefined, 2);
+  await awaitLibraryEntry(page);
+  await page.evaluate(() => {
+    const original = FileSystemFileHandle.prototype.getFile;
+    FileSystemFileHandle.prototype.getFile = async function (...args) {
+      if (this.name === 'tone.wav') throw new DOMException('Injected', 'NotReadableError');
+      return original.apply(this, args);
+    };
+  });
+  // the row's kebab menu → Duplicate
+  await page.locator('.recents-kebab').first().click();
+  await page.click('#recents-menu .recents-menu-duplicate');
+  await awaitModal(page);
+  expect(await projectModal(page)).toContain('could not be copied');
+  await page.click('#project-dialog-confirm');
+  expect((await libraryState(page)).entries.length).toBe(1);
+});
