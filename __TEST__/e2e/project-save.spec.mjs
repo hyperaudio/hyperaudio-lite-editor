@@ -1776,3 +1776,218 @@ test('a project switch restores scroll and playhead; unknown projects start at t
   expect(restored.scrollTop).toBeGreaterThan(0);
   expect(Math.abs(Number(restored.m) - Number(anchorM))).toBeLessThanOrEqual(1000); // within ~2 words
 });
+
+// ---- #652 / #653: a second tab on an owned project ------------------------
+// Since #456 Save is a shared commit, not an independent download, so a
+// second tab's ⌘S overwrote the owner's saved state and deleted its draft.
+// Ownership is now enforced in the write path (#652), and a tab that does
+// not own the project is read-only until it does (#653).
+
+const ownerFiles = (page) => page.evaluate(async () => {
+  const id = window.HyperaudioSave.library.currentId();
+  const root = await navigator.storage.getDirectory();
+  const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(id);
+  const read = async (name) => {
+    try { return await (await (await dir.getFileHandle(name)).getFile()).text(); } catch (e) { return null; }
+  };
+  const lib = JSON.parse(await (await (await root.getFileHandle('library.json')).getFile()).text());
+  const entry = lib.projects.find((p) => p.id === id);
+  return { id, saved: await read('saved.json'), draft: await read('draft.json'),
+    lastDraftAt: entry.lastDraftAt, lastSavedAt: entry.lastSavedAt, name: entry.name };
+});
+
+// A refused operation explains itself in the editor's own modal and only
+// resolves once that is dismissed — so the call is started without awaiting,
+// the modal is read and confirmed, and the result collected afterwards.
+const refused = async (page, start) => {
+  await page.evaluate((fn) => { window.__result = undefined; window.__result = (new Function('return ' + fn))()(); }, start);
+  await awaitModal(page);
+  const message = await projectModal(page);
+  await page.click('#project-dialog-confirm');
+  const result = await page.evaluate(() => window.__result);
+  return { message, result };
+};
+
+const editFirstWord = (page, text) => page.evaluate((t) => {
+  const w = document.querySelector('#hypertranscript span[data-m]:not(.speaker)');
+  w.textContent = t + ' ';
+  w.dispatchEvent(new Event('input', { bubbles: true }));
+}, text);
+
+test('a second tab cannot Save into a project another tab owns (#652)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  // the owner has an autosaved draft that must survive
+  await editFirstWord(page, 'OWNER-DRAFT');
+  await page.evaluate(() => window.HyperaudioSave.autosaveNow());
+  const before = await ownerFiles(page);
+  expect(before.draft).toContain('OWNER-DRAFT');
+
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible();
+  expect(await page2.evaluate(() => window.HyperaudioSave.library.ownsCurrent())).toBe(false);
+
+  // every route to Save: the API, the keyboard, the button — each refused
+  // with an explanation, and none touching the owner's files or index
+  const { message, result } = await refused(page2, '() => window.HyperaudioSave.saveProject()');
+  expect(message).toContain('another tab');
+  expect(result).toBe(false);
+  await page2.keyboard.press('Control+s');
+  await awaitModal(page2);
+  await page2.click('#project-dialog-confirm');
+  await page2.evaluate(() => document.getElementById('project-save-btn').disabled = false); // even if the gate is bypassed
+  await page2.evaluate(() => document.getElementById('project-save-btn').click());
+  await awaitModal(page2);
+  await page2.click('#project-dialog-confirm');
+
+  const after = await ownerFiles(page);
+  expect(after.saved).toBe(before.saved);
+  expect(after.draft).toBe(before.draft);
+  expect(after.lastDraftAt).toBe(before.lastDraftAt);
+  expect(after.lastSavedAt).toBe(before.lastSavedAt);
+  await page2.close();
+});
+
+test('a second tab is read-only until it owns the project (#653)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible();
+  await expect(page2.locator('#tab-guard-banner')).toContainText('view and play');
+
+  const gate = await page2.evaluate(() => ({
+    transcript: document.getElementById('hypertranscript').getAttribute('contenteditable'),
+    save: document.getElementById('project-save-btn').disabled,
+    strike: document.getElementById('strikethrough').disabled,
+    speakers: document.getElementById('show-speakers').disabled,
+  }));
+  expect(gate).toEqual({ transcript: 'false', save: true, strike: true, speakers: true });
+
+  // the caption editor's rows are gated too, including rows built after the gate
+  await page2.click('#caption-editor-btn');
+  await page2.waitForSelector('#captions-display .caption');
+  const divergence = page2.locator('#project-dialog.modal-open');   // the #506 notice on entry
+  if (await divergence.isVisible()) await page2.click('#project-dialog-confirm');
+  const captionGate = await page2.evaluate(() => {
+    const inputs = [...document.querySelectorAll('#captions-display input')];
+    const buttons = [...document.querySelectorAll('#captions-display button')];
+    return { inputs: inputs.length, disabledInputs: inputs.filter((i) => i.disabled).length,
+      buttons: buttons.length, disabledButtons: buttons.filter((b) => b.disabled).length };
+  });
+  expect(captionGate.inputs).toBeGreaterThan(0);
+  expect(captionGate.disabledInputs).toBe(captionGate.inputs);
+  expect(captionGate.disabledButtons).toBe(captionGate.buttons);
+
+  // typing into the transcript does nothing
+  await page2.click('#transcript-editor-btn');
+  await page2.locator('#hypertranscript').click();
+  await page2.keyboard.type('XYZ');
+  await expect(page2.locator('#hypertranscript')).not.toContainText('XYZ');
+  // and a different project is fully editable in the same tab: the gate is
+  // per project, not per tab
+  await page2.evaluate(() => {
+    document.querySelector('#hypertranscript').innerHTML =
+      "<article><section><p><span data-m='0' data-d='400'>TAB-TWO </span><span data-m='400' data-d='400'>words </span></p></section></article>";
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  });
+  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await expect.poll(() => page2.evaluate(() => ({
+    editable: document.getElementById('hypertranscript').getAttribute('contenteditable'),
+    save: document.getElementById('project-save-btn').disabled,
+  }))).toEqual({ editable: 'true', save: false });
+  await page2.close();
+});
+
+test('promotion re-reads the project before the second tab becomes editable (#653)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible();
+  await expect(page2.locator('#hypertranscript')).toContainText('Benvenuti');
+
+  // the owner changes and SAVES while the second tab is still showing the old text
+  await editFirstWord(page, 'OWNER-NEW');
+  expect(await page.evaluate(() => window.HyperaudioSave.saveProject())).toBe(true);
+  await expect(page2.locator('#hypertranscript')).toContainText('Benvenuti'); // still stale, still read-only
+
+  // the owner closes: the second tab takes over, with the LATEST document
+  await page.close();
+  await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await expect(page2.locator('#hypertranscript')).toContainText('OWNER-NEW');
+  await expect(page2.locator('#hypertranscript')).not.toContainText('Benvenuti');
+  await expect.poll(() => page2.evaluate(() => window.HyperaudioSave.library.ownsCurrent())).toBe(true);
+  expect(await page2.evaluate(() => document.getElementById('hypertranscript').getAttribute('contenteditable'))).toBe('true');
+
+  // its edits now land, on top of the owner's saved text rather than the stale copy
+  await editFirstWord(page2, 'AFTER-TAKEOVER');
+  await page2.evaluate(() => window.HyperaudioSave.autosaveNow());
+  const files = await ownerFiles(page2);
+  const draftHtml = JSON.parse(files.draft).html;   // the captions file keeps its own text; the transcript is what took over
+  expect(draftHtml).toContain('AFTER-TAKEOVER');
+  expect(draftHtml).not.toContain('Benvenuti');
+  expect(JSON.parse(files.saved).html).toContain('OWNER-NEW');
+  await page2.close();
+});
+
+test('a project another tab is editing cannot be renamed or deleted from here (#652)', async ({ page, context }, testInfo) => {
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const owner = await ownerFiles(page);
+
+  const page2 = await context.newPage();
+  await page2.goto('/index.html');
+  await page2.waitForSelector('#hypertranscript [data-m]');
+  await expect(page2.locator('#tab-guard-banner')).toBeVisible();
+
+  const rename = await refused(page2, `() => window.HyperaudioSave.library.rename(${JSON.stringify(owner.id)}, 'STOLEN')`);
+  expect(rename.message).toContain('not renamed');
+  const remove = await refused(page2, `() => window.HyperaudioSave.library.remove(${JSON.stringify(owner.id)})`);
+  expect(remove.message).toContain('not deleted');
+  expect(remove.result.refused).toBe(true);
+
+  const after = await ownerFiles(page);
+  expect(after.name).toBe(owner.name);
+  expect(after.saved).toBe(owner.saved);
+  expect(await page.evaluate(async () => (await window.HyperaudioSave.library.list()).length)).toBe(1);
+  await page2.close();
+});
+
+test('a lock this tab holds is not mistaken for another tab\'s (#652)', async ({ page }, testInfo) => {
+  // The other-tab check reads the Web Locks registry, which lists holders
+  // without saying which is this tab. A newborn project's lock is granted
+  // asynchronously, so a rename in the same tick found "someone" holding it
+  // and refused — the benchmark renames its project exactly then, and stalled
+  // behind the refusal modal. Holders are compared by client id now: a lock
+  // held by THIS tab, by whatever request, is never "elsewhere".
+  const dialogs = [];
+  await openFixture(page, testInfo, dialogs);
+  await awaitLibraryEntry(page);
+  const id = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  // hold the project's lock name from this tab through a second, independent
+  // request — the registry now shows this client as a holder either way
+  await page.evaluate((pid) => {
+    window.__held = new Promise((release) => { window.__release = release; });
+    navigator.locks.request('hyperaudio:project:' + pid, { mode: 'shared' }, () => window.__held).catch(() => {});
+  }, id);
+  await page.evaluate(() => window.__rename = window.HyperaudioSave.library.rename(window.HyperaudioSave.library.currentId(), 'Renamed by its own tab'));
+  await page.evaluate(() => window.__rename);
+  expect(await projectModal(page)).toBe(null);   // no refusal
+  await expect.poll(() => page.evaluate(async () => {
+    const lib = window.HyperaudioSave.library;
+    return (await lib.list()).find((e) => e.id === lib.currentId()).name;
+  })).toBe('Renamed by its own tab');
+  await page.evaluate(() => window.__release());
+});

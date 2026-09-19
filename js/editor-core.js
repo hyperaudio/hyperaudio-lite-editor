@@ -70,6 +70,8 @@
       transcript.setAttribute("aria-busy", "true");
     } else {
       transcript.removeAttribute("aria-busy");
+      // a tab that does not own the project stays read-only (#653)
+      if (typeof window.hyperaudioApplyReadOnly === 'function') window.hyperaudioApplyReadOnly();
     }
   }
 

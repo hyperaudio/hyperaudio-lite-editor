@@ -207,6 +207,8 @@
       }
 
       updateCaptionRates();   // freshly built rows, or the cache restored (#639)
+      // a tab that does not own the project may look but not edit (#653)
+      if (typeof window.hyperaudioApplyReadOnly === 'function') window.hyperaudioApplyReadOnly();
     } 
 
     function captureCaptions(holder) {
