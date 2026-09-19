@@ -93,3 +93,12 @@ test('buildWordChunks stays raw for the burn-in renderer (no escaping)', () => {
   const chunks = require('../../js/word-vtt.js').buildWordChunks({ source: mockRoot([{ m: 0, d: 100, t: '<laughs>' }]) });
   assert.equal(chunks[0][0].text, '<laughs>');
 });
+
+test('formatTimestamp: a fraction that rounds up carries into the seconds (#657)', () => {
+  // rounding the millisecond field on its own printed 00:00:01.1000
+  assert.equal(formatTimestamp(1.9995), '00:00:02.000');
+  assert.equal(formatTimestamp(59.9996), '00:01:00.000');
+  assert.equal(formatTimestamp(3599.9995), '01:00:00.000');
+  assert.equal(formatTimestamp(0.0004), '00:00:00.000');
+  assert.equal(formatTimestamp(0.0005), '00:00:00.001');
+});
