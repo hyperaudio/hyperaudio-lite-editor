@@ -1861,6 +1861,18 @@ test('a second tab is read-only until it owns the project (#653)', async ({ page
   await page2.waitForSelector('#hypertranscript [data-m]');
   await expect(page2.locator('#tab-guard-banner')).toBeVisible();
   await expect(page2.locator('#tab-guard-banner')).toContainText('view and play');
+  // the indicator beside Save: shown here, not in the owning tab, and it
+  // explains itself when clicked
+  await expect(page2.locator('#project-readonly-badge')).toBeVisible();
+  await expect(page.locator('#project-readonly-badge')).toBeHidden();
+  await page2.click('#project-readonly-badge');
+  await expect(page2.locator('#project-dialog.modal-open')).toContainText('another tab');
+  await expect(page2.locator('#project-dialog.modal-open')).toContainText('close the other tab');
+  await page2.click('#project-dialog-confirm');
+  await expect(page2.locator('#project-dialog.modal-open')).toHaveCount(0);
+  // dismissing the banner does not take the indicator with it
+  await page2.click('#tab-guard-banner button[aria-label="Dismiss"]');
+  await expect(page2.locator('#project-readonly-badge')).toBeVisible();
 
   const gate = await page2.evaluate(() => ({
     transcript: document.getElementById('hypertranscript').getAttribute('contenteditable'),
@@ -1898,6 +1910,7 @@ test('a second tab is read-only until it owns the project (#653)', async ({ page
     document.dispatchEvent(new CustomEvent('hyperaudioInit'));
   });
   await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await expect(page2.locator('#project-readonly-badge')).toBeHidden();
   await expect.poll(() => page2.evaluate(() => ({
     editable: document.getElementById('hypertranscript').getAttribute('contenteditable'),
     save: document.getElementById('project-save-btn').disabled,
@@ -1924,6 +1937,7 @@ test('promotion re-reads the project before the second tab becomes editable (#65
   // the owner closes: the second tab takes over, with the LATEST document
   await page.close();
   await expect(page2.locator('#tab-guard-banner')).toHaveCount(0);
+  await expect(page2.locator('#project-readonly-badge')).toBeHidden();
   await expect(page2.locator('#hypertranscript')).toContainText('OWNER-NEW');
   await expect(page2.locator('#hypertranscript')).not.toContainText('Benvenuti');
   await expect.poll(() => page2.evaluate(() => window.HyperaudioSave.library.ownsCurrent())).toBe(true);

@@ -1592,6 +1592,43 @@ label[data-a11y-wired]:focus-visible {
   display: block;
 }
 
+/* Read-only indicator (#653): pinned inside the transcript card's bottom-
+   right corner while another tab owns the project; clicking it explains.
+   Fixed like the progress pill, 12px in from the card's edges in each band
+   (the holder's right/bottom + 12), in the corner floats' z band. Solid
+   white for the same reason the Regenerate float is: text scrolls under
+   it. .btn's inline-flex would beat the [hidden] reset, so the hide is
+   spelled out. */
+#project-readonly-badge {
+  position: fixed;
+  right: 28px;                /* holder right (16px) + 12 */
+  bottom: 72px;               /* holder bottom (60px) + 12 */
+  z-index: 20;
+  gap: 6px;
+  min-height: 2rem;
+  height: 2rem;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+#project-readonly-badge[hidden] { display: none !important; }
+/* at the right edge a centred tooltip would run off-screen (#546's mirror) */
+#project-readonly-badge.tooltip::before {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+@media screen and (max-width: 948px) {
+  #project-readonly-badge {
+    right: 12px;              /* holder spans the width; bottom is the play bar */
+    bottom: 64px;             /* holder bottom (52px) + 12 */
+  }
+}
+
 /* Second-tab guard banner (#450): this tab edits without the working-copy
    slot; the owning tab has autosave/crash recovery. */
 #tab-guard-banner {
