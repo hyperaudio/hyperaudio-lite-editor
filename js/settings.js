@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.20 — last changed in release 1.3.20
+ * @version 1.3.21 — last changed in release 1.3.21
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -53,6 +53,9 @@
     // tag and a STYLE block are more than some caption tools accept, and
     // because SRT colour has no standard behind it at all.
     captionColourSpeakers: false,
+    // Whether a new paragraph always starts a new caption (#661). Off: short
+    // sentences share a caption across a paragraph break like any other.
+    captionParagraphBreaks: false,
   });
 
   // caption.js takes a maximum AND a minimum line length: the minimum is the
@@ -69,6 +72,26 @@
       ? Math.min(CAPTION_LINE_MAX, Math.max(CAPTION_LINE_MIN, Math.round(raw)))
       : DEFAULTS.captionLineLength;
     return { max, min: Math.min(21, Math.max(8, max - 8)) };
+  }
+
+  // The sentence and paragraph rules every caption generation runs under
+  // (#661, #662) — one answer for boot, Regenerate and the export fallback.
+  // Abbreviations come from js/caption-abbreviations.js by the project's
+  // language; an unknown language, or no data file at all, leaves caption.js
+  // with the rules that need no list.
+  function captionOptions(language) {
+    if (language === undefined) {
+      const save = window.HyperaudioSave;
+      language = save && typeof save.getProjectLanguage === 'function' ? save.getProjectLanguage() : '';
+    }
+    const lists = window.HyperaudioCaptionAbbreviations || {};
+    const code = String(language || '').toLowerCase().split(/[-_]/)[0];
+    return {
+      detectAbbreviations: true,
+      abbreviations: Array.isArray(lists[code]) ? lists[code] : [],
+      joinSentences: true,
+      paragraphBreaks: get('captionParagraphBreaks') === true,
+    };
   }
 
   // Every "don't show this again" the app can persist. A flag added anywhere
@@ -310,6 +333,14 @@
       });
     }
 
+    const paragraphBreaks = byId('setting-caption-paragraph-breaks');
+    if (paragraphBreaks !== null) {
+      paragraphBreaks.checked = get('captionParagraphBreaks') === true;
+      paragraphBreaks.addEventListener('change', () => {
+        set('captionParagraphBreaks', paragraphBreaks.checked);
+      });
+    }
+
     const lineLength = byId('setting-caption-line-length');
     if (lineLength !== null) {
       lineLength.value = String(captionLineLengths().max);
@@ -396,8 +427,9 @@
 
   window.HyperaudioSettings = Object.freeze({
     get, set, DISMISSAL_KEYS, APP_STORAGE_KEYS, refresh,
-    measureModels, removeModel, removeModels, captionLineLengths, captionRateLimit,
+    measureModels, removeModel, removeModels, captionLineLengths, captionRateLimit, captionOptions,
   });
+  window.captionOptions = captionOptions;
   window.captionRateLimit = captionRateLimit;
   // The caption generators reach this by name, as they do the other shared
   // helpers: one place decides how long a generated line may be.

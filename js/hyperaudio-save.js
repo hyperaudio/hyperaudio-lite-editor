@@ -3976,6 +3976,9 @@
     buildFlattenedProjectBlob, // #455: fresh container around a rendered export (media-export modal)
     // export naming and any future UI read the title through here
     getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
+    // the language the engine reported, or the project file carries ('' when
+    // unknown) — caption generation picks its abbreviations by it (#662)
+    getProjectLanguage: () => session.language || '',
     // the document exports (#467) read the transcript through here: the same
     // speaker-preserving, caption-mode-aware gather the save path uses
     getTranscriptJson: () => getEditorTranscriptJson(),

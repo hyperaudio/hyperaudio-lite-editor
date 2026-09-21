@@ -182,6 +182,7 @@
       captionsVtt: save && typeof save.getCaptionsVtt === 'function' ? save.getCaptionsVtt() : '',
       lineLengths: typeof window.captionLineLengths === 'function'
         ? window.captionLineLengths() : { max: 32, min: 21 },
+      captionOptions: typeof window.captionOptions === 'function' ? window.captionOptions() : undefined,
       title: exportTitle(),
       projectId: save && save.library && typeof save.library.currentId === 'function'
         ? save.library.currentId() : null,
@@ -372,7 +373,7 @@
     try {
       const lines = ctx.lineLengths;
       return caption().init('hypertranscript', 'media-export-no-player',
-        String(lines.max), String(lines.min), null, null, host);
+        String(lines.max), String(lines.min), null, null, host, ctx.captionOptions);
     } catch (e) {
       console.warn('Caption generation for export failed:', e);
       return null;

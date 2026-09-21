@@ -312,7 +312,9 @@
 
     const cap2 = caption();
     const bootLines = typeof captionLineLengths === 'function' ? captionLineLengths() : { max: 32, min: 21 };
-    let subs = cap2.init("hypertranscript", "hyperplayer", String(bootLines.max), String(bootLines.min)); // transcript Id, player Id, max chars, min chars for caption line
+    const bootOptions = typeof captionOptions === 'function' ? captionOptions() : undefined;
+    let subs = cap2.init("hypertranscript", "hyperplayer", String(bootLines.max), String(bootLines.min),
+      undefined, undefined, undefined, bootOptions); // transcript Id, player Id, max chars, min chars for caption line, sentence rules
     
     const countSeconds = (str) => {
       const [hh = '0', mm = '0', ss = '0'] = (str || '0:0:0').split(':');
