@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.21 — last changed in release 1.3.21
+ * @version 1.3.22 — last changed in release 1.3.22
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -190,6 +190,9 @@
       mediaSrc: playerSrc(),
       project: withProject === true && save && typeof save.captureState === 'function'
         ? save.captureState() : null,
+      // what a provenance file would say (#668), when that feature is loaded
+      tpme: window.HyperaudioTpme && typeof window.HyperaudioTpme.capture === 'function'
+        ? window.HyperaudioTpme.capture() : null,
     };
   };
 
@@ -1154,6 +1157,9 @@
   // Whether it is open is itself remembered, so someone who works with the
   // sidecars every time is not made to open it every time.
   const extrasBox = document.getElementById('export-extras');
+  // Rows another module added to the panel (data-export-extra): an extra file
+  // this module does not know about, counted like the ones it does (#668).
+  const otherExtraRows = () => (extrasBox === null ? [] : [...extrasBox.querySelectorAll('[data-export-extra]')]);
   const extrasCount = document.getElementById('export-extras-count');
   const zipCount = document.getElementById('export-zip-count');
   const updateExtrasDisclosure = (selected) => {
@@ -1161,7 +1167,7 @@
     // zipRow is deliberately NOT here: it lives outside the panel, because
     // packaging is not an extra file and its offer has to be SEEN the moment a
     // second output is chosen — which a closed panel would prevent.
-    const applicable = [retimeRow, vttRow, srtRow, projectRow]
+    const applicable = [retimeRow, vttRow, srtRow, projectRow].concat(otherExtraRows())
       .filter((row) => row !== null && row.style.display !== 'none').length;
     extrasBox.style.display = applicable > 0 ? '' : 'none';
     if (extrasCount !== null) {
@@ -1176,7 +1182,8 @@
       checkedAndVisible(vttCheck, vttRow),
       checkedAndVisible(srtCheck, srtRow),
       checkedAndVisible(projectCheck, projectRow),
-    ].filter(Boolean).length;
+    ].concat(otherExtraRows().map((row) => checkedAndVisible(row.querySelector('input[type="checkbox"]'), row)))
+      .filter(Boolean).length;
     const multi = extras > 0;   // the media itself is always the first output
     zipRow.style.display = multi ? 'flex' : 'none';
     // Name what is being packaged (#616). The options that cause this offer to
@@ -1451,6 +1458,14 @@
         }
       }
 
+      // 3b. transcript provenance (#668): one more file describing the ones
+      // above — off unless turned on in Settings, and like them built from
+      // what was captured at the click
+      if (window.HyperaudioTpme && typeof window.HyperaudioTpme.sidecar === 'function' && ctx.tpme !== null) {
+        const record = await window.HyperaudioTpme.sidecar(ctx.tpme, outputs, { struckRemoved: edited });
+        if (record !== null) outputs.push(record);
+      }
+
       // 4. hand the files to the browser — as one .zip when asked, else each on
       // its own, spaced out so Safari doesn't drop all but the last (#396).
       // Decided by what the run actually produced plus the toggle — NOT by the
@@ -1497,6 +1512,12 @@
   [retimeCheck, vttCheck, srtCheck, projectCheck, zipCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', updateZipVisibility);
   });
+  // ...and whenever a row another module added is toggled, shown or hidden
+  if (extrasBox !== null) {
+    extrasBox.addEventListener('change', (event) => {
+      if (event.target.closest && event.target.closest('[data-export-extra]') !== null) updateZipVisibility();
+    });
+  }
   // opening or closing the extras is itself a preference worth keeping (#616)
   if (extrasBox !== null) extrasBox.addEventListener('toggle', saveExportOpts);
   // the note depends on BOTH the interactive transcript and the burn choice

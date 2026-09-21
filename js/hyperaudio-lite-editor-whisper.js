@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.21 — last changed in release 1.3.21
+ * @version 1.3.22 — last changed in release 1.3.22
  * @license MIT
  */
 
@@ -366,6 +366,12 @@ function loadWhisperClient(modal, workerBaseUrl) {
         ? languageSelectionInput.selectedOptions[0].textContent
         : "Auto-detect",
       languageCode: language,   // "" when auto-detecting
+      // what was really run (#668). The runtime and its version are the
+      // worker's import; a unit test holds the two together.
+      modelId: model_name,
+      parameters: { model: model_name, language: language || 'auto', word_timestamps: true },
+      runtime: 'transformers.js',
+      engineVersion: '4.2.0',
     };
 
     if (!useUrl) {

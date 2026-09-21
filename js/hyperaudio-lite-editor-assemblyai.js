@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 0.8.3 — last changed in release 0.8.3
+ * @version 0.8.4 — last changed in release 0.8.4
  * @license MIT
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -101,6 +101,10 @@ class AssemblyAIService extends HTMLElement {
       service: "AssemblyAI (cloud)",
       model: document.querySelector('#assemblyai-model').selectedOptions[0]?.textContent || model,
       language: document.querySelector('#assemblyai-language').selectedOptions[0]?.textContent || language,
+      // what was really asked for (#668)
+      modelId: 'assemblyai/' + model,
+      parameters: Object.assign({ speech_models: [model], speaker_labels: true },
+        language === 'auto' ? { language_detection: true } : { language_code: language }),
     };
 
     // point the player at the media now so click-to-seek works after transcribing

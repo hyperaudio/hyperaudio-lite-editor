@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.21 — last changed in release 1.3.21
+ * @version 1.3.22 — last changed in release 1.3.22
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -291,7 +291,9 @@
         ? paragraphNormalizer(state.transcript)
         : state.transcript,
     });
-    if (state.provenance && (state.provenance.engine || state.provenance.model)) {
+    // ...or a provenance chain and identifiers of its own (#668): a transcript
+    // that came from elsewhere has no engine here and still has a history
+    if (state.provenance && (state.provenance.engine || state.provenance.model || state.provenance.tpme)) {
       project.provenance = Object.assign({}, state.provenance);
       if (state.hasOriginal) {
         project.provenance.originalTranscript = ENTRY.original;
@@ -3652,6 +3654,27 @@
           if (info && info.device) {
             session.provenance.device = String(info.device);
           }
+          // What was really run (#668), recorded at transcription whatever
+          // the settings say: TPME exists to "capture what can be known about
+          // a transcript at the time of creation … but which may not be
+          // capturable later", and a project transcribed with provenance
+          // files switched off must still be able to describe itself fully
+          // when they are switched on. Never a key or a token: the engines
+          // hand over parameters, not credentials.
+          if (info && info.modelId) session.provenance.modelId = String(info.modelId);
+          if (info && info.engineVersion) session.provenance.engineVersion = String(info.engineVersion);
+          if (info && info.runtime) session.provenance.runtime = String(info.runtime);
+          if (info && info.parameters !== undefined && info.parameters !== null) {
+            try { session.provenance.parameters = JSON.parse(JSON.stringify(info.parameters)); } catch (e) { /* not plain data */ }
+          }
+          {
+            // the file, or the address, that was transcribed — as it was named
+            const player = document.querySelector('#hyperplayer');
+            const src = player !== null ? player.src : '';
+            const named = session.mediaFile !== null && !(isLinkUrl(src) && session.mediaFileFromUrl !== src)
+              ? session.mediaFile.name : (isLinkUrl(src) ? src : '');
+            if (named) session.provenance.mediaFile = String(named);
+          }
           session.provenanceAt = Date.now();
           // the engine's own code first — it is the DETECTED language when
           // the picker said "auto" — then the picker's label, read as a name
@@ -4022,6 +4045,30 @@
     // the language the engine reported, or the project file carries ('' when
     // unknown) — caption generation picks its abbreviations by it (#662)
     getProjectLanguage: () => languageTag(session.language),
+    // Transcript provenance (#668, js/tpme.js). The project's provenance as
+    // recorded, and the part of it TPME owns: { mediaId, reviewLevel,
+    // entries } — an identifier, a judgement, and any chain imported with the
+    // transcript. Setting it is an edit like any other.
+    getProvenance: () => (session.provenance ? JSON.parse(JSON.stringify(session.provenance)) : null),
+    getTpme: () => (session.provenance && session.provenance.tpme
+      ? JSON.parse(JSON.stringify(session.provenance.tpme)) : {}),
+    setTpme: (patch) => {
+      if (!session.active || readOnly) return false;
+      const next = Object.assign({}, session.provenance && session.provenance.tpme, patch);
+      Object.keys(next).forEach((key) => {
+        const v = next[key];
+        if (v === '' || v === null || v === undefined || (Array.isArray(v) && v.length === 0)) delete next[key];
+      });
+      session.provenance = Object.assign({}, session.provenance);
+      if (Object.keys(next).length > 0) session.provenance.tpme = next;
+      else delete session.provenance.tpme;
+      scheduleAutosave();
+      return true;
+    },
+    // the engine's transcript as it first arrived (§ 5), for a NAMED project
+    originalTranscriptFor: async (id) => {
+      try { return JSON.parse(await readTextFrom(await getProjectDir(id, false), ENTRY.original)); } catch (e) { return null; }
+    },
     // the document exports (#467) read the transcript through here: the same
     // speaker-preserving, caption-mode-aware gather the save path uses
     getTranscriptJson: () => getEditorTranscriptJson(),

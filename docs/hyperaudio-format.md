@@ -326,6 +326,15 @@ user; they may be an empty string / empty array.
 | `seconds` | number | Optional (1.3): wall-clock duration of the transcription run, in seconds. |
 | `device` | string | Optional (1.3): what performed the inference, as reported by the engine (e.g. `"GPU (WebGPU)"`, `"CPU"`). Meaningful for local engines; absent for cloud services. |
 | `originalTranscript` | string | Path of the file holding the original machine transcription (§ 5), if kept. |
+| `modelId` | string | Optional: a canonical identifier for the model, where `model` is what a picker showed — `openai/whisper-small`-style, or the identifier the service uses (`deepgram/nova-3`). |
+| `parameters` | object | Optional: the parameters the engine was run with, as plain data. Never a key or a token. |
+| `engineVersion` | string | Optional: the version of what ran the inference, where it can be known — the runtime's for a local engine, the model build a service reported. |
+| `runtime` | string | Optional: for a local engine, the library that ran the model (`transformers.js`, `onnxruntime-web`). |
+| `mediaFile` | string | Optional: the name of the file, or the address, that was transcribed, as it was named at the time. |
+| `tpme` | object | Optional: transcript provenance in the terms of TPME v1.0 (doi:10.5281/zenodo.21287085) — `mediaId` (string, the recording's identifier in the keeper's collection), `reviewLevel` (string, the keeper's word for how far a person has reviewed the transcript) and `entries` (array of objects: TPME entries that arrived WITH the transcript, kept exactly as they came, unknown elements included). A `provenance` object may consist of `tpme` alone: a transcript from elsewhere has no engine here and still has a history. |
+
+The last six are recorded at transcription whether or not anything will ever
+read them: they are what can be known then and not later.
 
 Records who/what produced the original transcription. Zero cost today,
 valuable tomorrow (e.g. deciding whether to re-transcribe with a better
