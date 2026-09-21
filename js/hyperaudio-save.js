@@ -514,6 +514,44 @@
     return { recovered: false, project, htmlText, captionsVtt, originalText, mediaData, mediaEntryName, warnings };
   }
 
+  /* --------------------------------------------------------------------------
+   * texts.language is a BCP-47 tag (spec § 3.4: "it", "en-GB"). What the
+   * engines report is whatever their language picker SHOWED — "English",
+   * "Automatic language detection" — and that label was being saved as the
+   * tag. Anything keyed on the language then found nothing: the caption
+   * generator looked its abbreviations up under "english" (#662) and "Dr."
+   * went on ending sentences in English projects.
+   *
+   * One reader for both: a code in any of the engines' spellings ("en",
+   * "en_us", "EN-gb") becomes a tag, a language NAME becomes its code, and
+   * what is neither ("Auto-detect", "xx", "multi") is unknown, ''.
+   * ------------------------------------------------------------------------ */
+  const LANGUAGE_NAMES = [
+    [/\b(english)\b/i, 'en'], [/\b(german|deutsch)\b/i, 'de'], [/\b(french|fran[cç]ais)\b/i, 'fr'],
+    [/\b(spanish|espa[nñ]ol|castilian)\b/i, 'es'], [/\b(italian|italiano)\b/i, 'it'],
+    [/\b(portuguese|portugu[eê]s)\b/i, 'pt'], [/\b(dutch|nederlands|flemish)\b/i, 'nl'],
+    [/\b(swedish)\b/i, 'sv'], [/\b(danish)\b/i, 'da'], [/\b(norwegian)\b/i, 'no'], [/\b(finnish)\b/i, 'fi'],
+    [/\b(polish)\b/i, 'pl'], [/\b(czech)\b/i, 'cs'], [/\b(romanian)\b/i, 'ro'], [/\b(hungarian)\b/i, 'hu'],
+    [/\b(greek)\b/i, 'el'], [/\b(turkish)\b/i, 'tr'], [/\b(russian)\b/i, 'ru'], [/\b(ukrainian)\b/i, 'uk'],
+    [/\b(catalan)\b/i, 'ca'], [/\b(indonesian)\b/i, 'id'], [/\b(hindi)\b/i, 'hi'], [/\b(arabic)\b/i, 'ar'],
+    [/\b(hebrew)\b/i, 'he'], [/\b(japanese)\b/i, 'ja'], [/\b(korean)\b/i, 'ko'], [/\b(chinese|mandarin)\b/i, 'zh'],
+  ];
+  const NOT_A_LANGUAGE = ['xx', 'auto', 'multi', 'und', 'mul'];
+  function languageTag(value) {
+    const text = String(value === undefined || value === null ? '' : value).trim();
+    if (text === '') return '';
+    const code = /^([A-Za-z]{2,3})(?:[-_]([A-Za-z0-9]{2,8}))*$/.exec(text);
+    if (code !== null) {
+      const primary = code[1].toLowerCase();
+      if (NOT_A_LANGUAGE.indexOf(primary) !== -1) return '';
+      const rest = text.split(/[-_]/).slice(1)
+        .map((part) => (part.length === 2 ? part.toUpperCase() : part));
+      return [primary].concat(rest).join('-');
+    }
+    const named = LANGUAGE_NAMES.find(([pattern]) => pattern.test(text));
+    return named !== undefined ? named[1] : '';
+  }
+
   /* ==========================================================================
    * Exports for node --test (pure layers only), then browser-only code.
    * ======================================================================== */
@@ -525,7 +563,7 @@
     sanitizeTranscriptClasses,
     buildProjectJson, serializeProjectJson,
     sortLibraryEntries, isEntryDirty, newProjectId,
-    zipProject, unzipProject,
+    zipProject, unzipProject, languageTag,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = pure;
@@ -1073,7 +1111,9 @@
       },
       texts: {
         title,
-        language: session.language || '',
+        // a tag where the language can be read as one (spec § 3.4); a value
+        // that cannot is kept as it came, rather than lost
+        language: languageTag(session.language) || session.language || '',
         summary: summaryEl !== null ? summaryEl.textContent.trim() : '',
         topics: topicsEl !== null
           ? topicsEl.textContent.split(',').map((t) => t.trim()).filter((t) => t.length > 0)
@@ -3613,7 +3653,10 @@
             session.provenance.device = String(info.device);
           }
           session.provenanceAt = Date.now();
-          session.language = info && info.language ? String(info.language) : session.language;
+          // the engine's own code first — it is the DETECTED language when
+          // the picker said "auto" — then the picker's label, read as a name
+          const tag = languageTag(info && info.languageCode) || languageTag(info && info.language);
+          session.language = tag || (info && info.language ? String(info.language) : session.language);
         } catch (e) { /* provenance is best-effort */ }
         return originalSetInfo.apply(this, arguments);
       };
@@ -3978,7 +4021,7 @@
     getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
     // the language the engine reported, or the project file carries ('' when
     // unknown) — caption generation picks its abbreviations by it (#662)
-    getProjectLanguage: () => session.language || '',
+    getProjectLanguage: () => languageTag(session.language),
     // the document exports (#467) read the transcript through here: the same
     // speaker-preserving, caption-mode-aware gather the save path uses
     getTranscriptJson: () => getEditorTranscriptJson(),

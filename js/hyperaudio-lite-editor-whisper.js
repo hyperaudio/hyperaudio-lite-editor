@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.17 — last changed in release 1.3.17
+ * @version 1.3.21 — last changed in release 1.3.21
  * @license MIT
  */
 
@@ -365,6 +365,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
       language: languageSelectionInput !== null && languageSelectionInput.selectedOptions.length > 0
         ? languageSelectionInput.selectedOptions[0].textContent
         : "Auto-detect",
+      languageCode: language,   // "" when auto-detecting
     };
 
     if (!useUrl) {

@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.13 — last changed in release 0.6.13
+ * @version 0.6.14 — last changed in release 0.6.14
  * @license MIT
  */
 
@@ -139,6 +139,7 @@ class DeepgramService extends HTMLElement {
       service: "Deepgram (cloud)",
       model: document.querySelector('#language-model').selectedOptions[0]?.textContent || model,
       language: document.querySelector('#language').selectedOptions[0]?.textContent || language,
+      languageCode: language,   // the picker's value: a code, or "xx" for detect
     };
 
     if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
@@ -579,7 +580,10 @@ function parseData(json) {
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperTranscript));
 
   if (typeof setTranscriptionInfo === 'function' && transcriptionStart !== 0) {
-    setTranscriptionInfo({ ...transcriptionMeta, seconds: (Date.now() - transcriptionStart) / 1000 });
+    // a detected language is the better answer when there is one
+    let detected;
+    try { detected = extractLanguage(json); } catch (e) { detected = undefined; }
+    setTranscriptionInfo({ ...transcriptionMeta, languageCode: detected || transcriptionMeta.languageCode, seconds: (Date.now() - transcriptionStart) / 1000 });
   }
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);

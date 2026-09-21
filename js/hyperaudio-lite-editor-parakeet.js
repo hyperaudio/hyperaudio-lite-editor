@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 0.8.3 — last changed in release 0.8.3
+ * @version 0.8.4 — last changed in release 0.8.4
  * @license MIT
  *
  * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
@@ -106,6 +106,7 @@ class ParakeetHFService extends HTMLElement {
       service: "Parakeet (HuggingFace, cloud)",
       model: "Parakeet TDT 0.6B v3",
       language: document.querySelector('#parakeet-hf-language').selectedOptions[0]?.textContent || language,
+      languageCode: language,
     };
 
     const player = document.querySelector("#hyperplayer");
