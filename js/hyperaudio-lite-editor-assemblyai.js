@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 0.8.2 — last changed in release 0.8.2
+ * @version 0.8.3 — last changed in release 0.8.3
  * @license MIT
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -315,7 +315,9 @@ function assemblyaiParseData(json) {
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,' + encodeURIComponent(hyperTranscript));
 
   if (typeof setTranscriptionInfo === 'function' && assemblyaiTranscriptionStart !== 0) {
-    setTranscriptionInfo({ ...assemblyaiTranscriptionMeta, seconds: (Date.now() - assemblyaiTranscriptionStart) / 1000 });
+    // languageCode: what AssemblyAI says the language IS (it may have been
+    // detected), beside the picker's label the info panel shows
+    setTranscriptionInfo({ ...assemblyaiTranscriptionMeta, languageCode: language, seconds: (Date.now() - assemblyaiTranscriptionStart) / 1000 });
   }
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);

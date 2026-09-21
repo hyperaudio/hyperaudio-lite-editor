@@ -53,27 +53,65 @@ test('dotted abbreviations need no language at all (#662)', async ({ page }) => 
     .toEqual(['We left at 5 p.m.', 'Then the rain came down on all of us.']);
 });
 
-test('a title is an abbreviation only in a language that lists it (#662)', async ({ page }) => {
-  // language unknown: no list, so "Dr." still reads as a sentence end
-  expect(await generate(page, 'We spoke to Dr. Smith about the whole of it today.'))
-    .toEqual(['We spoke to Dr.', 'Smith about the whole of it today.']);
+// The language reaches the generator the way it does in use: the engine
+// reports it with its transcript. The first version of this test stubbed the
+// language with a code, and so never met what engines really report — the
+// picker's LABEL, "English" — under which no list was ever found.
+const report = (page, info) => page.evaluate((info) =>
+  window.setTranscriptionInfo(Object.assign({ service: 'Test engine', model: 'm' }, info)), info);
 
-  // the project's language is what an engine reports with its transcript
-  await page.evaluate(() => {
-    window.__lang = (code) => { window.HyperaudioSave.getProjectLanguage = () => code; };
-    window.__lang('en');
-  });
-  expect(await generate(page, 'We spoke to Dr. Smith about the whole of it today.'))
-    .toEqual(['We spoke to Dr. Smith about the whole of it today.']);
+test('a title is an abbreviation only in a language that lists it (#662)', async ({ page }) => {
+  const DR = 'We spoke to Dr. Smith about the whole of it today.';
+  const HR = 'Wir trafen Hr. Schmidt gestern in der Stadt.';
+
+  // language unknown: no list, so "Dr." still reads as a sentence end
+  expect(await generate(page, DR)).toEqual(['We spoke to Dr.', 'Smith about the whole of it today.']);
+
+  // the picker's label alone, which is all some engines give
+  await report(page, { language: 'English' });
+  expect(await page.evaluate(() => window.HyperaudioSave.getProjectLanguage())).toBe('en');
+  expect(await generate(page, DR)).toEqual([DR]);
   // English lists no "Hr.": it ends a sentence, and the line breaks after it.
   // (The two short "sentences" still share a caption — that is #661 — so it is
   // the line break that shows where the generator saw a sentence end.)
-  expect(await generate(page, 'Wir trafen Hr. Schmidt gestern in der Stadt.', ' / '))
-    .toEqual(['Wir trafen Hr. / Schmidt gestern in der Stadt.']);
-  await page.evaluate(() => window.__lang('de-AT'));
-  const german = await generate(page, 'Wir trafen Hr. Schmidt gestern in der Stadt.', ' / ');
+  expect(await generate(page, HR, ' / ')).toEqual(['Wir trafen Hr. / Schmidt gestern in der Stadt.']);
+
+  // auto-detect: the label says nothing, the engine's own code does
+  await report(page, { language: 'Automatic language detection', languageCode: 'de' });
+  const german = await generate(page, HR, ' / ');
   expect(german).toHaveLength(1);
   expect(german[0]).toContain('Hr. Schmidt');   // one sentence, wrapped by length alone
+
+  // AssemblyAI's spelling of a regional code
+  await report(page, { language: 'Global English', languageCode: 'en_us' });
+  expect(await page.evaluate(() => window.HyperaudioSave.getProjectLanguage())).toBe('en-US');
+  expect(await generate(page, DR)).toEqual([DR]);
+});
+
+test('the language is saved as a tag, and an older project saved with a label still works (#662)', async ({ page }) => {
+  const DR = 'We spoke to Dr. Smith about the whole of it today.';
+  await generate(page, DR);
+  await report(page, { language: 'English' });
+  const saved = await page.evaluate(async () => {
+    const save = window.HyperaudioSave;
+    await save.saveProject();
+    const dir = await save.storage.projectDir(save.library.currentId());
+    const state = JSON.parse(await save.storage.readText(dir, 'saved.json'));
+    const container = JSON.parse(state.json);
+    const was = container.texts.language;
+    // an older build wrote the picker's label here
+    container.texts.language = 'English';
+    state.json = JSON.stringify(container);
+    await save.storage.writeFile(dir, 'saved.json', JSON.stringify(state));
+    return was;
+  });
+  expect(saved).toBe('en');                     // BCP-47, as the format says
+
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.waitForFunction(() => typeof window.MediaExportCaptions === 'object');
+  expect(await page.evaluate(() => window.HyperaudioSave.getProjectLanguage())).toBe('en');
+  expect(await generate(page, DR)).toEqual([DR]);
 });
 
 test('short sentences share a caption; a long one is never split to fill one (#661)', async ({ page }) => {
