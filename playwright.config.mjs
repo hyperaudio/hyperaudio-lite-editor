@@ -15,6 +15,12 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     viewport: { width: 1280, height: 800 },
+    // The service worker takes control of a page as soon as it activates
+    // (#665), and a request a worker answers is one page.route() never sees —
+    // which is how the specs serve their fixture media. Blocked here, as
+    // Playwright advises; service-worker.spec.mjs allows it and drives the
+    // real worker through a server of its own.
+    serviceWorkers: 'block',
   },
   webServer: {
     // NOT python's http.server: single-threaded, broken-pipe-prone under
