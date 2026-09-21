@@ -1592,6 +1592,27 @@ label[data-a11y-wired]:focus-visible {
   display: block;
 }
 
+/* Every modal's ✕ stays in view (#660). The box scrolls when it is taller
+   than the viewport (daisyUI: max-height calc(100vh - 5em), overflow-y
+   auto), and an absolutely positioned ✕ scrolled away with the content.
+   Sticky pins it to the box's scrollport instead, at the same 0.5rem from
+   the top-right corner it always had: floated so it takes no row, and the
+   negative margins cancel its own height and pull it out of the box's
+   1.5rem padding, so nothing below it moves. The sticky offsets are the
+   margins' mirror because the engines measure the stuck position from the
+   margin box: 1.5rem of padding − 1rem of margin − 1rem of offset lands
+   the ✕ at 0.5rem from the corner, scrolled or not (measured in Chromium
+   and WebKit). Applies to every ✕ that is the box's own child — which is
+   all of them. */
+.modal-box > .btn-circle[aria-label="Close"] {
+  position: sticky;
+  top: -1rem;
+  right: -1rem;
+  float: right;
+  margin: -1rem -1rem -1rem 0;
+  z-index: 1;
+}
+
 /* Second-tab guard banner (#450): this tab edits without the working-copy
    slot; the owning tab has autosave/crash recovery. */
 #tab-guard-banner {
