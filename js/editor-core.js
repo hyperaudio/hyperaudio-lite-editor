@@ -1587,8 +1587,10 @@
     // how long a generated line may be, from Settings (default 32)
     const lines = typeof captionLineLengths === 'function' ? captionLineLengths() : { max: 32, min: 21 };
     const captionSource = captionSourceWithoutStruckWords();
+    // the sentence and paragraph rules (#661, #662), by the project's language
+    const rules = typeof captionOptions === 'function' ? captionOptions() : undefined;
     let subs = cap1.init("hypertranscript", "hyperplayer", String(lines.max), String(lines.min), null, null,
-      captionSource);
+      captionSource, rules);
 
     document.querySelector('#download-vtt').setAttribute('href', 'data:text/vtt,'+encodeURIComponent(subs.vtt));
     document.querySelector('#download-srt').setAttribute('href', 'data:text/srt,'+encodeURIComponent(subs.srt));
