@@ -76,19 +76,36 @@
 
   // The sentence and paragraph rules every caption generation runs under
   // (#661, #662) — one answer for boot, Regenerate and the export fallback.
-  // Abbreviations come from js/caption-abbreviations.js by the project's
-  // language; an unknown language, or no data file at all, leaves caption.js
-  // with the rules that need no list.
-  function captionOptions(language) {
+  // Abbreviations come from js/caption-abbreviations.js by language: the one
+  // the project records, else the one its transcript reads as
+  // (js/language-guess.js) — an engine asked to auto-detect records nothing,
+  // and Parakeet (local) never records anything else — else the few titles
+  // that belong to no language ("und"). With no data file at all, caption.js
+  // is left with the rules that need no list.
+  function transcriptText() {
+    const root = typeof window.currentTranscriptRoot === 'function'
+      ? window.currentTranscriptRoot() : document.getElementById('hypertranscript');
+    if (root === null || root === undefined) return '';
+    return [...root.querySelectorAll('[data-m]')]
+      .filter((span) => !span.classList.contains('speaker'))
+      .slice(0, 2000).map((span) => span.textContent).join(' ');
+  }
+  function captionLanguage(language) {
     if (language === undefined) {
       const save = window.HyperaudioSave;
       language = save && typeof save.getProjectLanguage === 'function' ? save.getProjectLanguage() : '';
     }
-    const lists = window.HyperaudioCaptionAbbreviations || {};
     const code = String(language || '').toLowerCase().split(/[-_]/)[0];
+    if (code !== '') return code;
+    return typeof window.guessTranscriptLanguage === 'function' ? window.guessTranscriptLanguage(transcriptText()) : '';
+  }
+  function captionOptions(language) {
+    const lists = window.HyperaudioCaptionAbbreviations || {};
+    const code = captionLanguage(language);
+    const list = Array.isArray(lists[code]) ? lists[code] : (code === '' && Array.isArray(lists.und) ? lists.und : []);
     return {
       detectAbbreviations: true,
-      abbreviations: Array.isArray(lists[code]) ? lists[code] : [],
+      abbreviations: list,
       joinSentences: true,
       paragraphBreaks: get('captionParagraphBreaks') === true,
     };
