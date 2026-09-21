@@ -220,7 +220,7 @@ test('the settings split into tabs, Application first and selected (#615)', asyn
   });
   expect(await page.evaluate(() =>
     [...document.querySelectorAll('#settings-modal + .modal .settings-tabs > .tab')].map((t) => t.getAttribute('aria-label'))))
-    .toEqual(['Application', 'Captions', 'Playback']);
+    .toEqual(['Application', 'Captions', 'Playback', 'Provenance']);   // the last is js/tpme.js's own (#668)
 
   // and it is one height whichever tab is showing, so the modal does not jump
   const heights = [];

@@ -42,9 +42,12 @@ test('the extras collapse, and the media options stay visible (#616)', async ({ 
   await openModal(page);
   const d = await disclosure(page);
   expect(d.shown).toBe(true);
+  // the last is the provenance file's (#668): in the panel like any other
+  // extra file, and hidden unless that feature is turned on in Settings
   expect(d.rowsInside).toEqual([
-    'export-retime-row', 'export-vtt-row', 'export-srt-row', 'export-project-row',
+    'export-retime-row', 'export-vtt-row', 'export-srt-row', 'export-project-row', 'export-tpme-row',
   ]);
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById('export-tpme-row')).display)).toBe('none');
   // zip stays OUT: packaging rather than an extra file, and its offer has to be
   // visible the moment a second output is chosen
   expect(await page.evaluate(

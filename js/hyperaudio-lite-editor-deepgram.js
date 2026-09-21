@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.14 — last changed in release 0.6.14
+ * @version 0.6.15 — last changed in release 0.6.15
  * @license MIT
  */
 
@@ -140,6 +140,11 @@ class DeepgramService extends HTMLElement {
       model: document.querySelector('#language-model').selectedOptions[0]?.textContent || model,
       language: document.querySelector('#language').selectedOptions[0]?.textContent || language,
       languageCode: language,   // the picker's value: a code, or "xx" for detect
+      // what was really asked for (#668): a canonical model name and the
+      // request's parameters, which no later reading of the project can recover
+      modelId: 'deepgram/' + model,
+      parameters: Object.assign({ model }, language === 'xx' ? { detect_language: true } : { language },
+        { diarize: true, summarize: 'v2', topics: true, smart_format: true }),
     };
 
     if (media.toLowerCase().startsWith("https://") === false && media.toLowerCase().startsWith("http://") === false) {
@@ -583,7 +588,13 @@ function parseData(json) {
     // a detected language is the better answer when there is one
     let detected;
     try { detected = extractLanguage(json); } catch (e) { detected = undefined; }
-    setTranscriptionInfo({ ...transcriptionMeta, languageCode: detected || transcriptionMeta.languageCode, seconds: (Date.now() - transcriptionStart) / 1000 });
+    // Deepgram names the exact model build that answered
+    let engineVersion;
+    try {
+      const info = Object.values((json.metadata && json.metadata.model_info) || {})[0];
+      engineVersion = info && info.version ? String(info.version) : undefined;
+    } catch (e) { engineVersion = undefined; }
+    setTranscriptionInfo({ ...transcriptionMeta, engineVersion, languageCode: detected || transcriptionMeta.languageCode, seconds: (Date.now() - transcriptionStart) / 1000 });
   }
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);

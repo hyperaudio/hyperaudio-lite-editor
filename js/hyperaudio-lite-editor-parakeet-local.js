@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.17 — last changed in release 1.3.17
+ * @version 1.3.22 — last changed in release 1.3.22
  * @license MIT
  */
 
@@ -310,6 +310,12 @@ function loadParakeetClient(modal, workerBaseUrl) {
       service: "Parakeet (local, in your browser)",
       model: "Parakeet TDT 0.6B v3 (multilingual)",
       language: "Auto-detect",
+      // what was really run (#668): the ONNX export the worker downloads, and
+      // the runtime it runs under; a unit test holds these to the worker's
+      modelId: "istupakov/parakeet-tdt-0.6b-v3-onnx",
+      parameters: {},
+      runtime: "onnxruntime-web",
+      engineVersion: "1.26.0",
     };
 
     if (!useUrl) {

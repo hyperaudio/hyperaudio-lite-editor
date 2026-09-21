@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.21 — last changed in release 1.3.21
+ * @version 1.3.22 — last changed in release 1.3.22
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -56,6 +56,14 @@
     // Whether a new paragraph always starts a new caption (#661). Off: short
     // sentences share a caption across a paragraph break like any other.
     captionParagraphBreaks: false,
+    // Transcript provenance files (#668, js/tpme.js). Off: nothing about them
+    // is visible anywhere. Provider and Editor are about the person using the
+    // editor, not a project, so they live here; with exports, whether the
+    // export modal's option starts ticked.
+    tpmeEnabled: false,
+    tpmeProvider: '',
+    tpmeEditor: '',
+    tpmeWithExports: true,
   });
 
   // caption.js takes a maximum AND a minimum line length: the minimum is the
