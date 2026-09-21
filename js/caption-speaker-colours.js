@@ -1,7 +1,7 @@
 /**
  * caption-speaker-colours.js
  * (C) The Hyperaudio Project
- * @version 1.3.20 — last changed in release 1.3.20
+ * @version 1.3.21 — last changed in release 1.3.21
  * @license MIT
  *
  * Speaker-coloured caption downloads (#536), export only.
@@ -78,7 +78,8 @@
   // colours the same way however many speakers it has.
   function assignColours(speakers) {
     const colours = new Map();
-    (Array.isArray(speakers) ? speakers : []).forEach((raw) => {
+    // an entry is a name, or [first, second] for a caption two speakers share
+    (Array.isArray(speakers) ? speakers : []).flat().forEach((raw) => {
       const name = sanitiseName(raw);
       if (name === '' || colours.has(name)) return;
       colours.set(name, PALETTE[colours.size % PALETTE.length]);
@@ -110,10 +111,27 @@
     return at === -1 ? null : { at, head: lines.slice(0, at + 1), body: lines.slice(at + 1) };
   }
 
+  // A caption two speakers share (#666): its entry is [first, second], its
+  // two lines are one speaker's each, and each opens with a hyphen — the
+  // Netflix form, which is how the generator and the plain files mark it. In
+  // a coloured file the colour marks the speaker instead, as the BBC does it,
+  // so each line is wrapped on its own and its hyphen dropped. Returns null
+  // for any other cue — including one whose lines no longer number two,
+  // because somebody retyped it — which is then coloured whole, as its first
+  // speaker's.
+  function dualLines(entry, body) {
+    if (!Array.isArray(entry) || body.length !== 2) return null;
+    const names = entry.map(sanitiseName);
+    if (names.length !== 2 || names[0] === '' || names[1] === '') return null;
+    return body.map((line, i) => ({ name: names[i], text: escapeCueText(line.replace(/^-\s?/, '').trim()) }));
+  }
+  const firstOf = (entry) => (Array.isArray(entry) ? entry[0] : entry);
+
   /**
    * Decorate a WebVTT document with a STYLE block and one voice tag per cue.
    * @param {string} vtt the finished VTT
-   * @param {string[]} speakers one entry per cue, in cue order; '' or null for none
+   * @param {Array<string|string[]>} speakers one entry per cue, in cue order: a
+   *   name, [first, second] for a caption two speakers share, '' or null for none
    * @returns {string} the decorated VTT, or the input unchanged when no cue has a speaker
    */
   function decorateVtt(vtt, speakers) {
@@ -125,8 +143,13 @@
       const lines = block.split('\n');
       const parts = payloadOf(lines);
       if (parts === null) return block;   // header, STYLE, NOTE: left alone
-      const name = sanitiseName(speakers[cue]);
+      const entry = speakers[cue];
       cue += 1;
+      const dual = dualLines(entry, parts.body);
+      if (dual !== null) {
+        return parts.head.concat(dual.map((line) => `<v ${line.name}>${line.text}</v>`)).join('\n');
+      }
+      const name = sanitiseName(firstOf(entry));
       if (name === '' || parts.body.length === 0) {
         return block;
       }
@@ -160,8 +183,14 @@
       const lines = block.split('\n');
       const parts = payloadOf(lines);
       if (parts === null) return block;
-      const name = sanitiseName(speakers[cue]);
+      const entry = speakers[cue];
       cue += 1;
+      const dual = dualLines(entry, parts.body);
+      if (dual !== null) {
+        return parts.head.concat(dual.map((line) =>
+          `<font color="${colours.get(line.name)}">${line.text}</font>`)).join('\n');
+      }
+      const name = sanitiseName(firstOf(entry));
       const colour = colours.get(name);
       if (colour === undefined || parts.body.length === 0) return block;
       const body = parts.body.map(escapeCueText).join('\n');
