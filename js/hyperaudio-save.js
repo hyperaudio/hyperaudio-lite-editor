@@ -3453,6 +3453,28 @@
       });
       if (exportBtn !== null) navEnd.insertBefore(saveBtn, exportBtn);
       else navEnd.appendChild(saveBtn);
+
+    }
+
+    // The read-only indicator: a project another tab is editing can be
+    // viewed and played here but not changed (#653), and the disabled
+    // controls alone did not say why. A pill pinned to the transcript
+    // card's bottom-right corner for as long as the state lasts — the side
+    // banner is dismissible, this is not — and clicking it explains the
+    // state and the two ways out of it. On the body, like the progress
+    // pill: the navbar is a stacking context of its own.
+    {
+      const badge = document.createElement('button');
+      badge.id = 'project-readonly-badge';
+      badge.type = 'button';
+      badge.className = 'btn btn-sm btn-outline btn-warning tooltip';
+      badge.setAttribute('data-tip', 'Why is this read-only?');
+      badge.setAttribute('aria-label', 'Read-only: this project is being edited in another tab. Why?');
+      badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+        + '<span>Read-only</span>';
+      badge.hidden = true;
+      badge.addEventListener('click', () => { explainReadOnly().catch(() => {}); });
+      document.body.appendChild(badge);
     }
 
     // ⌘/Ctrl-S — the universal save gesture; capture phase beats the browser's
@@ -3801,6 +3823,15 @@
     if (document.documentElement.classList.contains('ha-readonly') !== readOnly) {
       document.documentElement.classList.toggle('ha-readonly', readOnly);
     }
+    const badge = document.getElementById('project-readonly-badge');
+    if (badge !== null && badge.hidden === readOnly) badge.hidden = !readOnly;
+  }
+  // What the indicator says when clicked: the state, and the ways out of it.
+  function explainReadOnly() {
+    return projectDialog(
+      'This project is open for editing in another tab or window, so this tab can view and play it but not change it. Only one tab edits a project at a time, so two copies can never overwrite each other.'
+      + '\n\nTo edit here, close the other tab: this one takes over automatically and shows the latest saved version. Or open a different project from Recents — the limit is per project, not per tab.',
+      { title: 'Read-only', warning: true, cancelButton: false, confirmLabel: 'OK' });
   }
   function setReadOnly(on) {
     readOnly = on === true;
