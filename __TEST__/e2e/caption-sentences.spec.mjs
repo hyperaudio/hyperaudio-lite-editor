@@ -39,7 +39,10 @@ test('the rules the generator runs under come from one place (#661, #662)', asyn
     german: window.captionOptions('de'),
     unlisted: window.captionOptions('xx'),
   }));
-  expect(options.unknown).toMatchObject({ detectAbbreviations: true, joinSentences: true, paragraphBreaks: false, abbreviations: [] });
+  expect(options.unknown).toMatchObject({ detectAbbreviations: true, joinSentences: true, paragraphBreaks: false });
+  // no language recorded: the transcript on screen is read instead — the
+  // intro, which is English
+  expect(options.unknown.abbreviations).toEqual(options.english.abbreviations);
   expect(options.english.abbreviations).toContain('Dr.');
   expect(options.german.abbreviations).toContain('Hr.');
   expect(options.english.abbreviations).not.toContain('Hr.');
@@ -64,8 +67,10 @@ test('a title is an abbreviation only in a language that lists it (#662)', async
   const DR = 'We spoke to Dr. Smith about the whole of it today.';
   const HR = 'Wir trafen Hr. Schmidt gestern in der Stadt.';
 
-  // language unknown: no list, so "Dr." still reads as a sentence end
-  expect(await generate(page, DR)).toEqual(['We spoke to Dr.', 'Smith about the whole of it today.']);
+  // no language recorded, and too few words to read one from: the titles
+  // that belong to no language still hold, a German one does not
+  expect(await generate(page, DR)).toEqual([DR]);
+  expect(await generate(page, HR, ' / ')).toEqual(['Wir trafen Hr. / Schmidt gestern in der Stadt.']);
 
   // the picker's label alone, which is all some engines give
   await report(page, { language: 'English' });
@@ -86,6 +91,35 @@ test('a title is an abbreviation only in a language that lists it (#662)', async
   await report(page, { language: 'Global English', languageCode: 'en_us' });
   expect(await page.evaluate(() => window.HyperaudioSave.getProjectLanguage())).toBe('en-US');
   expect(await generate(page, DR)).toEqual([DR]);
+});
+
+test('a project whose engine recorded no language is read from its transcript (#662)', async ({ page }) => {
+  // what AssemblyAI's language detection and Parakeet (local) leave behind
+  await report(page, { language: 'Auto-detect' });
+  expect(await page.evaluate(() => window.HyperaudioSave.getProjectLanguage())).toBe('');
+
+  const english = 'Sure. So to start off, Gen. Ashby, can you just introduce yourself and give us a little insight into your background and where you are from?';
+  const cues = await generate(page, english, ' / ');
+  // "Gen." is on the English list and not among the titles of no language
+  expect(cues.some((c) => /Gen\.$/.test(c) || c.includes('Gen. /'))).toBe(false);
+  expect(cues.join(' ')).toContain('Gen. Ashby');
+
+  const german = 'Ich denke, dass wir heute mit Hr. Schmidt über die Frage sprechen, wie sich die Stadt in den letzten Jahren verändert hat und was das für uns bedeutet.';
+  const deCues = await generate(page, german, ' / ');
+  expect(deCues.some((c) => /Hr\.$/.test(c) || c.includes('Hr. /'))).toBe(false);
+  expect(await page.evaluate(() => window.captionOptions().abbreviations)).toContain('Hr.');
+
+  // and the guess is never written down as the project's language
+  expect(await page.evaluate(() => window.HyperaudioSave.getProjectLanguage())).toBe('');
+});
+
+test('a recorded language is never second-guessed (#662)', async ({ page }) => {
+  // the engine said German; an English passage in it does not change that
+  await report(page, { language: 'German', languageCode: 'de' });
+  await generate(page, 'Sure. So to start off, can you just introduce yourself and give us a little insight into your background and where you are from today?');
+  const list = await page.evaluate(() => window.captionOptions().abbreviations);
+  expect(list).toContain('Hr.');
+  expect(list).not.toContain('Gen.');
 });
 
 test('the language is saved as a tag, and an older project saved with a label still works (#662)', async ({ page }) => {

@@ -20,6 +20,10 @@
  *
  * Keys are two-letter language codes; "en-GB" is looked up as "en". Case and
  * the trailing full stop are ignored. To add a language, add a line.
+ *
+ * "und" (BCP-47 for undetermined) is what a transcript gets when its language
+ * is neither recorded nor recognisable: the few titles that travel between
+ * languages and are a word in none of them.
  */
 window.HyperaudioCaptionAbbreviations = Object.freeze({
   en: ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Mx.', 'Prof.', 'St.', 'Rev.', 'Hon.', 'Gen.', 'Col.', 'Capt.', 'Lt.', 'Sgt.', 'Gov.', 'Sen.', 'Rep.', 'Pres.', 'Mt.', 'Ft.', 'vs.'],
@@ -28,5 +32,6 @@ window.HyperaudioCaptionAbbreviations = Object.freeze({
   es: ['Sr.', 'Sra.', 'Srta.', 'Dr.', 'Dra.', 'D.', 'Dña.', 'Ud.', 'Uds.', 'Vd.', 'Prof.', 'Profa.', 'Lic.', 'Ing.', 'Av.', 'Avda.', 'núm.', 'pág.'],
   it: ['Sig.', 'Sigg.', 'Dott.', 'Dr.', 'Prof.', 'Ing.', 'Avv.', 'Arch.', 'On.', 'Egr.', 'Gent.', 'S.'],
   pt: ['Sr.', 'Sra.', 'Srta.', 'Dr.', 'Dra.', 'Prof.', 'Profa.', 'Eng.', 'Exmo.', 'Exma.', 'Av.'],
+  und: ['Dr.', 'Prof.', 'Mr.', 'Mrs.', 'Ms.'],
   nl: ['dhr.', 'mevr.', 'mw.', 'dr.', 'prof.', 'ir.', 'ing.', 'drs.', 'mr.', 'St.', 'nr.', 'ca.', 'bijv.', 'o.a.', 'd.w.z.'],
 });

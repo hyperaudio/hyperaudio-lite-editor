@@ -10,10 +10,10 @@ const window = {};
 new Function('window', src)(window);
 const lists = window.HyperaudioCaptionAbbreviations;
 
-test('lists are keyed by two-letter language code', () => {
+test('lists are keyed by two-letter language code, plus "und" for no language', () => {
   const codes = Object.keys(lists);
-  assert.ok(codes.includes('en') && codes.length >= 5);
-  codes.forEach((code) => assert.match(code, /^[a-z]{2}$/));
+  assert.ok(codes.includes('en') && codes.includes('und') && codes.length >= 5);
+  codes.forEach((code) => assert.match(code, /^([a-z]{2}|und)$/));
 });
 
 test('every entry is something the generator can match', () => {
