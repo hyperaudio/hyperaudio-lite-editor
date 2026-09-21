@@ -188,6 +188,10 @@
           if (typeof cap.speaker === 'string' && cap.speaker !== '') {
             captionTempl.setAttribute('data-speaker', cap.speaker);
           }
+          // ...and the second line's, where two speakers share the caption (#666)
+          if (typeof cap.speaker2 === 'string' && cap.speaker2 !== '') {
+            captionTempl.setAttribute('data-speaker2', cap.speaker2);
+          }
 
           holder.querySelector('#captions-display').insertAdjacentElement('beforeEnd', captionTempl);
         });
@@ -298,7 +302,10 @@
 
       if (Array.isArray(speakers) && speakers.length === data.length) {
         data.forEach((cap, i) => {
-          if (typeof speakers[i] === 'string' && speakers[i] !== '') cap.speaker = speakers[i];
+          // a name, or [first, second] for a caption two speakers share (#666)
+          const [first, second] = Array.isArray(speakers[i]) ? speakers[i] : [speakers[i]];
+          if (typeof first === 'string' && first !== '') cap.speaker = first;
+          if (typeof second === 'string' && second !== '') cap.speaker2 = second;
         });
       }
 
@@ -582,7 +589,8 @@
       // such rule — the surviving row keeps its own, and a cue can only be one
       // colour — and delete none at all.
       const above = elem.parentElement.parentNode;
-      const inherited = above.getAttribute('data-speaker');
+      // after a caption two speakers share, the turn is the second speaker's
+      const inherited = above.getAttribute('data-speaker2') || above.getAttribute('data-speaker');
       if (inherited !== null && inherited !== '') captionTempl.setAttribute('data-speaker', inherited);
       above.insertAdjacentElement('afterend', captionTempl);
       // Remove animation class after animation completes
@@ -603,8 +611,24 @@
       let belowCaption = thisCaption.nextElementSibling;
 
       thisCaption.querySelector('.end').value = belowCaption.querySelector('.end').value;
-      thisCaption.querySelector('.line2').value += 
-        ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
+      // Two one-line captions of different speakers become a caption the two
+      // share (#666): a speaker to a line, each line opening with a hyphen,
+      // as the generator writes them. Anything else merges as it always has,
+      // into the surviving caption's own speaker.
+      const mine = thisCaption.getAttribute('data-speaker') || '';
+      const theirs = belowCaption.getAttribute('data-speaker') || '';
+      const oneLineEach = thisCaption.querySelector('.line2').value.trim() === ''
+        && belowCaption.querySelector('.line2').value.trim() === '';
+      if (oneLineEach && mine !== '' && theirs !== '' && mine !== theirs
+          && !thisCaption.hasAttribute('data-speaker2') && !belowCaption.hasAttribute('data-speaker2')) {
+        const hyphenated = (text) => '-' + String(text).trim().replace(/^-/, '');
+        thisCaption.querySelector('.line1').value = hyphenated(thisCaption.querySelector('.line1').value);
+        thisCaption.querySelector('.line2').value = hyphenated(belowCaption.querySelector('.line1').value);
+        thisCaption.setAttribute('data-speaker2', theirs);
+      } else {
+        thisCaption.querySelector('.line2').value +=
+          ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
+      }
 
       belowCaption.parentNode.removeChild(belowCaption);
       makeCaptionEditorActive();
@@ -686,7 +710,10 @@
         const start = row.querySelector('.start');
         const value = start === null ? '' : (start.value || start.getAttribute('value') || '');
         if (String(value).length === 0) return;
-        out.push(row.getAttribute('data-speaker') || '');
+        // a name, or [first, second] where two speakers share the caption (#666)
+        const first = row.getAttribute('data-speaker') || '';
+        const second = row.getAttribute('data-speaker2') || '';
+        out.push(second !== '' ? [first, second] : first);
       });
       return out;
     }

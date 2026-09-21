@@ -1504,11 +1504,12 @@
   // transcript is irrelevant until Regenerate — so a later transcript edit
   // must not silently recolour captions the user had already finished.
   //
-  // caption.js starts a new segment on every speaker change, so each cue lies
-  // entirely inside one speaker's run. It drops segment.speaker before
-  // returning and it is vendored, so the run is re-derived here from the very
-  // transcript copy the cues were built from — struck words and struck
-  // speaker labels already removed, because neither is heard.
+  // caption.js reports the speaker of each LINE of a cue (2.3.0, #666): a cue
+  // is one speaker's, or — a quick exchange — two speakers', one per line.
+  // That report is what is recorded. The boundaries below are the older way,
+  // from before caption.js said anything: read off the very transcript copy
+  // the cues were built from, by cue start time. They remain for captions
+  // that carry no report, and can only ever name one speaker per cue.
   function captionSpeakerBoundaries(host) {
     if (host === null || host === undefined) return [];
     const out = [];
@@ -1538,7 +1539,21 @@
   // span carries the same data-m as the first word after it, and the cue start
   // is that word's time rounded to milliseconds, so the comparison needs a
   // hair of tolerance to land on the right side.
+  // speaker: whose the cue is (its first line). speaker2: the second line's,
+  // only where that is somebody else — a dual-speaker caption.
+  function speakersFromReport(cap) {
+    if (!Array.isArray(cap.speakers) || cap.speakers.every((name) => name === '')) return false;
+    const [first, second] = cap.speakers;
+    if (typeof first === 'string' && first !== '') cap.speaker = first;
+    if (typeof second === 'string' && second !== '' && second !== first) cap.speaker2 = second;
+    return true;
+  }
+
   function attachCaptionSpeakers(captions, host) {
+    if (Array.isArray(captions) && captions.some((cap) => Array.isArray(cap.speakers))) {
+      captions.forEach(speakersFromReport);
+      return captions;
+    }
     const bounds = captionSpeakerBoundaries(host);
     if (!Array.isArray(captions) || bounds.length === 0) return captions;
     captions.forEach((cap) => {
@@ -1559,10 +1574,37 @@
   // once captions exist they carry their own speakers, and reading the
   // transcript again is exactly what would let a later transcript edit
   // recolour captions someone had already finished.
+  //
+  // The cues are generated again, against no player, rather than looked up by
+  // start time: nothing has been edited, so the same cues come out, and a cue
+  // two speakers share (#666) names them both — which a start time cannot.
   function captionSpeakersForCues(starts) {
-    const cues = (Array.isArray(starts) ? starts : []).map((start) => ({ start }));
-    attachCaptionSpeakers(cues, captionSourceWithoutStruckWords());
-    return cues.map((c) => (typeof c.speaker === 'string' ? c.speaker : ''));
+    const wanted = Array.isArray(starts) ? starts : [];
+    const host = captionSourceWithoutStruckWords();
+    let generated = [];
+    try {
+      const lines = typeof captionLineLengths === 'function' ? captionLineLengths() : { max: 32, min: 21 };
+      const rules = typeof captionOptions === 'function' ? captionOptions() : undefined;
+      generated = caption().init('hypertranscript', 'caption-speakers-no-player',
+        String(lines.max), String(lines.min), null, null, host, rules).data;
+    } catch (e) {
+      generated = [];
+    }
+    const byStart = new Map(generated.map((cap) => [String(cap.start), cap]));
+    const cues = wanted.map((start) => {
+      const match = byStart.get(String(start).replace(',', '.'));
+      return match !== undefined ? { start, speakers: match.speakers } : { start };
+    });
+    if (cues.some((c) => Array.isArray(c.speakers))) cues.forEach(speakersFromReport);
+    else attachCaptionSpeakers(cues, host);
+    return cues.map(captionSpeakerEntry);
+  }
+  // One cue's place in the recorded list: a name, or [first, second] where two
+  // speakers share it. A plain name stays what it always was, so a project
+  // saved before #666 and one saved after read the same way.
+  function captionSpeakerEntry(cap) {
+    const first = typeof cap.speaker === 'string' ? cap.speaker : '';
+    return typeof cap.speaker2 === 'string' && cap.speaker2 !== '' ? [first, cap.speaker2] : first;
   }
   window.captionSpeakersForCues = captionSpeakersForCues;
 

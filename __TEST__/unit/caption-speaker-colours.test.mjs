@@ -153,3 +153,26 @@ test('cueStarts: one start per cue, in order, headers and notes skipped', () => 
   assert.deepEqual(cueStarts('WEBVTT\n\nNOTE nothing here\n'), []);
   assert.deepEqual(cueStarts(''), []);
 });
+
+// ---- #666: a caption two speakers share ------------------------------------
+test('a dual-speaker cue is coloured a line at a time, and loses its hyphens (#666)', async () => {
+  const { decorateVtt, decorateSrt } = (await import('node:module')).createRequire(import.meta.url)('../../js/caption-speaker-colours.js');
+  const vtt = 'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n-to start?\n-Sure.\n\n00:00:01.500 --> 00:00:03.000\nSo to start off,\nDr. Ashby\n';
+  const out = decorateVtt(vtt, [['Ann', 'Bob'], 'Bob']);
+  assert.match(out, /<v Ann>to start\?<\/v>\n<v Bob>Sure\.<\/v>/);
+  assert.match(out, /<v Bob>So to start off,\nDr\. Ashby<\/v>/);        // one speaker: wrapped whole, as before
+  assert.doesNotMatch(out, /<v [^>]+>-/);                                 // no hyphen survives inside a voice
+  assert.equal((out.match(/::cue\(v\[voice=/g) || []).length, 2);        // two speakers, two colours
+
+  const srt = '1\n00:00:00,000 --> 00:00:01,000\n-to start?\n-Sure.\n';
+  const coloured = decorateSrt(srt, [['Ann', 'Bob']]);
+  const fonts = [...coloured.matchAll(/<font color="(#[0-9a-f]{6})">([^<]*)<\/font>/g)];
+  assert.deepEqual(fonts.map((m) => m[2]), ['to start?', 'Sure.']);
+  assert.notEqual(fonts[0][1], fonts[1][1]);
+});
+
+test('a dual entry whose cue no longer has two lines is coloured as its first speaker (#666)', async () => {
+  const { decorateVtt } = (await import('node:module')).createRequire(import.meta.url)('../../js/caption-speaker-colours.js');
+  const out = decorateVtt('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n-to start? -Sure.\n', [['Ann', 'Bob']]);
+  assert.match(out, /<v Ann>-to start\? -Sure\.<\/v>/);                   // retyped by hand: left as typed
+});

@@ -52,8 +52,10 @@ test('the rules the generator runs under come from one place (#661, #662)', asyn
 test('dotted abbreviations need no language at all (#662)', async ({ page }) => {
   expect(await generate(page, 'It costs 3.5 million, e.g. for a small firm.'))
     .toEqual(['It costs 3.5 million, e.g. for a small firm.']);
-  expect(await generate(page, 'We left at 5 p.m. Then the rain came down on all of us.'))
-    .toEqual(['We left at 5 p.m.', 'Then the rain came down on all of us.']);
+  // (the first sentence is long enough not to lead the second, #666, so the
+  // two captions show where the generator saw the sentence end)
+  expect(await generate(page, 'We left the house at 5 p.m. Then the rain came down on all of us.'))
+    .toEqual(['We left the house at 5 p.m.', 'Then the rain came down on all of us.']);
 });
 
 // The language reaches the generator the way it does in use: the engine
@@ -151,14 +153,25 @@ test('the language is saved as a tag, and an older project saved with a label st
 test('short sentences share a caption; a long one is never split to fill one (#661)', async ({ page }) => {
   expect(await generate(page, 'Yes. No. Maybe. I see. Go on. Fine. That is all. Thanks.'))
     .toEqual(['Yes. No. Maybe. I see. Go on. Fine. That is all. Thanks.']);
+  // A long sentence is divided across captions either way, so a short one
+  // with nothing behind it to join leads it (#666) rather than standing alone.
+  // What never happens is a sentence that FITS a caption being cut to fill one.
   const cues = await generate(page, 'Yes. This sentence is far too long to sit on one line of a caption.');
-  expect(cues[0]).toBe('Yes.');
-  expect(cues.slice(1).join(' ')).toBe('This sentence is far too long to sit on one line of a caption.');
+  expect(cues[0].startsWith('Yes. This sentence')).toBe(true);
+  expect(cues.join(' ')).toBe('Yes. This sentence is far too long to sit on one line of a caption.');
+  expect(await generate(page, 'That is quite right, I think. And nothing else at all here.'))
+    .toEqual(['That is quite right, I think. And nothing else at all here.']);
 });
 
-test('a speaker label always starts a new caption (#661)', async ({ page }) => {
+test('a speaker label never joins a caption as more of the same line (#661, #666)', async ({ page }) => {
+  // #661 had a label always start a new caption. Since #666 a quick exchange
+  // may share one — but only a speaker to a line, never run together, so
+  // every LINE still belongs to one speaker, which is what is recorded.
+  expect(await generate(page, '@Ann Yes. No. | @Bob Maybe. Fine.', ' / ')).toEqual(['-Yes. No. / -Maybe. Fine.']);
+  expect(await page.evaluate(() => window.captionSpeakerList())).toEqual([['Ann', 'Bob']]);
+  // and with "Start a new caption at each new paragraph" on, a label starts one as before
+  await page.evaluate(() => window.HyperaudioSettings.set('captionParagraphBreaks', true));
   expect(await generate(page, '@Ann Yes. No. | @Bob Maybe. Fine.')).toEqual(['Yes. No.', 'Maybe. Fine.']);
-  // so every cue still belongs to one speaker, which is what #536 records
   expect(await page.evaluate(() => window.captionSpeakerList())).toEqual(['Ann', 'Bob']);
 });
 

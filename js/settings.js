@@ -108,6 +108,12 @@
       abbreviations: list,
       joinSentences: true,
       paragraphBreaks: get('captionParagraphBreaks') === true,
+      // #666: two speakers may share a caption, one per line, each line with
+      // a hyphen (the paragraph setting above turns that off, since a speaker
+      // label opens a paragraph); and a short sentence with nothing behind it
+      // to join leads the long sentence after it.
+      dualSpeakers: true,
+      leadSentences: true,
     };
   }
 
