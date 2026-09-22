@@ -15,6 +15,87 @@ Portable :iphone:
 
 [<img alt="Hyperaudio Lite Editor — default view" src="docs/images/default-view.png" width="860">](https://hyperaudio.github.io/hyperaudio-lite-editor/index.html)
 
+### Hosting it yourself
+
+The editor is a folder of static files. Copy it to any web server and it runs.
+
+- **No build.** What is in the repository is what is served: plain HTML, CSS and JavaScript, with the few libraries it uses vendored under `js/vendor/`. There is nothing to compile, bundle or transpile.
+- **No stack.** Any static host will do: GitHub Pages (which serves the demo), an S3 bucket, nginx, Apache, Caddy, a CDN, or a folder on a NAS. The editor asks nothing of the server but to serve files.
+- **No server-side dependencies.** Transcription runs in the browser (Whisper, Parakeet) or goes straight from the browser to the cloud service with your own key. Projects are stored in the browser. Nothing is uploaded to the host, and there is no database, no back end and no account.
+
+Two things make the difference between "runs" and "everything works":
+
+**1. Serve it over HTTPS** (or from `localhost` while developing). Installing it as an app, keeping projects in the browser's storage, running the local transcription engines on the GPU and working offline all need a secure context. Every static host above provides HTTPS.
+
+**2. Media hosts must allow cross-origin reading.** The editor plays media from any URL, but several features need to *read the file's bytes* rather than just play it, and the browser only allows that when the media's server says so with a CORS header:
+
+- exporting media, captions burned in or not
+- transcribing from a URL
+- capturing a poster frame for a project in Recents
+
+Without the header the media plays normally but those features report "This media source does not allow cross-origin reading (CORS)". Media loaded from a local file, or served from the same host as the editor, is not affected.
+
+The header is `Access-Control-Allow-Origin`, set on the server that holds the media, and the response should honour `Range` requests, which media hosts normally do. `*` is fine for public media: CORS only gates reading in the browser, which anyone can do by downloading the file. How to set it on the usual hosts:
+
+**S3** — bucket → Permissions → Cross-origin resource sharing:
+
+```json
+[
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedOrigins": ["*"],
+    "ExposeHeaders": ["Accept-Ranges", "Content-Length", "Content-Range"],
+    "MaxAgeSeconds": 86400
+  }
+]
+```
+
+If CloudFront sits in front of the bucket, its behaviour must also forward the `Origin` header (or use the managed *CORS-With-Preflight* response headers policy), followed by a cache invalidation.
+
+**nginx** — in the `location` that serves the media:
+
+```nginx
+add_header Access-Control-Allow-Origin "*" always;
+add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+add_header Access-Control-Expose-Headers "Accept-Ranges, Content-Length, Content-Range" always;
+```
+
+**Apache** — in the site config or a `.htaccess` in the media folder (needs `mod_headers`):
+
+```apache
+Header set Access-Control-Allow-Origin "*"
+Header set Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+Header set Access-Control-Expose-Headers "Accept-Ranges, Content-Length, Content-Range"
+```
+
+**Caddy**:
+
+```caddy
+header /media/* {
+    Access-Control-Allow-Origin "*"
+    Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+    Access-Control-Expose-Headers "Accept-Ranges, Content-Length, Content-Range"
+}
+```
+
+To check, ask for the file the way a browser would and look for the header in the reply:
+
+```sh
+curl -sI -H "Origin: https://your-editor-host" https://media-host/clip.mp4 | grep -i access-control
+```
+
+**GitHub Pages** already sends `Access-Control-Allow-Origin: *` for everything it serves, so media kept in the same repository as the editor, or in any Pages site, works without configuration.
+
+**Optional: faster local transcription on the CPU.** Parakeet's CPU path (the default in Firefox and Safari) uses one thread unless the page is *cross-origin isolated*, which needs two headers on the editor's own host:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Be aware that `require-corp` also stops the page loading media from any host that does not send a CORS or `Cross-Origin-Resource-Policy` header, so with these headers set, media hosts must have the CORS configuration above. The models and libraries the editor fetches already send it. Leave these headers off unless you control your media hosts. GitHub Pages does not set them, so the demo runs single-threaded on the CPU path.
+
 ---
 
 ## Features
