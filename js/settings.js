@@ -64,8 +64,8 @@
     tpmeProvider: '',
     tpmeEditor: '',
     tpmeWithExports: true,
-    // FADGI's WebVTT metadata block in exported .vtt files (#673, js/tpme.js);
-    // shown only with tpmeEnabled, since it uses the same Provider and Media ID
+    // FADGI's WebVTT metadata block in exported .vtt files (#673, js/tpme.js),
+    // a switch of its own; it shares Provider and Media ID with TPME
     fadgiEnabled: false,
     fadgiCountry: '',
   });
