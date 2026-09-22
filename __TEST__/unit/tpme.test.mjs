@@ -167,3 +167,58 @@ test('a checksum that is left out says why, in the entry itself', async () => {
   // an entry WITH a checksum carries no such note
   assert.equal(tpme.buildEntries(project(), OUTPUTS, NOW)[1].processing_note, undefined);
 });
+
+// ---- #673: the FADGI block inside an exported .vtt ---------------------------
+const FADGI_STATE = () => Object.assign(project(), {
+  country: 'us', exportedAt: '2026-09-22T09:30:00.000Z',
+  sidecarName: 'cpb-aacip-123-tpme-20260922-093000.json', reviewLevelUsed: 'partially-corrected',
+});
+
+test('the block carries the seven strongly recommended elements, in FADGI order', () => {
+  const lines = tpme.fadgiLines(FADGI_STATE());
+  assert.deepEqual(lines, [
+    'Type: caption',
+    'Language: eng',
+    'Responsible Party: US, Example Archive',
+    'Media Identifier: cpb-aacip-123',
+    'Originating File: interview.mp4',
+    'Title: An interview',
+    'File Creator: Hyperaudio Lite Editor 1.3.22',
+    'File Creation Date: 2026-09-22',
+    'Origin History: Transcribed by transformers.js (onnx-community/whisper-small.en_timestamped); corrected in Hyperaudio Lite Editor.',
+    'Local Usage Element: [tpme] cpb-aacip-123-tpme-20260922-093000.json; [human review] partially-corrected',
+  ]);
+});
+
+test('what is not known is left out rather than written empty', () => {
+  const lines = tpme.fadgiLines(Object.assign(FADGI_STATE(), { country: '', provider: '', provenance: null, imported: [], edited: null, title: '', sidecarName: '', reviewLevelUsed: '' }));
+  assert.ok(!lines.some((l) => /^(Responsible Party|Origin History|Local Usage Element|Title):/.test(l)), lines.join('\n'));
+  assert.ok(lines.includes('Type: caption'));
+  // a provider with no country is written on its own, not as ", Example Archive"
+  assert.ok(tpme.fadgiLines(Object.assign(FADGI_STATE(), { country: '' })).includes('Responsible Party: Example Archive'));
+});
+
+test('language is written as ISO 639-3, for every code the engines offer', () => {
+  const offered = ['en', 'en-US', 'en-GB', 'es', 'es-419', 'fr', 'fr-CA', 'de', 'hi', 'hi-Latn', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'pt-BR', 'ru', 'sv', 'tr', 'uk', 'zh', 'zh-CN', 'da', 'id', 'no', 'ta'];
+  offered.forEach((tag) => assert.match(tpme.iso639_3(tag), /^[a-z]{3}$/, tag));
+  assert.equal(tpme.iso639_3('en-GB'), 'eng');
+  assert.equal(tpme.iso639_3('eng'), 'eng');       // already three letters
+  assert.equal(tpme.iso639_3('xx'), 'xx');         // unknown: written as it is
+  assert.equal(tpme.iso639_3(''), '');
+});
+
+test('the block goes after the WEBVTT line and before the first cue, once', () => {
+  const vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nfirst\n';
+  const out = tpme.embedFadgi(vtt, FADGI_STATE());
+  assert.ok(out.startsWith('WEBVTT\nType: caption\nLanguage: eng\n'));
+  assert.ok(out.endsWith('File Creation Date: 2026-09-22\nOrigin History: Transcribed by transformers.js (onnx-community/whisper-small.en_timestamped); corrected in Hyperaudio Lite Editor.\nLocal Usage Element: [tpme] cpb-aacip-123-tpme-20260922-093000.json; [human review] partially-corrected\n\n00:00:01.000 --> 00:00:03.000\nfirst\n'));
+  assert.equal(tpme.embedFadgi(out, FADGI_STATE()), out);               // not twice
+  assert.equal(tpme.embedFadgi('not a vtt', FADGI_STATE()), 'not a vtt');
+  // CRLF files keep their line endings; a header comment on the WEBVTT line is kept
+  const crlf = tpme.embedFadgi('WEBVTT - kind: captions\r\n\r\n00:00:01.000 --> 00:00:03.000\r\nfirst\r\n', FADGI_STATE());
+  assert.ok(crlf.startsWith('WEBVTT - kind: captions\r\nType: caption\r\n'));
+  assert.ok(!crlf.includes('\n\n') || crlf.includes('\r\n\r\n'));
+  // a value with a line break inside it stays on one line
+  const multi = tpme.fadgiLines(Object.assign(FADGI_STATE(), { title: 'Two\nlines' }));
+  assert.ok(multi.includes('Title: Two lines'));
+});

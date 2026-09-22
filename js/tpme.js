@@ -253,7 +253,80 @@
 
   const mediaIds = (entries) => [...new Set((entries || []).map((e) => e.media_id).filter((id) => typeof id === 'string' && id !== ''))];
 
-  const pure = { REVIEW_LEVELS, CHECKSUM_LIMIT_BYTES, stamp, fileName, wasEdited, reviewLevel, checksumOf, asrEntry, buildEntries, mergeEntries, parseFile, mediaIds };
+  /* ---- FADGI: the same facts, embedded in the .vtt itself (#673) ----------
+   * FADGI's Guidelines for Embedding Metadata in WebVTT Files (v1.0, June
+   * 2024, CC0) put a block of "Element: value" lines straight after the
+   * WEBVTT line, before the first cue, where every WebVTT parser reads them
+   * as header text and ignores them. A sidecar can be separated from its
+   * file; this travels inside it. TPME v1.0 maps its elements onto these and
+   * treats the two as companions.
+   */
+
+  // ISO 639-1 -> ISO 639-3, for the languages the engines offer. FADGI asks
+  // for the three-letter code. A tag not listed here is written as it is,
+  // which is truer than leaving Language out.
+  const ISO_639_3 = Object.freeze({
+    en: 'eng', es: 'spa', fr: 'fra', de: 'deu', it: 'ita', pt: 'por', nl: 'nld', hi: 'hin', ja: 'jpn', ko: 'kor',
+    pl: 'pol', ru: 'rus', sv: 'swe', tr: 'tur', uk: 'ukr', zh: 'zho', da: 'dan', id: 'ind', no: 'nor', ta: 'tam',
+    fi: 'fin', cs: 'ces', ro: 'ron', hu: 'hun', el: 'ell', ca: 'cat', ar: 'ara', he: 'heb', vi: 'vie', th: 'tha',
+  });
+  function iso639_3(tag) {
+    const primary = String(tag || '').toLowerCase().split(/[-_]/)[0];
+    if (primary === '') return '';
+    return primary.length === 3 ? primary : (ISO_639_3[primary] || primary);
+  }
+
+  // one line per element, in FADGI's Appendix A order; a value is one line
+  const oneLine = (value) => String(value === undefined || value === null ? '' : value).replace(/\s*[\r\n]+\s*/g, ' ').trim();
+
+  /**
+   * The FADGI data block for an exported .vtt, as lines (no WEBVTT line).
+   * state: the TPME capture plus { country, exportedAt, sidecarName, reviewLevelUsed }
+   */
+  function fadgiLines(state) {
+    const party = [oneLine(state.country).toUpperCase(), oneLine(state.provider)].filter((v) => v !== '').join(', ');
+    const p = state.provenance || {};
+    const history = [];
+    if (p.engine || p.modelId || p.model) {
+      const by = p.runtime || p.engine || '';
+      history.push(`Transcribed by ${oneLine(by)}${p.modelId || p.model ? ` (${oneLine(p.modelId || p.model)})` : ''}`);
+    }
+    if (Array.isArray(state.imported) && state.imported.length > 0) history.push(`${state.imported.length} earlier processing entries imported with the transcript`);
+    if (state.edited === true) history.push(`corrected in ${EDITOR_NAME}`);
+    else if (history.length > 0) history.push(`captions written by ${EDITOR_NAME}`);
+    const local = [];
+    if (state.sidecarName) local.push(`[tpme] ${oneLine(state.sidecarName)}`);
+    if (state.reviewLevelUsed) local.push(`[human review] ${oneLine(state.reviewLevelUsed)}`);
+    const lines = [
+      ['Type', 'caption'],
+      ['Language', iso639_3(state.language)],
+      ['Responsible Party', party],
+      ['Media Identifier', oneLine(state.mediaId)],
+      ['Originating File', oneLine(p.mediaFile || state.mediaFilename)],
+      ['Title', oneLine(state.title)],
+      ['File Creator', `${EDITOR_NAME}${state.generatorVersion ? ' ' + state.generatorVersion : ''}`],
+      ['File Creation Date', String(state.exportedAt || '').slice(0, 10)],
+      ['Origin History', history.length > 0 ? history.join('; ') + '.' : ''],
+      ['Local Usage Element', local.join('; ')],
+    ];
+    return lines.filter(([, value]) => value !== '').map(([name, value]) => `${name}: ${value}`);
+  }
+
+  // The block into a WebVTT document: after the WEBVTT line (and anything
+  // already on it), before the blank line that ends the header block. A
+  // document that already carries a FADGI block is not given a second.
+  function embedFadgi(vtt, state) {
+    const text = String(vtt || '');
+    const m = /^(\uFEFF?WEBVTT[^\r\n]*)(\r?\n)/.exec(text);
+    if (m === null) return text;
+    const lines = fadgiLines(state);
+    if (lines.length === 0) return text;
+    const afterHeader = text.slice(m[0].length);
+    if (/^(?:[^\r\n]+\r?\n)*?File Creator: /m.test(afterHeader.split(/\r?\n\r?\n/)[0])) return text;
+    return m[1] + m[2] + lines.join(m[2]) + m[2] + afterHeader;
+  }
+
+  const pure = { REVIEW_LEVELS, CHECKSUM_LIMIT_BYTES, ISO_639_3, stamp, fileName, wasEdited, reviewLevel, checksumOf, asrEntry, buildEntries, mergeEntries, parseFile, mediaIds, iso639_3, fadgiLines, embedFadgi };
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;
   if (typeof document === 'undefined') return;
 
@@ -284,6 +357,10 @@
     return {
       enabled: enabled(),
       wanted: enabled() && (document.getElementById('export-tpme') || {}).checked === true,
+      // FADGI (#673): embedded in every exported .vtt while both switches are on
+      fadgi: enabled() && setting('fadgiEnabled') === true,
+      country: text('fadgiCountry'),
+      exportedAt: new Date().toISOString(),
       projectId: s && s.library ? s.library.currentId() : null,
       mediaId: tpme.mediaId || String(mediaFilename || 'transcript').replace(/\.[a-z0-9]+$/i, ''),
       title: String(title || '').replace(/\.[a-z0-9]+$/i, ''),
@@ -302,6 +379,22 @@
         text: span.textContent, struck: (span.style.textDecoration || '').includes('line-through'),
       })),
     };
+  }
+  // The sidecar's name is settled at the click, so a .vtt can point at it
+  // (FADGI's Local Usage Element) before the sidecar itself is written.
+  const sidecarNameFor = (snapshot) => (snapshot && snapshot.wanted === true ? fileName(snapshot.mediaId, snapshot.exportedAt) : '');
+
+  // What a .vtt leaving the editor carries (#673): the FADGI block, when
+  // switched on. Reads the engine's original to say whether the transcript
+  // was corrected, as the sidecar does.
+  async function vttForExport(vtt, snapshot) {
+    if (!snapshot || snapshot.fadgi !== true) return vtt;
+    const s = save();
+    const original = snapshot.projectId !== null && s && typeof s.originalTranscriptFor === 'function'
+      ? await s.originalTranscriptFor(snapshot.projectId) : null;
+    const edited = wasEdited(original && original.words, snapshot.currentWords);
+    const reviewLevelUsed = reviewLevel({ chosen: snapshot.reviewLevel, edited, hasEngine: !!(snapshot.provenance && (snapshot.provenance.engine || snapshot.provenance.modelId)) });
+    return embedFadgi(vtt, Object.assign({}, snapshot, { edited, reviewLevelUsed, sidecarName: sidecarNameFor(snapshot) }));
   }
 
   // Which of an export's files are transcripts or captions, and what TPME calls them.
@@ -332,17 +425,16 @@
     const state = Object.assign({}, snapshot, {
       edited: wasEdited(original && original.words, snapshot.currentWords), conventions,
     });
-    return buildEntries(state, outputs, new Date().toISOString());
+    return buildEntries(state, outputs, snapshot.exportedAt || new Date().toISOString());
   }
 
   // For the media export: one more output, from the snapshot taken at the click.
   async function sidecar(snapshot, files, options) {
     if (!snapshot || snapshot.wanted !== true) return null;
     const entries = await entriesFor(snapshot, files, options);
-    const now = (entries[entries.length - 1] || {}).modification_date || new Date().toISOString();
     return {
       blob: new Blob([JSON.stringify(entries, null, 2) + '\n'], { type: 'application/json' }),
-      name: fileName(snapshot.mediaId, now),
+      name: sidecarNameFor(snapshot),
     };
   }
 
@@ -427,15 +519,32 @@
           </span>
           <input id="setting-tpme-editor" type="text" class="input input-bordered input-sm" style="width:14rem" autocomplete="email" />
         </label>
+        <label class="settings-row settings-row-toggle tpme-only" for="setting-fadgi-enabled">
+          <span class="settings-text">
+            Embed FADGI metadata in exported WebVTT
+            <span class="settings-hint">A block of header lines inside every .vtt the editor exports — type, language, responsible party, media identifier, originating file, creator, date — following FADGI's guidelines for WebVTT files. Players ignore it. The captions kept in the editor stay plain.</span>
+          </span>
+          <input type="checkbox" id="setting-fadgi-enabled" class="toggle toggle-primary" />
+        </label>
+        <label class="settings-row tpme-only" for="setting-fadgi-country">
+          <span class="settings-text">
+            Country
+            <span class="settings-hint">Two letters (ISO 3166), written before the provider as FADGI's Responsible Party: "US, GBH Archives".</span>
+          </span>
+          <input id="setting-fadgi-country" type="text" class="input input-bordered input-sm" style="width:5rem" maxlength="2" autocomplete="country" />
+        </label>
       </div>`);
     const toggle = document.getElementById('setting-tpme-enabled');
     toggle.checked = enabled();
     toggle.addEventListener('change', () => { settings().set('tpmeEnabled', toggle.checked); apply(); });
-    [['setting-tpme-provider', 'tpmeProvider'], ['setting-tpme-editor', 'tpmeEditor']].forEach(([id, key]) => {
+    [['setting-tpme-provider', 'tpmeProvider'], ['setting-tpme-editor', 'tpmeEditor'], ['setting-fadgi-country', 'fadgiCountry']].forEach(([id, key]) => {
       const field = document.getElementById(id);
       field.value = text(key);
       field.addEventListener('change', () => settings().set(key, field.value.trim()));
     });
+    const fadgi = document.getElementById('setting-fadgi-enabled');
+    fadgi.checked = setting('fadgiEnabled') === true;
+    fadgi.addEventListener('change', () => settings().set('fadgiEnabled', fadgi.checked));
   }
 
   function injectInfo() {
@@ -479,6 +588,43 @@
     const count = Array.isArray(tpme.entries) ? tpme.entries.length : 0;
     document.getElementById('tpme-chain').textContent = count === 0 ? ''
       : `${count} earlier ${count === 1 ? 'entry' : 'entries'} imported with this transcript — kept as they are, and written out first.`;
+  }
+
+  // The File menu's WebVTT download (#673): the FADGI block goes in here,
+  // and the speaker colours (#536) on top of it when they are on, so the one
+  // download carries both. Capture phase, so this runs before the colour
+  // module's own click handler, and stops it: one file, not two.
+  function wireVttDownload() {
+    const link = document.getElementById('download-vtt');
+    if (link === null || link.dataset.fadgi === '1') return;
+    link.dataset.fadgi = '1';
+    link.addEventListener('click', (event) => {
+      if (!(enabled() && setting('fadgiEnabled') === true)) return;
+      const href = link.getAttribute('href') || '';
+      const comma = href.indexOf(',');
+      if (!href.startsWith('data:') || comma === -1) return;
+      let plain;
+      try { plain = decodeURIComponent(href.slice(comma + 1)); } catch (e) { return; }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const snapshot = capture();
+      vttForExport(plain, snapshot).then((withBlock) => {
+        let out = withBlock;
+        const colours = window.CaptionSpeakerColours;
+        const colourOn = setting('captionColourSpeakers') === true;
+        if (colourOn && colours && typeof colours.decorateVtt === 'function') {
+          const recorded = typeof window.captionSpeakerList === 'function' ? window.captionSpeakerList() : [];
+          const speakers = recorded.length > 0 ? recorded
+            : (typeof window.captionSpeakersForCues === 'function' ? window.captionSpeakersForCues(colours.cueStarts(plain)) : []);
+          if (speakers.length > 0) out = colours.decorateVtt(withBlock, speakers);
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([out], { type: 'text/vtt' }));
+        a.download = link.getAttribute('download') || 'hyperaudio.vtt';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      }).catch((e) => console.warn('tpme: FADGI download failed', e));
+    }, true);
   }
 
   function injectMenu() {
@@ -544,12 +690,13 @@
     injectInfo();
     injectMenu();
     injectExportOption();
+    wireVttDownload();
     apply();
     const modal = document.getElementById('export-modal');
     if (modal !== null) modal.addEventListener('change', () => { if (modal.checked) apply(); });
   }
 
-  window.HyperaudioTpme = Object.freeze(Object.assign({}, pure, { enabled, capture, sidecar, entriesFor, downloadNow, importFile }));
+  window.HyperaudioTpme = Object.freeze(Object.assign({}, pure, { enabled, capture, sidecar, entriesFor, downloadNow, importFile, vttForExport }));
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();

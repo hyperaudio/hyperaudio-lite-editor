@@ -49,10 +49,14 @@ const makeProject = async (page, name, words, info = ENGINE) => {
 const turnOn = (page, fields = {}) => page.evaluate((fields) => {
   const t = document.getElementById('setting-tpme-enabled');
   t.checked = true; t.dispatchEvent(new Event('change', { bubbles: true }));
-  [['setting-tpme-provider', fields.provider], ['setting-tpme-editor', fields.editor]].forEach(([id, value]) => {
+  [['setting-tpme-provider', fields.provider], ['setting-tpme-editor', fields.editor], ['setting-fadgi-country', fields.country]].forEach(([id, value]) => {
     if (value === undefined) return;
     const f = document.getElementById(id); f.value = value; f.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  if (fields.fadgi !== undefined) {
+    const f = document.getElementById('setting-fadgi-enabled');
+    f.checked = fields.fadgi; f.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 }, fields);
 
 const setUpExport = async (page, name, extras) => {
@@ -310,4 +314,78 @@ test('opening another project during an export does not change what the file say
   expect(entries[0]).toMatchObject({ media_id: 'ladder-a', inference_model: 'onnx-community/whisper-small.en_timestamped', originating_media_file: 'ladder-a.wav' });
   expect(JSON.stringify(entries)).not.toContain('ladder-b');
   expect(JSON.stringify(entries)).not.toContain('nova-3');
+});
+
+// ---- #673: FADGI metadata inside exported .vtt files -------------------------
+test('with FADGI off, an exported .vtt is exactly what it was; with it on, every exported .vtt carries the block (#673)', async ({ page }) => {
+  await makeProject(page, 'interview.wav', WORDS);
+  await turnOn(page, { provider: 'Example Archive', country: 'us', fadgi: false });
+  await setUpExport(page, 'plain', ['export-vtt', 'export-retime']);
+  const plain = (await runExport(page, 3))['plain.vtt'].toString('utf8');
+  expect(plain.startsWith('WEBVTT\n\n')).toBe(true);
+  expect(plain).not.toContain('Type: caption');
+
+  await turnOn(page, { fadgi: true });
+  await page.evaluate(() => { const m = document.getElementById('info-modal'); m.checked = true; m.dispatchEvent(new Event('change')); });
+  await page.fill('#tpme-media-id', 'cpb-aacip-123');
+  await page.locator('#tpme-media-id').dispatchEvent('change');
+  await page.evaluate(() => { document.getElementById('info-modal').checked = false; });
+  await setUpExport(page, 'interview', ['export-vtt', 'export-srt', 'export-retime', 'export-tpme']);
+  const files = await runExport(page, 5);
+  const vtt = files['interview.vtt'].toString('utf8');
+  const head = vtt.split('\n\n')[0].split('\n');
+  expect(head[0]).toBe('WEBVTT');
+  expect(head.slice(1)).toEqual([
+    'Type: caption',
+    'Language: eng',
+    'Responsible Party: US, Example Archive',
+    'Media Identifier: cpb-aacip-123',
+    'Originating File: interview.wav',
+    'Title: interview',
+    expect.stringMatching(/^File Creator: Hyperaudio Lite Editor \d+\.\d+\.\d+$/),
+    expect.stringMatching(/^File Creation Date: \d{4}-\d{2}-\d{2}$/),
+    'Origin History: Transcribed by transformers.js (onnx-community/whisper-small.en_timestamped); captions written by Hyperaudio Lite Editor.',
+    expect.stringMatching(/^Local Usage Element: \[tpme\] cpb-aacip-123-tpme-\d{8}-\d{6}\.json; \[human review\] machine-generated$/),
+  ]);
+  // the cues follow, untouched
+  expect(vtt).toContain('\n\n00:00:00.000 --> ');
+  expect(vtt).toContain('alpha');
+  // the SRT has no block, and neither does what the project holds
+  expect(files['interview.srt'].toString('utf8')).not.toContain('Type: caption');
+  expect(await page.evaluate(() => window.HyperaudioSave.getCaptionsVtt())).not.toContain('Type: caption');
+  // the TPME sidecar names the .vtt the block points back at, and its checksum is of the file WITH the block
+  const tpmeName = Object.keys(files).find((n) => /-tpme-/.test(n));
+  expect(vtt).toContain(`[tpme] ${tpmeName}`);
+  const entries = JSON.parse(files[tpmeName].toString('utf8'));
+  expect(entries.find((e) => e.transcript_id === 'interview.vtt').transcript_checksum).toBe(sha(files['interview.vtt']));
+  // the interactive transcript links that same file
+  expect(files['interview-transcript.html'].toString('utf8')).toContain('interview.vtt');
+});
+
+test('the File menu\'s WebVTT download carries the block, and the speaker colours on top of it (#673)', async ({ page }) => {
+  await makeProject(page, 'interview.wav', WORDS);
+  await turnOn(page, { provider: 'Example Archive', country: 'gb', fadgi: true });
+  await page.click('#caption-editor-btn');
+  await page.waitForSelector('#captions-display .caption');
+  const download = async () => {
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => document.getElementById('download-vtt').click())]);
+    const chunks = []; for await (const c of await dl.createReadStream()) chunks.push(c);
+    return Buffer.concat(chunks).toString('utf8');
+  };
+  const plainWithBlock = await download();
+  expect(plainWithBlock.startsWith('WEBVTT\nType: caption\nLanguage: eng\nResponsible Party: GB, Example Archive\n')).toBe(true);
+  expect(plainWithBlock).not.toContain('STYLE');
+  expect((plainWithBlock.match(/File Creator:/g) || []).length).toBe(1);   // one download, one block
+
+  await page.evaluate(() => window.HyperaudioSettings.set('captionColourSpeakers', true));
+  const coloured = await download();
+  expect(coloured.startsWith('WEBVTT\nType: caption\n')).toBe(true);
+  expect(coloured).toContain('STYLE');
+  expect(coloured).toContain('<v Ann>');
+  expect(coloured.indexOf('File Creator:')).toBeLessThan(coloured.indexOf('STYLE'));
+  // and it re-imports with only its cues (#672)
+  const before = await page.evaluate(() => document.querySelectorAll('#captions-display .caption').length);
+  await page.evaluate((vtt) => window.populateCaptionEditorFromVtt(vtt), coloured);
+  expect(await page.evaluate(() => document.querySelectorAll('#captions-display .caption').length)).toBe(before);
+  expect(await page.evaluate(() => document.querySelector('#captions-display .caption .line1').value)).not.toContain('Type:');
 });
