@@ -79,6 +79,7 @@
   let updateCaptionsFromTranscript = true;
   let captionMode = false; // used to detect whether we need to sanitise amongst other things
   let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
+  const transcriptInputWired = new WeakSet(); // the transcript elements whose input/blur listeners are attached (#675)
 
   function mutateTranscript(fn, origin, foldPolicy, captureHistory) {
     if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
@@ -798,10 +799,16 @@
 
     // Pause autoscroll while the user is actively typing so it doesn't yank the
     // view mid-edit; resume shortly after. Uses 'input' (content changes) so
-    // clicking a word to seek still autoscrolls. Attach once per transcript node.
+    // clicking a word to seek still autoscrolls. Attach once per transcript
+    // ELEMENT, remembered by identity (#675): the caption editor clones the
+    // transcript into its cache and puts the clone back on return, and a
+    // clone carries attributes but not listeners — so a data- attribute as
+    // the guard said "already attached" of an element that had nothing
+    // attached, and from then on typing marked no maintenance dirty: a typed
+    // [speaker] label stayed plain text until the next project switch.
     const transcriptEl = document.querySelector('#hypertranscript');
-    if (transcriptEl !== null && transcriptEl.dataset.autoscrollPause !== '1') {
-      transcriptEl.dataset.autoscrollPause = '1';
+    if (transcriptEl !== null && !transcriptInputWired.has(transcriptEl)) {
+      transcriptInputWired.add(transcriptEl);
       let typingResume = null;
       transcriptEl.addEventListener('input', (event) => {
         const hla = window.hyperaudioInstance;
