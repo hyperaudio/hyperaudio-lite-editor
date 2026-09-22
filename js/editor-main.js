@@ -258,6 +258,46 @@
       return formHTML;
     }
 
+    // WebVTT -> [{ start, stop, text }] for the caption rows (#672). Only what
+    // follows a timing line, up to the next blank line, is a cue's text. A
+    // file may carry lines before its first cue — FADGI's metadata block
+    // after WEBVTT, a NOTE, the STYLE block our own coloured download writes
+    // — and every one of them used to be appended to a cue that did not
+    // exist yet, then pushed as a first row with no times. Cue identifier
+    // lines (the optional line before a timing line) are dropped too. The
+    // last cue is pushed like every other: a VTT once lost its final caption
+    // because only the NEXT timing line pushed the one before (#513).
+    function parseVttCuesForEditor(vtt) {
+      const cues = [];
+      const lines = String(vtt || '').replace(/\r\n?/g, '\n').split('\n');
+      let cue = null;
+      let blockIsCue = false;
+      const timing = (line) => {
+        const at = line.indexOf(' --> ');
+        return at === -1 ? null : [line.slice(0, at).trim(), line.slice(at + 5).trim().split(/\s+/)[0]];
+      };
+      lines.forEach((line) => {
+        if (line.trim() === '') {                     // a blank line ends whatever block this was
+          if (cue !== null) cues.push(cue);
+          cue = null;
+          blockIsCue = false;
+          return;
+        }
+        const times = timing(line);
+        if (times !== null && cue === null) {         // a timing line opens a cue
+          cue = { start: times[0], stop: times[1], text: '' };
+          blockIsCue = true;
+          return;
+        }
+        if (blockIsCue && cue !== null) cue.text += line.trim() + '\n';
+        // anything else — the header block, NOTE and STYLE blocks, a cue's
+        // identifier line — is not caption text
+      });
+      if (cue !== null) cues.push(cue);
+      return cues;
+    }
+    window.parseVttCuesForEditor = parseVttCuesForEditor;
+
     // `speakers` is the list a project saved alongside its captions (#536),
     // one name per cue in cue order. An import has none. A list that does not
     // match the cue count is dropped rather than applied to the wrong lines:
@@ -271,34 +311,7 @@
       if (typeof window.setCaptionDownloadLinks === 'function') {
         window.setCaptionDownloadLinks(vtt);
       }
-      vtt = vtt.replace("WEBVTT\n\n","");
-      vtt = vtt.replaceAll("\n\n","\n");
-
-      let lines = vtt.split('\n');
-      let start, stop, text;
-
-      lines.forEach((line, index) => {
-        let lineIsNumber = !isNaN(line.trim().replace(' --> ','').replaceAll('.','').replaceAll(':',''));
-        if (lineIsNumber === true && line.indexOf(' --> ') === 12 && line.length === 29) {
-          if (index > 0) {
-            data.push({start, stop, text});
-          }
-          start = line.split(' --> ')[0];
-          stop = line.split(' --> ')[1].trim();
-          text = "";
-        } else {
-          text += line.trim() + "\n";
-        }
-      });
-
-      // The loop only pushes a cue when it meets the NEXT timestamp line, so
-      // the last one was never pushed — every VTT lost its final caption, and
-      // a single-cue VTT produced no rows at all (#513). Not cosmetic: the
-      // editor is what generateCaptionsFromCaptionEditor rebuilds the VTT
-      // from, so the dropped cue vanished for good on the next save.
-      if (start !== undefined) {
-        data.push({start, stop, text});
-      }
+      parseVttCuesForEditor(vtt).forEach((cue) => data.push(cue));
 
       if (Array.isArray(speakers) && speakers.length === data.length) {
         data.forEach((cap, i) => {
