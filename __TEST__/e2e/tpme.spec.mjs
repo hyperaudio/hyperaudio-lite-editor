@@ -389,3 +389,32 @@ test('the File menu\'s WebVTT download carries the block, and the speaker colour
   expect(await page.evaluate(() => document.querySelectorAll('#captions-display .caption').length)).toBe(before);
   expect(await page.evaluate(() => document.querySelector('#captions-display .caption .line1').value)).not.toContain('Type:');
 });
+
+test('a flattened .hyperaudio carries the block in its captions, and the editor opens it plain (#673)', async ({ page }) => {
+  await makeProject(page, 'interview.wav', WORDS);
+  await turnOn(page, { provider: 'Example Archive', country: 'us', fadgi: true });
+  await setUpExport(page, 'flat', ['export-project', 'export-tpme']);
+  const files = await runExport(page, 3);
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(files['flat.hyperaudio']);
+  const inside = await zip.file('captions.vtt').async('string');
+  expect(inside.startsWith('WEBVTT\nType: caption\nLanguage: eng\nResponsible Party: US, Example Archive\n')).toBe(true);
+  expect(inside).toContain('File Creator: Hyperaudio Lite Editor');
+  expect(inside).not.toContain('[tpme]');            // the sidecar is not inside the container
+  expect(inside).toContain(' --> ');
+
+  // open it: the store is plain from the start, the cues are all there
+  const fs = await import('node:fs/promises');
+  const path = (await import('node:path')).join((await import('node:os')).tmpdir(), `flat-${Date.now()}.hyperaudio`);
+  await fs.writeFile(path, files['flat.hyperaudio']);
+  await page.setInputFiles('#project-open-input', path);
+  await expect(page.locator('#hypertranscript')).toContainText('alpha');
+  await expect.poll(() => page.evaluate(() => window.HyperaudioSave.getCaptionsVtt())).toContain(' --> ');
+  const stored = await page.evaluate(() => window.HyperaudioSave.getCaptionsVtt());
+  expect(stored.startsWith('WEBVTT\n\n')).toBe(true);
+  expect(stored).not.toContain('Type: caption');
+  await page.evaluate(() => { document.getElementById('export-modal').checked = false; });   // the export modal is still up
+  await page.click('#caption-editor-btn');
+  await page.waitForSelector('#captions-display .caption');
+  expect(await page.evaluate(() => document.querySelector('#captions-display .caption .line1').value)).not.toContain('Type:');
+});

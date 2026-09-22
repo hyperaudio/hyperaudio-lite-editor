@@ -434,3 +434,14 @@ test('the container writes mimetype, then media, then the mutable text entries',
     assert.ok(order.indexOf(name) > mediaAt, name + ' must follow the media');
   });
 });
+
+// ---- #673: a container's captions.vtt may carry a FADGI header block ---------
+test('a header block after WEBVTT is stripped on the way in; everything else is kept exactly', () => {
+  const cues = '00:00:01.000 --> 00:00:02.000\nhi\n\nNOTE keep me\n\n00:00:03.000 --> 00:00:04.000\nthere\n';
+  assert.equal(save.plainCaptionsVtt('WEBVTT\nType: caption\nLanguage: eng\nFile Creator: x\n\n' + cues), 'WEBVTT\n\n' + cues);
+  assert.equal(save.plainCaptionsVtt('WEBVTT\n\n' + cues), 'WEBVTT\n\n' + cues);                  // already plain
+  assert.equal(save.plainCaptionsVtt('﻿WEBVTT - kind: captions\r\nType: caption\r\n\r\nhi\r\n'), '﻿WEBVTT - kind: captions\r\n\r\nhi\r\n');
+  assert.equal(save.plainCaptionsVtt('WEBVTT\nType: caption\n'), 'WEBVTT\nType: caption\n');   // no cues at all: left alone
+  assert.equal(save.plainCaptionsVtt(null), null);
+  assert.equal(save.plainCaptionsVtt('not a vtt'), 'not a vtt');
+});
