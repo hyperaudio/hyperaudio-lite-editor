@@ -450,7 +450,12 @@
     }
 
     const htmlText = await readTextEntry(ENTRY.html);
-    const captionsVtt = await readTextEntry(ENTRY.captions);
+    // A container's captions.vtt may carry a metadata block after WEBVTT
+    // (FADGI, #673, written by the flattened export). It is provenance for
+    // whoever unpacks the container, not caption content: the store the
+    // editor keeps stays plain, as it always has (#536), so the block is
+    // stripped here, once, on the way in.
+    const captionsVtt = plainCaptionsVtt(await readTextEntry(ENTRY.captions));
     const originalText = await readTextEntry(ENTRY.original);
     const jsonText = await readTextEntry(ENTRY.json);
 
@@ -554,6 +559,21 @@
     return named !== undefined ? named[1] : '';
   }
 
+  // The WebVTT header block — every line between the WEBVTT line and the
+  // first blank line — removed. That is where FADGI puts its metadata (#673);
+  // the WEBVTT line itself, and everything from the first blank line on, is
+  // kept exactly. null stays null.
+  function plainCaptionsVtt(vtt) {
+    if (typeof vtt !== 'string') return vtt;
+    const m = /^(\uFEFF?WEBVTT[^\r\n]*)(\r?\n)/.exec(vtt);
+    if (m === null) return vtt;
+    const rest = vtt.slice(m[0].length);
+    const blank = rest.search(/\r?\n\r?\n|^\r?\n/);
+    if (blank === -1) return vtt;                       // header lines and nothing else: leave it
+    const headerEnd = rest.startsWith(m[2]) ? 0 : rest.indexOf(m[2] + m[2]) + m[2].length;
+    return m[1] + m[2] + rest.slice(headerEnd);
+  }
+
   /* ==========================================================================
    * Exports for node --test (pure layers only), then browser-only code.
    * ======================================================================== */
@@ -565,7 +585,7 @@
     sanitizeTranscriptClasses,
     buildProjectJson, serializeProjectJson,
     sortLibraryEntries, isEntryDirty, newProjectId,
-    zipProject, unzipProject, languageTag,
+    zipProject, unzipProject, languageTag, plainCaptionsVtt,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = pure;

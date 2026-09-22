@@ -1446,9 +1446,16 @@
         if (projHtml !== null) {
           const projSubs = genRetimedCaptions(ctx);
           const projDur = keptDuration(sections) / rate; // Infinity when metadata never loaded
+          // the container's captions carry the FADGI block too (#673) — for
+          // whoever unpacks it; the editor strips it again on open — but not
+          // the pointer to a sidecar that is not inside the container
+          let projVtt = projSubs && projSubs.vtt ? projSubs.vtt : '';
+          if (projVtt && window.HyperaudioTpme && typeof window.HyperaudioTpme.vttForExport === 'function' && ctx.tpme !== null) {
+            projVtt = await window.HyperaudioTpme.vttForExport(projVtt, Object.assign({}, ctx.tpme, { wanted: false }));
+          }
           const projBlob = await window.HyperaudioSave.buildFlattenedProjectBlob({
             html: projHtml,
-            captionsVtt: projSubs && projSubs.vtt ? projSubs.vtt : '',
+            captionsVtt: projVtt,
             media: {
               name: mediaName,
               data: blob,
