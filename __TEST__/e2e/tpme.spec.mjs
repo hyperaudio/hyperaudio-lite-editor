@@ -418,3 +418,39 @@ test('a flattened .hyperaudio carries the block in its captions, and the editor 
   await page.waitForSelector('#captions-display .caption');
   expect(await page.evaluate(() => document.querySelector('#captions-display .caption .line1').value)).not.toContain('Type:');
 });
+
+test('FADGI is a switch of its own: on with TPME off, the block is written and no sidecar is (#673)', async ({ page }) => {
+  await makeProject(page, 'interview.wav', WORDS);
+  await page.evaluate(() => {
+    const f = document.getElementById('setting-fadgi-enabled');
+    f.checked = true; f.dispatchEvent(new Event('change', { bubbles: true }));
+    const c = document.getElementById('setting-fadgi-country'); c.value = 'us'; c.dispatchEvent(new Event('change', { bubbles: true }));
+    const p = document.getElementById('setting-tpme-provider'); p.value = 'Example Archive'; p.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(await page.evaluate(() => window.HyperaudioTpme.enabled())).toBe(false);
+  // the fields both use are visible whatever the switches say; the Info section serves both
+  await page.evaluate(() => {
+    const m = document.getElementById('settings-modal'); m.checked = true; m.dispatchEvent(new Event('change'));
+    document.getElementById('settings-tab-provenance').click();
+  });
+  // polled: under load the modal's first layout can land after the click
+  for (const id of ['#setting-tpme-provider', '#setting-fadgi-country', '#setting-fadgi-enabled', '#setting-tpme-editor']) {
+    await expect.poll(() => visible(page, id), { message: id }).toBe(true);
+  }
+  await page.evaluate(() => { document.getElementById('settings-modal').checked = false; });
+  await page.evaluate(() => { const m = document.getElementById('info-modal'); m.checked = true; m.dispatchEvent(new Event('change')); });
+  expect(await visible(page, '#project-tpme')).toBe(true);
+  await page.fill('#tpme-media-id', 'cpb-aacip-123');
+  await page.locator('#tpme-media-id').dispatchEvent('change');
+  await page.evaluate(() => { document.getElementById('info-modal').checked = false; });
+  // TPME's own things stay hidden
+  for (const id of ['#tpme-export-item', '#tpme-import-item']) expect(await visible(page, id)).toBe(false);
+
+  await setUpExport(page, 'solo', ['export-vtt']);
+  expect(await visible(page, '#export-tpme-row')).toBe(false);
+  const files = await runExport(page, 2);
+  expect(Object.keys(files).sort()).toEqual(['solo.vtt', 'solo.wav']);
+  const vtt = files['solo.vtt'].toString('utf8');
+  expect(vtt.startsWith('WEBVTT\nType: caption\nLanguage: eng\nResponsible Party: US, Example Archive\nMedia Identifier: cpb-aacip-123\n')).toBe(true);
+  expect(vtt).not.toContain('[tpme]');        // no sidecar to point at
+});

@@ -28,8 +28,10 @@
  * entries are passed through untouched and the editor's are appended, chained
  * by parent_transcript_id.
  *
- * OFF BY DEFAULT. With Settings → Provenance off, nothing here is visible:
- * no fields, no menu items, no export option. What the engines ran IS
+ * OFF BY DEFAULT. Two switches under Settings → Provenance, each its own:
+ * TPME (the sidecar, the menu items, the export option) and FADGI (the block
+ * in exported .vtt files). Provider, Country and Editor sit beside them,
+ * always visible, since both use them. With both off, nothing else appears. What the engines ran IS
  * recorded in every project regardless (hyperaudio-save.js) — TPME's first
  * design goal is to capture what "may not be capturable later", and a project
  * transcribed with this off must still describe itself fully once it is on.
@@ -338,6 +340,9 @@
   const save = () => window.HyperaudioSave;
   const setting = (key) => (settings() && typeof settings().get === 'function' ? settings().get(key) : undefined);
   const enabled = () => setting('tpmeEnabled') === true;
+  const fadgiEnabled = () => setting('fadgiEnabled') === true;   // its own switch (#673)
+  // the Info section serves both: Media ID is FADGI's Media Identifier too
+  const provenanceShown = () => enabled() || fadgiEnabled();
   const text = (key) => (typeof setting(key) === 'string' ? setting(key).trim() : '');
 
   // What an export needs, read in one go and detached, so a project opened or
@@ -358,7 +363,7 @@
       enabled: enabled(),
       wanted: enabled() && (document.getElementById('export-tpme') || {}).checked === true,
       // FADGI (#673): embedded in every exported .vtt while both switches are on
-      fadgi: enabled() && setting('fadgiEnabled') === true,
+      fadgi: fadgiEnabled(),
       country: text('fadgiCountry'),
       exportedAt: new Date().toISOString(),
       projectId: s && s.library ? s.library.currentId() : null,
@@ -501,37 +506,37 @@
         <label class="settings-row settings-row-toggle" for="setting-tpme-enabled">
           <span class="settings-text">
             Write transcript provenance (TPME) files
-            <span class="settings-hint">A small JSON file recording how a transcript was made and corrected, for archives that keep such records (AI4LAM TPME v1.0). Adds an export option, a File menu item, and two fields to a project's Info. Off, none of that appears.</span>
+            <span class="settings-hint">A small JSON file recording how a transcript was made and corrected, for archives that keep such records (AI4LAM TPME v1.0). Adds an export option, a File menu item, and a Provenance section to a project's Info.</span>
           </span>
           <input type="checkbox" id="setting-tpme-enabled" class="toggle toggle-primary" />
         </label>
-        <label class="settings-row tpme-only" for="setting-tpme-provider">
-          <span class="settings-text">
-            Provider
-            <span class="settings-hint">The organisation responsible for the transcripts, written the same way every time.</span>
-          </span>
-          <input id="setting-tpme-provider" type="text" class="input input-bordered input-sm" style="width:14rem" autocomplete="organization" />
-        </label>
-        <label class="settings-row tpme-only" for="setting-tpme-editor">
-          <span class="settings-text">
-            Editor
-            <span class="settings-hint">Who corrects transcripts here: a name, a role or an email address. Written only into entries for transcripts a person has reviewed.</span>
-          </span>
-          <input id="setting-tpme-editor" type="text" class="input input-bordered input-sm" style="width:14rem" autocomplete="email" />
-        </label>
-        <label class="settings-row settings-row-toggle tpme-only" for="setting-fadgi-enabled">
+        <label class="settings-row settings-row-toggle" for="setting-fadgi-enabled">
           <span class="settings-text">
             Embed FADGI metadata in exported WebVTT
             <span class="settings-hint">A block of header lines inside every .vtt the editor exports — type, language, responsible party, media identifier, originating file, creator, date — following FADGI's guidelines for WebVTT files. Players ignore it. The captions kept in the editor stay plain.</span>
           </span>
           <input type="checkbox" id="setting-fadgi-enabled" class="toggle toggle-primary" />
         </label>
-        <label class="settings-row tpme-only" for="setting-fadgi-country">
+        <label class="settings-row" for="setting-tpme-provider">
+          <span class="settings-text">
+            Provider
+            <span class="settings-hint">The organisation responsible for the transcripts, written the same way every time. Used by both.</span>
+          </span>
+          <input id="setting-tpme-provider" type="text" class="input input-bordered input-sm" style="width:14rem" autocomplete="organization" />
+        </label>
+        <label class="settings-row" for="setting-fadgi-country">
           <span class="settings-text">
             Country
             <span class="settings-hint">Two letters (ISO 3166), written before the provider as FADGI's Responsible Party: "US, GBH Archives".</span>
           </span>
           <input id="setting-fadgi-country" type="text" class="input input-bordered input-sm" style="width:5rem" maxlength="2" autocomplete="country" />
+        </label>
+        <label class="settings-row" for="setting-tpme-editor">
+          <span class="settings-text">
+            Editor
+            <span class="settings-hint">Who corrects transcripts here: a name, a role or an email address. Written into TPME entries for transcripts a person has reviewed.</span>
+          </span>
+          <input id="setting-tpme-editor" type="text" class="input input-bordered input-sm" style="width:14rem" autocomplete="email" />
         </label>
       </div>`);
     const toggle = document.getElementById('setting-tpme-enabled');
@@ -543,15 +548,15 @@
       field.addEventListener('change', () => settings().set(key, field.value.trim()));
     });
     const fadgi = document.getElementById('setting-fadgi-enabled');
-    fadgi.checked = setting('fadgiEnabled') === true;
-    fadgi.addEventListener('change', () => settings().set('fadgiEnabled', fadgi.checked));
+    fadgi.checked = fadgiEnabled();
+    fadgi.addEventListener('change', () => { settings().set('fadgiEnabled', fadgi.checked); apply(); });
   }
 
   function injectInfo() {
     const summary = document.querySelector('#info-modal + .modal #summary');
     if (summary === null || document.getElementById('project-tpme') !== null) return;
     summary.closest('.info-section').insertAdjacentHTML('beforebegin', `
-      <div class="info-section tpme-only" id="project-tpme">
+      <div class="info-section provenance-only" id="project-tpme">
         <h4 class="info-section-label">Provenance</h4>
         <div class="info-rows">
           <label style="display:flex; align-items:center; gap:8px; margin-top:4px">
@@ -599,7 +604,7 @@
     if (link === null || link.dataset.fadgi === '1') return;
     link.dataset.fadgi = '1';
     link.addEventListener('click', (event) => {
-      if (!(enabled() && setting('fadgiEnabled') === true)) return;
+      if (!fadgiEnabled()) return;
       const href = link.getAttribute('href') || '';
       const comma = href.indexOf(',');
       if (!href.startsWith('data:') || comma === -1) return;
@@ -667,24 +672,26 @@
     check.addEventListener('change', () => settings().set('tpmeWithExports', check.checked));
   }
 
-  // One switch for all of it. The class hides every .tpme-only; the export
+  // The classes hide every .tpme-only (menu items, the export row's kin) and
+  // every .provenance-only (the Info section both features share); the export
   // row is shown and hidden by hand because its siblings are, and tells the
   // export modal to count again.
   function apply() {
     const on = enabled();
     document.documentElement.classList.toggle('ha-tpme', on);
+    document.documentElement.classList.toggle('ha-provenance', provenanceShown());
     const row = document.getElementById('export-tpme-row');
     if (row !== null) {
       row.style.display = on ? 'flex' : 'none';
       row.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    if (on) fillInfo();
+    if (provenanceShown()) fillInfo();
   }
 
   function wire() {
     if (!settings() || !save()) return;
     const style = document.createElement('style');
-    style.textContent = 'html:not(.ha-tpme) .tpme-only { display: none !important; }';
+    style.textContent = 'html:not(.ha-tpme) .tpme-only { display: none !important; } html:not(.ha-provenance) .provenance-only { display: none !important; }';
     document.head.appendChild(style);
     injectSettings();
     injectInfo();
