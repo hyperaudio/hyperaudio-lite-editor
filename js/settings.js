@@ -64,6 +64,10 @@
     tpmeProvider: '',
     tpmeEditor: '',
     tpmeWithExports: true,
+    // FADGI's WebVTT metadata block in exported .vtt files (#673, js/tpme.js);
+    // shown only with tpmeEnabled, since it uses the same Provider and Media ID
+    fadgiEnabled: false,
+    fadgiCountry: '',
   });
 
   // caption.js takes a maximum AND a minimum line length: the minimum is the

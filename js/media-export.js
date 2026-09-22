@@ -1411,7 +1411,11 @@
         // language, which no data: URL can express.
         const needVtt = (wantVtt || (wantRetime && !burn)) && subs && subs.vtt;
         if (needVtt) {
-          outputs.push({ blob: new Blob([subs.vtt], { type: 'text/vtt' }), name: vttName });
+          // the FADGI block (#673), when that is switched on: the file the
+          // interactive transcript links and the TPME checksum covers
+          const vttOut = window.HyperaudioTpme && typeof window.HyperaudioTpme.vttForExport === 'function' && ctx.tpme !== null
+            ? await window.HyperaudioTpme.vttForExport(subs.vtt, ctx.tpme) : subs.vtt;
+          outputs.push({ blob: new Blob([vttOut], { type: 'text/vtt' }), name: vttName });
         }
         if (wantSrt && subs && subs.srt) {
           outputs.push({ blob: new Blob([subs.srt], { type: 'text/plain' }), name: srtName });
