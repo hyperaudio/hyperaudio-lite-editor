@@ -119,7 +119,7 @@ self.addEventListener('message', async (e) => {
   if (e.data.type !== 'INFERENCE_REQUEST') return;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   if (runs++ === 0) post({ type: 'device', device: 'webgpu', dtype: 'fp16' });
-  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'run', seconds: 300 } });
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'run', seconds: 8 } });
   await wait(1500);
   post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'done', runMs: 1500 } });
   post({ type: 'result', output: { chunks: [{ text: ' hello', timestamp: [0.5, 0.9] }], seconds: 2 } });
@@ -150,8 +150,8 @@ test('Whisper\'s percentage moves between a window\'s start and end, and a secon
   const first = await run();
   expect(first.length).toBeGreaterThanOrEqual(4);
   expect([...first].sort((a, b) => a - b)).toEqual(first);
-  expect(first[0]).toBeLessThan(20);                                // 300 s at the default 8x: 37 s expected, so 1.5 s is a few percent
-  expect(first.some((p) => p > 0 && p < 100)).toBe(true);
+  expect(first[0]).toBeLessThan(20);                                // 8 s of audio at the default 4x: 2 s expected, so the bar climbs through the 1.5 s
+  expect(first.some((p) => p > 20 && p < 100)).toBe(true);
 
   // the second run is paced by the first's measured 1.5 s, so it climbs
   // most of the way — and starts low, not at the first run's 100
