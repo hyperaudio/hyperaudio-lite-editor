@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.23 — last changed in release 1.3.23
+ * @version 1.3.24 — last changed in release 1.3.24
  * @license MIT
  */
 

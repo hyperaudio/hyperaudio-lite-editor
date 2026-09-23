@@ -20,7 +20,7 @@
  */
 'use strict';
 
-const VERSION = '1.3.23';
+const VERSION = '1.3.24';
 const PREFIX = 'hyperaudio-editor-';
 const CACHE = PREFIX + VERSION;
 // the old worker's cache. Finding it means this visitor was pinned.
