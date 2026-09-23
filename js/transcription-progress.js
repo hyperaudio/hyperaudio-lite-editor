@@ -36,8 +36,8 @@
  * a time, every CATCH_UP_MS, so every number in between is seen.
  *
  * A tracker is for one transcription: it never falls, so a second run needs
- * a fresh one. `seed` takes a previous tracker's inspect() so what that run
- * measured (encoder time, share, window time) carries over.
+ * a fresh one, and a fresh one starts from the guess again, so every run
+ * counts the same way.
  *
  * Pure: no DOM, no timers of its own. Exported for node tests.
  */
@@ -53,6 +53,10 @@
   // forward when the window ends, while one that is too fast overshoots.
   const WINDOW_RATE = { webgpu: 4, wasm: 1 };
   const DEFAULT_SHARE = 0.5;      // the encoder's share of a window, until measured
+  // a measured window is expected to take this much longer next time: paced
+  // to the exact measurement, any run slightly slower reaches the step early
+  // and waits there, while erring slow leaves a little for the catch-up
+  const MARGIN = 1.2;
   const CATCH_UP_MS = 100;        // one point per this, when the shown value is behind the target
 
   // 0..1 for elapsed against expected: a straight count that holds at the end
@@ -64,7 +68,6 @@
     const opts = options || {};
     const rate = ENCODER_RATE[opts.device] || ENCODER_RATE.wasm;
     const windowRate = WINDOW_RATE[opts.device] || WINDOW_RATE.wasm;
-    const seed = opts.seed || {};
     let windows = 0;
     let index = -1;              // which window
     let stage = 'idle';
@@ -72,11 +75,11 @@
     let seconds = 0;              // the current window's audio
     let frames = 0;
     let frame = 0;
-    let share = typeof seed.share === 'number' ? seed.share : DEFAULT_SHARE;    // encoder's share of a window
+    let share = DEFAULT_SHARE;    // encoder's share of a window
     // the last measured ms per second of audio, so a short window is paced by
     // its length
-    let encoderMsPerSecond = typeof seed.encoderMsPerSecond === 'number' ? seed.encoderMsPerSecond : null;
-    let runMsPerSecond = typeof seed.runMsPerSecond === 'number' ? seed.runMsPerSecond : null;
+    let encoderMsPerSecond = null;
+    let runMsPerSecond = null;
     let encoderMs = null;         // this window's, once reported
     let best = 0;                 // the target: never falls
     let shown = 0;                // trails the target a point at a time
@@ -128,10 +131,10 @@
       } else if (stage === 'decode') {
         fraction = share + (1 - share) * (frames > 0 ? Math.min(1, frame / frames) : 0);
       } else if (stage === 'run') {
-        const expectedMs = runMsPerSecond !== null ? runMsPerSecond * seconds : (seconds / windowRate) * 1000;
+        const expectedMs = runMsPerSecond !== null ? runMsPerSecond * seconds * MARGIN : (seconds / windowRate) * 1000;
         fraction = countUp(Math.max(0, at - stageStart), expectedMs);
       } else {
-        const expectedMs = encoderMsPerSecond !== null ? encoderMsPerSecond * seconds : (seconds / rate) * 1000;
+        const expectedMs = encoderMsPerSecond !== null ? encoderMsPerSecond * seconds * MARGIN : (seconds / rate) * 1000;
         fraction = share * countUp(Math.max(0, at - stageStart), expectedMs);
       }
       const value = Math.floor(((index + fraction) / windows) * 100);
