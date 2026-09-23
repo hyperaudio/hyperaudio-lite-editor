@@ -213,11 +213,12 @@ function loadWhisperClient(modal, workerBaseUrl) {
           break;
         case "result":
           scheduleWorkerRetirement();
-          stopProgressClock();
-          if (pendingInfo !== null && typeof setTranscriptionInfo === "function") {
-            setTranscriptionInfo({ ...pendingInfo, device: lastDeviceLabel, seconds: data.output.seconds });
-          }
-          handleInferenceDone(data);
+          finishProgress(() => {
+            if (pendingInfo !== null && typeof setTranscriptionInfo === "function") {
+              setTranscriptionInfo({ ...pendingInfo, device: lastDeviceLabel, seconds: data.output.seconds });
+            }
+            handleInferenceDone(data);
+          });
           break;
         case "error":
           scheduleWorkerRetirement();
@@ -276,6 +277,23 @@ function loadWhisperClient(modal, workerBaseUrl) {
   function stopProgressClock() {
     clearInterval(progressTicker);
     progressTicker = null;
+  }
+
+  // The shown percentage trails the facts, so a fast finish would close the
+  // loader on 70-odd: count the rest of the way to 100 in well under a
+  // second, let 100 be seen, and only then hand over to `then`.
+  function finishProgress(then) {
+    stopProgressClock();
+    const from = progressTracker !== null && /^Transcribing…/.test(progressMessage) ? progressTracker.inspect().shown : 100;
+    if (from >= 100) { then(); return; }
+    const remaining = 100 - from;
+    const stepMs = Math.min(100, Math.floor(600 / remaining));
+    let shown = from;
+    const finisher = setInterval(() => {
+      shown = Math.min(100, shown + 1);
+      updateLoadingMessage(`Transcribing… ${shown}%`);
+      if (shown === 100) { clearInterval(finisher); setTimeout(then, 250); }
+    }, stepMs);
   }
 
   function formatElapsed(ms) {
