@@ -294,6 +294,7 @@ async function transcribe(pipe, audio, language) {
       progress: windowCount > 1 ? Math.round(((i + 1) / windowCount) * 100) : null,
       detail: { window: i, windows: windowCount, stage: "done", runMs: Date.now() - windowStart },
     });
+    console.log(`  window ${i + 1}/${windowCount}: ${(window.length / SAMPLE_RATE).toFixed(1)}s of audio in ${((Date.now() - windowStart) / 1000).toFixed(1)}s`);
   }
 
   chunks = collapseCycles(mergeWordFragments(chunks));

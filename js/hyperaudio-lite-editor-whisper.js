@@ -188,6 +188,13 @@ function loadWhisperClient(modal, workerBaseUrl) {
             // while a window's single call runs
             progressTracker.on(data.detail);
             transcribeProgressMessage();
+            // one line per window start and end (not per decoder frame), so a
+            // percentage that misbehaves can be read against the facts
+            if (data.detail.stage !== "decode") {
+              const d = data.detail;
+              console.log(`%s progress: window %d/%d %s%s → %d%%`, "Whisper", d.window + 1, d.windows, d.stage,
+                d.stage === "done" ? "" : ` (${Math.round(d.seconds)}s of audio)`, progressTracker.percent());
+            }
             break;
           }
           updateLoadingMessage(data.phase === "download"

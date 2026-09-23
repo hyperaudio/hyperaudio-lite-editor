@@ -19,16 +19,18 @@
  *
  * The decoder walks frames one at a time, so its share of a window is measured.
  * The encoder is one opaque call, so its share is extrapolated by elapsed time
- * against the previous window's encoder time — and, before there is one, against
- * a rate for the device — and is never allowed to reach the stage's end on its
- * own: a slow encoder holds at the cap, it does not overshoot. How the two
- * stages divide a window is learned from the first window rather than assumed,
- * which is what makes the CPU path, where the encoder is the bulk, come out
- * right. The percentage never falls.
+ * against how long the previous window's encoder took per second of audio —
+ * and, before there is one, against a rate for the device. The extrapolation
+ * runs straight to most of the stage over the expected time, then creeps
+ * towards a cap it never reaches: a slower stage than expected keeps moving,
+ * it does not stall, and it does not overshoot either. How the two stages
+ * divide a window is learned from the first window rather than assumed, which
+ * is what makes the CPU path, where the encoder is the bulk, come out right.
+ * The percentage never falls.
  *
  * A whole opaque window is treated like the encoder: extrapolated against the
- * previous window's time, capped short of the end, snapping to it when the
- * window reports done.
+ * previous window's time per second of audio (so a short last window is paced
+ * by its own length), snapping to its end when the window reports done.
  *
  * A tracker is for one transcription: it never falls, so a second run needs
  * a fresh one. `seed` takes a previous tracker's inspect() so what that run
@@ -44,10 +46,22 @@
   const ENCODER_RATE = { webgpu: 40, wasm: 3 };
   // seconds of audio a whole opaque window gets through per second, before
   // anything has been measured: deliberately on the slow side, since a rate
-  // that is too fast reaches the cap early and looks stuck there
-  const WINDOW_RATE = { webgpu: 8, wasm: 1 };
-  const ENCODE_CAP = 0.95;        // how far an extrapolated stage may get on its own
+  // that is too fast runs out of straight line early and creeps for the rest
+  // of the window, while one that is too slow only means a jump forward when
+  // the window ends. 8x looked stuck on a three-window Whisper file (#676).
+  const WINDOW_RATE = { webgpu: 4, wasm: 1 };
+  const LINEAR_TO = 0.8;          // an extrapolated stage gets this far over its expected time...
+  const CAP = 0.95;               // ...then creeps towards this, never reaching it
   const DEFAULT_SHARE = 0.5;      // the encoder's share of a window, until measured
+
+  // 0..CAP for elapsed against expected: straight to LINEAR_TO, then an
+  // exponential approach to CAP with the expected time as its constant
+  function extrapolate(elapsedMs, expectedMs) {
+    if (!(expectedMs > 0)) return 0;
+    const x = elapsedMs / expectedMs;
+    if (x <= 1) return LINEAR_TO * x;
+    return LINEAR_TO + (CAP - LINEAR_TO) * (1 - Math.exp(-(x - 1)));
+  }
 
   function createProgressTracker(options) {
     const opts = options || {};
@@ -62,8 +76,10 @@
     let frames = 0;
     let frame = 0;
     let share = typeof seed.share === 'number' ? seed.share : DEFAULT_SHARE;    // encoder's share of a window
-    let encoderMs = typeof seed.encoderMs === 'number' ? seed.encoderMs : null;  // last measured
-    let runMs = typeof seed.runMs === 'number' ? seed.runMs : null;              // last measured whole window
+    // measured ms per second of audio, so a short window is paced by its length
+    let encoderMsPerSecond = typeof seed.encoderMsPerSecond === 'number' ? seed.encoderMsPerSecond : null;
+    let runMsPerSecond = typeof seed.runMsPerSecond === 'number' ? seed.runMsPerSecond : null;
+    let encoderMs = null;         // this window's, once reported
     let best = 0;
 
     function on(detail, now) {
@@ -77,7 +93,10 @@
         stage = detail.stage;
         stageStart = at;
       } else if (detail.stage === 'decode') {
-        if (typeof detail.encoderMs === 'number') encoderMs = detail.encoderMs;
+        if (typeof detail.encoderMs === 'number') {
+          encoderMs = detail.encoderMs;
+          if (seconds > 0) encoderMsPerSecond = encoderMs / seconds;
+        }
         if (typeof detail.frames === 'number') frames = detail.frames;
         if (typeof detail.frame === 'number') frame = detail.frame;
         if (stage !== 'decode') { stage = 'decode'; stageStart = at; }
@@ -85,7 +104,7 @@
         if (typeof encoderMs === 'number' && typeof detail.decodeMs === 'number' && encoderMs + detail.decodeMs > 0) {
           share = encoderMs / (encoderMs + detail.decodeMs);
         }
-        if (typeof detail.runMs === 'number' && detail.runMs > 0) runMs = detail.runMs;
+        if (typeof detail.runMs === 'number' && detail.runMs > 0 && seconds > 0) runMsPerSecond = detail.runMs / seconds;
         stage = 'done';
       }
     }
@@ -100,20 +119,21 @@
       } else if (stage === 'decode') {
         fraction = share + (1 - share) * (frames > 0 ? Math.min(1, frame / frames) : 0);
       } else if (stage === 'run') {
-        const expectedMs = runMs !== null ? runMs : (seconds / windowRate) * 1000;
-        const elapsed = Math.max(0, at - stageStart);
-        fraction = Math.min(ENCODE_CAP, expectedMs > 0 ? elapsed / expectedMs : 0);
+        const expectedMs = runMsPerSecond !== null ? runMsPerSecond * seconds : (seconds / windowRate) * 1000;
+        fraction = extrapolate(Math.max(0, at - stageStart), expectedMs);
       } else {
-        const expectedMs = encoderMs !== null ? encoderMs : (seconds / rate) * 1000;
-        const elapsed = Math.max(0, at - stageStart);
-        fraction = share * Math.min(ENCODE_CAP, expectedMs > 0 ? elapsed / expectedMs : 0);
+        const expectedMs = encoderMsPerSecond !== null ? encoderMsPerSecond * seconds : (seconds / rate) * 1000;
+        fraction = share * extrapolate(Math.max(0, at - stageStart), expectedMs);
       }
       const value = Math.floor(((index + fraction) / windows) * 100);
       best = Math.max(best, Math.min(100, value));
       return best;
     }
 
-    return { on, percent, inspect: () => ({ windows, window: index, stage, share, encoderMs, runMs, frames, frame }) };
+    return {
+      on, percent,
+      inspect: () => ({ windows, window: index, stage, seconds, share, encoderMsPerSecond, runMsPerSecond, frames, frame }),
+    };
   }
 
   if (typeof module !== 'undefined' && module.exports) module.exports = { createProgressTracker };
