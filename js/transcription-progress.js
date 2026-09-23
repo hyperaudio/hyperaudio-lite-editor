@@ -29,8 +29,12 @@
  * The percentage never falls.
  *
  * A whole opaque window is treated like the encoder: extrapolated against the
- * previous window's time per second of audio (so a short last window is paced
- * by its own length), snapping to its end when the window reports done.
+ * fastest window so far per second of audio (so a short last window is paced
+ * by its own length), snapping to its end when the window reports done. The
+ * fastest, not the latest: a window is only ever slower than steady state
+ * because of one-off costs — the first window of a Whisper run pays for
+ * shader compilation at the real chunk size — and pacing the next window by
+ * that leaves the bar creeping and then leaping.
  *
  * A tracker is for one transcription: it never falls, so a second run needs
  * a fresh one. `seed` takes a previous tracker's inspect() so what that run
@@ -76,9 +80,11 @@
     let frames = 0;
     let frame = 0;
     let share = typeof seed.share === 'number' ? seed.share : DEFAULT_SHARE;    // encoder's share of a window
-    // measured ms per second of audio, so a short window is paced by its length
+    // the fastest measured ms per second of audio, so a short window is paced
+    // by its length and a one-off slow window does not pace the ones after it
     let encoderMsPerSecond = typeof seed.encoderMsPerSecond === 'number' ? seed.encoderMsPerSecond : null;
     let runMsPerSecond = typeof seed.runMsPerSecond === 'number' ? seed.runMsPerSecond : null;
+    const fastest = (sofar, ms) => (sofar === null ? ms : Math.min(sofar, ms));
     let encoderMs = null;         // this window's, once reported
     let best = 0;
 
@@ -95,7 +101,7 @@
       } else if (detail.stage === 'decode') {
         if (typeof detail.encoderMs === 'number') {
           encoderMs = detail.encoderMs;
-          if (seconds > 0) encoderMsPerSecond = encoderMs / seconds;
+          if (seconds > 0) encoderMsPerSecond = fastest(encoderMsPerSecond, encoderMs / seconds);
         }
         if (typeof detail.frames === 'number') frames = detail.frames;
         if (typeof detail.frame === 'number') frame = detail.frame;
@@ -104,7 +110,7 @@
         if (typeof encoderMs === 'number' && typeof detail.decodeMs === 'number' && encoderMs + detail.decodeMs > 0) {
           share = encoderMs / (encoderMs + detail.decodeMs);
         }
-        if (typeof detail.runMs === 'number' && detail.runMs > 0 && seconds > 0) runMsPerSecond = detail.runMs / seconds;
+        if (typeof detail.runMs === 'number' && detail.runMs > 0 && seconds > 0) runMsPerSecond = fastest(runMsPerSecond, detail.runMs / seconds);
         stage = 'done';
       }
     }
