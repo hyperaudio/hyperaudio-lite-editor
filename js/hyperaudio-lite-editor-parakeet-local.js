@@ -271,11 +271,10 @@ function loadParakeetClient(modal, workerBaseUrl) {
 
   // one tracker per transcription: it never falls, so a run that reuses the
   // worker's loaded model (no fresh "device" message) must not inherit the
-  // last run's 100%. What the last run measured is carried over as a seed.
+  // last run's 100% — and every run counts the same way from the start
   function newProgressTracker() {
     if (typeof window.createTranscriptionProgressTracker !== "function") return null;
-    const seed = progressTracker !== null ? progressTracker.inspect() : undefined;
-    return window.createTranscriptionProgressTracker({ device: progressDevice, seed });
+    return window.createTranscriptionProgressTracker({ device: progressDevice });
   }
 
   function transcribeProgressMessage() {

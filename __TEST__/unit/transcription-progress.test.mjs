@@ -34,9 +34,9 @@ test('the encoder\'s share is learned from the first window, so later windows ar
   t.on({ stage: 'decode', frames: 3750, frame: 0, encoderMs: 90000 }, 90000);   // encoder 90 s
   t.on({ stage: 'done', decodeMs: 10000 }, 100000);                              // decoder 10 s: share 0.9
   assert.equal(t.inspect().share, 0.9);
-  // second window: elapsed time against the MEASURED 90 s, not the default rate
+  // second window: elapsed time against the MEASURED 90 s (plus the 20% margin), not the default rate
   t.on({ window: 1, windows: 4, stage: 'encode', seconds: 300 }, 100000);
-  assert.equal(t.target(100000 + 45000), Math.floor(((1 + 0.9 * 0.5) / 4) * 100));   // 36
+  assert.equal(t.target(100000 + 54000), Math.floor(((1 + 0.9 * 0.5) / 4) * 100));   // 36
   t.on({ stage: 'decode', frames: 3750, frame: 0, encoderMs: 90000 }, 190000);
   assert.equal(t.target(190000), Math.floor(((1 + 0.9) / 4) * 100));                 // 47
 });
@@ -69,7 +69,8 @@ test('an unknown device and missing facts are tolerated', () => {
 // 18 s, on a GPU that does Whisper Base at 12x. The first window counts up
 // slowly against the default guess and jumps to its step when the window
 // ends; from then on each window is paced by the one before, per second of
-// audio, so the short tail does not crawl.
+// audio and with a 20% margin, so the short tail does not crawl and a window
+// a little slower than the last does not wait at the step.
 test('an engine whose window is one opaque call counts up slowly, holds at the step, and is then paced by the last window', () => {
   const t = createProgressTracker({ device: 'webgpu' });
   t.on({ window: 0, windows: 3, stage: 'run', seconds: 300 }, 0);   // 75 s expected at the default 4x
@@ -78,12 +79,12 @@ test('an engine whose window is one opaque call counts up slowly, holds at the s
   t.on({ stage: 'done', runMs: 24000 }, 24000);
   assert.equal(t.target(24000), 33);                                // ...so it jumps to the step
   t.on({ window: 1, windows: 3, stage: 'run', seconds: 300 }, 24000);
-  assert.equal(t.target(24000 + 12000), 50);                        // paced by the 24 s just measured
-  assert.equal(t.target(24000 + 24000), 66);
+  assert.equal(t.target(24000 + 14400), 50);                        // paced by the 24 s just measured, plus the margin: 28.8 s
+  assert.equal(t.target(24000 + 24000), 61);
   assert.equal(t.target(24000 + 40000), 66);                        // a slower window holds at the step
   t.on({ stage: 'done', runMs: 23500 }, 47500);
-  t.on({ window: 2, windows: 3, stage: 'run', seconds: 18 }, 47500); // 1.4 s expected, not 24
-  assert.equal(t.target(47500 + 700), 83);
+  t.on({ window: 2, windows: 3, stage: 'run', seconds: 18 }, 47500); // 1.7 s expected, not 24
+  assert.equal(t.target(47500 + 846), 83);
   t.on({ stage: 'done', runMs: 600 }, 48100);
   assert.equal(t.target(48100), 100);
 });
@@ -93,19 +94,18 @@ test('a short last window is paced by its own length on the Parakeet path too', 
   p.on({ window: 0, windows: 2, stage: 'encode', seconds: 300 }, 0);
   p.on({ stage: 'decode', frames: 3750, frame: 0, encoderMs: 30000 }, 30000);   // 100 ms per second
   p.on({ stage: 'done', decodeMs: 30000 }, 60000);
-  p.on({ window: 1, windows: 2, stage: 'encode', seconds: 30 }, 60000);         // 3 s expected
-  assert.equal(p.target(60000 + 1500), Math.floor(((1 + 0.5 * 0.5) / 2) * 100));   // 62
+  p.on({ window: 1, windows: 2, stage: 'encode', seconds: 30 }, 60000);         // 3 s expected, 3.6 with the margin
+  assert.equal(p.target(60000 + 1800), Math.floor(((1 + 0.5 * 0.5) / 2) * 100));   // 62
 });
 
-test('a fresh tracker seeded from a previous run starts at zero but keeps its measurements', () => {
+test('every run counts the same way: a fresh tracker starts from the guess, not the last run', () => {
   const first = createProgressTracker({ device: 'webgpu' });
   first.on({ window: 0, windows: 1, stage: 'run', seconds: 300 }, 0);
-  first.on({ stage: 'done', runMs: 40000 }, 40000);
-  assert.equal(first.target(40000), 100);
-  const second = createProgressTracker({ device: 'webgpu', seed: first.inspect() });
-  assert.equal(second.target(50000), 0);
+  first.on({ stage: 'done', runMs: 24000 }, 24000);
+  assert.equal(first.target(24000), 100);
+  const second = createProgressTracker({ device: 'webgpu' });
   second.on({ window: 0, windows: 1, stage: 'run', seconds: 300 }, 50000);
-  assert.equal(second.target(50000 + 20000), 50);   // paced by the first run's 40 s
+  assert.equal(second.target(50000 + 24000), 32);   // 24 of 75 s, as the first run showed at that point
 });
 
 // The shown value never leaps: when the first window finished at 10% of the
