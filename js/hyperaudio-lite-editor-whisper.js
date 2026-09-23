@@ -261,8 +261,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
   }
 
   // the worker only hears from a window when it starts and when it ends, so
-  // a ticking clock carries the percentage in between — a quarter-second
-  // tick, since a second between steps looks stuck
+  // a ticking clock carries the percentage in between — a tenth of a second,
+  // the pace at which the shown value catches up with a target that leapt
   function startProgressClock() {
     progressStart = Date.now();
     progressTracker = newProgressTracker();
@@ -270,7 +270,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     progressTicker = setInterval(() => {
       if (progressTracker !== null && /^Transcribing…/.test(progressMessage)) transcribeProgressMessage();
       else renderLoadingMessage();
-    }, 250);
+    }, 100);
   }
 
   function stopProgressClock() {

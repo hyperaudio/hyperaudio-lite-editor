@@ -67,18 +67,19 @@ test('the worker reports each window\'s stages and its frames as it decodes (#67
 });
 
 // The client's worker replaced by a script that plays a window's facts over
-// two seconds: the page must show a percentage that moves through them.
+// a few seconds: the page must show a percentage that moves through them, a
+// point at a time.
 const SCRIPTED_WORKER = `
 const post = (m) => self.postMessage(m);
 self.addEventListener('message', async (e) => {
   if (e.data.type !== 'INFERENCE_REQUEST') return;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   post({ type: 'device', device: 'webgpu', dtype: 'fp16' });
-  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'encode', seconds: 300 } });
-  await wait(900);
-  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'decode', frames: 100, frame: 0, encoderMs: 900 } });
-  for (let f = 10; f <= 100; f += 10) { await wait(100); post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'decode', frame: f } }); }
-  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'done', decodeMs: 1000 } });
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'encode', seconds: 60 } });
+  await wait(1500);   // 60 s at the default 40x: 1.5 s expected, so the encoder's half is counted in full
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'decode', frames: 100, frame: 0, encoderMs: 1500 } });
+  for (let f = 10; f <= 100; f += 10) { await wait(600); post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'decode', frame: f } }); }
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'done', decodeMs: 6000 } });
   post({ type: 'result', output: { words: [{ word: 'hello', start: 0.5, end: 0.9 }], seconds: 2 } });
 });
 `;
@@ -100,9 +101,11 @@ test('the page shows a percentage that moves within the window (#676)', async ({
   await expect(page.locator('#hypertranscript')).toContainText('hello', { timeout: 30000 });
   clearInterval(sampler);
   const distinct = [...new Set(readings)];
-  // several distinct values, rising, with something seen DURING the encoder and DURING the decode
-  expect(distinct.length).toBeGreaterThanOrEqual(5);
+  // many distinct values, rising a point at a time (the sampler may skip one),
+  // with something seen DURING the encoder and DURING the decode
+  expect(distinct.length).toBeGreaterThanOrEqual(20);
   expect([...distinct].sort((a, b) => a - b)).toEqual(distinct);
+  for (let i = 1; i < distinct.length; i++) expect(distinct[i] - distinct[i - 1]).toBeLessThanOrEqual(2);
   expect(distinct.some((p) => p > 0 && p < 50)).toBe(true);
   expect(distinct.some((p) => p > 50 && p < 100)).toBe(true);
 });
@@ -119,9 +122,9 @@ self.addEventListener('message', async (e) => {
   if (e.data.type !== 'INFERENCE_REQUEST') return;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   if (runs++ === 0) post({ type: 'device', device: 'webgpu', dtype: 'fp16' });
-  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'run', seconds: 8 } });
-  await wait(1500);
-  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'done', runMs: 1500 } });
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'run', seconds: 16 } });
+  await wait(3000);
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'done', runMs: 3000 } });
   post({ type: 'result', output: { chunks: [{ text: ' hello', timestamp: [0.5, 0.9] }], seconds: 2 } });
 });
 `;
@@ -148,15 +151,16 @@ test('Whisper\'s percentage moves between a window\'s start and end, and a secon
   };
 
   const first = await run();
-  expect(first.length).toBeGreaterThanOrEqual(4);
+  expect(first.length).toBeGreaterThanOrEqual(10);
   expect([...first].sort((a, b) => a - b)).toEqual(first);
-  expect(first[0]).toBeLessThan(20);                                // 8 s of audio at the default 4x: 2 s expected, so the bar climbs through the 1.5 s
+  expect(first[0]).toBeLessThan(20);                                // 16 s of audio at the default 4x: 4 s expected, so the bar climbs through the 3 s
+  for (let i = 1; i < first.length; i++) expect(first[i] - first[i - 1]).toBeLessThanOrEqual(2);
   expect(first.some((p) => p > 20 && p < 100)).toBe(true);
 
-  // the second run is paced by the first's measured 1.5 s, so it climbs
-  // most of the way — and starts low, not at the first run's 100
+  // the second run is paced by the first's measured 3 s, and starts low
+  // rather than at the first run's 100
   const second = await run();
-  expect(second[0]).toBeLessThan(30);
-  expect(second.some((p) => p >= 50 && p < 100)).toBe(true);
+  expect(second[0]).toBeLessThan(20);
+  expect(second.some((p) => p > 20 && p < 100)).toBe(true);
   expect([...second].sort((a, b) => a - b)).toEqual(second);
 });
