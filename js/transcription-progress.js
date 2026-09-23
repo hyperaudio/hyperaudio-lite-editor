@@ -18,23 +18,18 @@
  *   the window is done                 -> { stage: 'done', runMs }
  *
  * The decoder walks frames one at a time, so its share of a window is measured.
- * The encoder is one opaque call, so its share is extrapolated by elapsed time
- * against how long the previous window's encoder took per second of audio —
- * and, before there is one, against a rate for the device. The extrapolation
- * runs straight to most of the stage over the expected time, then creeps
- * towards a cap it never reaches: a slower stage than expected keeps moving,
- * it does not stall, and it does not overshoot either. How the two stages
- * divide a window is learned from the first window rather than assumed, which
- * is what makes the CPU path, where the encoder is the bulk, come out right.
- * The percentage never falls.
+ * The encoder is one opaque call, so it is counted up by elapsed time: towards
+ * the stage's end over the time the previous window's encoder took per second
+ * of audio, or, before one has finished, over a deliberately slow guess for
+ * the device. Reaching the end early and holding there is fine, and so is
+ * jumping to it when the window finishes sooner — what is not fine is running
+ * past it. How the two stages divide a window is learned from the first window
+ * rather than assumed, which is what makes the CPU path, where the encoder is
+ * the bulk, come out right. The percentage never falls.
  *
- * A whole opaque window is treated like the encoder: extrapolated against the
- * fastest window so far per second of audio (so a short last window is paced
- * by its own length), snapping to its end when the window reports done. The
- * fastest, not the latest: a window is only ever slower than steady state
- * because of one-off costs — the first window of a Whisper run pays for
- * shader compilation at the real chunk size — and pacing the next window by
- * that leaves the bar creeping and then leaping.
+ * A whole opaque window is counted up the same way, against the time the
+ * previous window took per second of audio (so a short last window is paced
+ * by its own length).
  *
  * A tracker is for one transcription: it never falls, so a second run needs
  * a fresh one. `seed` takes a previous tracker's inspect() so what that run
@@ -49,22 +44,15 @@
   // being most of that
   const ENCODER_RATE = { webgpu: 40, wasm: 3 };
   // seconds of audio a whole opaque window gets through per second, before
-  // anything has been measured: deliberately on the slow side, since a rate
-  // that is too fast runs out of straight line early and creeps for the rest
-  // of the window, while one that is too slow only means a jump forward when
-  // the window ends. 8x looked stuck on a three-window Whisper file (#676).
+  // anything has been measured: deliberately slow. Whisper Base on an Apple
+  // GPU measured 12x (#676); a guess that is too slow only means a jump
+  // forward when the window ends, while one that is too fast overshoots.
   const WINDOW_RATE = { webgpu: 4, wasm: 1 };
-  const LINEAR_TO = 0.8;          // an extrapolated stage gets this far over its expected time...
-  const CAP = 0.95;               // ...then creeps towards this, never reaching it
   const DEFAULT_SHARE = 0.5;      // the encoder's share of a window, until measured
 
-  // 0..CAP for elapsed against expected: straight to LINEAR_TO, then an
-  // exponential approach to CAP with the expected time as its constant
-  function extrapolate(elapsedMs, expectedMs) {
-    if (!(expectedMs > 0)) return 0;
-    const x = elapsedMs / expectedMs;
-    if (x <= 1) return LINEAR_TO * x;
-    return LINEAR_TO + (CAP - LINEAR_TO) * (1 - Math.exp(-(x - 1)));
+  // 0..1 for elapsed against expected: a straight count that holds at the end
+  function countUp(elapsedMs, expectedMs) {
+    return expectedMs > 0 ? Math.min(1, elapsedMs / expectedMs) : 0;
   }
 
   function createProgressTracker(options) {
@@ -80,11 +68,10 @@
     let frames = 0;
     let frame = 0;
     let share = typeof seed.share === 'number' ? seed.share : DEFAULT_SHARE;    // encoder's share of a window
-    // the fastest measured ms per second of audio, so a short window is paced
-    // by its length and a one-off slow window does not pace the ones after it
+    // the last measured ms per second of audio, so a short window is paced by
+    // its length
     let encoderMsPerSecond = typeof seed.encoderMsPerSecond === 'number' ? seed.encoderMsPerSecond : null;
     let runMsPerSecond = typeof seed.runMsPerSecond === 'number' ? seed.runMsPerSecond : null;
-    const fastest = (sofar, ms) => (sofar === null ? ms : Math.min(sofar, ms));
     let encoderMs = null;         // this window's, once reported
     let best = 0;
 
@@ -101,7 +88,7 @@
       } else if (detail.stage === 'decode') {
         if (typeof detail.encoderMs === 'number') {
           encoderMs = detail.encoderMs;
-          if (seconds > 0) encoderMsPerSecond = fastest(encoderMsPerSecond, encoderMs / seconds);
+          if (seconds > 0) encoderMsPerSecond = encoderMs / seconds;
         }
         if (typeof detail.frames === 'number') frames = detail.frames;
         if (typeof detail.frame === 'number') frame = detail.frame;
@@ -110,7 +97,7 @@
         if (typeof encoderMs === 'number' && typeof detail.decodeMs === 'number' && encoderMs + detail.decodeMs > 0) {
           share = encoderMs / (encoderMs + detail.decodeMs);
         }
-        if (typeof detail.runMs === 'number' && detail.runMs > 0 && seconds > 0) runMsPerSecond = fastest(runMsPerSecond, detail.runMs / seconds);
+        if (typeof detail.runMs === 'number' && detail.runMs > 0 && seconds > 0) runMsPerSecond = detail.runMs / seconds;
         stage = 'done';
       }
     }
@@ -126,10 +113,10 @@
         fraction = share + (1 - share) * (frames > 0 ? Math.min(1, frame / frames) : 0);
       } else if (stage === 'run') {
         const expectedMs = runMsPerSecond !== null ? runMsPerSecond * seconds : (seconds / windowRate) * 1000;
-        fraction = extrapolate(Math.max(0, at - stageStart), expectedMs);
+        fraction = countUp(Math.max(0, at - stageStart), expectedMs);
       } else {
         const expectedMs = encoderMsPerSecond !== null ? encoderMsPerSecond * seconds : (seconds / rate) * 1000;
-        fraction = share * extrapolate(Math.max(0, at - stageStart), expectedMs);
+        fraction = share * countUp(Math.max(0, at - stageStart), expectedMs);
       }
       const value = Math.floor(((index + fraction) / windows) * 100);
       best = Math.max(best, Math.min(100, value));

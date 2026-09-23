@@ -11,15 +11,12 @@ test('a single window shows a percentage, and it rises through both stages to 10
   const t = createProgressTracker({ device: 'webgpu' });
   assert.equal(t.percent(0), 0);
   t.on({ window: 0, windows: 1, stage: 'encode', seconds: 300 }, 1000);
-  // 300 s at 40x: ~7.5 s expected for the encoder, which owns half the bar by default
+  // 300 s at 40x: 7.5 s expected for the encoder, which owns half the bar by default
   assert.equal(t.percent(1000), 0);
-  // half way through the expected encoder time: half of the 0.8 the straight part reaches
-  assert.equal(t.percent(1000 + 3750), 20);
-  // a slow encoder creeps towards a cap it never reaches: no stall, no overshoot
-  assert.equal(t.percent(1000 + 7500), 40);
-  const late = t.percent(1000 + 15000);
-  assert.ok(late > 40 && late < 47, `still moving after the expected time: ${late}`);
-  assert.equal(t.percent(1000 + 600000), 47);
+  assert.equal(t.percent(1000 + 3750), 25);
+  // a slow encoder counts up to its stage's end and holds there; it does not overshoot
+  assert.equal(t.percent(1000 + 7500), 50);
+  assert.equal(t.percent(1000 + 60000), 50);
   t.on({ stage: 'decode', frames: 3750, frame: 0, encoderMs: 7000 }, 9000);
   assert.equal(t.percent(9000), 50);
   t.on({ stage: 'decode', frame: 1875 }, 12000);
@@ -38,7 +35,7 @@ test('the encoder\'s share is learned from the first window, so later windows ar
   assert.equal(t.inspect().share, 0.9);
   // second window: elapsed time against the MEASURED 90 s, not the default rate
   t.on({ window: 1, windows: 4, stage: 'encode', seconds: 300 }, 100000);
-  assert.equal(t.percent(100000 + 45000), Math.floor(((1 + 0.9 * 0.4) / 4) * 100));   // 34
+  assert.equal(t.percent(100000 + 45000), Math.floor(((1 + 0.9 * 0.5) / 4) * 100));   // 36
   t.on({ stage: 'decode', frames: 3750, frame: 0, encoderMs: 90000 }, 190000);
   assert.equal(t.percent(190000), Math.floor(((1 + 0.9) / 4) * 100));                 // 47
 });
@@ -61,27 +58,42 @@ test('an unknown device and missing facts are tolerated', () => {
   const t = createProgressTracker({});
   t.on(null); t.on({ stage: 'decode', frame: 5 });
   assert.equal(t.percent(), 0);
-  t.on({ window: 0, windows: 1, stage: 'encode' }, 0);
-  assert.equal(t.percent(1000), 0);                       // no seconds: nothing to extrapolate from
-  t.on({ stage: 'decode', frames: 0 }, 1000);
-  assert.equal(t.percent(1000), 50);                      // no frames: the stage's start
+  t.on({ window: 0, windows: 3, stage: 'encode' }, 0);
+  assert.equal(t.percent(5000), 0);   // no seconds: nothing to extrapolate against
+  t.on({ stage: 'done' }, 6000);
+  assert.equal(t.percent(6000), 33);
 });
 
-test('an engine whose window is one opaque call is extrapolated by elapsed time, capped, and snaps at done', () => {
+// The run behind the report: 9:58 of audio, three windows of 300, 300 and
+// 18 s, on a GPU that does Whisper Base at 12x. The first window counts up
+// slowly against the default guess and jumps to its step when the window
+// ends; from then on each window is paced by the one before, per second of
+// audio, so the short tail does not crawl.
+test('an engine whose window is one opaque call counts up slowly, holds at the step, and is then paced by the last window', () => {
   const t = createProgressTracker({ device: 'webgpu' });
-  t.on({ window: 0, windows: 2, stage: 'run', seconds: 300 }, 0);
-  // 300 s at the default 4x: 75 s expected for the window, which is half the bar
+  t.on({ window: 0, windows: 3, stage: 'run', seconds: 300 }, 0);   // 75 s expected at the default 4x
   assert.equal(t.percent(0), 0);
-  assert.equal(t.percent(75000 / 2), 20);
-  assert.equal(t.percent(75000), 40);
-  assert.equal(t.percent(600000), 47);   // a slow window creeps up to the cap, it does not stall
-  t.on({ stage: 'done', runMs: 60000 }, 60000);
-  assert.equal(t.percent(60000), 50);
-  // the second window is paced by what the first one took, not the default
-  t.on({ window: 1, windows: 2, stage: 'run', seconds: 300 }, 60000);
-  assert.equal(t.percent(60000 + 30000), 70);
-  t.on({ stage: 'done', runMs: 58000 }, 120000);
-  assert.equal(t.percent(120000), 100);
+  assert.equal(t.percent(24000), 10);                                // the window actually took 24 s...
+  t.on({ stage: 'done', runMs: 24000 }, 24000);
+  assert.equal(t.percent(24000), 33);                                // ...so it jumps to the step
+  t.on({ window: 1, windows: 3, stage: 'run', seconds: 300 }, 24000);
+  assert.equal(t.percent(24000 + 12000), 50);                        // paced by the 24 s just measured
+  assert.equal(t.percent(24000 + 24000), 66);
+  assert.equal(t.percent(24000 + 40000), 66);                        // a slower window holds at the step
+  t.on({ stage: 'done', runMs: 23500 }, 47500);
+  t.on({ window: 2, windows: 3, stage: 'run', seconds: 18 }, 47500); // 1.4 s expected, not 24
+  assert.equal(t.percent(47500 + 700), 83);
+  t.on({ stage: 'done', runMs: 600 }, 48100);
+  assert.equal(t.percent(48100), 100);
+});
+
+test('a short last window is paced by its own length on the Parakeet path too', () => {
+  const p = createProgressTracker({ device: 'webgpu' });
+  p.on({ window: 0, windows: 2, stage: 'encode', seconds: 300 }, 0);
+  p.on({ stage: 'decode', frames: 3750, frame: 0, encoderMs: 30000 }, 30000);   // 100 ms per second
+  p.on({ stage: 'done', decodeMs: 30000 }, 60000);
+  p.on({ window: 1, windows: 2, stage: 'encode', seconds: 30 }, 60000);         // 3 s expected
+  assert.equal(p.percent(60000 + 1500), Math.floor(((1 + 0.5 * 0.5) / 2) * 100));   // 62
 });
 
 test('a fresh tracker seeded from a previous run starts at zero but keeps its measurements', () => {
@@ -92,60 +104,5 @@ test('a fresh tracker seeded from a previous run starts at zero but keeps its me
   const second = createProgressTracker({ device: 'webgpu', seed: first.inspect() });
   assert.equal(second.percent(50000), 0);
   second.on({ window: 0, windows: 1, stage: 'run', seconds: 300 }, 50000);
-  assert.equal(second.percent(50000 + 20000), 40);   // paced by the first run's 40 s
-});
-
-// Seen on a three-window Whisper file: the last window is shorter than the
-// others but was paced as if it would take as long, so the bar crawled from
-// 66% and leapt to 100 when it finished. Pacing is per second of audio.
-test('a short last window is paced by its own length', () => {
-  const t = createProgressTracker({ device: 'webgpu' });
-  t.on({ window: 0, windows: 3, stage: 'run', seconds: 300 }, 0);
-  t.on({ stage: 'done', runMs: 60000 }, 60000);                     // 200 ms per second of audio
-  t.on({ window: 1, windows: 3, stage: 'run', seconds: 300 }, 60000);
-  t.on({ stage: 'done', runMs: 60000 }, 120000);
-  t.on({ window: 2, windows: 3, stage: 'run', seconds: 60 }, 120000);   // a minute left: 12 s expected
-  assert.equal(t.percent(120000 + 6000), Math.floor(((2 + 0.4) / 3) * 100));   // 80
-  assert.equal(t.percent(120000 + 12000), Math.floor(((2 + 0.8) / 3) * 100));  // 93
-  // the same for the encoder on the Parakeet path
-  const p = createProgressTracker({ device: 'webgpu' });
-  p.on({ window: 0, windows: 2, stage: 'encode', seconds: 300 }, 0);
-  p.on({ stage: 'decode', frames: 3750, frame: 0, encoderMs: 30000 }, 30000);   // 100 ms per second
-  p.on({ stage: 'done', decodeMs: 30000 }, 60000);
-  p.on({ window: 1, windows: 2, stage: 'encode', seconds: 30 }, 60000);         // 3 s expected
-  assert.equal(p.percent(60000 + 3000), Math.floor(((1 + 0.5 * 0.8) / 2) * 100));   // 70
-});
-
-// ...and the first window of that file sat at 31% (floor(95 / 3)) for ten
-// seconds: the default rate was optimistic for the machine and the old hard
-// cap held. Now the bar keeps creeping past the estimate — coarsely, since a
-// third of the bar has few integer steps left in its tail, which is why the
-// default rate errs slow.
-test('a window slower than the estimate keeps the bar moving', () => {
-  const t = createProgressTracker({ device: 'webgpu' });
-  t.on({ window: 0, windows: 3, stage: 'run', seconds: 300 }, 0);   // 75 s expected
-  const atEstimate = t.percent(75000);
-  assert.equal(atEstimate, 26);
-  const steps = new Set();
-  for (let ms = 75000; ms <= 150000; ms += 250) steps.add(t.percent(ms));
-  assert.ok(steps.size >= 4, `distinct values while running to twice the estimate: ${[...steps]}`);
-  assert.ok(Math.max(...steps) <= 31, `never past the cap: ${[...steps]}`);
-});
-
-// The run behind #676's report: 9:58 of audio, three windows, 50 s in all —
-// the first window paid a one-off cost (shader compilation at the real chunk
-// size), the second ran at full speed but was paced by the first, so the bar
-// crept and leapt. The fastest window so far paces the next.
-test('a one-off slow window does not pace the windows after it', () => {
-  const t = createProgressTracker({ device: 'webgpu' });
-  t.on({ window: 0, windows: 3, stage: 'run', seconds: 300 }, 0);
-  t.on({ stage: 'done', runMs: 44000 }, 44000);
-  t.on({ window: 1, windows: 3, stage: 'run', seconds: 300 }, 44000);
-  t.on({ stage: 'done', runMs: 5000 }, 49000);
-  assert.equal(t.inspect().runMsPerSecond, 5000 / 300);
-  t.on({ window: 2, windows: 3, stage: 'run', seconds: 18 }, 49000);     // 300 ms expected, not 2.6 s
-  assert.equal(t.percent(49000 + 300), Math.floor(((2 + 0.8) / 3) * 100));
-  // a later slow window does not drag the rate back down either
-  t.on({ stage: 'done', runMs: 2000 }, 51000);
-  assert.equal(t.inspect().runMsPerSecond, 5000 / 300);
+  assert.equal(second.percent(50000 + 20000), 50);   // paced by the first run's 40 s
 });
