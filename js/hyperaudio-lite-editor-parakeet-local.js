@@ -286,12 +286,13 @@ function loadParakeetClient(modal, workerBaseUrl) {
     progressStart = Date.now();
     progressTracker = newProgressTracker();
     clearInterval(progressTicker);
-    // a quarter-second tick, not a second: the encoder's share of the bar is
-    // extrapolated by elapsed time, and a second between steps looks stuck
+    // a tenth-of-a-second tick: the encoder's share of the bar is counted up by
+    // elapsed time, and the shown value catches up with a leaping target a
+    // point per tick
     progressTicker = setInterval(() => {
       if (progressTracker !== null && /^Transcribing…/.test(progressMessage)) transcribeProgressMessage();
       else renderLoadingMessage();
-    }, 250);
+    }, 100);
   }
 
   function stopProgressClock() {

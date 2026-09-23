@@ -31,6 +31,10 @@
  * previous window took per second of audio (so a short last window is paced
  * by its own length).
  *
+ * What is shown trails what is known: when the target leaps (a window that
+ * finished sooner than the guess), the percentage counts up to it a point at
+ * a time, every CATCH_UP_MS, so every number in between is seen.
+ *
  * A tracker is for one transcription: it never falls, so a second run needs
  * a fresh one. `seed` takes a previous tracker's inspect() so what that run
  * measured (encoder time, share, window time) carries over.
@@ -49,6 +53,7 @@
   // forward when the window ends, while one that is too fast overshoots.
   const WINDOW_RATE = { webgpu: 4, wasm: 1 };
   const DEFAULT_SHARE = 0.5;      // the encoder's share of a window, until measured
+  const CATCH_UP_MS = 100;        // one point per this, when the shown value is behind the target
 
   // 0..1 for elapsed against expected: a straight count that holds at the end
   function countUp(elapsedMs, expectedMs) {
@@ -73,7 +78,9 @@
     let encoderMsPerSecond = typeof seed.encoderMsPerSecond === 'number' ? seed.encoderMsPerSecond : null;
     let runMsPerSecond = typeof seed.runMsPerSecond === 'number' ? seed.runMsPerSecond : null;
     let encoderMs = null;         // this window's, once reported
-    let best = 0;
+    let best = 0;                 // the target: never falls
+    let shown = 0;                // trails the target a point at a time
+    let shownAt = null;           // when `shown` last earned a point
 
     function on(detail, now) {
       const at = typeof now === 'number' ? now : Date.now();
@@ -102,9 +109,18 @@
       }
     }
 
-    // 0..100, for the moment `now`
+    // 0..100, for the moment `now`: the target, approached a point per CATCH_UP_MS
     function percent(now) {
       const at = typeof now === 'number' ? now : Date.now();
+      const target = targetPercent(at);
+      if (shownAt === null || target <= shown) { shownAt = at; return shown; }   // nothing owed: no credit banked
+      const points = Math.min(target - shown, Math.floor((at - shownAt) / CATCH_UP_MS));
+      shown += points;
+      shownAt = shown === target ? at : shownAt + points * CATCH_UP_MS;   // caught up: no credit banked
+      return shown;
+    }
+
+    function targetPercent(at) {
       if (windows <= 0 || index < 0) return best;
       let fraction;
       if (stage === 'done') {
@@ -125,7 +141,8 @@
 
     return {
       on, percent,
-      inspect: () => ({ windows, window: index, stage, seconds, share, encoderMsPerSecond, runMsPerSecond, frames, frame }),
+      target: (now) => targetPercent(typeof now === 'number' ? now : Date.now()),
+      inspect: () => ({ windows, window: index, stage, seconds, share, encoderMsPerSecond, runMsPerSecond, frames, frame, target: best, shown }),
     };
   }
 
