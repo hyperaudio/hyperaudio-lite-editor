@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.22 — last changed in release 1.3.22
+ * @version 1.3.23 — last changed in release 1.3.23
  * @license MIT
  */
 
@@ -70,7 +70,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.2";
+  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.23";
 
   // On Chrome (Chromium) Parakeet runs fp16 on the GPU (WebGPU) – fast, and the
   // default. Firefox's WebGPU underperforms here and Safari's can exhaust memory
@@ -179,6 +179,14 @@ function loadParakeetClient(modal, workerBaseUrl) {
           // data.kind ("GPU"/"CPU") names the model build so it's clear which one
           // is downloading – and obvious if both ever download in one session.
           const model = data.kind ? `${data.kind} model` : "model";
+          if (data.phase === "transcribe" && data.detail && progressTracker !== null) {
+            // within-window progress (#676): the tracker turns the worker's
+            // facts into a percentage, and the clock below keeps it moving
+            // while the encoder's opaque call runs
+            progressTracker.on(data.detail);
+            transcribeProgressMessage();
+            break;
+          }
           updateLoadingMessage(data.phase === "download"
             ? `Downloading ${model}… ${data.progress}%`
             : data.phase === "prepare"
@@ -191,6 +199,8 @@ function loadParakeetClient(modal, workerBaseUrl) {
         case "device":
           console.log(`Parakeet running on ${data.device} (${data.dtype})`);
           lastDeviceLabel = data.device === "webgpu" ? "GPU (WebGPU)" : "CPU";
+          progressTracker = typeof window.createTranscriptionProgressTracker === "function"
+            ? window.createTranscriptionProgressTracker({ device: data.device }) : null;
           if (deviceLabel !== null) {
             // The CPU caveat also reaches Chromium users who silently fell
             // back from WebGPU and never saw the Safari/Firefox note (#388).
@@ -248,11 +258,22 @@ function loadParakeetClient(modal, workerBaseUrl) {
   let progressMessage = "";
   let lastDeviceLabel = "";
   let pendingInfo = null;
+  let progressTracker = null;    // #676: a percentage that moves within a window
+
+  function transcribeProgressMessage() {
+    if (progressTracker === null) return;
+    updateLoadingMessage(`Transcribing… ${progressTracker.percent()}%`);
+  }
 
   function startProgressClock() {
     progressStart = Date.now();
     clearInterval(progressTicker);
-    progressTicker = setInterval(renderLoadingMessage, 1000);
+    // a quarter-second tick, not a second: the encoder's share of the bar is
+    // extrapolated by elapsed time, and a second between steps looks stuck
+    progressTicker = setInterval(() => {
+      if (progressTracker !== null && /^Transcribing…/.test(progressMessage)) transcribeProgressMessage();
+      else renderLoadingMessage();
+    }, 250);
   }
 
   function stopProgressClock() {

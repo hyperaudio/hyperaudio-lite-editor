@@ -1,7 +1,7 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 1.3.2 — last changed in release 1.3.2
+ * @version 1.3.23 — last changed in release 1.3.23
  * @license MIT
  */
 
@@ -425,16 +425,22 @@ async function transcribe(s, audio) {
     : Math.ceil((audio.length - windowSamples) / stepSamples) + 1;
 
   let words = [];
+  // Progress is reported as FACTS — which window, which stage, which frame —
+  // and the page turns them into a percentage that moves within a window
+  // (#676, js/transcription-progress.js). The percent field stays for
+  // anything that only reads that.
+  const report = (detail) => self.postMessage(Object.assign({
+    type: "progress", phase: "transcribe",
+    progress: windowCount > 1
+      ? Math.round(((detail.window + (detail.stage === "done" ? 1 : 0)) / windowCount) * 100) : null,
+  }, { detail }));
   for (let i = 0; i < windowCount; i++) {
-    self.postMessage({
-      type: "progress",
-      phase: "transcribe",
-      progress: windowCount > 1 ? Math.round((i / windowCount) * 100) : null,
-    });
     const offsetSamples = i * stepSamples;
     const offsetSeconds = offsetSamples / SAMPLE_RATE;
     const win = audio.subarray(offsetSamples, offsetSamples + windowSamples);
-    const windowWords = await transcribeWindow(s, win, offsetSeconds);
+    report({ window: i, windows: windowCount, stage: "encode", seconds: win.length / SAMPLE_RATE });
+    const windowWords = await transcribeWindow(s, win, offsetSeconds, (detail) =>
+      report(Object.assign({ window: i, windows: windowCount }, detail)));
     if (i === 0) {
       words = windowWords;
     } else {
@@ -444,11 +450,6 @@ async function transcribe(s, audio) {
       const cut = offsetSeconds + OVERLAP_S / 2;
       words = words.filter((w) => w.start < cut).concat(windowWords.filter((w) => w.start >= cut));
     }
-    self.postMessage({
-      type: "progress",
-      phase: "transcribe",
-      progress: windowCount > 1 ? Math.round(((i + 1) / windowCount) * 100) : null,
-    });
   }
 
   const seconds = (Date.now() - startedAt) / 1000;
@@ -456,7 +457,8 @@ async function transcribe(s, audio) {
   return { words, seconds };
 }
 
-async function transcribeWindow(s, samples, offsetSeconds) {
+async function transcribeWindow(s, samples, offsetSeconds, onProgress) {
+  const progress = typeof onProgress === "function" ? onProgress : () => {};
   // Every ort.Tensor we create or receive holds a buffer (a GPU buffer on the
   // WebGPU path). Without explicit dispose() they only go when GC runs, which on
   // Safari is far too late — memory ratchets up window-over-window until the tab
@@ -476,6 +478,9 @@ async function transcribeWindow(s, samples, offsetSeconds) {
   const encLen = Number(enc.encoded_lengths.data[0]);
   const encMs = Date.now() - encT0;
   const decT0 = Date.now();
+  progress({ stage: "decode", frames: encLen, frame: 0, encoderMs: encMs });
+  const PROGRESS_EVERY = 50;     // frames: 4 s of audio, ~100 reports a window
+  let reportedAt = 0;
   const frame = (t) => { const f = new Float32Array(D); for (let d = 0; d < D; d++) f[d] = encData[d * Tp + t]; return f; };
 
   // 3. TDT greedy decode loop
@@ -512,7 +517,9 @@ async function transcribeWindow(s, samples, offsetSeconds) {
     encIn.dispose(); tgtIn.dispose(); tgtLenIn.dispose();
     if (step > 0) { t += step; emitted = 0; }
     else if (tok === BLANK || emitted === MAX_SYMBOLS) { t += 1; emitted = 0; }
+    if (t - reportedAt >= PROGRESS_EVERY) { reportedAt = t; progress({ stage: "decode", frame: t }); }
   }
+  progress({ stage: "done", decodeMs: Date.now() - decT0 });
   s1.dispose(); s2.dispose();
   enc.outputs.dispose(); enc.encoded_lengths.dispose();
 
