@@ -302,16 +302,19 @@ function loadParakeetClient(modal, workerBaseUrl) {
 
   // The shown percentage trails the facts, so a fast finish would close the
   // loader on 70-odd: count the rest of the way to 100 in well under a
-  // second, let 100 be seen, and only then hand over to `then`.
+  // second, let 100 be seen, and only then hand over to `then`. Paced by the
+  // clock, not by ticks, and not at all in a hidden tab: its timers fire once
+  // a second, or once a minute after five minutes, and a tick-based count
+  // left the transcript unrendered for over a minute.
   function finishProgress(then) {
     stopProgressClock();
     const from = progressTracker !== null && /^Transcribing…/.test(progressMessage) ? progressTracker.inspect().shown : 100;
-    if (from >= 100) { then(); return; }
+    if (from >= 100 || document.hidden) { then(); return; }
     const remaining = 100 - from;
     const stepMs = Math.min(100, Math.floor(600 / remaining));
-    let shown = from;
+    const started = Date.now();
     const finisher = setInterval(() => {
-      shown = Math.min(100, shown + 1);
+      const shown = Math.min(100, from + Math.floor((Date.now() - started) / stepMs));
       updateLoadingMessage(`Transcribing… ${shown}%`);
       if (shown === 100) { clearInterval(finisher); setTimeout(then, 250); }
     }, stepMs);
