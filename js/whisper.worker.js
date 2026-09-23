@@ -1,7 +1,7 @@
 /**
  * whisper.worker.js
  * (C) The Hyperaudio Project
- * @version 1.1.2 — last changed in release 1.1.2
+ * @version 1.3.23 — last changed in release 1.3.23
  * @license MIT
  */
 
@@ -257,17 +257,19 @@ async function transcribe(pipe, audio, language) {
     // announce the window before running it – otherwise nothing updates the
     // loader between the model download and the first completed window, and
     // it shows a stale "Downloading model" for the whole first inference.
-    // progress is only countable across windows, so a single-window file
-    // (under 5 minutes) gets no percentage – the elapsed clock carries it
+    // the percent field counts whole windows; the detail is what the page's
+    // tracker (#676, js/transcription-progress.js) uses to move the
+    // percentage within a window, by elapsed time against the last one
+    const offsetSamples = i * stepSamples;
+    const offsetSeconds = offsetSamples / SAMPLE_RATE;
+    const window = audio.subarray(offsetSamples, offsetSamples + windowSamples);
     self.postMessage({
       type: "progress",
       phase: "transcribe",
       progress: windowCount > 1 ? Math.round((i / windowCount) * 100) : null,
+      detail: { window: i, windows: windowCount, stage: "run", seconds: window.length / SAMPLE_RATE },
     });
-
-    const offsetSamples = i * stepSamples;
-    const offsetSeconds = offsetSamples / SAMPLE_RATE;
-    const window = audio.subarray(offsetSamples, offsetSamples + windowSamples);
+    const windowStart = Date.now();
 
     const output = await pipe(window, {
       return_timestamps: "word",
@@ -290,6 +292,7 @@ async function transcribe(pipe, audio, language) {
       type: "progress",
       phase: "transcribe",
       progress: windowCount > 1 ? Math.round(((i + 1) / windowCount) * 100) : null,
+      detail: { window: i, windows: windowCount, stage: "done", runMs: Date.now() - windowStart },
     });
   }
 
