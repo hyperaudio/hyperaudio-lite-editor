@@ -199,8 +199,8 @@ function loadParakeetClient(modal, workerBaseUrl) {
         case "device":
           console.log(`Parakeet running on ${data.device} (${data.dtype})`);
           lastDeviceLabel = data.device === "webgpu" ? "GPU (WebGPU)" : "CPU";
-          progressTracker = typeof window.createTranscriptionProgressTracker === "function"
-            ? window.createTranscriptionProgressTracker({ device: data.device }) : null;
+          progressDevice = data.device;
+          progressTracker = newProgressTracker();
           if (deviceLabel !== null) {
             // The CPU caveat also reaches Chromium users who silently fell
             // back from WebGPU and never saw the Safari/Firefox note (#388).
@@ -259,6 +259,16 @@ function loadParakeetClient(modal, workerBaseUrl) {
   let lastDeviceLabel = "";
   let pendingInfo = null;
   let progressTracker = null;    // #676: a percentage that moves within a window
+  let progressDevice = null;     // from the worker's last "device" message
+
+  // one tracker per transcription: it never falls, so a run that reuses the
+  // worker's loaded model (no fresh "device" message) must not inherit the
+  // last run's 100%. What the last run measured is carried over as a seed.
+  function newProgressTracker() {
+    if (typeof window.createTranscriptionProgressTracker !== "function") return null;
+    const seed = progressTracker !== null ? progressTracker.inspect() : undefined;
+    return window.createTranscriptionProgressTracker({ device: progressDevice, seed });
+  }
 
   function transcribeProgressMessage() {
     if (progressTracker === null) return;
@@ -267,6 +277,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
 
   function startProgressClock() {
     progressStart = Date.now();
+    progressTracker = newProgressTracker();
     clearInterval(progressTicker);
     // a quarter-second tick, not a second: the encoder's share of the bar is
     // extrapolated by elapsed time, and a second between steps looks stuck

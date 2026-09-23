@@ -63,3 +63,31 @@ test('an unknown device and missing facts are tolerated', () => {
   t.on({ stage: 'decode', frames: 0 }, 1000);
   assert.equal(t.percent(1000), 50);                      // no frames: the stage's start
 });
+
+test('an engine whose window is one opaque call is extrapolated by elapsed time, capped, and snaps at done', () => {
+  const t = createProgressTracker({ device: 'webgpu' });
+  t.on({ window: 0, windows: 2, stage: 'run', seconds: 300 }, 0);
+  // 300 s at the default 8x: 37.5 s expected for the window, which is half the bar
+  assert.equal(t.percent(0), 0);
+  const quarter = t.percent(37500 / 2);
+  assert.ok(quarter >= 24 && quarter <= 25, `half way through the expected time: ${quarter}`);
+  assert.equal(t.percent(600000), Math.floor(0.95 * 50));   // a slow window holds at the cap
+  t.on({ stage: 'done', runMs: 60000 }, 60000);
+  assert.equal(t.percent(60000), 50);
+  // the second window is paced by what the first one took, not the default
+  t.on({ window: 1, windows: 2, stage: 'run', seconds: 300 }, 60000);
+  assert.equal(t.percent(60000 + 30000), 75);
+  t.on({ stage: 'done', runMs: 58000 }, 120000);
+  assert.equal(t.percent(120000), 100);
+});
+
+test('a fresh tracker seeded from a previous run starts at zero but keeps its measurements', () => {
+  const first = createProgressTracker({ device: 'webgpu' });
+  first.on({ window: 0, windows: 1, stage: 'run', seconds: 300 }, 0);
+  first.on({ stage: 'done', runMs: 40000 }, 40000);
+  assert.equal(first.percent(40000), 100);
+  const second = createProgressTracker({ device: 'webgpu', seed: first.inspect() });
+  assert.equal(second.percent(50000), 0);
+  second.on({ window: 0, windows: 1, stage: 'run', seconds: 300 }, 50000);
+  assert.equal(second.percent(50000 + 20000), 50);   // paced by the first run's 40 s
+});

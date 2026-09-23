@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.22 — last changed in release 1.3.22
+ * @version 1.3.23 — last changed in release 1.3.23
  * @license MIT
  */
 
@@ -89,7 +89,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.1.2";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.3.23";
 
   // Turbo is WebGPU-only (#461): neither of its quantised variants loads on
   // the WASM runtime, so without a usable GPU the worker refuses it. Grey the
@@ -182,6 +182,14 @@ function loadWhisperClient(modal, workerBaseUrl) {
       const data = event.data;
       switch (data.type) {
         case "progress":
+          if (data.phase === "transcribe" && data.detail && progressTracker !== null) {
+            // within-window progress (#676): the tracker turns the worker's
+            // facts into a percentage, and the clock below keeps it moving
+            // while a window's single call runs
+            progressTracker.on(data.detail);
+            transcribeProgressMessage();
+            break;
+          }
           updateLoadingMessage(data.phase === "download"
             ? `Downloading model… ${data.progress}%`
             : data.phase === "prepare"
@@ -193,6 +201,8 @@ function loadWhisperClient(modal, workerBaseUrl) {
         case "device":
           console.log(`Whisper running on ${data.device} (${data.dtype})`);
           lastDeviceLabel = data.device === "webgpu" ? "GPU (WebGPU)" : "CPU";
+          progressDevice = data.device;
+          progressTracker = newProgressTracker();
           break;
         case "result":
           scheduleWorkerRetirement();
@@ -226,13 +236,34 @@ function loadWhisperClient(modal, workerBaseUrl) {
   let progressMessage = "";
   let lastDeviceLabel = "";
   let pendingInfo = null;
+  let progressTracker = null;    // #676: a percentage that moves within a window
+  let progressDevice = null;     // from the worker's last "device" message
 
-  // progress messages only arrive when a whole window completes, so a ticking
-  // clock is the liveness signal in between
+  // one tracker per transcription: it never falls, so a run that reuses the
+  // worker's loaded model (no fresh "device" message) must not inherit the
+  // last run's 100%. What the last run measured is carried over as a seed.
+  function newProgressTracker() {
+    if (typeof window.createTranscriptionProgressTracker !== "function") return null;
+    const seed = progressTracker !== null ? progressTracker.inspect() : undefined;
+    return window.createTranscriptionProgressTracker({ device: progressDevice, seed });
+  }
+
+  function transcribeProgressMessage() {
+    if (progressTracker === null) return;
+    updateLoadingMessage(`Transcribing… ${progressTracker.percent()}%`);
+  }
+
+  // the worker only hears from a window when it starts and when it ends, so
+  // a ticking clock carries the percentage in between — a quarter-second
+  // tick, since a second between steps looks stuck
   function startProgressClock() {
     progressStart = Date.now();
+    progressTracker = newProgressTracker();
     clearInterval(progressTicker);
-    progressTicker = setInterval(renderLoadingMessage, 1000);
+    progressTicker = setInterval(() => {
+      if (progressTracker !== null && /^Transcribing…/.test(progressMessage)) transcribeProgressMessage();
+      else renderLoadingMessage();
+    }, 250);
   }
 
   function stopProgressClock() {

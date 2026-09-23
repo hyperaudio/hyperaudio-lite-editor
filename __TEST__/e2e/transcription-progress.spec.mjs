@@ -106,3 +106,57 @@ test('the page shows a percentage that moves within the window (#676)', async ({
   expect(distinct.some((p) => p > 0 && p < 50)).toBe(true);
   expect(distinct.some((p) => p > 50 && p < 100)).toBe(true);
 });
+
+// Whisper's window is one opaque call, so the worker can only say when a
+// window starts and ends; the page paces the percentage between the two by
+// elapsed time. The scripted worker answers two requests without a second
+// "device" message, as the real one does once its model is loaded: the
+// second run must start from zero again rather than inherit the first's 100%.
+const SCRIPTED_WHISPER = `
+const post = (m) => self.postMessage(m);
+let runs = 0;
+self.addEventListener('message', async (e) => {
+  if (e.data.type !== 'INFERENCE_REQUEST') return;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  if (runs++ === 0) post({ type: 'device', device: 'webgpu', dtype: 'fp16' });
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'run', seconds: 300 } });
+  await wait(1500);
+  post({ type: 'progress', phase: 'transcribe', progress: null, detail: { window: 0, windows: 1, stage: 'done', runMs: 1500 } });
+  post({ type: 'result', output: { chunks: [{ text: ' hello', timestamp: [0.5, 0.9] }], seconds: 2 } });
+});
+`;
+
+test('Whisper\'s percentage moves between a window\'s start and end, and a second run starts over (#676)', async ({ page, context }, testInfo) => {
+  await context.route('**/js/whisper.worker.js*', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: SCRIPTED_WHISPER }));
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  const wavPath = testInfo.outputPath('tone.wav');
+  (await import('node:fs')).writeFileSync(wavPath, ladderWav(3));
+
+  const run = async () => {
+    const readings = [];
+    const sampler = setInterval(async () => {
+      const t = await page.evaluate(() => (document.querySelector('#hypertranscript .transcribing-msg') || {}).textContent || '').catch(() => '');
+      const m = /Transcribing… (\d+)%/.exec(t);
+      if (m) readings.push(Number(m[1]));
+    }, 60);
+    await page.setInputFiles('#file-input', wavPath);
+    await page.evaluate(() => document.getElementById('form-submit-btn').click());
+    await expect(page.locator('#hypertranscript')).toContainText('hello', { timeout: 30000 });
+    clearInterval(sampler);
+    return [...new Set(readings)];
+  };
+
+  const first = await run();
+  expect(first.length).toBeGreaterThanOrEqual(4);
+  expect([...first].sort((a, b) => a - b)).toEqual(first);
+  expect(first[0]).toBeLessThan(20);                                // 300 s at the default 8x: 37 s expected, so 1.5 s is a few percent
+  expect(first.some((p) => p > 0 && p < 100)).toBe(true);
+
+  // the second run is paced by the first's measured 1.5 s, so it climbs
+  // most of the way — and starts low, not at the first run's 100
+  const second = await run();
+  expect(second[0]).toBeLessThan(30);
+  expect(second.some((p) => p >= 50 && p < 100)).toBe(true);
+  expect([...second].sort((a, b) => a - b)).toEqual(second);
+});
