@@ -131,3 +131,21 @@ test('a window slower than the estimate keeps the bar moving', () => {
   assert.ok(steps.size >= 4, `distinct values while running to twice the estimate: ${[...steps]}`);
   assert.ok(Math.max(...steps) <= 31, `never past the cap: ${[...steps]}`);
 });
+
+// The run behind #676's report: 9:58 of audio, three windows, 50 s in all —
+// the first window paid a one-off cost (shader compilation at the real chunk
+// size), the second ran at full speed but was paced by the first, so the bar
+// crept and leapt. The fastest window so far paces the next.
+test('a one-off slow window does not pace the windows after it', () => {
+  const t = createProgressTracker({ device: 'webgpu' });
+  t.on({ window: 0, windows: 3, stage: 'run', seconds: 300 }, 0);
+  t.on({ stage: 'done', runMs: 44000 }, 44000);
+  t.on({ window: 1, windows: 3, stage: 'run', seconds: 300 }, 44000);
+  t.on({ stage: 'done', runMs: 5000 }, 49000);
+  assert.equal(t.inspect().runMsPerSecond, 5000 / 300);
+  t.on({ window: 2, windows: 3, stage: 'run', seconds: 18 }, 49000);     // 300 ms expected, not 2.6 s
+  assert.equal(t.percent(49000 + 300), Math.floor(((2 + 0.8) / 3) * 100));
+  // a later slow window does not drag the rate back down either
+  t.on({ stage: 'done', runMs: 2000 }, 51000);
+  assert.equal(t.inspect().runMsPerSecond, 5000 / 300);
+});
