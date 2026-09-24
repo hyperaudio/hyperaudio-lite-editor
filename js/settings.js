@@ -69,7 +69,8 @@
     fadgiEnabled: false,
     fadgiCountry: '',
     // Features still being tested (js/experimental-features.js): off, so they
-    // are opt-in and come with a warning. Today, the larger Whisper models.
+    // are opt-in and come with a warning. The larger Whisper models were the
+    // first, until the GPU-memory fix (#462) let them out.
     experimentalFeatures: false,
   });
 

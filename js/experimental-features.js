@@ -13,6 +13,10 @@
  * the select's default (the option marked selected in the markup), with a
  * change event so whoever remembers the choice records the fallback.
  *
+ * The switch's own row in Settings is hidden while nothing in the page is
+ * marked, so there is never a switch that does nothing; a setting already on
+ * stays saved for the next experimental feature.
+ *
  * Applied at DOMContentLoaded, before transcribe-prefs.js restores the saved
  * choices on the next tick, so a saved choice of an experimental option
  * survives a reload only while the switch is on. Changes are announced as
@@ -38,6 +42,8 @@
 
   function apply() {
     collect();
+    const row = document.getElementById('setting-experimental-row');
+    if (row !== null) row.style.display = entries.length === 0 ? 'none' : '';
     const on = enabled();
     entries.forEach(({ el, marker }) => {
       if (on) {

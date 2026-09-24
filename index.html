@@ -266,11 +266,8 @@ If you are creating an open source application under a license compatible with t
           <select class="form-select select select-bordered w-full max-w-xs" aria-label="Whisper model" id="model-name-input">
             <option value="tiny">Whisper (Tiny) – ~40–80 MB, fastest, least accurate</option>
             <option selected="" value="base">Whisper (Base) – ~80–150 MB</option>
-            <!-- Experimental (js/experimental-features.js): shown only with
-                 Settings ▸ Experimental features on. Their GPU memory grows with
-                 the media's length (#462), enough to freeze a browser. -->
-            <option value="small" data-experimental>Whisper (Small) – ~250–490 MB</option>
-            <option value="turbo" data-experimental>Whisper (Large v3 Turbo) – ~560 MB, needs GPU</option>
+            <option value="small">Whisper (Small) – ~250–490 MB</option>
+            <option value="turbo">Whisper (Large v3 Turbo) – ~560 MB, needs GPU</option>
           </select>
         </div>
         <label for="whisper-language" class="form-label label-text" style="display:block; padding-top:12px">Language</label>
@@ -617,10 +614,12 @@ If you are creating an open source application under a license compatible with t
                     </span>
                     <button type="button" id="settings-forget-keys" class="btn btn-sm btn-outline">Forget</button>
                   </div>
-                  <label class="settings-row settings-row-toggle" for="setting-experimental">
+                  <!-- shown only while something in the page is marked
+                       data-experimental (js/experimental-features.js) -->
+                  <label class="settings-row settings-row-toggle" for="setting-experimental" id="setting-experimental-row">
                     <span class="settings-text">
                       Experimental features
-                      <span class="settings-hint">Features still being tested. At the moment, the larger Whisper models: Small and Large v3 Turbo.</span>
+                      <span class="settings-hint">Features still being tested.</span>
                       <span class="settings-hint settings-hint-warning">Using experimental features may cause unexpected results, including slowing down or freezing the browser.</span>
                     </span>
                     <input type="checkbox" id="setting-experimental" class="toggle toggle-warning" />

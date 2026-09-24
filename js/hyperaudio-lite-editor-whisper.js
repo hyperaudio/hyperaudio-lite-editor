@@ -96,9 +96,10 @@ function loadWhisperClient(modal, workerBaseUrl) {
   // option out up front rather than let users pick a model that can't run.
   // Mirrors the worker's device choice, where Firefox prefers WASM over its
   // slower WebGPU.
-  // Turbo is experimental (js/experimental-features.js), so it may be out of
-  // the menu when the probe answers and put back later: keep the answer, and
-  // apply it again whenever the switch changes.
+  // Keep the probe's answer and apply it again whenever Settings ▸
+  // Experimental features changes: an option marked experimental
+  // (js/experimental-features.js) may be out of the menu when the probe
+  // answers and put back later.
   let gpuUsable = null;
   const limitToGpu = () => {
     if (gpuUsable === false && modelNameSelectionInput !== null) {

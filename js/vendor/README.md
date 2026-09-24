@@ -43,8 +43,9 @@ worker caches it on first use like every file here.
 
 **Remove it** once a transformers.js release includes the fix: go back to the
 jsDelivr import in `js/whisper.worker.js` and delete this file and the patch.
-Whisper Small and Large v3 Turbo are behind Settings ▸ Experimental features
-because of this leak; whether they can leave it is a separate decision.
+Whisper Small and Large v3 Turbo were held back behind Settings ▸
+Experimental features until this fix: with it, both ran a 54-minute file with
+GPU memory flat at about 3 GB (M4 Pro, 2026-09-24).
 
 ## Upgrading
 
