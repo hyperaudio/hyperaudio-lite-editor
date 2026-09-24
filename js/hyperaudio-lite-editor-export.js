@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.21 — last changed in release 1.3.21
+ * @version 1.3.25 — last changed in release 1.3.25
  * @license MIT
  *
  * Export/import custom elements: transcript downloads and the Deepgram JSON,
@@ -15,14 +15,7 @@ class ExportJson extends HTMLElement {
   }
 
   exportJson() {
-    let hypertranscript = document.getElementById('hypertranscript');
-
-    if (hypertranscript === null) {
-      alert("Currently you can only export JSON from the transcript view.");
-    } else {
-      let jsonData = htmlToJson(hypertranscript);
-      downloadJson(jsonData);
-    }
+    downloadJson(htmlToJson(document.getElementById('hypertranscript')));
   }
 
   connectedCallback() {
@@ -450,13 +443,22 @@ class ImportVtt extends HTMLElement {
 
 customElements.define('import-vtt', ImportVtt);
 
+// Named from the project title like the other transcript downloads
+// (editor-core.js), keeping the historical name for an untitled project (#683)
+function jsonExportName() {
+  const save = window.HyperaudioSave;
+  const title = save && typeof save.getProjectTitle === 'function' ? save.getProjectTitle() : '';
+  const base = typeof window.safeExportName === 'function' ? window.safeExportName(title, '') : '';
+  return base === '' ? 'hyperaudio-lite.json' : base + '.json';
+}
+
 function downloadJson(jsonData) {
   // download json file
   let dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(jsonData, null, 2));
   //start download
   let downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute('href', dataStr);
-  downloadAnchorNode.setAttribute('download', 'hyperaudio-lite.json');
+  downloadAnchorNode.setAttribute('download', jsonExportName());
   document.body.appendChild(downloadAnchorNode); // required for firefox
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
