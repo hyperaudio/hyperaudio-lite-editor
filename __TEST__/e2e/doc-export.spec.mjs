@@ -72,6 +72,17 @@ test('the transcript exports sit directly under Export Project in the Export sub
   expect(importOrder).toEqual(['project-open-hyperaudio']);
 });
 
+// #683: the Hyperaudio JSON export was always "hyperaudio-lite.json"
+test('Hyperaudio JSON export is named from the project title (#683)', async ({ page }, testInfo) => {
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(() => document.querySelector('export-json a').click());
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('Doc_Export_Project.json');
+  const outPath = testInfo.outputPath('out.json');
+  await download.saveAs(outPath);
+  expect(JSON.stringify(JSON.parse(fs.readFileSync(outPath, 'utf8')))).toContain('Benvenuti');
+});
+
 test('TXT export: speaker prefix, redacted word dropped, title-derived filename', async ({ page }, testInfo) => {
   const out = await exportVia(page, 'export-transcript-txt', testInfo, 'out.txt');
   expect(out.name).toBe('Doc Export Project.txt');
