@@ -1,7 +1,7 @@
 /**
  * find-replace.js
  * (C) The Hyperaudio Project
- * @version 1.3.5 — last changed in release 1.3.5
+ * @version 1.3.25 — last changed in release 1.3.25
  * @license MIT
  *
  * Find & replace for the transcript (#25). "Find" reuses the vendored
@@ -43,21 +43,16 @@
   let matches = [];       // groups of marks: one group per phrase occurrence
   let activeIndex = -1;
 
-  // How many spans searchPhrase marks per hit. This must count the needles
-  // the VENDORED search derives, not raw whitespace tokens: it strips
-  // punctuation from each word and drops any that empties, so a query like
-  // "big - pharma" yields two needles, not three. Counting tokens instead
-  // grouped the marks in threes and misaligned every match after the first.
-  // (Mirrors SEARCH_PUNCT in hyperaudio-lite-extension.js, which is vendored
-  // and must not be imported from.)
-  const QUERY_PUNCT = /[.,\-\/#!$%\^&\*;:{}=_`~()\?\s]/g;
+  // How many spans searchPhrase marks per hit: the words of the query as
+  // js/search-match.js parses it (a token of punctuation alone joins its
+  // neighbour, so "big , pharma" is two words, not three). Counting raw
+  // tokens instead grouped the marks wrongly and misaligned every match
+  // after the first (#557).
+  const matcher = () => window.HyperaudioSearchMatch || null;
+  const parsedQuery = () => (matcher() ? matcher().parseQuery(searchBox.value) : null);
   const queryWordCount = () => {
-    const needles = searchBox.value
-      .toLowerCase()
-      .split(/\s+/)
-      .map((w) => w.replace(QUERY_PUNCT, ''))
-      .filter(Boolean);
-    return Math.max(1, needles.length);
+    const parsed = parsedQuery();
+    return parsed === null ? 1 : Math.max(1, parsed.words.length);
   };
 
   const isOpen = () => !panel.hasAttribute('hidden');
@@ -116,49 +111,18 @@
   // match rather than chunking it by needle count.
   const WHOLE = 'data-whole-phrase';
   const markWholePhraseSpans = () => {
-    const needles = searchBox.value
-      .toLowerCase()
-      .split(/\s+/)
-      .map((w) => w.replace(QUERY_PUNCT, ''))
-      .filter(Boolean);
-    if (needles.length < 2) return; // single needles are the vendored pass's job
-    const joined = needles.join('');
+    const parsed = parsedQuery();
+    if (parsed === null || parsed.words.length < 2) return; // single words are the main pass's job
     document.querySelectorAll('#hypertranscript [data-m]').forEach((span) => {
       if (span.querySelector('mark.search-mark') !== null) return; // already marked
       const raw = span.textContent;
-      const normalised = raw.toLowerCase().replace(QUERY_PUNCT, '');
-      if (!normalised.includes(joined)) return;
-      // Walk the raw text consuming the needle characters, skipping the
-      // punctuation and spaces between them, so the mark covers the phrase
-      // exactly as written — "[Teon Brooks]" including its space.
-      let start = -1;
-      let ni = 0;
-      for (let i = 0; i < raw.length && ni < joined.length; i += 1) {
-        const ch = raw[i].toLowerCase();
-        if (ch === joined[ni]) {
-          if (ni === 0) start = i;
-          ni += 1;
-        } else if (QUERY_PUNCT.test(ch)) {
-          QUERY_PUNCT.lastIndex = 0; // the /g regex is stateful in .test()
-          if (ni > 0) continue;      // punctuation inside the phrase is skipped
-        } else {
-          QUERY_PUNCT.lastIndex = 0;
-          ni = 0;
-          start = -1;
-        }
-        QUERY_PUNCT.lastIndex = 0;
-      }
-      if (ni < joined.length || start < 0) return;
-      let end = start;
-      let consumed = 0;
-      while (end < raw.length && consumed < joined.length) {
-        const ch = raw[end].toLowerCase();
-        if (ch === joined[consumed]) consumed += 1;
-        end += 1;
-      }
-      const before = raw.slice(0, start);
-      const hit = raw.slice(start, end);
-      const after = raw.slice(end);
+      const range = matcher().matchWithin(raw, parsed);
+      if (range === null) return;
+      // the mark covers the phrase exactly as written — "[Teon Brooks]"
+      // including its space
+      const before = raw.slice(0, range[0]);
+      const hit = raw.slice(range[0], range[1]);
+      const after = raw.slice(range[1]);
       span.textContent = '';
       if (before) span.append(before);
       const mark = document.createElement('mark');
@@ -216,11 +180,42 @@
       if (span && typeof span.normalize === 'function') span.normalize();
       // A span whose text is now empty holds no word: drop it rather than
       // leave a timed span with nothing in it for the sanitiser to trip on.
-      if (span && span.hasAttribute && span.hasAttribute('data-m')
-          && span.textContent.trim() === '') {
-        span.remove();
+      // One left with only the punctuation that sat around the word (a match
+      // excludes it) is no word either: "So, um, we" must not become
+      // "So, , we" (#395). Its sentence ending, if any, moves to the word
+      // before, so "that's it, um." becomes "that's it."
+      if (span && span.hasAttribute && span.hasAttribute('data-m')) {
+        const rest = span.textContent;
+        if (rest.trim() === '') {
+          span.remove();
+        } else if (chunk === '' && PUNCTUATION_ONLY.test(rest)) {
+          carrySentenceEnd(span, rest);
+          span.remove();
+        }
       }
     });
+  };
+
+  const PUNCTUATION_ONLY = /^[^\p{L}\p{N}\p{M}]+$/u;
+  const SENTENCE_END = /[.?!…]+/;
+
+  // Put the sentence-ending punctuation of `rest` (from a word being removed)
+  // on the word before `span`, unless that word already ends a sentence; a
+  // comma, semicolon or colon it ends with gives way. Edits the last text
+  // node only, so any search mark in that word survives.
+  const carrySentenceEnd = (span, rest) => {
+    const end = SENTENCE_END.exec(rest);
+    if (end === null) return;
+    const words = [...document.querySelectorAll('#hypertranscript [data-m]')];
+    const prev = words[words.indexOf(span) - 1];
+    if (!prev || /[.?!…]\s*$/.test(prev.textContent)) return;
+    const walker = document.createTreeWalker(prev, NodeFilter.SHOW_TEXT);
+    let last = null;
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if (node.nodeValue.trim() !== '') last = node;
+    }
+    if (last === null) return;
+    last.nodeValue = last.nodeValue.replace(/[,;:]?(\s*)$/, end[0] + '$1');
   };
 
   const mutateTranscript = (fn, origin) => {

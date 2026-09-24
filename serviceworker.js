@@ -48,7 +48,7 @@ const PRECACHE = [
   'js/hyperaudio-push-notification.js', 'js/hyperaudio-save.js', 'js/ionosphere-reader.js',
   'js/language-guess.js', 'js/media-export.js', 'js/media-first-frame.js',
   'js/media-posters.js', 'js/paragraph-timecodes.js', 'js/parakeet.worker.js',
-  'js/responsive.js', 'js/settings.js', 'js/stream-stretch.js', 'js/tpme.js', 'js/transcribe-prefs.js', 'js/transcription-progress.js',
+  'js/responsive.js', 'js/search-match.js', 'js/settings.js', 'js/stream-stretch.js', 'js/tpme.js', 'js/transcribe-prefs.js', 'js/transcription-progress.js',
   'js/transcript-bench.js', 'js/transcript-doc-export.js', 'js/transcript-gateway.js',
   'js/transcript-history.js', 'js/transcript-lifecycle.js', 'js/transcript-maintenance.js',
   'js/transcript-serializer.js', 'js/transcript-to-ionosphere.js', 'js/whisper-json-import.js',
