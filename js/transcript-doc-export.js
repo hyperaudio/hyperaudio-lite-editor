@@ -3,7 +3,7 @@
  * TRANSCRIPT DOCUMENT EXPORTS (#467) — TXT and Markdown
  * ============================================================================
  *
- * @version 1.3.13 — last changed in release 1.3.13
+ * @version 1.3.25 — last changed in release 1.3.25
  *
  * Rendered document exports of the transcript, added to the FILE →
  * Export / Import submenu. RENDERED means the semantics of the format doc's
@@ -225,10 +225,12 @@
   }
 
   // Same title→filename rule as the .hyperaudio export.
+  // cleaned by the same rule as every other download (#682), so one project's
+  // files share a name: "My Interview" → My_Interview.docx, .vtt, .json
   function exportFilename(extension) {
-    const title = ((window.HyperaudioSave && window.HyperaudioSave.getProjectTitle()) || 'transcript')
-      .replace(/[\\/:*?"<>|]+/g, '-').trim() || 'transcript';
-    return title + extension;
+    const title = (window.HyperaudioSave && window.HyperaudioSave.getProjectTitle()) || '';
+    const base = typeof window.safeExportName === 'function' ? window.safeExportName(title, 'transcript') : 'transcript';
+    return base + extension;
   }
 
   function triggerDownload(data, extension, mime) {
