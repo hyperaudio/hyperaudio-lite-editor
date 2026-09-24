@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.24 — last changed in release 1.3.24
+ * @version 1.3.25 — last changed in release 1.3.25
  * @license MIT
  */
 
@@ -96,16 +96,12 @@ function loadWhisperClient(modal, workerBaseUrl) {
   // option out up front rather than let users pick a model that can't run.
   // Mirrors the worker's device choice, where Firefox prefers WASM over its
   // slower WebGPU.
-  (async () => {
-    let gpuUsable = false;
-    try {
-      gpuUsable = !/firefox/i.test(navigator.userAgent)
-        && navigator.gpu !== undefined
-        && (await navigator.gpu.requestAdapter()) !== null;
-    } catch (e) {
-      // treat as no GPU
-    }
-    if (!gpuUsable && modelNameSelectionInput !== null) {
+  // Turbo is experimental (js/experimental-features.js), so it may be out of
+  // the menu when the probe answers and put back later: keep the answer, and
+  // apply it again whenever the switch changes.
+  let gpuUsable = null;
+  const limitToGpu = () => {
+    if (gpuUsable === false && modelNameSelectionInput !== null) {
       const turboOption = modelNameSelectionInput.querySelector('option[value="turbo"]');
       if (turboOption !== null) {
         turboOption.disabled = true;
@@ -117,6 +113,17 @@ function loadWhisperClient(modal, workerBaseUrl) {
         modelNameSelectionInput.value = "base";
       }
     }
+  };
+  document.addEventListener("hyperaudio:experimental", limitToGpu);
+  (async () => {
+    try {
+      gpuUsable = !/firefox/i.test(navigator.userAgent)
+        && navigator.gpu !== undefined
+        && (await navigator.gpu.requestAdapter()) !== null;
+    } catch (e) {
+      gpuUsable = false;   // treat as no GPU
+    }
+    limitToGpu();
   })();
 
   // Firefox runs Whisper on the CPU (its WebGPU is still much slower than

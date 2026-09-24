@@ -39,7 +39,7 @@ const PRECACHE = [
   'js/a11y.js', 'js/audio-source.js', 'js/caption-abbreviations.js',
   'js/caption-speaker-colours.js', 'js/caption.js', 'js/editor-audio-cut.js',
   'js/editor-core.js', 'js/editor-file-menu.js', 'js/editor-main.js',
-  'js/editor-service-worker.js', 'js/editor-svg.js', 'js/find-replace.js', 'js/hls-source.js',
+  'js/editor-service-worker.js', 'js/editor-svg.js', 'js/experimental-features.js', 'js/find-replace.js', 'js/hls-source.js',
   'js/html-json-converter.js', 'js/hyperaudio-library.js',
   'js/hyperaudio-lite-editor-assemblyai.js', 'js/hyperaudio-lite-editor-deepgram.js',
   'js/hyperaudio-lite-editor-export.js', 'js/hyperaudio-lite-editor-parakeet-local.js',
