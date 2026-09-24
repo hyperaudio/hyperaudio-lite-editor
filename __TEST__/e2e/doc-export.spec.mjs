@@ -85,13 +85,13 @@ test('Hyperaudio JSON export is named from the project title (#683)', async ({ p
 
 test('TXT export: speaker prefix, redacted word dropped, title-derived filename', async ({ page }, testInfo) => {
   const out = await exportVia(page, 'export-transcript-txt', testInfo, 'out.txt');
-  expect(out.name).toBe('Doc Export Project.txt');
+  expect(out.name).toBe('Doc_Export_Project.txt');
   expect(out.text).toBe('Maria: Benvenuti a\n'); // "ehm" is struck: it must not survive
 });
 
 test('MD export: bold speaker, struck word kept but marked (#611)', async ({ page }, testInfo) => {
   const out = await exportVia(page, 'export-transcript-md', testInfo, 'out.md');
-  expect(out.name).toBe('Doc Export Project.md');
+  expect(out.name).toBe('Doc_Export_Project.md');
   // Markdown can say "this was struck", so it does, rather than handing over a
   // quietly shorter document. TXT above cannot, so it drops the word instead.
   expect(out.text).toBe('**Maria:** Benvenuti ~~ehm~~ a\n');
@@ -101,7 +101,7 @@ test('DOCX export: a valid package with bold speaker run, struck word marked (#6
   const downloadPromise = page.waitForEvent('download');
   await page.evaluate(() => document.getElementById('export-transcript-docx').click());
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe('Doc Export Project.docx');
+  expect(download.suggestedFilename()).toBe('Doc_Export_Project.docx');
   const outPath = testInfo.outputPath('out.docx');
   await download.saveAs(outPath);
   const zip = await JSZip.loadAsync(fs.readFileSync(outPath));
