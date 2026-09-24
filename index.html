@@ -51,9 +51,10 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=0.8.4"></script>
   <script src="js/hyperaudio-lite-editor-parakeet.js?v=0.8.5"></script>
   <script src="js/transcribe-prefs.js?v=1.3.14"></script>
-  <script src="js/settings.js?v=1.3.22"></script>
+  <script src="js/settings.js?v=1.3.25"></script>
+  <script src="js/experimental-features.js?v=1.3.25"></script>
   <script src="js/transcription-progress.js?v=1.3.23"></script>
-  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.24"></script>
+  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.25"></script>
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.24"></script>
   <script src="js/word-alignment.js?v=1.3.8"></script>
   <script src="js/html-json-converter.js?v=1.1.9"></script>
@@ -133,7 +134,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.21">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.25">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -265,14 +266,11 @@ If you are creating an open source application under a license compatible with t
           <select class="form-select select select-bordered w-full max-w-xs" aria-label="Whisper model" id="model-name-input">
             <option value="tiny">Whisper (Tiny) – ~40–80 MB, fastest, least accurate</option>
             <option selected="" value="base">Whisper (Base) – ~80–150 MB</option>
-            <!-- Small and Large v3 Turbo are withheld: transcribing with them has
-                 crashed the browser, and once the whole machine. A saved choice
-                 of either falls back to Base (transcribe-prefs.js restores a
-                 model only if its option exists). Models already downloaded
-                 can still be removed in Settings ▸ Downloaded models.
-            <option value="small">Whisper (Small) – ~250–490 MB</option>
-            <option value="turbo">Whisper (Large v3 Turbo) – ~560 MB, needs GPU</option>
-            -->
+            <!-- Experimental (js/experimental-features.js): shown only with
+                 Settings ▸ Experimental features on. Their GPU memory grows with
+                 the media's length (#462), enough to freeze a browser. -->
+            <option value="small" data-experimental>Whisper (Small) – ~250–490 MB</option>
+            <option value="turbo" data-experimental>Whisper (Large v3 Turbo) – ~560 MB, needs GPU</option>
           </select>
         </div>
         <label for="whisper-language" class="form-label label-text" style="display:block; padding-top:12px">Language</label>
@@ -619,6 +617,14 @@ If you are creating an open source application under a license compatible with t
                     </span>
                     <button type="button" id="settings-forget-keys" class="btn btn-sm btn-outline">Forget</button>
                   </div>
+                  <label class="settings-row settings-row-toggle" for="setting-experimental">
+                    <span class="settings-text">
+                      Experimental features
+                      <span class="settings-hint">Features still being tested. At the moment, the larger Whisper models: Small and Large v3 Turbo.</span>
+                      <span class="settings-hint settings-hint-warning">Using experimental features may cause unexpected results, including slowing down or freezing the browser.</span>
+                    </span>
+                    <input type="checkbox" id="setting-experimental" class="toggle toggle-warning" />
+                  </label>
                   <div class="settings-row">
                     <span class="settings-text">
                       Reset the editor

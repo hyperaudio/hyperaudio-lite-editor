@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.22 — last changed in release 1.3.22
+ * @version 1.3.25 — last changed in release 1.3.25
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -68,6 +68,9 @@
     // a switch of its own; it shares Provider and Media ID with TPME
     fadgiEnabled: false,
     fadgiCountry: '',
+    // Features still being tested (js/experimental-features.js): off, so they
+    // are opt-in and come with a warning. Today, the larger Whisper models.
+    experimentalFeatures: false,
   });
 
   // caption.js takes a maximum AND a minimum line length: the minimum is the
@@ -338,6 +341,15 @@
   }
 
   function wire() {
+    const experimental = byId('setting-experimental');
+    if (experimental !== null) {
+      experimental.checked = get('experimentalFeatures') === true;
+      experimental.addEventListener('change', () => {
+        set('experimentalFeatures', experimental.checked);
+        if (window.HyperaudioExperimental) window.HyperaudioExperimental.apply();
+      });
+    }
+
     const toggle = byId('setting-play-on-dblclick');
     if (toggle !== null) {
       toggle.checked = get('playOnDoubleClick') === true;
