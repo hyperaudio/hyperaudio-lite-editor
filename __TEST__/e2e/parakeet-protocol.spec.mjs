@@ -109,7 +109,7 @@ test('the transcription worker is lazy, retired after idle, and recreated on dem
 // retirement after the idle tier, recreation on demand. Whisper's worker
 // imports transformers.js rather than onnxruntime, so its stub differs.
 test('the Whisper worker is lazy, retired after idle, and recreated on demand (#552)', async ({ page, context }, testInfo) => {
-  await context.route('**/@huggingface/transformers**', (route) => route.fulfill({
+  await context.route('**/js/vendor/transformers-*.js', (route) => route.fulfill({
     status: 200, contentType: 'text/javascript',
     body: 'export const pipeline = async () => { throw new Error("stub refuses"); };',
   }));

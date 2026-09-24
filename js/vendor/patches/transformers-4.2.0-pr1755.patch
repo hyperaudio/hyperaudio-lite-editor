@@ -1,0 +1,130 @@
+diff --git a/packages/transformers/src/models/modeling_utils.js b/packages/transformers/src/models/modeling_utils.js
+index ec9f174..4bb37d0 100644
+--- a/packages/transformers/src/models/modeling_utils.js
++++ b/packages/transformers/src/models/modeling_utils.js
+@@ -856,6 +856,7 @@ export class PreTrainedModel extends Callable {
+         });
+ 
+         const is_encoder_decoder = this.config.is_encoder_decoder;
++        let encoderOutputsToDispose = null;
+ 
+         // 4. Define other model kwargs
+         if (!is_encoder_decoder) {
+@@ -869,6 +870,7 @@ export class PreTrainedModel extends Callable {
+                 model_input_name,
+                 generation_config,
+             });
++            encoderOutputsToDispose = model_inputs.encoder_outputs;
+         }
+ 
+         // 5. Prepare `input_ids` which will be used for auto-regressive generation
+@@ -1051,6 +1053,8 @@ export class PreTrainedModel extends Callable {
+             await past_key_values.dispose();
+         }
+ 
++        encoderOutputsToDispose?.dispose();
++
+         if (generation_config.return_dict_in_generate) {
+             return {
+                 sequences,
+@@ -1199,6 +1203,9 @@ export function getPastKeyValues(decoderResults, pastKeyValues) {
+                 // Optimization introduced by optimum to reuse past key values.
+                 // So, we just replace the constant outputs (`decoderResults[name]`) with the previous past key values.
+                 // https://github.com/huggingface/optimum/blob/0bf2c05fb7e1182b52d21b703cfc95fd9e4ea3dc/optimum/onnxruntime/base.py#L677-L704
++                if (decoderResults[name] !== pastKeyValues[newName]) {
++                    decoderResults[name].dispose();
++                }
+                 pkvs[newName] = pastKeyValues[newName];
+             } else {
+                 pkvs[newName] = decoderResults[name];
+diff --git a/packages/transformers/src/models/whisper/modeling_whisper.js b/packages/transformers/src/models/whisper/modeling_whisper.js
+index d0d6f0b..0a50ce5 100644
+--- a/packages/transformers/src/models/whisper/modeling_whisper.js
++++ b/packages/transformers/src/models/whisper/modeling_whisper.js
+@@ -13,6 +13,24 @@ import { mergeArrays } from '../../utils/core.js';
+ import { ModelOutput } from '../modeling_outputs.js';
+ import { logger } from '../../utils/logger.js';
+ 
++async function disposeTimestampGenerationOutputs(outputs) {
++    const disposed = new Set();
++    for (const name of ['cross_attentions', 'encoder_attentions', 'decoder_attentions']) {
++        const tokenAttentions = outputs[name];
++        if (!tokenAttentions) continue;
++
++        for (const attentions of tokenAttentions) {
++            for (const tensor of attentions) {
++                if (disposed.has(tensor)) continue;
++                tensor.dispose();
++                disposed.add(tensor);
++            }
++        }
++        outputs[name] = null;
++    }
++    await outputs.past_key_values?.dispose();
++}
++
+ export class WhisperPreTrainedModel extends PreTrainedModel {
+     requires_attention_mask = false;
+     main_input_name = 'input_features';
+@@ -173,14 +191,18 @@ export class WhisperForConditionalGeneration extends WhisperPreTrainedModel {
+         });
+ 
+         if (generation_config.return_token_timestamps) {
+-            outputs['token_timestamps'] = this._extract_token_timestamps(
+-                // @ts-expect-error TS2345
+-                outputs,
+-                generation_config.alignment_heads,
+-                generation_config.num_frames,
+-                0.02,
+-                init_tokens.length,
+-            );
++            try {
++                outputs['token_timestamps'] = this._extract_token_timestamps(
++                    // @ts-expect-error TS2345
++                    outputs,
++                    generation_config.alignment_heads,
++                    generation_config.num_frames,
++                    0.02,
++                    init_tokens.length,
++                );
++            } finally {
++                await disposeTimestampGenerationOutputs(outputs);
++            }
+         }
+ 
+         return outputs;
+@@ -262,18 +284,22 @@ export class WhisperForConditionalGeneration extends WhisperPreTrainedModel {
+             // Extract token-level timestamps for this seek pass if needed
+             let seek_token_timestamps;
+             if (return_token_timestamps) {
+-                outputs['token_timestamps'] = this._extract_token_timestamps(
+-                    outputs,
+-                    generation_config.alignment_heads,
+-                    Math.floor((seek_end - seek) / input_stride),
+-                    0.02,
+-                    init_tokens.length,
+-                );
+-                const time_offset = (seek / input_stride) * 0.02;
+-                seek_token_timestamps = outputs.token_timestamps[0]
+-                    .tolist()
+-                    .slice(init_tokens.length)
+-                    .map((/** @type {number} */ t) => t + time_offset);
++                try {
++                    outputs['token_timestamps'] = this._extract_token_timestamps(
++                        outputs,
++                        generation_config.alignment_heads,
++                        Math.floor((seek_end - seek) / input_stride),
++                        0.02,
++                        init_tokens.length,
++                    );
++                    const time_offset = (seek / input_stride) * 0.02;
++                    seek_token_timestamps = outputs.token_timestamps[0]
++                        .tolist()
++                        .slice(init_tokens.length)
++                        .map((/** @type {number} */ t) => t + time_offset);
++                } finally {
++                    await disposeTimestampGenerationOutputs(outputs);
++                }
+             }
+ 
+             // Remove trailing EOS
