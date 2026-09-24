@@ -237,15 +237,17 @@ test('a hand correction keeps your place in the matches (#559)', async ({ page }
 // whitespace tokens: it strips punctuation per word and drops any that
 // empties. "big , pharma" is two needles — grouping by three misaligned
 // every match after the first.
+// A token of punctuation alone joins the word before it (#395), so this is
+// "big, pharma": two words, and the comma typed must be there.
 test('a query with a punctuation-only token still groups correctly (#557)', async ({ page }) => {
   await page.evaluate(() => {
     const spans = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
-    spans[0].textContent = 'big '; spans[1].textContent = 'pharma ';
-    spans[4].textContent = 'big '; spans[5].textContent = 'pharma ';
+    spans[0].textContent = 'big, '; spans[1].textContent = 'pharma ';
+    spans[4].textContent = 'big, '; spans[5].textContent = 'pharma ';
   });
   await page.evaluate(() => {
     const sb = document.querySelector('#search-box');
-    sb.value = 'big , pharma';           // three tokens, two needles
+    sb.value = 'big , pharma';           // three tokens, two words
     sb.dispatchEvent(new KeyboardEvent('keyup'));
     document.getElementById('find-replace-toggle').click();
     document.getElementById('replace-box').value = 'Big Pharma';
@@ -321,4 +323,45 @@ test('the replace panel has a close button', async ({ page }) => {
   await expect(page.locator('#find-replace-toggle')).toHaveAttribute('aria-expanded', 'false');
   await page.click('#find-replace-toggle');
   await expect(page.locator('#replace-panel')).toBeVisible();
+});
+
+// #395 — what you type must be there; what you don't type is ignored.
+const plantWords = (page, words) => page.evaluate((ws) => {
+  const spans = document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)');
+  ws.forEach((w, i) => { spans[i].textContent = w; });
+}, words);
+const wordsNow = (page, n) => page.evaluate((count) =>
+  [...document.querySelectorAll('#hypertranscript span[data-m]:not(.speaker)')]
+    .slice(0, count).map((s) => s.textContent).join(''), n);
+
+test('spaces typed around a word find only that word (#395)', async ({ page }) => {
+  await plantWords(page, ['So, ', 'um, ', 'the ', 'album ', 'and ', 'umbrella ', 'um. ']);
+  expect(await search(page, 'um')).toEqual(expect.arrayContaining(['um', 'um', 'um', 'um']));
+  expect((await search(page, ' um ')).slice(0, 2)).toEqual(['um', 'um']);
+  const whole = await page.evaluate(() =>
+    [...document.querySelectorAll('#hypertranscript mark.search-mark')].map((m) => m.parentNode.textContent));
+  expect(whole.slice(0, 2)).toEqual(['um, ', 'um. ']);   // not "album", not "umbrella"
+});
+
+test('punctuation typed must be there (#395)', async ({ page }) => {
+  await plantWords(page, ['the ', 'U.S. ', 'and ', 'us ', 'focus ']);
+  expect((await search(page, 'U.S.'))[0]).toBe('U.S.');
+  const parents = await page.evaluate(() =>
+    [...document.querySelectorAll('#hypertranscript mark.search-mark')].map((m) => m.parentNode.textContent.trim()));
+  expect(parents).not.toContain('us');
+  expect(parents).not.toContain('focus');
+});
+
+test('replacing a filler with nothing takes its punctuation too, keeping a sentence end (#395)', async ({ page }) => {
+  await plantWords(page, ['So, ', 'um, ', 'we ', 'did ', 'it, ', 'um. ', 'Then ']);
+  await page.evaluate(() => {
+    const sb = document.querySelector('#search-box');
+    sb.value = ' um ';
+    sb.dispatchEvent(new KeyboardEvent('keyup'));
+    document.getElementById('find-replace-toggle').click();
+    document.getElementById('replace-box').value = '';
+  });
+  await expect(page.locator('#find-match-count')).toHaveText('1 / 2');
+  await page.click('#replace-all');
+  expect(await wordsNow(page, 5)).toBe('So, we did it. Then ');
 });
