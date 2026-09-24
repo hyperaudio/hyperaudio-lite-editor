@@ -433,11 +433,12 @@ function loadWhisperClient(modal, workerBaseUrl) {
         : "Auto-detect",
       languageCode: language,   // "" when auto-detecting
       // what was really run (#668). The runtime and its version are the
-      // worker's import; a unit test holds the two together.
+      // worker's import; a unit test holds the two together. "+pr1755" is
+      // the patch the vendored build carries (#462, js/vendor/README.md).
       modelId: model_name,
       parameters: { model: model_name, language: language || 'auto', word_timestamps: true },
       runtime: 'transformers.js',
-      engineVersion: '4.2.0',
+      engineVersion: '4.2.0+pr1755',
     };
 
     if (!useUrl) {
