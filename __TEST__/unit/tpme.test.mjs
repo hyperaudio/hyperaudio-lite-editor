@@ -140,8 +140,14 @@ test('every engine reports what it really ran, and the local ones name their wor
     assert.match(src, /parameters:/, `${file} reports no parameters`);
     assert.doesNotMatch(src, /parameters:[^;]*(apiKey|token|Authorization)/i, `${file} puts a credential in its parameters`);
   });
-  const whisperRuntime = /transformers@([0-9.]+)/.exec(read('whisper.worker.js'))[1];
-  assert.match(read('hyperaudio-lite-editor-whisper.js'), new RegExp(`engineVersion: '${whisperRuntime.replace(/\./g, '\\.')}'`));
+  // the jsDelivr release (transformers@4.2.0), or a vendored build that
+  // carries a patch (vendor/transformers-4.2.0-pr1755.min.js → 4.2.0+pr1755)
+  const worker = read('whisper.worker.js');
+  const cdn = /from "[^"]*transformers@([0-9.]+)/.exec(worker);
+  const vendored = /from "[^"]*vendor\/transformers-([0-9.]+?)(?:-(pr[0-9]+))?\.min\.js"/.exec(worker);
+  assert.ok(cdn || vendored, 'whisper.worker.js imports no recognisable transformers.js');
+  const whisperRuntime = cdn ? cdn[1] : vendored[1] + (vendored[2] ? '+' + vendored[2] : '');
+  assert.match(read('hyperaudio-lite-editor-whisper.js'), new RegExp(`engineVersion: '${whisperRuntime.replace(/[.+]/g, '\\$&')}'`));
   const ortRuntime = /onnxruntime-web@([0-9.]+)/.exec(read('parakeet.worker.js'))[1];
   assert.match(read('hyperaudio-lite-editor-parakeet-local.js'), new RegExp(`engineVersion: "${ortRuntime.replace(/\./g, '\\.')}"`));
   assert.match(read('parakeet.worker.js'), /istupakov\/parakeet-tdt-0\.6b-v3-onnx/);
