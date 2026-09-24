@@ -1,11 +1,16 @@
 /**
  * whisper.worker.js
  * (C) The Hyperaudio Project
- * @version 1.3.23 — last changed in release 1.3.23
+ * @version 1.3.25 — last changed in release 1.3.25
  * @license MIT
  */
 
-import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
+// transformers.js 4.2.0 with the fix from huggingface/transformers.js#1755,
+// which frees the GPU tensors Whisper's generation left behind (#462): about
+// 600 MB per 137 s of audio on Base, enough on Small to lock up a Mac. Built
+// from source; see js/vendor/README.md. Back to the jsDelivr release once
+// the fix is published.
+import { pipeline } from "./vendor/transformers-4.2.0-pr1755.min.js";
 
 const SAMPLE_RATE = 16000;
 const WINDOW_S = 300;   // transcribe in 5-minute windows to bound memory
