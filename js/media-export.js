@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.22 — last changed in release 1.3.22
+ * @version 1.3.26 — last changed in release 1.3.26
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -1063,6 +1063,18 @@
     setLengthBoxes(currentContentLength() / rate);
     updateAdjustReadout();
   };
+  // While the speed is being typed, never write the box back: "1." read as a
+  // number is 1, and rewriting it on every keystroke ate the decimal point,
+  // so 1.5 or 0.75 could not be typed (and "0" became "1"). Follow a value as
+  // soon as it is a valid speed; tidy the box (clamp, two decimals) only when
+  // it is left, as the length boxes do (#441).
+  const followTypedSpeed = () => {
+    const typed = parseFloat(speedInput.value);
+    if (!(typed >= RATE_MIN && typed <= RATE_MAX)) return;
+    if (speedSlider !== null) speedSlider.value = String(typed);
+    setLengthBoxes(currentContentLength() / typed);
+    updateAdjustReadout();
+  };
   const syncFromSlider = () => {
     speedInput.value = String(+parseFloat(speedSlider.value).toFixed(2));
     syncFromSpeed();
@@ -1545,7 +1557,8 @@
       if (adjustCheck.checked) syncFromSpeed();
       saveExportOpts();
     });
-    speedInput.addEventListener('input', () => { syncFromSpeed(); saveExportOpts(); });
+    speedInput.addEventListener('input', () => { followTypedSpeed(); saveExportOpts(); });
+    speedInput.addEventListener('change', () => { syncFromSpeed(); saveExportOpts(); });
     if (speedSlider !== null) speedSlider.addEventListener('input', () => { syncFromSlider(); saveExportOpts(); });
     if (lengthMinInput !== null) lengthMinInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
     if (lengthSecInput !== null) lengthSecInput.addEventListener('change', () => { syncFromLength(); saveExportOpts(); });
