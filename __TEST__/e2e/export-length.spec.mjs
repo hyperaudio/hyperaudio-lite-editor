@@ -91,3 +91,31 @@ test('an impossible target explains the cap instead of snapping silently', async
   expect(capped).toMatchObject({ min: '0', sec: '6' }); // the request stands
   expect(capped.readout).toContain('→ 0:15 at 4×');     // the outcome is shown
 });
+
+// The speed box rewrote itself on every keystroke, so a decimal point was
+// eaten as soon as it was typed: 1.5 and 0.75 could not be entered.
+test('a decimal speed can be typed key by key, and is tidied when the box is left', async ({ page }) => {
+  await setup(page, 60);
+  const box = page.locator('#export-speed');
+  const state = () => page.evaluate(() => ({
+    speed: document.getElementById('export-speed').value,
+    slider: document.getElementById('export-speed-slider').value,
+    min: document.getElementById('export-length-min').value,
+    sec: document.getElementById('export-length-sec').value,
+  }));
+
+  await box.fill('');
+  await box.pressSequentially('1.5');
+  expect(await state()).toEqual({ speed: '1.5', slider: '1.5', min: '0', sec: '40' });
+
+  await box.fill('');
+  await box.pressSequentially('0.75');
+  expect(await state()).toEqual({ speed: '0.75', slider: '0.75', min: '1', sec: '20' });
+
+  // out of range while typing is left alone; leaving the box clamps it
+  await box.fill('');
+  await box.pressSequentially('9');
+  expect((await state()).speed).toBe('9');
+  await box.press('Tab');
+  expect((await state()).speed).toBe('4');
+});
