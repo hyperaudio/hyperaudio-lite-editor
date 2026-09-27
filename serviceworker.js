@@ -51,7 +51,7 @@ const PRECACHE = [
   'js/responsive.js', 'js/search-match.js', 'js/settings.js', 'js/stream-stretch.js', 'js/tpme.js', 'js/transcribe-prefs.js', 'js/transcription-progress.js',
   'js/transcript-bench.js', 'js/transcript-doc-export.js', 'js/transcript-gateway.js',
   'js/transcript-history.js', 'js/transcript-lifecycle.js', 'js/transcript-maintenance.js',
-  'js/transcript-serializer.js', 'js/transcript-to-ionosphere.js', 'js/whisper-json-import.js',
+  'js/transcript-selection.js', 'js/transcript-serializer.js', 'js/transcript-to-ionosphere.js', 'js/whisper-json-import.js',
   'js/whisper.worker.js', 'js/word-alignment.js', 'js/word-vtt.js',
   // vendored libraries: export, project zip, HLS — what offline export and saving need
   'js/vendor/hls-1.6.16.js', 'js/vendor/jszip-3.10.1.min.js',
