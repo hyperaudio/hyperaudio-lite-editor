@@ -170,7 +170,7 @@
   // sections/rate/dropStruck are the retiming inputs every helper below
   // takes; withProject adds the project metadata the flattened container
   // needs, which costs a transcript parse and is only read when asked for.
-  const captureContext = ({ sections, rate, dropStruck, withProject }) => {
+  const captureContext = ({ sections, rate, dropStruck, withProject, clip }) => {
     const save = window.HyperaudioSave;
     const root = typeof window.currentTranscriptRoot === 'function'
       ? window.currentTranscriptRoot() : document.getElementById('hypertranscript');
@@ -178,6 +178,9 @@
       sections: sections.map((s) => ({ start: s.start, end: s.end })),
       rate,
       dropStruck: dropStruck === true,
+      // a clip's selected words, by their own times (unpadded): { from, to }
+      // the first word's start and the last word's end; null for no clip
+      clip: clip ? { from: clip.from, to: clip.to } : null,
       transcript: root !== null && root !== undefined ? root.cloneNode(true) : null,
       captionsVtt: save && typeof save.getCaptionsVtt === 'function' ? save.getCaptionsVtt() : '',
       lineLengths: typeof window.captionLineLengths === 'function'
@@ -211,6 +214,16 @@
   };
 
   const keptDuration = (sections) => sections.reduce((sum, s) => sum + (s.end - s.start), 0);
+
+  // A clip (#689): the kept sections — strikeouts and skipped silences
+  // already out — limited to the selected stretch of media.
+  const clipSections = (duration, clip) => {
+    const base = editedSections(duration) || [{ start: 0, end: duration }];
+    return base
+      .map((s) => ({ start: Math.max(s.start, clip.start), end: Math.min(s.end, clip.end) }))
+      .filter((s) => s.end > s.start + 0.001);
+  };
+  const inSections = (t, sections) => sections.some((s) => t >= s.start - 0.001 && t < s.end);
 
   const hasEdits = (sections, duration) =>
     sections !== null &&
@@ -249,6 +262,15 @@
         return;
       }
       const t = parseInt(span.getAttribute('data-m'), 10) / 1000;
+      // a clip carries only its selected words (#689): outside the sections,
+      // mapTime would stack them at the clip's first or last instant, and a
+      // word starting in the padding after the selection was not selected.
+      // A speaker label stays while its paragraph has words in the clip.
+      if (ctx.clip !== null && !span.classList.contains('speaker')
+          && (t < ctx.clip.from - 0.001 || t >= ctx.clip.to || !inSections(t, sections))) {
+        span.remove();
+        return;
+      }
       span.setAttribute('data-m', String(Math.round((mapTime(t, sections) / rate) * 1000)));
       if (rate !== 1) {
         const d = parseInt(span.getAttribute('data-d'), 10);
@@ -256,7 +278,7 @@
       }
     });
     clone.querySelectorAll('p').forEach((p) => {
-      if (p.querySelector('[data-m]') === null) p.remove();
+      if (p.querySelector('[data-m]:not(.speaker)') === null) p.remove();
     });
     clone.normalize();
     // canonical formatting (one span per line, data-m before data-d) so the
@@ -346,8 +368,11 @@
   // from the transcript — the very thing #634 stopped exports doing once a
   // track exists. A present, emptied track stays empty.
   const retimedCues = (ctx) => {
-    const cues = parseVttCues(ctx.captionsVtt);
+    let cues = parseVttCues(ctx.captionsVtt);
     if (cues.length === 0) return null;   // no track, or one with no cues to begin with
+    // a clip keeps the cues that overlap its selected words, not ones that
+    // only reach into the padding either side (#689)
+    if (ctx.clip !== null) cues = cues.filter((c) => c.end > ctx.clip.from + 0.001 && c.start < ctx.clip.to - 0.001);
     return retimeCues(cues, ctx.sections, ctx.rate);
   };
 
@@ -955,6 +980,16 @@
   const sourceEntire = document.getElementById('export-source-entire');
   const sourceEdited = document.getElementById('export-source-edited');
   const editSummary = document.getElementById('export-edit-summary');
+  const sourceClip = document.getElementById('export-source-clip');
+  const clipRow = document.getElementById('export-source-clip-row');
+  const clipSummary = document.getElementById('export-clip-summary');
+
+  // The transcript selection as a stretch of media (#689), from
+  // js/transcript-selection.js; without that module, no clip is offered.
+  const selectedClip = (duration) => (window.TranscriptSelection
+    ? window.TranscriptSelection.range(duration) : null);
+  let clipRange = null;   // the selection as it was when the dialog opened
+  const clipChosen = () => sourceClip !== null && sourceClip.checked && clipRange !== null;
   const adjustRow = document.getElementById('export-adjust-row');
   const adjustCheck = document.getElementById('export-adjust');
   const adjustPanel = document.getElementById('export-adjust-panel');
@@ -1015,6 +1050,7 @@
     const player = document.getElementById('hyperplayer');
     const dur = player && !isNaN(player.duration) ? player.duration : 0;
     if (!dur) return 0;
+    if (clipChosen()) return keptDuration(clipSections(dur, clipRange));
     const edited = sourceEdited.checked && !sourceEdited.disabled;
     return keptDuration(edited ? editedSections(dur) : [{ start: 0, end: dur }]);
   };
@@ -1267,6 +1303,22 @@
       : '';
   };
 
+  // The default name follows the source: a clip's carries its start time,
+  // "My_Interview-0m42s". It is swapped when the source changes only while the
+  // box still holds the default, never over a name someone typed.
+  let defaultName = '';
+  const nameForSource = () => {
+    const base = exportBaseName();
+    if (!clipChosen()) return base;
+    const s = Math.round(clipRange.from);   // the first word's own start
+    return `${base}-${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
+  };
+  const applyDefaultName = (force) => {
+    if (nameInput === null) return;
+    if (force || nameInput.value === defaultName) nameInput.value = nameForSource();
+    defaultName = nameForSource();
+  };
+
   const populateModal = async () => {
     setStatus('');
     setProgress(null);
@@ -1289,8 +1341,21 @@
       sourceEntire.checked = true;
     }
 
+    // a selection in the transcript is offered as a clip, and chosen (#689)
+    clipRange = selectedClip(duration);
+    if (clipRow !== null) clipRow.style.display = clipRange !== null ? 'flex' : 'none';
+    if (clipRange !== null && sourceClip !== null) {
+      const len = keptDuration(clipSections(duration, clipRange));
+      // the selected words' own times (the padding is ours, not theirs), and
+      // the length that will be exported
+      if (clipSummary !== null) clipSummary.textContent = `(${fmtLen(clipRange.from)}–${fmtLen(clipRange.to)}, ${fmtLen(len)})`;
+      sourceClip.checked = true;
+    } else if (sourceClip !== null) {
+      sourceClip.checked = false;
+    }
+
     // default the export name to the project/media base name
-    if (nameInput !== null) nameInput.value = exportBaseName();
+    applyDefaultName(true);
 
     // restore the user's last export-option choices (default: all off)
     const opts = loadExportOpts();
@@ -1363,7 +1428,8 @@
     // Everything the run needs, read before its first await (#656): from here
     // the editor may be edited or switched to another project, and none of
     // that reaches the outputs.
-    const edited = sourceEdited.checked && !sourceEdited.disabled;
+    const clip = clipChosen() ? clipRange : null;
+    const edited = clip === null && sourceEdited.checked && !sourceEdited.disabled;
     const rate = exportRate();
     const rateLabel = +rate.toFixed(2);
     const burn = fmt.kind === 'video' && burnRow !== null &&
@@ -1384,8 +1450,18 @@
 
     const player = document.getElementById('hyperplayer');
     const duration = player && !isNaN(player.duration) ? player.duration : Infinity;
-    const sections = edited ? editedSections(duration) : [{ start: 0, end: duration }];
-    const ctx = Object.freeze(captureContext({ sections, rate, dropStruck: edited, withProject: wantProject }));
+    const sections = clip !== null ? clipSections(duration, clip)
+      : edited ? editedSections(duration) : [{ start: 0, end: duration }];
+    if (clip !== null && keptDuration(sections) < 0.05) {
+      setStatus('Nothing to export: everything in the selection is struck out.');
+      setProgress(null);
+      exporting = false;
+      startBtn.classList.remove('btn-disabled');
+      return;
+    }
+    const ctx = Object.freeze(captureContext({
+      sections, rate, dropStruck: edited || clip !== null, withProject: wantProject, clip,
+    }));
 
     try {
       const mb = await loadMediabunny();
@@ -1395,13 +1471,15 @@
       // path, so it always routes through the section pipeline (as an applied
       // speed does), even for an unedited "entire" export at 1×.
       let blob;
-      const straightCopy = !edited && rate === 1 && !burn;
+      const straightCopy = !edited && clip === null && rate === 1 && !burn;
       if (straightCopy) {
         setStatus('Exporting entire media…');
         blob = await exportEntire(mb, fmt, ctx, setProgress);
       } else {
         const captions = burn ? buildCaptionChunks(ctx) : null;
-        setStatus(burn ? 'Exporting with captions…' : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…` : 'Exporting edited media…'));
+        setStatus(burn ? 'Exporting with captions…'
+          : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…`
+            : (clip !== null ? 'Exporting clip…' : 'Exporting edited media…')));
         blob = fmt.kind === 'video'
           ? await exportEditedVideo(mb, fmt, ctx, setProgress, captions)
           : await exportEditedAudio(mb, fmt, ctx, setProgress);
@@ -1485,7 +1563,7 @@
       // above — off unless turned on in Settings, and like them built from
       // what was captured at the click
       if (window.HyperaudioTpme && typeof window.HyperaudioTpme.sidecar === 'function' && ctx.tpme !== null) {
-        const record = await window.HyperaudioTpme.sidecar(ctx.tpme, outputs, { struckRemoved: edited });
+        const record = await window.HyperaudioTpme.sidecar(ctx.tpme, outputs, { struckRemoved: edited || clip !== null });
         if (record !== null) outputs.push(record);
       }
 
@@ -1547,8 +1625,9 @@
   [retimeCheck, burnCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', updateVttNote);
   });
-  sourceEntire.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
-  sourceEdited.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); });
+  [sourceEntire, sourceEdited, sourceClip].forEach((radio) => {
+    if (radio !== null) radio.addEventListener('change', () => { updateRetimeVisibility(); refreshAdjustForContent(); applyDefaultName(false); });
+  });
   // the format decides whether burning is even offered, so the note follows it
   formatSelect.addEventListener('change', () => { updateBurnVisibility(); updateVttNote(); });
   if (adjustCheck !== null) {

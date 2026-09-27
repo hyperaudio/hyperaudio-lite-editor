@@ -978,6 +978,12 @@ If you are creating an open source application under a license compatible with t
           <input type="radio" name="export-source" id="export-source-edited" class="radio radio-primary radio-sm" />
           <span class="label-text">Edited media <span id="export-edit-summary" style="opacity:0.6; font-size:85%"></span></span>
         </label>
+        <!-- A clip of the transcript selection (#689): shown only when text
+             was selected in the transcript before opening this dialog. -->
+        <label id="export-source-clip-row" style="display:none; gap:10px; align-items:center; cursor:pointer">
+          <input type="radio" name="export-source" id="export-source-clip" class="radio radio-primary radio-sm" />
+          <span class="label-text">Selection <span id="export-clip-summary" style="opacity:0.6; font-size:85%"></span></span>
+        </label>
         <!-- Shown only when there is something to warn about (#608): with a
              clean transcript both options produce the same media and this
              would be noise. -->
@@ -1266,6 +1272,7 @@ If you are creating an open source application under a license compatible with t
   <!-- device limits benchmark — inert without ?bench=1 in the URL -->
   <script src="js/transcript-bench.js?v=1.3.0"></script>
   <script src="js/stream-stretch.js?v=0.8.6"></script>
+  <script src="js/transcript-selection.js?v=1.3.26"></script>
   <script src="js/media-export.js?v=1.3.26"></script>
   <!-- speaker-coloured caption downloads (#536) -->
   <script src="js/caption-speaker-colours.js?v=1.3.21"></script>
