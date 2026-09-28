@@ -135,3 +135,37 @@ test('the clip exports only its stretch, struck words out, and its transcript ca
   const spoken = [...srt.matchAll(/\bw(\d+)\b/g)].map((m) => Number(m[1]));
   expect(spoken).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
 });
+
+// A long drag easily ends (or starts) just past the transcript's text — in the
+// margin, below the last line — and the selection was then ignored outright.
+test('a selection that runs past the transcript still counts, for its words', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => {
+    const spans = document.querySelectorAll('#hypertranscript [data-m]');
+    const range = document.createRange();
+    range.setStart(spans[25].firstChild, 0);
+    range.setEndAfter(document.body.lastChild);      // the drag ends past the transcript
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+  await openExport(page);
+  await expect(page.locator('#export-source-clip-row')).toBeVisible();
+  // w25 (25 s) to the last word, w29, which ends at 30 s
+  await expect(page.locator('#export-clip-summary')).toHaveText('(0:25–0:30, 0:05)');
+});
+
+test('a selection made elsewhere on the page leaves the remembered one alone', async ({ page }) => {
+  await setup(page);
+  await select(page, 10, 19);
+  await page.evaluate(() => {
+    const target = document.querySelector('.navbar') || document.body;
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+  await openExport(page);
+  await expect(page.locator('#export-clip-summary')).toHaveText('(0:10–0:20, 0:09)');
+});

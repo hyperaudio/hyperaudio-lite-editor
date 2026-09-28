@@ -1,7 +1,7 @@
 /**
  * transcript-selection.js
  * (C) The Hyperaudio Project
- * @version 1.3.26 — last changed in release 1.3.26
+ * @version 1.3.27 — last changed in release 1.3.27
  * @license MIT
  *
  * What is selected in the transcript, as a stretch of media — for anything
@@ -13,6 +13,11 @@
  * into the transcript (a collapsed selection there) forgets it, so an old
  * selection never comes back as a surprise. Selecting elsewhere on the page
  * leaves it alone.
+ *
+ * A selection counts when it overlaps the transcript, not only when it lies
+ * wholly inside it: a long drag easily starts or ends just past the text — in
+ * the margin, below the last line, over the player — and was then ignored
+ * altogether. Only the transcript's own words in it are used.
  *
  * A word counts when some of its text is selected, not merely its edge.
  * Speaker labels are not words. Remove this file and every dialog simply
@@ -27,8 +32,11 @@
     const ht = document.getElementById('hypertranscript');
     if (sel === null || sel.rangeCount === 0 || ht === null) return;
     const range = sel.getRangeAt(0);
-    if (!ht.contains(range.commonAncestorContainer)) return;
-    last = range.collapsed ? null : range.cloneRange();
+    if (range.collapsed) {
+      if (ht.contains(range.startContainer)) last = null;   // a click in the transcript
+      return;
+    }
+    if (range.intersectsNode(ht)) last = range.cloneRange();
   });
 
   // The word spans of the remembered selection, in order, or [] when there
@@ -37,7 +45,7 @@
     const range = last;
     const ht = document.getElementById('hypertranscript');
     if (range === null || ht === null || !range.startContainer.isConnected
-        || !ht.contains(range.commonAncestorContainer)) return [];
+        || !range.endContainer.isConnected || !range.intersectsNode(ht)) return [];
     const touched = (span) => {
       if (!range.intersectsNode(span)) return false;
       const part = document.createRange();
