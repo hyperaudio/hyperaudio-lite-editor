@@ -431,6 +431,7 @@
   }
 
   let renderToken = 0;
+  let revealedId = null;   // the open project whose row was last brought into view
 
   async function render() {
     const api = lib();
@@ -585,6 +586,18 @@
         api.open(el.getAttribute('data-id')); // flushes the outgoing project itself
       });
     });
+    // The open project's row is brought into view when the open project
+    // CHANGES (#698): an opened file is placed by when it was last edited,
+    // which may be well down the list. Only then — the panel redraws after
+    // every autosave, and pulling the list back on each would fight anyone
+    // scrolling it.
+    if (!viewingPending && currentId !== null && currentId !== revealedId) {
+      const row = filePicker.querySelector(`.file-item[data-id="${CSS.escape(currentId)}"]`);
+      if (row !== null) {
+        revealedId = currentId;
+        row.scrollIntoView({ block: 'nearest' });
+      }
+    }
     // hover popout: attach to the ROW so it stays up while reaching for the
     // kebab (it floats clear of both); a short delay stops flicker while the
     // pointer travels down the list

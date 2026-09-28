@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.26 — last changed in release 1.3.26
+ * @version 1.3.28 — last changed in release 1.3.28
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1603,6 +1603,7 @@
     const now = Date.now();
     await updateLibrary((lib) => {
       let entry = lib.projects.find((p) => p.id === id);
+      const isNew = entry === undefined;
       if (entry === undefined) {
         entry = {
           id,
@@ -1618,7 +1619,12 @@
         lib.projects.push(entry);
       }
       entry.name = state.texts.title;
-      entry.modifiedAt = now;
+      // A birth that says when it was last edited is placed by that (#698),
+      // never later than now, so a file with a wrong clock cannot pin itself
+      // to the top; every write after it is an edit, and stamps now.
+      const editedAt = stamps && Number.isFinite(stamps.editedAt) && stamps.editedAt > 0
+        ? Math.min(stamps.editedAt, now) : null;
+      entry.modifiedAt = isNew && editedAt !== null ? editedAt : now;
       if (stamps && stamps.draft === true) entry.lastDraftAt = now;
       if (stamps && stamps.saved === true) {
         entry.lastSavedAt = now;
@@ -1652,11 +1658,13 @@
   // preserves the as-transcribed baseline at the format level). The dirty
   // dot means "edited since the last committed state", never "you haven't
   // performed a first Save".
-  function commitInitialState(id) {
+  // editedAt: when the project was last edited, for a birth that carries one
+  // (an opened file, #698); otherwise the entry is stamped now
+  function commitInitialState(id, editedAt) {
     snapshotChain = snapshotChain.then(async () => {
       try {
         const state = await writeStateFile(id, SAVED_FILE);
-        await touchLibraryEntry(id, state, { saved: true });
+        await touchLibraryEntry(id, state, { saved: true, editedAt });
       } catch (e) {
         console.warn('hyperaudio-save: committing the new project failed', e);
       }
@@ -2661,9 +2669,13 @@
       suppressCapture = false;
     }
     // The opened file IS the saved state: commit it, no draft — the fresh
-    // entry starts clean.
+    // entry starts clean. Its place in Recents is when it was last EDITED,
+    // the file's own `modified`, as its `created` is carried over too (#698):
+    // opening it is not an edit. (Opening does make it the project a reload
+    // returns to — that is lastActiveAt's job.)
     if (opfsAvailable && session.projectId !== null) {
-      await commitInitialState(session.projectId);
+      await commitInitialState(session.projectId,
+        loaded.recovered ? undefined : Date.parse(loaded.project.modified));
     }
 
     if (loaded.warnings.length > 0) {

@@ -12,11 +12,16 @@ const require = createRequire(import.meta.url);
 const save = require('../../js/hyperaudio-save.js');
 const JSZip = require('jszip');
 
+// Each fixture opened is last-edited a minute after the one before (#698): an
+// opened file is placed in Recents by its own `modified`, so "B was edited
+// after A" has to be true of the files — opening is no longer an edit.
+let fixtureEdits = 0;
 async function buildFixture(title) {
+  fixtureEdits += 1;
   const state = {
     generatorVersion: 'e2e',
     created: '2026-07-10T09:00:00Z',
-    modified: '2026-07-10T11:30:00Z',
+    modified: new Date(Date.parse('2026-07-10T11:30:00Z') + fixtureEdits * 60000).toISOString(),
     media: {
       kind: 'original', path: 'media/tone.wav', url: null, filename: 'tone.wav',
       mimeType: 'audio/wav', durationSeconds: 2, sizeBytes: 0,
