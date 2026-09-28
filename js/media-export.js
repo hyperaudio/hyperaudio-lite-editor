@@ -558,31 +558,24 @@
     }
 
     const layout = captionLayout(w, h);
-    const fontSize = layout.fontSize;
+    const font = (px) => `700 ${px}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
     ctx.save();
-    ctx.font = `700 ${fontSize}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
     ctx.textBaseline = 'alphabetic';
     ctx.lineJoin = 'round';
-    const spaceW = ctx.measureText(' ').width;
-    const maxWidth = layout.maxWidth;
 
-    // the cue's own lines, each wrapped only if it overflows the safe width
-    const lines = [];
-    for (const source of sourceLines) {
-      let line = [];
-      let lineW = 0;
-      for (const word of source) {
-        const wW = ctx.measureText(word.text).width;
-        if (line.length && lineW + spaceW + wW > maxWidth) {
-          lines.push(line);
-          line = [];
-          lineW = 0;
-        }
-        lineW += (line.length ? spaceW : 0) + wW;
-        line.push(word);
-      }
-      if (line.length) lines.push(line);
-    }
+    // The caption's own lines, exactly as made in the editor (#690): never
+    // re-broken. When the widest line is too wide for the column, the type
+    // shrinks until it fits, rather than a line wrapping into two.
+    const lineWidth = (line) => line.reduce((sum, word, i) =>
+      sum + (i ? ctx.measureText(' ').width : 0) + ctx.measureText(word.text).width, 0);
+    ctx.font = font(layout.fontSize);
+    const widest = Math.max(...sourceLines.map(lineWidth));
+    const fontSize = widest > layout.maxWidth
+      ? Math.max(12, Math.floor(layout.fontSize * layout.maxWidth / widest))
+      : layout.fontSize;
+    ctx.font = font(fontSize);
+    const spaceW = ctx.measureText(' ').width;
+    const lines = sourceLines.filter((line) => line.length > 0);
 
     const lineH = fontSize * 1.25;
     let y = h - layout.bottomMargin - (lines.length - 1) * lineH;

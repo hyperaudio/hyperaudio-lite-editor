@@ -113,3 +113,42 @@ for (const [aspect, fit, size] of [['portrait', 'crop', [1080, 1920]], ['square'
     expect(await exportedSize(page)).toEqual(size);
   });
 }
+
+// Burned-in captions are the editor's captions: a line too wide for the frame
+// shrinks the type rather than wrapping into an extra line.
+test('a caption keeps its own lines in any frame; too wide, its type shrinks to fit', async ({ page }) => {
+  await setup(page);
+  const drawn = await page.evaluate(() => {
+    const word = (text, start) => ({ text, start });
+    const cue = {
+      start: 0, end: 5,
+      lines: [
+        ['There\'s', 'a', 'built-in', 'whisper', 'model,', 'or', 'for', 'faster'].map((t, i) => word(t, i * 0.2)),
+        ['processing', 'and', 'longer', 'content.'].map((t, i) => word(t, 2 + i * 0.2)),
+      ],
+    };
+    const run = (w, h) => {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const real = c.getContext('2d');
+      const rows = new Map(); let size = null; let widest = 0;
+      const spy = new Proxy(real, {
+        get(t, k) {
+          if (k === 'fillText') return (s, x, y) => { rows.set(Math.round(y), (rows.get(Math.round(y)) || []).concat(s)); };
+          const v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
+        },
+        set(t, k, v) { t[k] = v; if (k === 'font') size = Number(/(\d+)px/.exec(v)[1]); return true; },
+      });
+      window.MediaExportCaptions.drawCaptionOverlay(spy, 1, [cue], w, h);
+      const lines = [...rows.values()].map((ws) => ws.join(' '));
+      real.font = `700 ${size}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
+      lines.forEach((l) => { widest = Math.max(widest, real.measureText(l).width); });
+      return { lines, size, fits: widest <= w * 0.86 + 1 };
+    };
+    return { landscape: run(1920, 1080), portrait: run(1080, 1920) };
+  });
+  const own = ['There\'s a built-in whisper model, or for faster', 'processing and longer content.'];
+  expect(drawn.landscape.lines).toEqual(own);
+  expect(drawn.portrait.lines).toEqual(own);                 // not re-broken into three
+  expect(drawn.portrait.size).toBeLessThan(drawn.landscape.size);
+  expect(drawn.portrait.fits).toBe(true);
+});
