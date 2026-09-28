@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.22 — last changed in release 1.3.22
+ * @version 1.3.26 — last changed in release 1.3.26
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -325,8 +325,12 @@
   // lastActiveAt is stamped when a project BECOMES current. Entries written
   // before this field fall back to modifiedAt, so an existing library keeps
   // its previous ordering rather than jumping to the bottom.
+  //
+  // A recorded 0 means never active (a project added to Recents without being
+  // opened, #693): it sorts oldest, where a missing stamp falls back.
   function sortByLastActive(entries) {
-    const key = (e) => e.lastActiveAt || e.modifiedAt || e.createdAt || 0;
+    const key = (e) => (typeof e.lastActiveAt === 'number'
+      ? e.lastActiveAt : (e.modifiedAt || e.createdAt || 0));
     return entries.slice().sort((a, b) => key(b) - key(a));
   }
 
@@ -1606,7 +1610,10 @@
           createdAt: Date.parse(state.created) || now,
           lastDraftAt: 0,
           lastSavedAt: 0,
-          lastActiveAt: now, // a project being written IS the current one
+          // a project being written IS the current one — except one added to
+          // Recents without being opened (#693), which must not become what a
+          // reload lands on
+          lastActiveAt: stamps && stamps.active === false ? 0 : now,
         };
         lib.projects.push(entry);
       }
@@ -2260,7 +2267,11 @@
   //     them on the new timeline would cut twice.
   // parts: { html, captionsVtt, media: {name, data(Blob), mimeType,
   //          durationSeconds}, title }  →  Promise<Blob>
-  async function buildFlattenedProjectBlob(parts) {
+  // The new project a flattened export describes, as the parts a container
+  // or a library entry is written from: { state, json, safeName }. Shared by
+  // the download (buildFlattenedProjectBlob) and Add to Recents
+  // (addFlattenedProject, #693), so the two cannot describe it differently.
+  function flattenedProject(parts) {
     // parts.base: the state captured when the export started (#656), so a
     // container built after a long render describes the project that was
     // exported, not whatever the editor holds by then.
@@ -2296,12 +2307,49 @@
       throw new Error('The flattened project failed validation: '
         + valid.errors.map((e) => e.code).join(', '));
     }
+    return { state, json: serializeProjectJson(project), safeName };
+  }
+
+  async function buildFlattenedProjectBlob(parts) {
+    const { json, safeName } = flattenedProject(parts);
     return zipProject({
-      json: serializeProjectJson(project),
+      json,
       html: parts.html,
       captionsVtt: parts.captionsVtt || '',
       media: { name: safeName, data: parts.media.data },
     }, await loadJSZip(), 'blob');
+  }
+
+  // Add to Recents (#693): the same new project, written straight into the
+  // library as a project of its own — saved state, media and index entry —
+  // WITHOUT opening it, so the project on screen stays where it is. Its media
+  // is the rendered file, so it is independent of the project it came from.
+  // parts as for buildFlattenedProjectBlob → Promise<the new project's id>;
+  // throws when the library is unavailable or the write fails, leaving no
+  // half-written project behind.
+  async function addFlattenedProject(parts) {
+    if (!opfsAvailable) throw new Error('The project library is not available in this browser.');
+    const { state, json, safeName } = flattenedProject(parts);
+    const id = newProjectId();
+    try {
+      const dir = await getProjectDir(id, true);
+      await writeFileTo(dir, SAVED_FILE, JSON.stringify({
+        json,
+        html: parts.html,
+        captionsVtt: parts.captionsVtt ? parts.captionsVtt : null,
+      }));
+      const media = await getMediaDir(id, true);
+      await writeFileTo(media, safeName, parts.media.data);
+      const written = (await (await media.getFileHandle(safeName)).getFile()).size;
+      if (written !== parts.media.data.size) {
+        throw new Error('media write incomplete: ' + written + ' of ' + parts.media.data.size + ' bytes');
+      }
+      await touchLibraryEntry(id, state, { saved: true, active: false });
+    } catch (e) {
+      await deleteProjectDir(id);   // best-effort: an orphan beats a published bad project
+      throw e;
+    }
+    return id;
   }
 
   // Export Project (.hyperaudio): build the container and download it — the
@@ -4148,6 +4196,8 @@
       ownsCurrent: () => hasProjectLock,
       isEntryDirty,
       open: switchToProject,
+      addFlattened: addFlattenedProject,
+      available: () => opfsAvailable,
       rename: renameProject,
       setStarred: setProjectStarred,
       duplicate: duplicateProject,

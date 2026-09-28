@@ -1006,6 +1006,17 @@
   const zipRow = document.getElementById('export-zip-row');
   const zipCheck = document.getElementById('export-zip');
   const nameNote = document.getElementById('export-name-note');
+  const destRow = document.getElementById('export-dest-row');
+  const destRecents = document.getElementById('export-dest-recents');
+  const destDownload = document.getElementById('export-dest-download');
+  const openProjectBtn = document.getElementById('export-open-project');
+  // Add to Recents (#693): offered when the project library can take a new
+  // project, and there is a transcript to make one of
+  const libraryAvailable = () => !!(window.HyperaudioSave && window.HyperaudioSave.library
+    && typeof window.HyperaudioSave.library.addFlattened === 'function'
+    && window.HyperaudioSave.library.available());
+  const toRecents = () => destRecents !== null && destRecents.checked
+    && destRow !== null && destRow.style.display !== 'none';
   const srtRow = document.getElementById('export-srt-row');
   const srtCheck = document.getElementById('export-srt');
   const projectRow = document.getElementById('export-project-row');
@@ -1249,7 +1260,29 @@
         ? 'All exported files use this name. They arrive in one .zip, in a folder that keeps them together.'
         : 'All exported files use this name. The interactive transcript links the video by it — keep the downloads together in one folder.';
     }
+    applyDestination();
   };
+
+  // Added to Recents, nothing is downloaded: the downloads' extras and their
+  // zip do not apply, and the name is the new project's (#693).
+  const applyDestination = () => {
+    if (destRow === null) return;
+    const recents = toRecents();
+    if (recents) {
+      if (extrasBox !== null) extrasBox.style.display = 'none';
+      if (zipRow !== null) zipRow.style.display = 'none';
+      if (nameNote !== null) nameNote.textContent = 'The new project is named this. It appears in Recents; the project you have open stays open.';
+    }
+    startBtn.textContent = finished ? 'DONE' : (recents ? 'ADD TO RECENTS' : 'EXPORT');
+  };
+
+  // A finished run leaves a finished dialog (#693): the button becomes Done,
+  // which closes it, rather than a button that would repeat the same long job
+  // on a stray second click. The status line keeps what happened, and any
+  // change to a setting makes it an export button again, so exporting the
+  // same source in another format is one change away.
+  let finished = false;
+  const setFinished = (on) => { finished = on; applyDestination(); };
 
   const hasTranscript = () => {
     const t = document.getElementById('hypertranscript');
@@ -1341,6 +1374,14 @@
       sourceEntire.checked = true;
     }
 
+    setFinished(false);
+    formatSwapped = false;
+
+    // where the result goes (#693): Download unless changed, every time
+    if (destRow !== null) destRow.style.display = libraryAvailable() && hasTranscript() ? '' : 'none';
+    if (destDownload !== null) destDownload.checked = true;
+    if (openProjectBtn !== null) openProjectBtn.style.display = 'none';
+
     // a selection in the transcript is offered as a clip, and chosen (#689)
     clipRange = selectedClip(duration);
     if (clipRow !== null) clipRow.style.display = clipRange !== null ? 'flex' : 'none';
@@ -1428,6 +1469,8 @@
     // Everything the run needs, read before its first await (#656): from here
     // the editor may be edited or switched to another project, and none of
     // that reaches the outputs.
+    const recents = toRecents();
+    if (openProjectBtn !== null) openProjectBtn.style.display = 'none';
     const clip = clipChosen() ? clipRange : null;
     const edited = clip === null && sourceEdited.checked && !sourceEdited.disabled;
     const rate = exportRate();
@@ -1460,7 +1503,7 @@
       return;
     }
     const ctx = Object.freeze(captureContext({
-      sections, rate, dropStruck: edited || clip !== null, withProject: wantProject, clip,
+      sections, rate, dropStruck: edited || clip !== null, withProject: wantProject || recents, clip,
     }));
 
     try {
@@ -1485,6 +1528,38 @@
           : await exportEditedAudio(mb, fmt, ctx, setProgress);
       }
       const mediaName = `${baseName}.${fmt.ext}`;
+
+      // 1b. Add to Recents (#693): the render becomes a project of its own,
+      // written into the library without opening it; nothing is downloaded
+      if (recents) {
+        setStatus('Adding to Recents…');
+        const html = buildRetimedTranscriptHtml(ctx);
+        if (html === null) throw new Error('there is no transcript to make a project of');
+        const subs = genRetimedCaptions(ctx);
+        const dur = keptDuration(sections) / rate;
+        const title = rawName || exportBaseName();
+        const id = await window.HyperaudioSave.library.addFlattened({
+          html,
+          captionsVtt: subs && subs.vtt ? subs.vtt : '',
+          media: {
+            name: mediaName,
+            data: blob,
+            mimeType: fmt.mime,
+            durationSeconds: Number.isFinite(dur) ? Math.round(dur * 1000) / 1000 : 0,
+          },
+          title,
+          base: ctx.project,   // the state captured at the click (#656)
+        });
+        setProgress(1);
+        setStatus(`Added to Recents as “${title}”.`);
+        setFinished(true);
+        if (openProjectBtn !== null) {
+          openProjectBtn.dataset.projectId = id;
+          openProjectBtn.style.display = '';
+        }
+        return;
+      }
+
       const outputs = [{ blob, name: mediaName }];
 
       // 2. caption sidecars + interactive transcript, all re-timed to the export
@@ -1597,6 +1672,7 @@
 
       setProgress(1);
       setStatus('Done — check your downloads.');
+      setFinished(true);
     } catch (e) {
       console.error(e);
       setStatus('Export failed: ' + (e && e.message ? e.message : e));
@@ -1608,6 +1684,37 @@
   };
 
   modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
+  // A project kept in the library is better small (#693): choosing Add to
+  // Recents turns WAV into M4A, and Download turns it back — but only a WAV
+  // this rule changed; a format someone picked is theirs.
+  let formatSwapped = false;
+  const followDestinationFormat = () => {
+    const has = (id) => formatSelect.querySelector(`option[value="${id}"]`) !== null;
+    if (toRecents()) {
+      if (formatSelect.value === 'wav' && has('m4a')) {
+        formatSelect.value = 'm4a';
+        formatSwapped = true;
+      }
+    } else if (formatSwapped && formatSelect.value === 'm4a') {
+      formatSelect.value = 'wav';
+      formatSwapped = false;
+    }
+    updateBurnVisibility();
+    updateVttNote();
+  };
+  formatSelect.addEventListener('change', () => { formatSwapped = false; });
+  [destDownload, destRecents].forEach((radio) => {
+    if (radio !== null) radio.addEventListener('change', () => { updateZipVisibility(); followDestinationFormat(); });
+  });
+  if (openProjectBtn !== null) {
+    openProjectBtn.addEventListener('click', async () => {
+      const id = openProjectBtn.dataset.projectId;
+      if (!id || !window.HyperaudioSave || !window.HyperaudioSave.library) return;
+      modalToggle.checked = false;
+      modalToggle.dispatchEvent(new Event('change'));
+      await window.HyperaudioSave.library.open(id);
+    });
+  }
   // the zip offer tracks how many files the run will produce, so it has to
   // re-evaluate whenever a sidecar is toggled (and its own state changes the note)
   [retimeCheck, vttCheck, srtCheck, projectCheck, zipCheck].forEach((el) => {
@@ -1645,7 +1752,17 @@
   [burnCheck, retimeCheck, vttCheck, srtCheck, projectCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', saveExportOpts);
   });
-  startBtn.addEventListener('click', runExport);
+  startBtn.addEventListener('click', () => {
+    if (!finished) { runExport(); return; }
+    modalToggle.checked = false;
+    modalToggle.dispatchEvent(new Event('change'));
+  });
+  const modalBox = startBtn.closest('.modal-box');
+  if (modalBox !== null) {
+    const reopen = () => { if (finished) setFinished(false); };
+    modalBox.addEventListener('change', reopen);
+    modalBox.addEventListener('input', reopen);
+  }
 
   // The caption pipeline, exposed (#634). Exports are heavy to drive, and
   // these are the pure parts of what an export says: what the cues are, where
