@@ -295,16 +295,13 @@
     }
     if (!startSpan || !endSpan) return;
 
-    let startIndex = allSpans.indexOf(startSpan);
+    // coversText already leaves out a word the selection only touches (its
+    // trailing space, say), so the spans from first to last covered are the
+    // selection. A loop here once skipped one WORD per leading SPACE of the
+    // selected text, and dropped up to all but the last word of a selection
+    // that began in the indentation between spans (#701).
+    const startIndex = allSpans.indexOf(startSpan);
     const endIndex = allSpans.indexOf(endSpan);
-
-    // Trim leading spaces — if the selection only touches the trailing space
-    // of a word, that word shouldn't be struck.
-    let selectedText = range.toString();
-    while (selectedText.startsWith(' ') && startIndex < endIndex) {
-      startIndex++;
-      selectedText = selectedText.slice(1);
-    }
 
     const selectedSpans = allSpans.slice(startIndex, endIndex + 1);
     const action = selectedSpans.every(isStruck) ? unstrikeElement : strikeoutElement;
