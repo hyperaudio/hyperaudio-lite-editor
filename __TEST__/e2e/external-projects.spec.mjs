@@ -157,3 +157,64 @@ test('no hooks, no change (#604)', async ({ page }) => {
   await expect.poll(() => panel(page)).toEqual([{ name: 'How to use the Editor', external: false }]);
   expect(await page.locator('.recents-row-external').count()).toBe(0);
 });
+
+// #694 — a host may say more about a row than that it exists: that it is
+// being worked on, waiting, failed, or cannot be reached right now.
+const badges = (page) => page.evaluate(() =>
+  [...document.querySelectorAll('#file-picker .recents-row-external')].map((li) => {
+    const b = li.querySelector('.recents-external-badge');
+    return {
+      name: li.querySelector('.file-item').textContent.trim(),
+      badge: b.textContent.trim(),
+      title: b.getAttribute('title'),
+      spinner: b.querySelector('.recents-transcribing-spinner') !== null,
+    };
+  }));
+
+test('a host row can carry a state, shown as its badge with the host\'s label (#694)', async ({ page }) => {
+  await withHost(page, () => {
+    window.hyperaudioExternalProjects = async () => ([
+      { id: 'ext:plain', title: 'Interview', modified: 9_000_000_000_004 },
+      { id: 'ext:work', title: 'Keynote', modified: 9_000_000_000_003, state: 'working', stateLabel: 'Transcribing…' },
+      { id: 'ext:queue', title: 'Q&A', modified: 9_000_000_000_002, state: 'queued' },
+      { id: 'ext:fail', title: 'Panel', modified: 9_000_000_000_001, state: 'failed', stateLabel: 'Could not read the media' },
+      { id: 'ext:gone', title: 'Archive', modified: 9_000_000_000_000, state: 'unavailable' },
+      { id: 'ext:new', title: 'Future', modified: 1, state: 'teleporting' },
+    ]);
+  });
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect.poll(() => badges(page)).toEqual([
+    { name: 'Interview', badge: 'not opened', title: null, spinner: false },
+    { name: 'Keynote', badge: 'working', title: 'Transcribing…', spinner: true },
+    { name: 'Q&A', badge: 'queued', title: 'Waiting its turn', spinner: false },
+    { name: 'Panel', badge: 'failed', title: 'Could not read the media', spinner: false },
+    { name: 'Archive', badge: 'unavailable', title: 'This file can’t be opened right now', spinner: false },
+    // a state this editor does not know is ignored: the row is as it was
+    { name: 'Future', badge: 'not opened', title: null, spinner: false },
+  ]);
+  // still no actions, and still the host's to open
+  expect(await page.locator('.recents-row-external .recents-kebab').count()).toBe(0);
+});
+
+test('a host changing a row\'s state redraws it when it says so (#694)', async ({ page }) => {
+  await withHost(page, () => {
+    window.__state = 'queued';
+    window.hyperaudioExternalProjects = async () => ([
+      { id: 'ext:one', title: 'Keynote', modified: 9_000_000_000_000, state: window.__state },
+    ]);
+  });
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect.poll(async () => (await badges(page))[0] && (await badges(page))[0].badge).toBe('queued');
+  await page.evaluate(() => {
+    window.__state = 'working';
+    document.dispatchEvent(new CustomEvent('hyperaudioLibraryChanged'));
+  });
+  await expect.poll(async () => (await badges(page))[0].badge).toBe('working');
+  await page.evaluate(() => {
+    window.__state = undefined;   // finished: back to a plain row
+    document.dispatchEvent(new CustomEvent('hyperaudioLibraryChanged'));
+  });
+  await expect.poll(async () => (await badges(page))[0].badge).toBe('not opened');
+});

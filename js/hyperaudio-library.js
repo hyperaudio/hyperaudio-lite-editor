@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.27 — last changed in release 1.3.27
+ * @version 1.3.28 — last changed in release 1.3.28
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -390,7 +390,20 @@
   // settles after one extra render rather than looping.
   let pendingExternal = [];
   const externalSignature = (list) =>
-    list.map((e) => e.id + '\u0000' + e.modifiedAt + '\u0000' + e.name).join('\u0001');
+    list.map((e) => [e.id, e.modifiedAt, e.name, e.state || '', e.stateLabel || ''].join('\u0000')).join('\u0001');
+
+  // What a host may say about a row beyond "it exists" (#694): a small closed
+  // set, each with the badge it shows and the tooltip used when the host
+  // gives none. An unknown value is ignored, so a host can send a newer
+  // vocabulary to an older editor safely. A host whose rows change — a file
+  // finishing, failing, coming back — asks for a redraw by dispatching
+  // 'hyperaudioLibraryChanged' on document.
+  const EXTERNAL_STATES = Object.freeze({
+    working: { badge: 'working', title: 'In progress' },
+    queued: { badge: 'queued', title: 'Waiting its turn' },
+    failed: { badge: 'failed', title: 'Something went wrong with this file' },
+    unavailable: { badge: 'unavailable', title: 'This file can\u2019t be opened right now' },
+  });
 
   async function externalRows(knownIds) {
     const hook = window.hyperaudioExternalProjects;
@@ -412,6 +425,8 @@
         modifiedAt: Number(e.modified) || 0,
         starred: false,
         external: true,
+        state: Object.prototype.hasOwnProperty.call(EXTERNAL_STATES, e.state) ? e.state : null,
+        stateLabel: typeof e.stateLabel === 'string' ? e.stateLabel.trim().slice(0, 120) : '',
       }));
   }
 
@@ -478,10 +493,18 @@
         // every action in that menu would be a lie about something the editor
         // does not hold.
         const extName = escapeMarkup(entry.name || 'project');
+        // a state the host gave (#694) replaces "not opened"; its label, or
+        // the state's own wording, is the badge's tooltip
+        const state = entry.state ? EXTERNAL_STATES[entry.state] : null;
+        const badge = state === null
+          ? '<span class="recents-external-badge">not opened</span>'
+          : `<span class="recents-external-badge recents-external-${entry.state}" title="${escapeMarkup(entry.stateLabel || state.title)}">`
+            + (entry.state === 'working' ? '<span class="recents-transcribing-spinner" aria-hidden="true"></span>' : '')
+            + `${state.badge}</span>`;
         filePicker.insertAdjacentHTML('beforeend',
-          `<li class="recents-row recents-row-external">`
+          `<li class="recents-row recents-row-external${state === null ? '' : ` recents-row-state-${entry.state}`}">`
           + `<a class="file-item" data-external-id="${escapeMarkup(entry.id)}">${extName}</a>`
-          + `<span class="recents-actions"><span class="recents-external-badge">not opened</span></span>`
+          + `<span class="recents-actions">${badge}</span>`
           + `</li>`);
         return;
       }

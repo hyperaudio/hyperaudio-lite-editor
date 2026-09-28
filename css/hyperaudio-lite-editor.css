@@ -1753,6 +1753,31 @@ label[data-a11y-wired]:focus-visible {
   color: oklch(var(--bc) / 0.55);
 }
 
+/* A state the host gave a contributed row (#694). Working carries the same
+   small spinner as the editor's own in-progress row; failed takes the
+   theme's error colour; unavailable dims the row further, since clicking it
+   is unlikely to work until the host says otherwise. */
+#file-picker .recents-external-badge.recents-external-working {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-style: solid;
+  color: oklch(var(--bc) / 0.7);
+}
+#file-picker .recents-external-badge.recents-external-working .recents-transcribing-spinner {
+  width: 9px;
+  height: 9px;
+  border-width: 1.5px;
+}
+#file-picker .recents-external-badge.recents-external-failed {
+  border-style: solid;
+  border-color: oklch(var(--er) / 0.6);
+  color: oklch(var(--er));
+}
+#file-picker .recents-row-state-unavailable .file-item {
+  opacity: 0.4;
+}
+
 /* The in-progress transcription row (#525): the same anatomy and widths as a
    normal row, with a spinner in the kebab's slot as the wordless "something
    is happening" signal — always visible, where a kebab reveals on hover. */
