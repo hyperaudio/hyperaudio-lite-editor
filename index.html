@@ -134,7 +134,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.25">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.27">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -1038,6 +1038,34 @@ If you are creating an open source application under a license compatible with t
         <input type="checkbox" id="export-burn" class="toggle toggle-primary" />
         <span class="label-text">Burn captions into the video (word-level highlight)</span>
       </label>
+      <!-- Portrait and square video for Reels, TikTok and Shorts (#690):
+           video formats only. The preview is the player's current frame as
+           the export will frame it. -->
+      <div id="export-frame-row" style="display:none; margin-top:14px">
+        <label class="label-text" for="export-aspect">Aspect ratio</label>
+        <select id="export-aspect" class="select select-bordered select-sm w-full" style="margin-top:4px">
+          <option value="original">Original</option>
+          <option value="portrait">Portrait 9:16 — Reels, TikTok, Shorts</option>
+          <option value="square">Square 1:1</option>
+        </select>
+        <div id="export-framing" style="display:none; gap:14px; align-items:flex-start; margin-top:10px">
+          <canvas id="export-frame-preview" width="90" height="160" style="flex:none; border-radius:4px; background:#000" aria-label="Preview of the framing"></canvas>
+          <div style="display:flex; flex-direction:column; gap:8px; flex:1">
+            <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
+              <input type="radio" name="export-fit" id="export-fit-crop" class="radio radio-primary radio-sm" checked />
+              <span class="label-text">Crop to fill</span>
+            </label>
+            <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
+              <input type="radio" name="export-fit" id="export-fit-fit" class="radio radio-primary radio-sm" />
+              <span class="label-text">Fit the whole picture</span>
+            </label>
+            <label id="export-position-row" style="display:flex; flex-direction:column; gap:4px">
+              <span class="label-text" style="font-size:85%; opacity:0.75">What to keep: left to right</span>
+              <input type="range" id="export-position" min="0" max="100" value="50" class="range range-xs range-primary" aria-label="Crop position" />
+            </label>
+          </div>
+        </div>
+      </div>
       <!-- The extras collapse (#616): everything here is a file that comes
            ALONGSIDE the media, so the modal stays about the media itself.
            These options are remembered across sessions, so the summary
@@ -1290,7 +1318,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/transcript-bench.js?v=1.3.0"></script>
   <script src="js/stream-stretch.js?v=0.8.6"></script>
   <script src="js/transcript-selection.js?v=1.3.26"></script>
-  <script src="js/media-export.js?v=1.3.26"></script>
+  <script src="js/media-export.js?v=1.3.27"></script>
   <!-- speaker-coloured caption downloads (#536) -->
   <script src="js/caption-speaker-colours.js?v=1.3.21"></script>
   <!-- word-level / karaoke VTT export (#387 part 1) -->
@@ -1310,7 +1338,7 @@ If you are creating an open source application under a license compatible with t
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
   <script src="js/hyperaudio-save.js?v=1.3.26"></script>
   <script src="js/tpme.js?v=1.3.22"></script>
-  <script src="js/hyperaudio-library.js?v=1.3.21"></script>
+  <script src="js/hyperaudio-library.js?v=1.3.27"></script>
   <script src="js/media-first-frame.js?v=1.3.20"></script>
   <script src="js/media-posters.js?v=1.3.20"></script>
   <!-- transcript document exports: TXT / Markdown (#467) -->
