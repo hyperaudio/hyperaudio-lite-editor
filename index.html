@@ -34,6 +34,9 @@ If you are creating an open source application under a license compatible with t
        by js/media-export.js and by @mediabunny/mp3-encoder's internal
        `import "mediabunny"` (the map guarantees one shared module instance).
        Versions are lockstep: mediabunny and its mp3-encoder release together. -->
+  <!-- the embeddable demo (#691): before every other script, since it keeps
+       storage apart and trims the interface -->
+  <script src="js/demo.js"></script>
   <script type="importmap">
   {
     "imports": {
@@ -1332,7 +1335,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/a11y.js?v=0.8.3"></script>
 
   <!-- service worker script for PWA -->
-  <script src="js/editor-service-worker.js?v=1.3.21"></script>
+  <!-- demo (#691): no service worker; js/demo.js removes one left installed -->
   <script type="module" src="js/editor-audio-cut.js?v=1.3.27"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
