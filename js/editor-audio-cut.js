@@ -28,6 +28,11 @@
       applyStrikeThroughToSelection();
       rebuildAudioDataArray();
       ensureSkipListeners();
+      // the captions follow what is said: struck words leave them, un-struck
+      // ones come back (unless the captions were edited by hand)
+      if (typeof window.hyperaudioRefreshCaptionsFromTranscript === 'function') {
+        window.hyperaudioRefreshCaptionsFromTranscript();
+      }
     };
     if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
       window.transcriptGateway.mutate(applyStrike, { origin: 'strike' });

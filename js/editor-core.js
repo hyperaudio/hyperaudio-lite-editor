@@ -1330,7 +1330,10 @@
       // consuming redo or creating a visible step.
       window.hyperaudioNormalizeAfterHistoryRestore = function () {
         pendingGlobal = true;
-        return maintenance.flush('history-restore-normalize', { force: true });
+        const flushed = maintenance.flush('history-restore-normalize', { force: true });
+        // an undone or redone strikeout changes the words the captions say
+        window.hyperaudioRefreshCaptionsFromTranscript();
+        return flushed;
       };
 
       //longpress to set playhead on mobile
@@ -1621,6 +1624,20 @@
   // finds nothing. The word-level VTT did, and wrote a bare header. One answer
   // for every reader outside this module, matching the rule
   // captionSourceWithoutStruckWords already follows.
+  // A strikeout, or undoing one, changes what is said without an edit in the
+  // transcript's text box, so the live-edit pass (which regenerates captions
+  // only while the transcript has focus) never saw it. The caption track kept
+  // the struck words, and an export with cuts burned them in. Captions follow
+  // the transcript unless they have been edited by hand.
+  window.hyperaudioRefreshCaptionsFromTranscript = function () {
+    if (updateCaptionsFromTranscript !== true) return false;
+    const player = document.querySelector('#hyperplayer');
+    const track = document.querySelector('#hyperplayer-vtt');
+    if (player === null || track === null) return false;
+    generateCaptionsFromTranscript(null, player.src, track);
+    return true;
+  };
+
   window.currentTranscriptRoot = function currentTranscriptRoot() {
     const live = document.querySelector('#hypertranscript');
     if (captionMode !== true) return live;
