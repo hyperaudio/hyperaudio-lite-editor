@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.21 — last changed in release 1.3.21
+ * @version 1.3.27 — last changed in release 1.3.27
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -158,7 +158,18 @@
           img.className = 'recents-popout-poster';
           img.alt = '';
           img.src = url;
-          img.addEventListener('load', () => { if (popoutEl === owner) thumb.replaceChildren(img); });
+          img.addEventListener('load', () => {
+            if (popoutEl !== owner) return;
+            thumb.replaceChildren(img);
+            // a portrait or square picture keeps its own proportions (#690)
+            // rather than being cropped to a band of the 16:9 box, which
+            // stays for landscape so the card does not reflow there
+            if (img.naturalWidth > 0 && img.naturalHeight > img.naturalWidth * 0.8) {
+              thumb.classList.add('is-tall');
+              thumb.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
+              placePopout(rowEl);   // now taller: keep it on screen
+            }
+          });
         }).catch(() => {});
       }
     }
@@ -183,6 +194,13 @@
       popoutEl.appendChild(duration);
     }
     document.body.appendChild(popoutEl);
+    placePopout(rowEl);
+  }
+
+  // Beside the panel, level with the row, and kept inside the window
+  function placePopout(rowEl) {
+    const pane = document.getElementById('recents-pane');
+    if (popoutEl === null || pane === null) return;
     const paneRect = pane.getBoundingClientRect();
     const rowRect = rowEl.getBoundingClientRect();
     popoutEl.style.left = Math.round(paneRect.right) + 'px'; // flush with the panel's right edge

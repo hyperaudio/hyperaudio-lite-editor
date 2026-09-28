@@ -247,3 +247,54 @@ test('a stored black poster is captured again, so an old black thumbnail is not 
   const luma = await meanLuma(page, 'window.__after');
   expect(luma).toBeGreaterThan(100);
 });
+
+// #690 — a portrait poster keeps its proportions in the hover card, up to
+// 240px tall, instead of being cropped to a band of the 16:9 box; landscape
+// keeps the 16:9 box.
+test('the hover card shows a portrait poster whole, and a landscape one as before (#690)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(async () => {
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    for (let i = 0; i < 50 && window.HyperaudioSave.library.currentId() === null; i += 1) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  });
+  const id = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  const plant = (w, h) => page.evaluate(async ([pid, width, height]) => {
+    const c = new OffscreenCanvas(width, height);
+    const g = c.getContext('2d');
+    g.fillStyle = '#3366cc'; g.fillRect(0, 0, width, height);
+    const jpeg = await c.convertToBlob({ type: 'image/jpeg' });
+    const root = await navigator.storage.getDirectory();
+    const dir = await (await root.getDirectoryHandle('work')).getDirectoryHandle(pid);
+    const fh = await dir.getFileHandle('poster.jpg', { create: true });
+    const out = await fh.createWritable(); await out.write(jpeg); await out.close();
+  }, [id, w, h]);
+  const thumbBox = async () => {
+    await page.mouse.move(10, 10);
+    await page.hover('#file-picker .recents-row .file-item');
+    await expect(page.locator('#recents-popout img.recents-popout-poster')).toBeVisible({ timeout: 5000 });
+    return page.evaluate(() => {
+      const t = document.querySelector('#recents-popout .recents-popout-thumb');
+      const r = t.getBoundingClientRect();
+      const card = document.getElementById('recents-popout').getBoundingClientRect();
+      return { tall: t.classList.contains('is-tall'), w: r.width, h: r.height, cardBottom: card.bottom, vh: window.innerHeight };
+    });
+  };
+
+  await plant(180, 320);
+  const portrait = await thumbBox();
+  expect(portrait.tall).toBe(true);
+  expect(portrait.h).toBeCloseTo(240, 0);
+  expect(portrait.w / portrait.h).toBeCloseTo(9 / 16, 1);
+  expect(portrait.cardBottom).toBeLessThanOrEqual(portrait.vh);   // re-placed on screen
+
+  // posters are cached in memory per project: a reload reads the new one
+  await plant(320, 180);
+  await page.reload();
+  await page.waitForSelector('#file-picker .recents-row .file-item');
+  const landscape = await thumbBox();
+  expect(landscape.tall).toBe(false);
+  expect(landscape.w / landscape.h).toBeCloseTo(16 / 9, 1);
+});

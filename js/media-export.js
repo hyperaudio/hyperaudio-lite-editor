@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.26 — last changed in release 1.3.26
+ * @version 1.3.27 — last changed in release 1.3.27
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -170,7 +170,7 @@
   // sections/rate/dropStruck are the retiming inputs every helper below
   // takes; withProject adds the project metadata the flattened container
   // needs, which costs a transcript parse and is only read when asked for.
-  const captureContext = ({ sections, rate, dropStruck, withProject, clip }) => {
+  const captureContext = ({ sections, rate, dropStruck, withProject, clip, frame }) => {
     const save = window.HyperaudioSave;
     const root = typeof window.currentTranscriptRoot === 'function'
       ? window.currentTranscriptRoot() : document.getElementById('hypertranscript');
@@ -181,6 +181,8 @@
       // a clip's selected words, by their own times (unpadded): { from, to }
       // the first word's start and the last word's end; null for no clip
       clip: clip ? { from: clip.from, to: clip.to } : null,
+      // portrait/square framing for video (#690): { aspect, fit, position }
+      frame: frame ? { aspect: frame.aspect, fit: frame.fit, position: frame.position } : null,
       transcript: root !== null && root !== undefined ? root.cloneNode(true) : null,
       captionsVtt: save && typeof save.getCaptionsVtt === 'function' ? save.getCaptionsVtt() : '',
       lineLengths: typeof window.captionLineLengths === 'function'
@@ -517,6 +519,19 @@
   // Legibility comes from a soft shadow + a THIN outline: a thick stroke eats
   // the fill on slender glyph strokes and bleeds into letter counters (the holes
   // in o/e/a/d), so it is kept small and the fill is drawn shadow-free on top.
+  // Where burned-in captions go (#690): one layout for every aspect. Type is
+  // sized from the frame's shorter side, so landscape is as it always was and
+  // a portrait frame gets the same size rather than one scaled to its height;
+  // a caption line of the usual length then fits the column in any frame.
+  // The one difference: in a tall frame the lines sit higher, clear of the
+  // text TikTok, Instagram Reels and Shorts draw over the bottom of the video.
+  const captionLayout = (w, h) => ({
+    fontSize: Math.max(16, Math.round(Math.min(w, h) * 0.055)),
+    maxWidth: w * 0.86,
+    bottomMargin: h * (h > w * 1.25 ? 0.18 : 0.10),
+    centreX: w / 2,
+  });
+
   const drawCaptionOverlay = (ctx, t, chunks, w, h) => {
     const startOf = (c) => (Array.isArray(c) ? c[0].start : c.start);
     let active = null;
@@ -542,13 +557,14 @@
       seen.add(word);
     }
 
-    const fontSize = Math.max(16, Math.round(h * 0.055));
+    const layout = captionLayout(w, h);
+    const fontSize = layout.fontSize;
     ctx.save();
     ctx.font = `700 ${fontSize}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
     ctx.textBaseline = 'alphabetic';
     ctx.lineJoin = 'round';
     const spaceW = ctx.measureText(' ').width;
-    const maxWidth = w * 0.86;
+    const maxWidth = layout.maxWidth;
 
     // the cue's own lines, each wrapped only if it overflows the safe width
     const lines = [];
@@ -569,13 +585,12 @@
     }
 
     const lineH = fontSize * 1.25;
-    const bottomMargin = h * 0.10;                       // lower-third, safe-area
-    let y = h - bottomMargin - (lines.length - 1) * lineH;
+    let y = h - layout.bottomMargin - (lines.length - 1) * lineH;
     const strokeW = Math.max(2, fontSize * 0.06);
     for (const ln of lines) {
       let total = 0;
       ln.forEach((e, i) => { total += (i ? spaceW : 0) + ctx.measureText(e.text).width; });
-      let x = (w - total) / 2;                            // centre each line
+      let x = layout.centreX - total / 2;                 // centre each line
       for (let i = 0; i < ln.length; i++) {
         if (i) x += spaceW;
         const word = ln[i];
@@ -748,6 +763,58 @@
   // Edited media with video: decode frames per kept section and re-timestamp
   // them onto the edited timeline; audio as above (its appended timestamps
   // already match the edited timeline).
+  // Portrait and square output (#690). The output's size, and how each
+  // source frame is placed in it: 'crop' fills the frame, cutting the sides
+  // (or top and bottom) with `position` 0..1 choosing what is kept; 'fit'
+  // shows the whole picture over a blurred, darkened copy of itself.
+  const FRAME_SIZES = { portrait: { w: 1080, h: 1920 }, square: { w: 1080, h: 1080 } };
+  const outputSize = (frame, srcW, srcH) =>
+    (frame && FRAME_SIZES[frame.aspect]) || { w: srcW, h: srcH };
+
+  // The part of a srcW x srcH frame that fills a W x H output: [sx, sy, sw, sh]
+  const coverRegion = (srcW, srcH, W, H, position) => {
+    const scale = Math.max(W / srcW, H / srcH);
+    const sw = Math.min(srcW, W / scale);
+    const sh = Math.min(srcH, H / scale);
+    const p = Math.min(1, Math.max(0, position === undefined ? 0.5 : position));
+    return [(srcW - sw) * p, (srcH - sh) * p, sw, sh];
+  };
+  // Where a whole srcW x srcH frame sits inside a W x H output: [dx, dy, dw, dh]
+  const containRegion = (srcW, srcH, W, H) => {
+    const scale = Math.min(W / srcW, H / srcH);
+    const dw = srcW * scale;
+    const dh = srcH * scale;
+    return [(W - dw) / 2, (H - dh) / 2, dw, dh];
+  };
+
+  // Draws one decoded sample into the output canvas as the frame settings say.
+  // The blur behind a fitted picture is the frame drawn tiny and scaled back
+  // up — cheap per frame, and independent of canvas filter support.
+  const makeFrameDrawer = (frame, srcW, srcH, W, H) => {
+    if (!frame || frame.aspect === 'original' || !FRAME_SIZES[frame.aspect]) {
+      return (sample, c) => sample.draw(c, 0, 0, W, H);
+    }
+    if (frame.fit !== 'fit') {
+      const [sx, sy, sw, sh] = coverRegion(srcW, srcH, W, H, frame.position);
+      return (sample, c) => sample.draw(c, sx, sy, sw, sh, 0, 0, W, H);
+    }
+    const bg = document.createElement('canvas');
+    bg.width = Math.max(8, Math.round(W / 24));
+    bg.height = Math.max(8, Math.round(H / 24));
+    const bgCtx = bg.getContext('2d');
+    const [bx, by, bw, bh] = coverRegion(srcW, srcH, bg.width, bg.height, 0.5);
+    const [dx, dy, dw, dh] = containRegion(srcW, srcH, W, H);
+    return (sample, c) => {
+      sample.draw(bgCtx, bx, by, bw, bh, 0, 0, bg.width, bg.height);
+      c.imageSmoothingEnabled = true;
+      c.imageSmoothingQuality = 'high';
+      c.drawImage(bg, 0, 0, W, H);
+      c.fillStyle = 'rgba(0,0,0,0.45)';
+      c.fillRect(0, 0, W, H);
+      sample.draw(c, 0, 0, srcW, srcH, dx, dy, dw, dh);
+    };
+  };
+
   const exportEditedVideo = async (mb, fmt, ctx, onProgress, captions) => {
     const { sections, rate } = ctx;
     const input = await makeInput(mb, ctx);
@@ -763,13 +830,15 @@
     // the output timestamps for the edited timeline.
     const vSink = new mb.VideoSampleSink(vTrack);
     const probe = await vSink.getSample(sections[0].start);
-    const width = (probe && (probe.displayWidth || probe.codedWidth)) || 640;
-    const height = (probe && (probe.displayHeight || probe.codedHeight)) || 360;
+    const srcW = (probe && (probe.displayWidth || probe.codedWidth)) || 640;
+    const srcH = (probe && (probe.displayHeight || probe.codedHeight)) || 360;
     if (probe) probe.close();
+    const { w: width, h: height } = outputSize(ctx.frame, srcW, srcH);
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx2d = canvas.getContext('2d');
+    const drawFrame = makeFrameDrawer(ctx.frame, srcW, srcH, width, height);
 
     const vSource = new mb.CanvasSource(canvas, { codec: fmt.vcodec, bitrate: videoBitrate(mb) });
     output.addVideoTrack(vSource);
@@ -801,7 +870,7 @@
             if (t <= prevT) t = prevT + 0.001;
             prevT = t;
             const frameDur = Math.max(sample.duration || 1 / 30, 0.001) / rate;
-            sample.draw(ctx2d, 0, 0, width, height);
+            drawFrame(sample, ctx2d);
             sample.close();
             closed = true;
             if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
@@ -1292,10 +1361,101 @@
   // Burn-in is a video-only, frame-by-frame operation and needs a transcript to
   // draw. Offer it only when both hold (#387 part 2).
   const updateBurnVisibility = () => {
+    updateFrameVisibility();
     if (burnRow === null) return;
     const fmt = FORMATS.find((f) => f.id === formatSelect.value);
     const show = fmt && fmt.kind === 'video' && hasTranscript();
     burnRow.style.display = show ? 'flex' : 'none';
+  };
+
+  // Portrait and square (#690): offered for video formats
+  const frameRow = document.getElementById('export-frame-row');
+  const aspectSelect = document.getElementById('export-aspect');
+  const framingBox = document.getElementById('export-framing');
+  const fitCrop = document.getElementById('export-fit-crop');
+  const fitFit = document.getElementById('export-fit-fit');
+  const positionRow = document.getElementById('export-position-row');
+  const positionInput = document.getElementById('export-position');
+  const framePreview = document.getElementById('export-frame-preview');
+  const videoChosen = () => {
+    const fmt = FORMATS.find((f) => f.id === formatSelect.value);
+    return !!(fmt && fmt.kind === 'video');
+  };
+  // what the export will do with the picture, or null for no change
+  const chosenFrame = () => {
+    if (frameRow === null || aspectSelect === null || !videoChosen()) return null;
+    if (!FRAME_SIZES[aspectSelect.value]) return null;
+    return {
+      aspect: aspectSelect.value,
+      fit: fitFit !== null && fitFit.checked ? 'fit' : 'crop',
+      position: positionInput !== null ? Number(positionInput.value) / 100 : 0.5,
+    };
+  };
+  // The player's current frame, framed as the export will frame it, with the
+  // same geometry as the export's. It is drawn from a hidden copy of the
+  // video seeked to the player's position: a video that has loaded but not
+  // yet played or seeked has no decoded picture to draw, which is just how
+  // the player sits after a project opens.
+  let previewVideo = null;
+  let previewReady = false;
+  const previewSource = () => {
+    const player = document.getElementById('hyperplayer');
+    const src = player !== null ? (player.currentSrc || player.src) : '';
+    if (!src) return null;
+    const at = Math.max(0.1, player.currentTime || 0);
+    if (previewVideo === null || previewVideo.dataset.src !== src) {
+      previewVideo = document.createElement('video');
+      previewVideo.muted = true;
+      previewVideo.preload = 'auto';
+      previewVideo.playsInline = true;
+      previewVideo.dataset.src = src;
+      previewReady = false;
+      previewVideo.addEventListener('seeked', () => { previewReady = true; drawFramePreview(); });
+      previewVideo.addEventListener('loadedmetadata', () => {
+        previewVideo.currentTime = Math.min(at, Math.max(0, previewVideo.duration - 0.05));
+      });
+      previewVideo.src = src;
+    } else if (previewReady && Math.abs(previewVideo.currentTime - at) > 0.5
+        && Number.isFinite(previewVideo.duration)) {
+      previewReady = false;
+      previewVideo.currentTime = Math.min(at, Math.max(0, previewVideo.duration - 0.05));
+    }
+    return previewReady ? previewVideo : null;
+  };
+  const drawFramePreview = () => {
+    const frame = chosenFrame();
+    if (framePreview === null || frame === null) return;
+    const size = FRAME_SIZES[frame.aspect];
+    const pw = frame.aspect === 'portrait' ? 90 : 120;
+    const ph = Math.round(pw * size.h / size.w);
+    framePreview.width = pw;
+    framePreview.height = ph;
+    const c = framePreview.getContext('2d');
+    c.fillStyle = '#000';
+    c.fillRect(0, 0, pw, ph);
+    const video = previewSource();
+    if (video === null || !video.videoWidth) return;
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (frame.fit === 'fit') {
+      const [bx, by, bw, bh] = coverRegion(vw, vh, pw, ph, 0.5);
+      c.drawImage(video, bx, by, bw, bh, 0, 0, pw, ph);
+      c.fillStyle = 'rgba(0,0,0,0.45)';
+      c.fillRect(0, 0, pw, ph);
+      const [dx, dy, dw, dh] = containRegion(vw, vh, pw, ph);
+      c.drawImage(video, 0, 0, vw, vh, dx, dy, dw, dh);
+    } else {
+      const [sx, sy, sw, sh] = coverRegion(vw, vh, pw, ph, frame.position);
+      c.drawImage(video, sx, sy, sw, sh, 0, 0, pw, ph);
+    }
+  };
+  const updateFrameVisibility = () => {
+    if (frameRow === null) return;
+    frameRow.style.display = videoChosen() ? '' : 'none';
+    const frame = chosenFrame();
+    if (framingBox !== null) framingBox.style.display = frame !== null ? 'flex' : 'none';
+    if (positionRow !== null) positionRow.style.display = frame !== null && frame.fit === 'crop' ? 'flex' : 'none';
+    drawFramePreview();
   };
 
   // Persist the option toggles so the user's choices stick across sessions.
@@ -1310,6 +1470,9 @@
     try {
       window.localStorage.setItem(EXPORT_OPTS_KEY, JSON.stringify({
         burn: burnCheck.checked,
+        aspect: aspectSelect !== null ? aspectSelect.value : 'original',
+        fit: fitFit !== null && fitFit.checked ? 'fit' : 'crop',
+        position: positionInput !== null ? Number(positionInput.value) : 50,
         adjust: adjustCheck !== null && adjustCheck.checked,
         speed: adjustCheck !== null ? clampRate(parseFloat(speedInput.value)) : 1,
         retime: retimeCheck.checked,
@@ -1401,6 +1564,12 @@
     // restore the user's last export-option choices (default: all off)
     const opts = loadExportOpts();
     burnCheck.checked = opts.burn === true;
+    if (aspectSelect !== null) aspectSelect.value = FRAME_SIZES[opts.aspect] ? opts.aspect : 'original';
+    if (fitFit !== null && fitCrop !== null) {
+      fitFit.checked = opts.fit === 'fit';
+      fitCrop.checked = opts.fit !== 'fit';
+    }
+    if (positionInput !== null) positionInput.value = String(Number.isFinite(opts.position) ? opts.position : 50);
     retimeCheck.checked = opts.retime === true;
     if (vttCheck !== null) vttCheck.checked = opts.vtt === true;
     if (srtCheck !== null) srtCheck.checked = opts.srt === true;
@@ -1470,6 +1639,7 @@
     // the editor may be edited or switched to another project, and none of
     // that reaches the outputs.
     const recents = toRecents();
+    const frame = chosenFrame();
     if (openProjectBtn !== null) openProjectBtn.style.display = 'none';
     const clip = clipChosen() ? clipRange : null;
     const edited = clip === null && sourceEdited.checked && !sourceEdited.disabled;
@@ -1503,7 +1673,7 @@
       return;
     }
     const ctx = Object.freeze(captureContext({
-      sections, rate, dropStruck: edited || clip !== null, withProject: wantProject || recents, clip,
+      sections, rate, dropStruck: edited || clip !== null, withProject: wantProject || recents, clip, frame,
     }));
 
     try {
@@ -1514,7 +1684,8 @@
       // path, so it always routes through the section pipeline (as an applied
       // speed does), even for an unedited "entire" export at 1×.
       let blob;
-      const straightCopy = !edited && clip === null && rate === 1 && !burn;
+      // a new aspect ratio redraws every frame, as burning captions does
+      const straightCopy = !edited && clip === null && rate === 1 && !burn && frame === null;
       if (straightCopy) {
         setStatus('Exporting entire media…');
         blob = await exportEntire(mb, fmt, ctx, setProgress);
@@ -1684,6 +1855,13 @@
   };
 
   modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
+  [aspectSelect, fitCrop, fitFit].forEach((el) => {
+    if (el !== null) el.addEventListener('change', () => { updateFrameVisibility(); saveExportOpts(); });
+  });
+  if (positionInput !== null) {
+    positionInput.addEventListener('input', drawFramePreview);
+    positionInput.addEventListener('change', saveExportOpts);
+  }
   // A project kept in the library is better small (#693): choosing Add to
   // Recents turns WAV into M4A, and Download turns it back — but only a WAV
   // this rule changed; a format someone picked is theirs.
@@ -1778,4 +1956,7 @@
     genRetimedCaptions: (sections, rate, dropStruck) => genRetimedCaptions(liveContext(sections, rate, dropStruck)),
     buildCaptionChunks: (sections, rate, dropStruck) => buildCaptionChunks(liveContext(sections, rate, dropStruck)),
   });
+  // The framing geometry for portrait and square output (#690), pure, so it
+  // can be checked without rendering a video
+  window.MediaExportFrame = Object.freeze({ FRAME_SIZES, outputSize, coverRegion, containRegion, captionLayout });
 })();

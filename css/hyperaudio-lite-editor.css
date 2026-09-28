@@ -994,13 +994,21 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
    of a display:none pop, at the same 0.5s ease as the sidebar slide so all
    panel motion matches. The controls row and Recents card animate in step
    (their margins move under body.video-collapsed below). overflow hidden also
-   clips the play overlay while shut; 480px accommodates portrait videos at
-   the 368px card width. Mobile keeps its own pinned-pane animation. */
+   clips the play overlay while shut. Mobile keeps its own pinned-pane
+   animation.
+   The VIDEO is capped at the frame's height too, and scales down to fit
+   (#690): a 9:16 video at the 368px card width is 654px tall, and the frame
+   alone clipped its bottom quarter — where portrait captions sit. */
 @media screen and (min-width: 949px) {
   #player-frame {
     overflow: hidden;
     max-height: 480px;
     transition: max-height 0.5s ease, opacity 0.5s ease;
+  }
+  #player-frame #hyperplayer {
+    max-height: 480px;
+    object-fit: contain;
+    background: transparent;   /* the card shows either side of a tall video */
   }
   body.video-collapsed #player-frame {
     max-height: 0;
@@ -1834,6 +1842,16 @@ html.ha-transcribing #upload-transcribe-btn {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+/* A portrait or square poster keeps its proportions (#690), up to 240px
+   tall and centred, instead of being cropped to a band of the 16:9 box.
+   Its aspect-ratio is set from the picture when it loads. */
+#recents-popout .recents-popout-thumb.is-tall {
+  width: auto;
+  max-width: 100%;
+  height: 240px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Settings modal (#615): the Info modal's section idiom, with rows that put
