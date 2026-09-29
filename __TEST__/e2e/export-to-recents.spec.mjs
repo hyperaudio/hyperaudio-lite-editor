@@ -137,11 +137,13 @@ test('the Open it button opens the added project', async ({ page }, testInfo) =>
   await page.click('#export-open-project');
   await expect(page.locator('#hypertranscript')).not.toContainText('w29');
   await expect(page.locator('#hypertranscript')).toContainText('w11');
-  const current = await page.evaluate(async () => {
+  // polled: the transcript changes a moment before the session points at the
+  // new project, and on a slow machine a read in between found no entry (#706)
+  await expect.poll(() => page.evaluate(async () => {
     const id = window.HyperaudioSave.library.currentId();
-    return (await window.HyperaudioSave.library.list()).find((p) => p.id === id).name;
-  });
-  expect(current).toBe('Short');
+    const entry = (await window.HyperaudioSave.library.list()).find((p) => p.id === id);
+    return entry ? entry.name : null;
+  })).toBe('Short');
 });
 
 // A finished run leaves a finished dialog: Done, not a button that repeats
@@ -178,6 +180,8 @@ test('after a run the button is Done and closes the dialog; any change brings th
 test('Add to Recents turns WAV into M4A, and Download turns it back; a format picked by hand stays', async ({ page }, testInfo) => {
   await openFixture(page, testInfo);
   await openExport(page);
+  const offered = await page.evaluate(() => [...document.getElementById('export-format').options].map((o) => o.value));
+  test.skip(!offered.includes('m4a'), 'this browser cannot encode AAC (M4A), so there is nothing to swap WAV for');
   await page.selectOption('#export-format', 'wav');
   await page.check('#export-dest-recents');
   expect(await page.inputValue('#export-format')).toBe('m4a');

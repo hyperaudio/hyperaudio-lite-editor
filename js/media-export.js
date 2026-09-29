@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.27 — last changed in release 1.3.27
+ * @version 1.3.31 — last changed in release 1.3.31
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -1607,9 +1607,13 @@
       }
       // append atomically so the list is never seen half-populated
       options.forEach((o) => formatSelect.appendChild(o));
-      // default to a video format when the source has video
-      if (withVideo && formatSelect.querySelector('option[value="mp4"]') !== null) {
-        formatSelect.value = 'mp4';
+      // default to a video format when the source has video: MP4, or WebM
+      // where the browser cannot encode H.264/AAC (Chromium on Linux, #706).
+      // Falling through to the first option, WAV, dropped the picture — and
+      // failed outright for a video with no sound.
+      if (withVideo) {
+        const video = ['mp4', 'webm'].find((id) => formatSelect.querySelector(`option[value="${id}"]`) !== null);
+        if (video !== undefined) formatSelect.value = video;
       }
       updateBurnVisibility();
       setStatus('');

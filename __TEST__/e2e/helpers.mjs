@@ -125,3 +125,23 @@ export async function withoutIntroProject(page) {
     await route.fulfill({ response, body });
   });
 }
+
+// The export formats this browser can encode, as the export dialog offers
+// them (#706). Playwright's Chromium on Linux has no AAC or H.264 encoder, so
+// 'm4a' and 'mp4' are missing there; a test that needs one skips, saying so,
+// rather than timing out waiting for a download that cannot happen.
+export async function exportFormats(page) {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(() => {
+    const m = document.getElementById('export-modal');
+    m.checked = true;
+    m.dispatchEvent(new Event('change'));
+  });
+  await page.waitForFunction(() => document.getElementById('export-format').options.length > 0, null, { timeout: 60000 });
+  return page.evaluate(() => {
+    const formats = [...document.getElementById('export-format').options].map((o) => o.value);
+    document.getElementById('export-modal').checked = false;
+    return formats;
+  });
+}

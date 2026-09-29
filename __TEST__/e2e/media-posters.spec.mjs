@@ -272,9 +272,14 @@ test('the hover card shows a portrait poster whole, and a landscape one as befor
     const out = await fh.createWritable(); await out.write(jpeg); await out.close();
   }, [id, w, h]);
   const thumbBox = async () => {
-    await page.mouse.move(10, 10);
-    await page.hover('#file-picker .recents-row .file-item');
-    await expect(page.locator('#recents-popout img.recents-popout-poster')).toBeVisible({ timeout: 5000 });
+    // hover again if need be: the list redraws on every library write, which
+    // removes the card, and a pointer that has not moved does not re-enter
+    // the row. On a slow machine a late write lands mid-hover (#706).
+    await expect(async () => {
+      await page.mouse.move(10, 10);
+      await page.hover('#file-picker .recents-row .file-item');
+      await expect(page.locator('#recents-popout img.recents-popout-poster')).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 20000 });
     return page.evaluate(() => {
       const t = document.querySelector('#recents-popout .recents-popout-thumb');
       const r = t.getBoundingClientRect();

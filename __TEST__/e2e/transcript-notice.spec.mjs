@@ -44,6 +44,8 @@ test('the error card is a message, not a document: it cannot be typed into (#628
 });
 
 test('Save after a failed transcription refuses, and the project keeps its transcript (#628)', async ({ page }) => {
+  // the intro's first commit may still be on its way to disk (#706)
+  await expect.poll(() => stateFile(page, 'saved.json')).not.toBeNull();
   const atRest = await stateFile(page, 'saved.json');
   expect(atRest.words).toBeGreaterThan(100);       // the intro, as seeded
 
