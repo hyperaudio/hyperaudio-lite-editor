@@ -137,11 +137,13 @@ test('the Open it button opens the added project', async ({ page }, testInfo) =>
   await page.click('#export-open-project');
   await expect(page.locator('#hypertranscript')).not.toContainText('w29');
   await expect(page.locator('#hypertranscript')).toContainText('w11');
-  const current = await page.evaluate(async () => {
+  // polled: the transcript changes a moment before the session points at the
+  // new project, and on a slow machine a read in between found no entry (#706)
+  await expect.poll(() => page.evaluate(async () => {
     const id = window.HyperaudioSave.library.currentId();
-    return (await window.HyperaudioSave.library.list()).find((p) => p.id === id).name;
-  });
-  expect(current).toBe('Short');
+    const entry = (await window.HyperaudioSave.library.list()).find((p) => p.id === id);
+    return entry ? entry.name : null;
+  })).toBe('Short');
 });
 
 // A finished run leaves a finished dialog: Done, not a button that repeats
