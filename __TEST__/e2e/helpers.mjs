@@ -51,9 +51,13 @@ export function analyseWav(buf, win = 0.5) {
 }
 
 // Build transcript HTML from [startMs, durMs, struck?] triples.
+// A word is [startMs, durationMs, struck?, text?]. The text defaults to "w"
+// because most gap and strike fixtures care only about timings; give it a real
+// word where the behaviour under test reads the text (#703: the truncated-word
+// guard weighs a duration against the word's syllables).
 export function transcriptHtml(words) {
-  return '<article><section><p>' + words.map(([m, d, s]) =>
-    `<span data-m="${m}" data-d="${d}"${s ? ' style="text-decoration: line-through;"' : ''}>w </span>`
+  return '<article><section><p>' + words.map(([m, d, s, text]) =>
+    `<span data-m="${m}" data-d="${d}"${s ? ' style="text-decoration: line-through;"' : ''}>${text || 'w'} </span>`
   ).join('') + '</p></section></article>';
 }
 
