@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ladderWav, transcriptHtml } from './helpers.mjs';
+import { ladderWav, transcriptHtml, exportFormats } from './helpers.mjs';
 
 // #579 — WebKit's WebCodecs AudioEncoder picks HE-AAC for MONO audio below
 // 32 kHz, and the muxed track is unreadable to AVFoundation: a silent export
@@ -13,6 +13,12 @@ import { ladderWav, transcriptHtml } from './helpers.mjs';
 // What is provable here is the transformation: audio below 32 kHz reaches the
 // encoder lifted, on every path into it, and audio at or above 32 kHz is left
 // exactly as it was.
+
+// Every test here reads the rate out of an MP4 audio track, so each needs an
+// AAC encoder; a browser without one (Chromium on Linux) skips (#706).
+test.beforeEach(async ({ page }) => {
+  test.skip(!(await exportFormats(page)).includes('m4a'), 'this browser cannot encode AAC (M4A)');
+});
 
 const exportAt = async (page, { sourceRate, rate = 1, format = 'm4a' }) => {
   const wav = ladderWav(3, sourceRate); // 16-bit MONO — the failing shape

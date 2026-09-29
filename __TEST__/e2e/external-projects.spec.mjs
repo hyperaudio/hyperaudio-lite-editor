@@ -124,9 +124,19 @@ test('a stable host is not asked forever (#604)', async ({ page }) => {
   await page.waitForSelector('#hypertranscript [data-m]');
   await expect.poll(() => panel(page)).toContainEqual({ name: 'stable', external: true });
 
-  const settled = await page.evaluate(() => window.__calls);
-  await page.waitForTimeout(2000); // idle
-  expect(await page.evaluate(() => window.__calls)).toBe(settled);
+  // The host is asked once per render, and the panel renders on every library
+  // write — of which a slow machine still has a few to come at this point
+  // (the intro's media metadata, its poster), so a count taken now and
+  // compared two seconds later measured the machine (#706). What the test is
+  // for is that the asking STOPS: two seconds with no new call, reached
+  // within twenty. A render loop never gets there.
+  const calls = () => page.evaluate(() => window.__calls);
+  await expect.poll(async () => {
+    const before = await calls();
+    await page.waitForTimeout(2000);
+    return (await calls()) - before;
+  }, { timeout: 20000, intervals: [100] }).toBe(0);
+  expect(await calls()).toBeLessThan(20);
 });
 
 test('a host row colliding with a real project is skipped (#604)', async ({ page }) => {

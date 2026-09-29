@@ -178,6 +178,8 @@ test('after a run the button is Done and closes the dialog; any change brings th
 test('Add to Recents turns WAV into M4A, and Download turns it back; a format picked by hand stays', async ({ page }, testInfo) => {
   await openFixture(page, testInfo);
   await openExport(page);
+  const offered = await page.evaluate(() => [...document.getElementById('export-format').options].map((o) => o.value));
+  test.skip(!offered.includes('m4a'), 'this browser cannot encode AAC (M4A), so there is nothing to swap WAV for');
   await page.selectOption('#export-format', 'wav');
   await page.check('#export-dest-recents');
   expect(await page.inputValue('#export-format')).toBe('m4a');

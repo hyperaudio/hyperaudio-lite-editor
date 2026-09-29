@@ -30,15 +30,38 @@ test('the search is gone in BOTH cramped bands, not just the reported one (#592)
   }
 });
 
+// What the navbar has left for the search once its two fixed sides are in:
+// the number responsive.js decides on.
+const searchRoom = (page) => page.evaluate(() => {
+  const w = (sel) => document.querySelector(sel).getBoundingClientRect().width;
+  return w('.main-panel .navbar') - w('.navbar-start') - w('.navbar-end');
+});
+
 test('the cut-off sits where it was chosen, in both bands (#592)', async ({ page }) => {
-  // 1070px is the deliberate boundary: an 83px box with ~37px for text. One
-  // notch narrower and it goes, rather than creeping toward the 48px floor.
-  for (const [width, shown] of [[1070, true], [1060, false], [670, true], [660, false]]) {
-    await page.setViewportSize({ width, height: 800 });
-    // poll rather than sleep: the navbar's width animates, so a fixed wait
-    // reads a size that is still on its way somewhere
-    await expect.poll(() => searchVisible(page), { message: `search at ${width}px` })
-      .toBe(shown);
+  // The rule is 128px of room: with it the search shows, without it it goes,
+  // rather than creeping toward the 48px floor. On the machine it was chosen
+  // on that lands at 1070px and 670px wide; the width it lands at elsewhere
+  // depends on the fonts the toolbar is drawn in (#706), so this walks each
+  // band and holds every width to the rule — and each band to ONE cut-off.
+  for (const band of [[1120, 1000], [720, 600]]) {
+    const seen = [];
+    for (let width = band[0]; width >= band[1]; width -= 10) {
+      await page.setViewportSize({ width, height: 800 });
+      // poll rather than sleep: the navbar's width animates, so a fixed wait
+      // reads a size that is still on its way somewhere. Settled means the
+      // room has stopped changing AND the search agrees with it.
+      await expect.poll(async () => {
+        const before = await searchRoom(page);
+        await page.waitForTimeout(150);
+        const room = await searchRoom(page);
+        return room === before && (await searchVisible(page)) === (room >= 128);
+      }, { message: `search at ${width}px follows the room it has` }).toBe(true);
+      seen.push(await searchVisible(page));
+    }
+    expect(seen[0], `search visible at ${band[0]}px`).toBe(true);
+    expect(seen[seen.length - 1], `search hidden at ${band[1]}px`).toBe(false);
+    // once gone it stays gone: a single cut-off, no flicker back
+    expect(seen.indexOf(false), 'one cut-off in the band').toBe(seen.lastIndexOf(true) + 1);
   }
 });
 
