@@ -13,7 +13,7 @@ const safeExportName = (name, fallback) => {
     .replace(/^[._-]+/, '')
     .replace(/[._-]+$/, '')
     .trim();
-  return cleaned !== '' ? cleaned : (fallback || 'hyperaudio-export');
+  return cleaned !== '' ? cleaned : (fallback === undefined ? 'hyperaudio-export' : fallback);
 };
 
 test('spaces become single underscores', () => {
@@ -36,6 +36,11 @@ test('an empty or all-hostile name falls back', () => {
   assert.equal(safeExportName(''), 'hyperaudio-export');
   assert.equal(safeExportName('///', 'export'), 'export');
   assert.equal(safeExportName(null), 'hyperaudio-export');
+  // an explicit '' fallback is an answer, not an absence: the download links
+  // ask for it so they can keep the name their markup gives an untitled
+  // project, and got "hyperaudio-export" instead
+  assert.equal(safeExportName('', ''), '');
+  assert.equal(safeExportName('///', ''), '');
 });
 
 test('ordinary names survive unchanged', () => {
