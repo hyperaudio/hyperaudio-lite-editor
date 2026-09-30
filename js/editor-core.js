@@ -1224,22 +1224,35 @@
         'download-srt': '.srt',
         'download-html': '.html',
       };
+      // The markup's own name is kept on each link the FIRST time through, so
+      // an untitled project gets it back. This block runs again on every
+      // hyperaudioInit, by which time the links carry the previous project's
+      // title; reading the attribute here recorded that as the default, and
+      // a return on '' left it there. Same once-only guard for the listeners.
+      Object.keys(DOWNLOAD_SUFFIX).forEach((id) => {
+        const link = document.getElementById(id);
+        if (link !== null && !link.dataset.markupName) {
+          link.dataset.markupName = link.getAttribute('download') || ('hyperaudio' + DOWNLOAD_SUFFIX[id]);
+        }
+      });
       const nameDownloadLinks = () => {
         const save = window.HyperaudioSave;
         const title = save && typeof save.getProjectTitle === 'function' ? save.getProjectTitle() : '';
         const base = typeof window.safeExportName === 'function' ? window.safeExportName(title, '') : '';
-        if (base === '') return;   // untitled: leave the name the markup gives
         Object.keys(DOWNLOAD_SUFFIX).forEach((id) => {
           const link = document.getElementById(id);
-          if (link !== null) link.setAttribute('download', base + DOWNLOAD_SUFFIX[id]);
+          if (link !== null) link.setAttribute('download', base === '' ? link.dataset.markupName : base + DOWNLOAD_SUFFIX[id]);
         });
       };
       // on the way out, and whenever the library moves, so a rename lands
-      Object.keys(DOWNLOAD_SUFFIX).forEach((id) => {
-        const link = document.getElementById(id);
-        if (link !== null) link.addEventListener('click', nameDownloadLinks);
-      });
-      document.addEventListener('hyperaudioLibraryChanged', nameDownloadLinks);
+      if (!document.body.dataset.downloadNamesWired) {
+        document.body.dataset.downloadNamesWired = '1';
+        Object.keys(DOWNLOAD_SUFFIX).forEach((id) => {
+          const link = document.getElementById(id);
+          if (link !== null) link.addEventListener('click', nameDownloadLinks);
+        });
+        document.addEventListener('hyperaudioLibraryChanged', nameDownloadLinks);
+      }
       nameDownloadLinks();
 
       // Both caption links took their address from the two caption WRITERS

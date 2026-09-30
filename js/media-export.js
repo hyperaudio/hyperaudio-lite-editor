@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.31 — last changed in release 1.3.31
+ * @version 1.3.32 — last changed in release 1.3.32
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -1002,7 +1002,10 @@
       .replace(/^[._-]+/, '')                      // no hidden files, no leading noise
       .replace(/[._-]+$/, '')
       .trim();
-    return cleaned !== '' ? cleaned : (fallback || 'hyperaudio-export');
+    // an explicit '' fallback means "tell me there was nothing": the callers
+    // that name downloads from the project title check for it, and then keep
+    // the name their markup gives; it used to be taken for "no fallback"
+    return cleaned !== '' ? cleaned : (fallback === undefined ? 'hyperaudio-export' : fallback);
   };
   window.safeExportName = safeExportName;
 
