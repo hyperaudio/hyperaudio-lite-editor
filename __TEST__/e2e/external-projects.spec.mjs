@@ -228,3 +228,36 @@ test('a host changing a row\'s state redraws it when it says so (#694)', async (
   });
   await expect.poll(async () => (await badges(page))[0].badge).toBe('not opened');
 });
+
+// #700 — a row the host has marked working or queued is not something to
+// open; failed and unavailable rows are exactly the ones a user retries.
+test('working and queued rows cannot be clicked; failed and unavailable rows still open through the host (#700)', async ({ page }) => {
+  await withHost(page, () => {
+    window.__opened = [];
+    window.hyperaudioOpenExternalProject = async (id) => { window.__opened.push(id); };
+    window.hyperaudioExternalProjects = async () => ([
+      { id: 'ext:work', title: 'Working', modified: 9_000_000_000_003, state: 'working' },
+      { id: 'ext:queue', title: 'Queued', modified: 9_000_000_000_002, state: 'queued' },
+      { id: 'ext:fail', title: 'Failed', modified: 9_000_000_000_001, state: 'failed' },
+      { id: 'ext:gone', title: 'Unavailable', modified: 9_000_000_000_000, state: 'unavailable' },
+    ]);
+  });
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect.poll(() => page.locator('.recents-row-external').count()).toBe(4);
+
+  const row = (title) => page.locator('#file-picker .recents-row-external', { hasText: title }).locator('.file-item');
+  // the pointer passes through an inert row, and it says so to assistive tech
+  await expect(row('Working')).toHaveCSS('pointer-events', 'none');
+  await expect(row('Working')).toHaveAttribute('aria-disabled', 'true');
+  await expect(row('Failed')).toHaveCSS('pointer-events', 'auto');
+  await expect(row('Failed')).not.toHaveAttribute('aria-disabled', 'true');
+
+  // a click on an inert row reaches nothing — forced past pointer-events, as
+  // a script might send one, and the handler still declines
+  await row('Working').click({ force: true });
+  await row('Queued').click({ force: true });
+  await row('Failed').click();
+  await row('Unavailable').click();
+  await expect.poll(() => page.evaluate(() => window.__opened)).toEqual(['ext:fail', 'ext:gone']);
+});

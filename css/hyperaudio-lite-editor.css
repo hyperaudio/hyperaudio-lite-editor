@@ -1777,6 +1777,15 @@ label[data-a11y-wired]:focus-visible {
 #file-picker .recents-row-state-unavailable .file-item {
   opacity: 0.4;
 }
+/* A working or queued row is not an invitation (#700): no pointer, no hover
+   pill, and a click that does nothing. The badge still says what is going on. */
+#file-picker .recents-row-inert .file-item {
+  cursor: default;
+  pointer-events: none;
+}
+#file-picker .recents-row-inert:hover .file-item {
+  background: none;
+}
 
 /* The in-progress transcription row (#525): the same anatomy and widths as a
    normal row, with a spinner in the kebab's slot as the wordless "something

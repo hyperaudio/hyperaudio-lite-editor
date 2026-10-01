@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.28 — last changed in release 1.3.28
+ * @version 1.3.32 — last changed in release 1.3.32
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -398,11 +398,15 @@
   // vocabulary to an older editor safely. A host whose rows change — a file
   // finishing, failing, coming back — asks for a redraw by dispatching
   // 'hyperaudioLibraryChanged' on document.
+  // inert: a row that is being worked on, or waiting to be, is not something
+  // to open (#700) — a click would ask the host for a file it has just said
+  // is in progress. Failed and unavailable rows stay clickable: those are
+  // the ones a user retries once a drive is back or a conversion re-run.
   const EXTERNAL_STATES = Object.freeze({
-    working: { badge: 'working', title: 'In progress' },
-    queued: { badge: 'queued', title: 'Waiting its turn' },
-    failed: { badge: 'failed', title: 'Something went wrong with this file' },
-    unavailable: { badge: 'unavailable', title: 'This file can\u2019t be opened right now' },
+    working: { badge: 'working', title: 'In progress', inert: true },
+    queued: { badge: 'queued', title: 'Waiting its turn', inert: true },
+    failed: { badge: 'failed', title: 'Something went wrong with this file', inert: false },
+    unavailable: { badge: 'unavailable', title: 'This file can\u2019t be opened right now', inert: false },
   });
 
   async function externalRows(knownIds) {
@@ -503,8 +507,8 @@
             + (entry.state === 'working' ? '<span class="recents-transcribing-spinner" aria-hidden="true"></span>' : '')
             + `${state.badge}</span>`;
         filePicker.insertAdjacentHTML('beforeend',
-          `<li class="recents-row recents-row-external${state === null ? '' : ` recents-row-state-${entry.state}`}">`
-          + `<a class="file-item" data-external-id="${escapeMarkup(entry.id)}">${extName}</a>`
+          `<li class="recents-row recents-row-external${state === null ? '' : ` recents-row-state-${entry.state}`}${state !== null && state.inert ? ' recents-row-inert' : ''}">`
+          + `<a class="file-item" data-external-id="${escapeMarkup(entry.id)}"${state !== null && state.inert ? ' aria-disabled="true"' : ''}>${extName}</a>`
           + `<span class="recents-actions">${badge}</span>`
           + `</li>`);
         return;
@@ -565,6 +569,7 @@
     filePicker.querySelectorAll('.file-item[data-external-id]').forEach((el) => {
       el.addEventListener('click', (event) => {
         event.preventDefault();
+        if (el.getAttribute('aria-disabled') === 'true') return; // working or queued (#700)
         const open = window.hyperaudioOpenExternalProject;
         if (typeof open !== 'function') return; // rows with no way to open them do nothing
         try {
