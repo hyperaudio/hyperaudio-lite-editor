@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.31 — last changed in release 1.3.31
+ * @version 1.3.32 — last changed in release 1.3.32
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -780,7 +780,19 @@
     return [(W - dw) / 2, (H - dh) / 2, dw, dh];
   };
 
+  // Where the WHOLE srcW x srcH frame must be drawn so that the region
+  // coverRegion() selects lands exactly on a W x H canvas: [dx, dy, dw, dh].
+  // The canvas edge then does the cropping. WebKit ignores a SOURCE rectangle
+  // when the source is a VideoFrame (#711), and honours a destination one.
+  const coverPlacement = (srcW, srcH, W, H, position) => {
+    const [sx, sy, sw, sh] = coverRegion(srcW, srcH, W, H, position);
+    const kx = W / sw;
+    const ky = H / sh;
+    return [-sx * kx, -sy * ky, srcW * kx, srcH * ky];
+  };
+
   // Draws one decoded sample into the output canvas as the frame settings say.
+  // Never with a source rectangle — see coverPlacement.
   // The blur behind a fitted picture is the frame drawn tiny and scaled back
   // up — cheap per frame, and independent of canvas filter support.
   const makeFrameDrawer = (frame, srcW, srcH, W, H) => {
@@ -788,23 +800,23 @@
       return (sample, c) => sample.draw(c, 0, 0, W, H);
     }
     if (frame.fit !== 'fit') {
-      const [sx, sy, sw, sh] = coverRegion(srcW, srcH, W, H, frame.position);
-      return (sample, c) => sample.draw(c, sx, sy, sw, sh, 0, 0, W, H);
+      const [dx, dy, dw, dh] = coverPlacement(srcW, srcH, W, H, frame.position);
+      return (sample, c) => sample.draw(c, dx, dy, dw, dh);
     }
     const bg = document.createElement('canvas');
     bg.width = Math.max(8, Math.round(W / 24));
     bg.height = Math.max(8, Math.round(H / 24));
     const bgCtx = bg.getContext('2d');
-    const [bx, by, bw, bh] = coverRegion(srcW, srcH, bg.width, bg.height, 0.5);
+    const [bx, by, bw, bh] = coverPlacement(srcW, srcH, bg.width, bg.height, 0.5);
     const [dx, dy, dw, dh] = containRegion(srcW, srcH, W, H);
     return (sample, c) => {
-      sample.draw(bgCtx, bx, by, bw, bh, 0, 0, bg.width, bg.height);
+      sample.draw(bgCtx, bx, by, bw, bh);
       c.imageSmoothingEnabled = true;
       c.imageSmoothingQuality = 'high';
       c.drawImage(bg, 0, 0, W, H);
       c.fillStyle = 'rgba(0,0,0,0.45)';
       c.fillRect(0, 0, W, H);
-      sample.draw(c, 0, 0, srcW, srcH, dx, dy, dw, dh);
+      sample.draw(c, dx, dy, dw, dh);
     };
   };
 
@@ -1002,7 +1014,10 @@
       .replace(/^[._-]+/, '')                      // no hidden files, no leading noise
       .replace(/[._-]+$/, '')
       .trim();
-    return cleaned !== '' ? cleaned : (fallback || 'hyperaudio-export');
+    // an explicit '' fallback means "tell me there was nothing": the callers
+    // that name downloads from the project title check for it, and then keep
+    // the name their markup gives; it used to be taken for "no fallback"
+    return cleaned !== '' ? cleaned : (fallback === undefined ? 'hyperaudio-export' : fallback);
   };
   window.safeExportName = safeExportName;
 
@@ -1955,5 +1970,5 @@
   });
   // The framing geometry for portrait and square output (#690), pure, so it
   // can be checked without rendering a video
-  window.MediaExportFrame = Object.freeze({ FRAME_SIZES, outputSize, coverRegion, containRegion, captionLayout });
+  window.MediaExportFrame = Object.freeze({ FRAME_SIZES, outputSize, coverRegion, coverPlacement, containRegion, makeFrameDrawer, captionLayout });
 })();

@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.28 — last changed in release 1.3.28
+ * @version 1.3.32 — last changed in release 1.3.32
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1097,6 +1097,20 @@
 
   // Snapshot the full editor state for the writer. Pure DOM reads; the media
   // bytes themselves are handled separately (write-once / resolve-on-demand).
+  // The project's title as the library shows it: the title field (#449),
+  // the session's title, else the media's name — a link's URL leaf included,
+  // so a project transcribed from a URL is named after its file. One rule,
+  // shared with getProjectTitle, which used to fall back to the captured File
+  // alone and so had NO name for URL-mode media: every download of a project
+  // straight after transcribing from a URL was "hyperaudio-export.*".
+  function projectDisplayTitle(media) {
+    const titleField = document.querySelector('#project-title');
+    if (titleField !== null && titleField.value.trim() !== '') return titleField.value.trim();
+    if (session.title) return session.title;
+    const descriptor = media || currentMediaDescriptor();
+    return descriptor.filename || '';
+  }
+
   function gather() {
     // One read of the DOM, parsed once; the HTML entry is projected from the
     // resulting JSON rather than read again (#489).
@@ -1104,13 +1118,10 @@
     const transcript = htmlToJSON(source);
     const html = projectTranscriptHtml(transcript, source);
     const versionMeta = document.querySelector('meta[name="version"]');
-    const titleField = document.querySelector('#project-title'); // #449's field, when present
     const summaryEl = document.getElementById('summary');
     const topicsEl = document.getElementById('topics');
     const media = currentMediaDescriptor();
-    const title = (titleField !== null && titleField.value.trim() !== '')
-      ? titleField.value.trim()
-      : (session.title || media.filename || 'project');
+    const title = projectDisplayTitle(media) || 'project';
 
     return {
       generatorVersion: versionMeta !== null ? versionMeta.content : '',
@@ -4120,8 +4131,10 @@
     saveProject,     // silent OPFS commit (⌘S / the navbar button)
     exportProject,   // build + download a portable .hyperaudio
     buildFlattenedProjectBlob, // #455: fresh container around a rendered export (media-export modal)
-    // export naming and any future UI read the title through here
-    getProjectTitle: () => session.title || (session.mediaFile !== null ? session.mediaFile.name : '') || '',
+    // export naming and any future UI read the title through here. With no
+    // project open there is no title: the media's name stands in for a
+    // PROJECT's missing title, not for a missing project (#563).
+    getProjectTitle: () => (session.active ? projectDisplayTitle() : ''),
     // the language the engine reported, or the project file carries ('' when
     // unknown) — caption generation picks its abbreviations by it (#662)
     getProjectLanguage: () => languageTag(session.language),
