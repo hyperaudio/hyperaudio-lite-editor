@@ -4131,8 +4131,10 @@
     saveProject,     // silent OPFS commit (⌘S / the navbar button)
     exportProject,   // build + download a portable .hyperaudio
     buildFlattenedProjectBlob, // #455: fresh container around a rendered export (media-export modal)
-    // export naming and any future UI read the title through here
-    getProjectTitle: () => projectDisplayTitle(),
+    // export naming and any future UI read the title through here. With no
+    // project open there is no title: the media's name stands in for a
+    // PROJECT's missing title, not for a missing project (#563).
+    getProjectTitle: () => (session.active ? projectDisplayTitle() : ''),
     // the language the engine reported, or the project file carries ('' when
     // unknown) — caption generation picks its abbreviations by it (#662)
     getProjectLanguage: () => languageTag(session.language),
