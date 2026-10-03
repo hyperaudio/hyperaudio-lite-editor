@@ -102,6 +102,54 @@ test('the framing geometry: crop keeps the chosen slice; fit centres the whole p
   expect(g.portrait).toEqual({ fontSize: 59, maxWidth: 1080 * 0.86, bottomMargin: 1920 * 0.18, centreX: 540 });
 });
 
+// #711 — WebKit ignores a source rectangle when the source is a VideoFrame and
+// squeezes the whole frame into the output. So a frame is only ever drawn
+// whole, placed so that the wanted region lands on the canvas. This pins the
+// placement to coverRegion and the calls to the destination-only form. It
+// cannot see WebKit's behaviour itself, which needs WebKit decoding a frame.
+test('a cropped frame is drawn whole and placed, never with a source rectangle', async ({ page }) => {
+  await setup(page);
+  const r = await page.evaluate(() => {
+    const f = window.MediaExportFrame;
+    const worst = [];
+    for (const [srcW, srcH] of [[640, 360], [1280, 720], [314, 240], [720, 1280]]) {
+      for (const [W, H] of [[1080, 1920], [1080, 1080], [45, 80]]) {
+        for (const p of [0, 0.3, 0.5, 1]) {
+          const [sx, sy, sw, sh] = f.coverRegion(srcW, srcH, W, H, p);
+          const [dx, dy, dw, dh] = f.coverPlacement(srcW, srcH, W, H, p);
+          // the region's corners land on the canvas corners
+          worst.push(Math.abs(dx + sx * dw / srcW), Math.abs(dy + sy * dh / srcH),
+            Math.abs(sw * dw / srcW - W), Math.abs(sh * dh / srcH - H));
+        }
+      }
+    }
+    const calls = (frame) => {
+      const seen = [];
+      const sample = { draw: (...args) => seen.push(args.slice(1)) };
+      const c = document.createElement('canvas').getContext('2d');
+      f.makeFrameDrawer(frame, 640, 360, 1080, 1920)(sample, c);
+      return seen;
+    };
+    return {
+      worst: Math.max(...worst),
+      crop: calls({ aspect: 'portrait', fit: 'crop', position: 1 }),
+      fit: calls({ aspect: 'portrait', fit: 'fit' }),
+    };
+  });
+  expect(r.worst).toBeLessThan(1e-9);
+  // 640x360 scaled to fill 1920 high is 3413.33 wide, pushed left to keep the right edge
+  expect(r.crop).toHaveLength(1);
+  expect(r.crop[0]).toHaveLength(4);
+  expect(r.crop[0][0]).toBeCloseTo(-2333.333, 2);
+  expect(r.crop[0][1]).toBeCloseTo(0, 9);
+  expect(r.crop[0][2]).toBeCloseTo(3413.333, 2);
+  expect(r.crop[0][3]).toBeCloseTo(1920, 9);
+  // fit: the blurred background, then the picture — both placed, neither cropped
+  expect(r.fit).toHaveLength(2);
+  expect(r.fit[0]).toHaveLength(4);
+  expect(r.fit[1]).toEqual([0, 656.25, 1080, 607.5]);
+});
+
 for (const [aspect, fit, size] of [['portrait', 'crop', [1080, 1920]], ['square', 'fit', [1080, 1080]], ['original', 'crop', [640, 360]]]) {
   test(`a ${aspect} export (${fit}) comes out ${size.join('×')}`, async ({ page }) => {
     await setup(page);
