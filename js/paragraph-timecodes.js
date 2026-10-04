@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 0.6.20 */
+/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 1.3.33 */
 
 // Self-contained, modular display feature. To remove it entirely: delete this
 // file, its <script> tag in index.html, and the #show-timecodes checkbox.
@@ -138,6 +138,40 @@
     }
   }
 
+  // The transcript's start moves without the holder resizing or the content
+  // changing: opening the replace box eases its top padding down. Nothing
+  // above notices, so the labels stayed where they were. Keep them on their
+  // paragraphs for as long as the transcript's own layout is in motion.
+  const FOLLOW_LIMIT_MS = 1000; // a transition that never reports its end
+  let following = 0;
+  let followUntil = 0;
+  function follow() {
+    if (following === 0 || !enabled) {
+      return;
+    }
+    reposition();
+    if (performance.now() < followUntil) {
+      requestAnimationFrame(follow);
+    } else {
+      following = 0;
+    }
+  }
+  function onTransition(e) {
+    if (!enabled || e.target !== transcriptEl()) {
+      return;
+    }
+    if (e.type === 'transitionrun') {
+      following += 1;
+      followUntil = performance.now() + FOLLOW_LIMIT_MS;
+      if (following === 1) {
+        requestAnimationFrame(follow);
+      }
+    } else {
+      following = Math.max(0, following - 1);
+      reposition();
+    }
+  }
+
   // The transcript element is replaced wholesale when a file loads (Recents wipes
   // .transcript-holder). Re-bind the per-transcript observers to the current one.
   function attachToTranscript() {
@@ -217,6 +251,13 @@
           // scrolls to this paragraph, not the previous one (boundary off-by-one).
           player.currentTime = ms / 1000 + 0.01;
         }
+      });
+    }
+
+    if (holder) {
+      // bubbles up from the transcript, which is replaced when a file loads
+      ['transitionrun', 'transitionend', 'transitioncancel'].forEach((type) => {
+        holder.addEventListener(type, onTransition);
       });
     }
 
