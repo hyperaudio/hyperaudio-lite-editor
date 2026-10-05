@@ -55,7 +55,9 @@ test('finishing while another project is open saves it to Recents and leaves the
   await expect.poll(async () => (await library(page)).length).toBe(2);
   await expect(page.locator('.recents-row-transcribing')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.classList.contains('ha-transcribing'))).toBe(false);
-  await expect(page.locator('#project-progress')).toContainText('new-recording.wav');
+  // it says so, and keeps saying so: no timer takes the message away
+  const notice = page.locator('#transcript-ready-notice');
+  await expect(notice).toContainText('“new-recording.wav” transcript is ready');
 
   // the screen: same project, same media, the edit still there and still typed into
   expect(await page.evaluate(() => window.HyperaudioSave.library.currentId())).toBe(homeId);
@@ -77,8 +79,10 @@ test('finishing while another project is open saves it to Recents and leaves the
 
   // opening it gives the transcript, its media, its captions and its details
   await page.waitForTimeout(1700); // the home project's edit reaches its draft
+  await expect(notice).toBeVisible(); // still there, seconds later
   await page.evaluate((id) => window.HyperaudioSave.library.open(id), born.id);
   await expect(page.locator('#hypertranscript')).toContainText('Finished elsewhere');
+  await expect(notice).toHaveCount(0); // opening the transcript is the message read
   await expect.poll(() => page.evaluate(() => document.getElementById('hyperplayer').duration)).toBeGreaterThan(0.5);
   const details = await page.evaluate(() => window.HyperaudioSave.getProvenance());
   expect(details.engine).toBe('testengine');
@@ -151,4 +155,8 @@ test('an engine finishing off screen writes nothing to the open project (Deepgra
   expect(born.name).toBe('interview.wav');
   expect(born.summary).toBe('A talk about tides.');
   expect(born.topics).toEqual(['Tides']);
+  // the message can be closed by hand, and the project stays where it is
+  await page.locator('#transcript-ready-notice .transcript-ready-close').click();
+  await expect(page.locator('#transcript-ready-notice')).toHaveCount(0);
+  expect(await page.evaluate(() => window.HyperaudioSave.library.currentId())).toBe(homeId);
 });

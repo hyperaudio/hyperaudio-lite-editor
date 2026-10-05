@@ -3171,6 +3171,39 @@
     document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
   }
 
+  // Says a transcript made off screen is ready. It stays until it is closed,
+  // or until its project is opened, which is the news having arrived.
+  let readyNotice = null; // { el, id }
+  function closeReadyNotice() {
+    if (readyNotice === null) return;
+    readyNotice.el.remove();
+    readyNotice = null;
+  }
+  function showReadyNotice(kept) {
+    closeReadyNotice();
+    const el = document.createElement('div');
+    el.id = 'transcript-ready-notice';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    const text = document.createElement('span');
+    text.className = 'transcript-ready-text';
+    text.textContent = '“' + kept.name + '” transcript is ready';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'transcript-ready-close';
+    close.setAttribute('aria-label', 'Close');
+    close.title = 'Close';
+    close.textContent = '×';
+    close.addEventListener('click', closeReadyNotice);
+    el.appendChild(text);
+    el.appendChild(close);
+    document.body.appendChild(el);
+    readyNotice = { el, id: kept.id };
+  }
+  document.addEventListener('hyperaudioLibraryChanged', () => {
+    if (readyNotice !== null && session.projectId === readyNotice.id) closeReadyNotice();
+  });
+
   window.hyperaudioKeepTranscription = function (result) {
     if (!transcriptionInBackground() || !result || typeof result.html !== 'string') return false;
     const identity = pendingIdentity;
@@ -3188,7 +3221,7 @@
     };
     writeKeptTranscription(result, identity, reported).then((kept) => {
       finish();
-      showProgress('“' + kept.name + '” is ready in Recents', 4000);
+      showReadyNotice(kept);
       document.dispatchEvent(new CustomEvent('hyperaudioTranscriptionKept', { detail: kept }));
     }).catch((e) => {
       console.warn('hyperaudio-save: could not keep the transcription in the background', e);
