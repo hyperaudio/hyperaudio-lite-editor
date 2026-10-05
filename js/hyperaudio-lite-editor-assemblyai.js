@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 0.8.4 — last changed in release 0.8.4
+ * @version 1.3.34 — last changed in release 1.3.34
  * @license MIT
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -269,7 +269,9 @@ function assemblyaiParseData(json) {
   let wordsInPara = 0;
 
   const language = json.language_code || (document.querySelector('#assemblyai-language') || {}).value || "";
-  const track = document.querySelector('#hyperplayer-vtt');
+  // finishing while another project is open (#715): its track is not ours
+  const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
+  const track = background ? null : document.querySelector('#hyperplayer-vtt');
   if (track) {
     track.label = language;
     track.srcLang = language;
@@ -309,6 +311,14 @@ function assemblyaiParseData(json) {
   hyperTranscript += "\n </p> \n </section>\n</article>\n ";
   hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
+  // languageCode: what AssemblyAI says the language IS (it may have been
+  // detected), beside the picker's label the info panel shows
+  const info = assemblyaiTranscriptionStart !== 0
+    ? { ...assemblyaiTranscriptionMeta, languageCode: language, seconds: (Date.now() - assemblyaiTranscriptionStart) / 1000 } : null;
+  // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
+  if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html: hyperTranscript, info })) {
+    return;
+  }
   document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
 
   const showSpeakers = document.querySelector('#show-speakers');
@@ -318,10 +328,8 @@ function assemblyaiParseData(json) {
 
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,' + encodeURIComponent(hyperTranscript));
 
-  if (typeof setTranscriptionInfo === 'function' && assemblyaiTranscriptionStart !== 0) {
-    // languageCode: what AssemblyAI says the language IS (it may have been
-    // detected), beside the picker's label the info panel shows
-    setTranscriptionInfo({ ...assemblyaiTranscriptionMeta, languageCode: language, seconds: (Date.now() - assemblyaiTranscriptionStart) / 1000 });
+  if (typeof setTranscriptionInfo === 'function' && info !== null) {
+    setTranscriptionInfo(info);
   }
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
