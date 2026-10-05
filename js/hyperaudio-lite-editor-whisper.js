@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.25 — last changed in release 1.3.25
+ * @version 1.3.34 — last changed in release 1.3.34
  * @license MIT
  */
 
@@ -341,7 +341,6 @@ function loadWhisperClient(modal, workerBaseUrl) {
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(false);
     }
-    videoPlayer.currentTime = 0;
 
     let hypertranscript = "";
     let sentences = 0;
@@ -379,8 +378,14 @@ function loadWhisperClient(modal, workerBaseUrl) {
       }
     });
 
+    const html = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
+    // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
+    if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html })) {
+      return;
+    }
+    videoPlayer.currentTime = 0;
     const resultsContainer = document.getElementById("hypertranscript");
-    resultsContainer.innerHTML = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
+    resultsContainer.innerHTML = html;
 
     const initEvent = new CustomEvent('hyperaudioInit');
     document.dispatchEvent(initEvent);

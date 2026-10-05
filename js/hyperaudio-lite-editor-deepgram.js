@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 0.6.15 — last changed in release 0.6.15
+ * @version 1.3.34 — last changed in release 1.3.34
  * @license MIT
  */
 
@@ -518,19 +518,28 @@ function parseData(json) {
   let wordsInPara = 0;
   let showDiarization = true;
 
-  if (document.querySelector("#summary") !== null) {
-    document.querySelector("#summary").innerHTML = extractSummary(json);
-  }
+  // Finishing while another project is open (#715): the summary, the topics
+  // and the caption track on screen are that project's, so nothing is written
+  // to them. The result is handed over whole further down.
+  const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
+  const summary = extractSummary(json);
+  const topics = extractTopics(json);
 
-  if (document.querySelector("#topics") !== null) {
-    document.querySelector("#topics").innerHTML = extractTopics(json).join(", ");
-  }
+  if (!background) {
+    if (document.querySelector("#summary") !== null) {
+      document.querySelector("#summary").innerHTML = summary;
+    }
 
-  language = getLanguageCode(json);
-  
-  let track = document.querySelector('#hyperplayer-vtt');
-  track.label = language;
-  track.srcLang = language;
+    if (document.querySelector("#topics") !== null) {
+      document.querySelector("#topics").innerHTML = topics.join(", ");
+    }
+
+    language = getLanguageCode(json);
+
+    let track = document.querySelector('#hyperplayer-vtt');
+    track.label = language;
+    track.srcLang = language;
+  }
 
   wordData.forEach((element, index) => {
 
@@ -566,6 +575,26 @@ function parseData(json) {
 
   hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
+  let transcriptionInfo = null;
+  if (transcriptionStart !== 0) {
+    // a detected language is the better answer when there is one
+    let detected;
+    try { detected = extractLanguage(json); } catch (e) { detected = undefined; }
+    // Deepgram names the exact model build that answered
+    let engineVersion;
+    try {
+      const info = Object.values((json.metadata && json.metadata.model_info) || {})[0];
+      engineVersion = info && info.version ? String(info.version) : undefined;
+    } catch (e) { engineVersion = undefined; }
+    transcriptionInfo = { ...transcriptionMeta, engineVersion, languageCode: detected || transcriptionMeta.languageCode, seconds: (Date.now() - transcriptionStart) / 1000 };
+  }
+
+  // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
+  if (typeof window.hyperaudioKeepTranscription === 'function'
+      && window.hyperaudioKeepTranscription({ html: hyperTranscript, summary, topics, info: transcriptionInfo })) {
+    return;
+  }
+
   document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
 
   let showSpeakers = document.querySelector('#show-speakers');
@@ -584,17 +613,8 @@ function parseData(json) {
   console.log("updating download html link");
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hyperTranscript));
 
-  if (typeof setTranscriptionInfo === 'function' && transcriptionStart !== 0) {
-    // a detected language is the better answer when there is one
-    let detected;
-    try { detected = extractLanguage(json); } catch (e) { detected = undefined; }
-    // Deepgram names the exact model build that answered
-    let engineVersion;
-    try {
-      const info = Object.values((json.metadata && json.metadata.model_info) || {})[0];
-      engineVersion = info && info.version ? String(info.version) : undefined;
-    } catch (e) { engineVersion = undefined; }
-    setTranscriptionInfo({ ...transcriptionMeta, engineVersion, languageCode: detected || transcriptionMeta.languageCode, seconds: (Date.now() - transcriptionStart) / 1000 });
+  if (typeof setTranscriptionInfo === 'function' && transcriptionInfo !== null) {
+    setTranscriptionInfo(transcriptionInfo);
   }
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
