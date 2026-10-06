@@ -1722,6 +1722,48 @@ label[data-a11y-wired]:focus-visible {
   #project-progress { transition: none; }
 }
 
+/* A transcript that finished while another project was open (#715): the same
+   pill in the same corner, and it stays until closed or until its project is
+   opened. */
+#transcript-ready-notice {
+  position: fixed;
+  right: 16px;
+  bottom: 64px;               /* play bar (52px) + 12px */
+  z-index: 31;                /* over a passing progress message */
+  max-width: calc(100vw - 32px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 9999px;
+  background: oklch(var(--n, 0.2 0 0));
+  color: oklch(var(--nc, 0.98 0 0));
+  font-size: 0.85rem;
+  line-height: 1.4;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+#transcript-ready-notice .transcript-ready-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#transcript-ready-notice .transcript-ready-close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  font-size: 1rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+#transcript-ready-notice .transcript-ready-close:hover { opacity: 1; background: rgba(255, 255, 255, 0.15); }
+@media screen and (max-width: 948px) {
+  #transcript-ready-notice { right: 12px; left: 12px; bottom: 60px; justify-content: space-between; }
+}
+
 /* An unavailable export source reads as unavailable (#608). Disabling the
    radio alone left its label at full strength, so "Edited media" looked like a
    choice you could make when there was nothing to edit. The summary beside it

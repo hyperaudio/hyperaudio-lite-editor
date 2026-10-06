@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.24 — last changed in release 1.3.24
+ * @version 1.3.34 — last changed in release 1.3.34
  * @license MIT
  */
 
@@ -225,7 +225,10 @@ function loadParakeetClient(modal, workerBaseUrl) {
             if (pendingInfo !== null && typeof setTranscriptionInfo === "function") {
               setTranscriptionInfo({ ...pendingInfo, device: lastDeviceLabel, seconds: data.output.seconds });
             }
-            videoPlayer.currentTime = 0;
+            // the player is another project's when this finishes off screen (#715)
+            if (!(typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground())) {
+              videoPlayer.currentTime = 0;
+            }
             parakeetParseData(data.output);
           });
           break;
@@ -454,6 +457,10 @@ function parakeetParseData(json) {
   hyperTranscript += "\n </p> \n </section>\n</article>\n ";
   hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
+  // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
+  if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html: hyperTranscript })) {
+    return;
+  }
   document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,' + encodeURIComponent(hyperTranscript));
 

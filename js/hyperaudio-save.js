@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.32 — last changed in release 1.3.32
+ * @version 1.3.34 — last changed in release 1.3.34
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1859,7 +1859,7 @@
 
   // The origin (spec § 5): written once when a project is born from a
   // transcription/import, immutable afterwards, never with struck flags.
-  async function writeOriginOnce(transcript) {
+  function originJsonOf(transcript) {
     const clean = {
       words: (transcript.words || []).map((w) => {
         const word = { start: w.start, end: w.end, text: w.text };
@@ -1872,8 +1872,11 @@
         ? paragraphNormalizer(transcript).paragraphs
         : transcript.paragraphs || []),
     };
+    return JSON.stringify(clean, null, 2);
+  }
+  async function writeOriginOnce(transcript) {
     session.hasOriginal = true;
-    session.originalJson = JSON.stringify(clean, null, 2);
+    session.originalJson = originJsonOf(transcript);
     await writeOriginToProjectDir();
   }
 
@@ -2872,7 +2875,15 @@
   // recovered birth stole the name, media and video of whatever project the
   // user was viewing. The identity survives until a birth consumes it, a new
   // transcription replaces it, or a user-initiated import clears it.
-  let pendingIdentity = null; // { file, fromUrl, playerSrc }
+  let pendingIdentity = null; // { file, fromUrl, playerSrc, name }
+  // Whether the transcription's own view (its loader) has the screen. It does
+  // from the moment the engine starts, loses it when the user opens a project,
+  // and gets it back when they click the in-progress row. What a finished
+  // transcription does next turns on this (#715).
+  let pendingOnScreen = false;
+  // What the engine reported about a run that finishes off screen: kept here
+  // rather than on the session, which by then describes the open project.
+  let pendingProvenance = null; // { provenance, language }
 
   function pendingTranscriptionInfo() {
     return pendingTranscription === null ? null : { name: pendingTranscription.name };
@@ -2927,7 +2938,10 @@
               file: fileIsThisMediums ? session.mediaFile : null,
               fromUrl: fileIsThisMediums ? session.mediaFileFromUrl : null,
               playerSrc,
+              name: pendingTranscription.name,
             };
+            pendingOnScreen = true;
+            pendingProvenance = null;
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /
             // transcribe entry points grey on this class, so the gate holds
@@ -2976,11 +2990,253 @@
     }
   });
 
+  /* --------------------------------------------------------------------------
+   * A transcription that finishes while the user is in another project (#715)
+   * is saved to Recents and left there. It used to land on screen like any
+   * other: the engines write their result straight into #hypertranscript, so
+   * the project being worked on was replaced mid-sentence, the player moved to
+   * the new media, and whatever had been typed inside the autosave delay was
+   * lost with the view.
+   *
+   * The engines ask first. hyperaudioTranscriptionInBackground() says whether
+   * the screen belongs to a project, so they can hold back the writes they
+   * make on the way (player position, summary, caption track). Then
+   * hyperaudioKeepTranscription({ html, summary, topics, info }) takes the
+   * result: true means it is being written as a project of its own and the
+   * engine must touch nothing. The project is what a birth on screen would
+   * have made (origin, media, provenance, saved state), written directly, the
+   * way Add to Recents writes one (#693).
+   * ----------------------------------------------------------------------- */
+  function transcriptionInBackground() {
+    return opfsAvailable && pendingIdentity !== null && pendingOnScreen === false
+      && session.active === true && session.projectId !== null;
+  }
+  window.hyperaudioTranscriptionInBackground = transcriptionInBackground;
+
+  // What an engine's report says about a transcription, as the provenance a
+  // project records and the language it is in: { provenance, language }.
+  // named: the file, or the address, that was transcribed.
+  function provenanceOf(info, named) {
+    const provenance = {
+      engine: (info && info.service ? String(info.service) : '').toLowerCase(),
+      model: info && info.model ? String(info.model) : '',
+      transcribedAt: nowIso(),
+    };
+    // Optional fields (spec § 3.5, format 1.3) — persisted so the info
+    // modal's Time taken / Processing rows survive a reload (#457).
+    if (info && typeof info.seconds === 'number' && Number.isFinite(info.seconds)) {
+      provenance.seconds = Math.round(info.seconds * 10) / 10;
+    }
+    if (info && info.device) {
+      provenance.device = String(info.device);
+    }
+    // What was really run (#668), recorded at transcription whatever
+    // the settings say: TPME exists to "capture what can be known about
+    // a transcript at the time of creation … but which may not be
+    // capturable later", and a project transcribed with provenance
+    // files switched off must still be able to describe itself fully
+    // when they are switched on. Never a key or a token: the engines
+    // hand over parameters, not credentials.
+    if (info && info.modelId) provenance.modelId = String(info.modelId);
+    if (info && info.engineVersion) provenance.engineVersion = String(info.engineVersion);
+    if (info && info.runtime) provenance.runtime = String(info.runtime);
+    if (info && info.parameters !== undefined && info.parameters !== null) {
+      try { provenance.parameters = JSON.parse(JSON.stringify(info.parameters)); } catch (e) { /* not plain data */ }
+    }
+    if (named) provenance.mediaFile = String(named);
+    const tag = languageTag(info && info.languageCode) || languageTag(info && info.language);
+    return { provenance, language: tag || (info && info.language ? String(info.language) : '') };
+  }
+
+  // The file, or the address, a pending transcription was made from
+  function pendingMediaName(identity) {
+    if (identity.file !== null && identity.file.name) return identity.file.name;
+    return isLinkUrl(identity.playerSrc) ? identity.playerSrc : '';
+  }
+
+  // Length and whether there is a picture, read off the media itself: the
+  // player is on another project's media, so it cannot be asked.
+  function probeMedia(src) {
+    return new Promise((resolve) => {
+      const unknown = { durationSeconds: 0, hasVideo: null };
+      if (!src) { resolve(unknown); return; }
+      const probe = document.createElement('video');
+      let settled = false;
+      const done = (answer) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        probe.removeAttribute('src');
+        try { probe.load(); } catch (e) { /* nothing to release */ }
+        resolve(answer);
+      };
+      const timer = setTimeout(() => done(unknown), 4000);
+      probe.preload = 'metadata';
+      probe.muted = true;
+      probe.addEventListener('loadedmetadata', () => done({
+        durationSeconds: Number.isFinite(probe.duration) ? Math.round(probe.duration * 1000) / 1000 : 0,
+        hasVideo: probe.videoWidth > 0,
+      }));
+      probe.addEventListener('error', () => done(unknown));
+      probe.src = src;
+    });
+  }
+
+  async function writeKeptTranscription(result, identity, reported) {
+    const transcript = htmlToJSON(result.html);
+    if (!transcript.words || transcript.words.length === 0) throw new Error('the result holds no timed words');
+    let file = identity.file;
+    const linkUrl = file === null && isLinkUrl(identity.playerSrc) ? identity.playerSrc : null;
+    if (file === null && linkUrl === null) {
+      // local media never captured as a File: take it from its blob: address
+      const blob = await (await fetch(identity.playerSrc)).blob();
+      const ext = (blob.type.split('/')[1] || 'bin').split(';')[0];
+      file = new File([blob], 'media.' + ext, { type: blob.type });
+    }
+    const own = file !== null ? URL.createObjectURL(file) : null;
+    let measured;
+    try {
+      measured = await probeMedia(own !== null ? own : linkUrl);
+    } finally {
+      if (own !== null) URL.revokeObjectURL(own);
+    }
+    const safeName = file !== null ? sanitizeMediaFilename(file.name) : '';
+    const media = file !== null
+      ? { kind: 'original', path: MEDIA_DIR + safeName, url: null, filename: safeName,
+        mimeType: file.type || '', durationSeconds: measured.durationSeconds, sizeBytes: file.size, hasVideo: measured.hasVideo }
+      : { kind: 'link', path: null, url: linkUrl, filename: mediaDisplayName2(linkUrl) || '',
+        mimeType: '', durationSeconds: measured.durationSeconds, sizeBytes: 0, hasVideo: measured.hasVideo };
+    // the app-wide settings come from the editor; everything that describes
+    // a PROJECT is this transcription's own, never the open project's
+    const base = gather();
+    const now = nowIso();
+    const language = reported !== null ? reported.language : '';
+    const state = Object.assign({}, base, {
+      envelope: null,
+      created: now,
+      modified: now,
+      media,
+      options: Object.assign({}, base.options, { captionSpeakers: [] }),
+      texts: {
+        title: media.filename || identity.name || 'project',
+        language: languageTag(language) || language || '',
+        summary: typeof result.summary === 'string' ? result.summary.trim() : '',
+        topics: Array.isArray(result.topics) ? result.topics.map((t) => String(t).trim()).filter((t) => t.length > 0) : [],
+      },
+      provenance: reported !== null ? reported.provenance : null,
+      hasOriginal: true,
+      transcript,
+      html: projectTranscriptHtml(transcript, result.html),
+    });
+    const project = buildProjectJson(state);
+    const valid = validateProjectJson(project);
+    if (!valid.ok) throw new Error('the new project failed validation: ' + valid.errors.map((e) => e.code).join(', '));
+    const id = newProjectId();
+    try {
+      const dir = await getProjectDir(id, true);
+      await writeFileTo(dir, ENTRY.original, originJsonOf(transcript));
+      if (file !== null) {
+        const mediaDir = await getMediaDir(id, true);
+        await writeFileTo(mediaDir, safeName, file);
+        const written = (await (await mediaDir.getFileHandle(safeName)).getFile()).size;
+        if (written !== file.size) throw new Error('media write incomplete: ' + written + ' of ' + file.size + ' bytes');
+      }
+      await writeFileTo(dir, SAVED_FILE, JSON.stringify({
+        json: serializeProjectJson(project),
+        html: state.html,
+        captionsVtt: null, // made from the transcript when the project is opened
+      }));
+      await touchLibraryEntry(id, state, { saved: true, active: false });
+    } catch (e) {
+      await deleteProjectDir(id); // best-effort: an orphan beats a half-written project
+      throw e;
+    }
+    return { id, name: state.texts.title };
+  }
+
+  // The way out when the write fails (storage full, say): the result must not
+  // be lost, so it lands on screen after all — once the open project's edits
+  // are safely in its draft, which the old path never waited for.
+  async function landKeptTranscriptionOnScreen(result, identity) {
+    await flushPendingDraft();
+    pendingIdentity = identity; // the birth restores the transcription's media from it
+    const t = document.getElementById('hypertranscript');
+    if (t === null) return;
+    const summaryEl = document.getElementById('summary');
+    const topicsEl = document.getElementById('topics');
+    if (summaryEl !== null && typeof result.summary === 'string') summaryEl.textContent = result.summary;
+    if (topicsEl !== null && Array.isArray(result.topics)) topicsEl.textContent = result.topics.join(', ');
+    t.innerHTML = result.html;
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  }
+
+  // Says a transcript made off screen is ready. It stays until it is closed,
+  // or until its project is opened, which is the news having arrived.
+  let readyNotice = null; // { el, id }
+  function closeReadyNotice() {
+    if (readyNotice === null) return;
+    readyNotice.el.remove();
+    readyNotice = null;
+  }
+  function showReadyNotice(kept) {
+    closeReadyNotice();
+    const el = document.createElement('div');
+    el.id = 'transcript-ready-notice';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    const text = document.createElement('span');
+    text.className = 'transcript-ready-text';
+    text.textContent = '“' + kept.name + '” transcript is ready';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'transcript-ready-close';
+    close.setAttribute('aria-label', 'Close');
+    close.title = 'Close';
+    close.textContent = '×';
+    close.addEventListener('click', closeReadyNotice);
+    el.appendChild(text);
+    el.appendChild(close);
+    document.body.appendChild(el);
+    readyNotice = { el, id: kept.id };
+  }
+  document.addEventListener('hyperaudioLibraryChanged', () => {
+    if (readyNotice !== null && session.projectId === readyNotice.id) closeReadyNotice();
+  });
+
+  window.hyperaudioKeepTranscription = function (result) {
+    if (!transcriptionInBackground() || !result || typeof result.html !== 'string') return false;
+    const identity = pendingIdentity;
+    let reported = pendingProvenance;
+    if (result.info) {
+      try { reported = provenanceOf(result.info, pendingMediaName(identity)); } catch (e) { /* best-effort */ }
+    }
+    // taken: a second result, or an import's hyperaudioInit, finds nothing here
+    pendingIdentity = null;
+    pendingProvenance = null;
+    const finish = () => {
+      if (pendingTranscription !== null) pendingTranscription = null;
+      document.documentElement.classList.remove('ha-transcribing');
+      notifyLibraryChanged(false);
+    };
+    writeKeptTranscription(result, identity, reported).then((kept) => {
+      finish();
+      showReadyNotice(kept);
+      document.dispatchEvent(new CustomEvent('hyperaudioTranscriptionKept', { detail: kept }));
+    }).catch((e) => {
+      console.warn('hyperaudio-save: could not keep the transcription in the background', e);
+      finish();
+      return landKeptTranscriptionOnScreen(result, identity);
+    }).catch((e) => console.warn('hyperaudio-save: landing the transcription failed', e));
+    return true;
+  };
+
   // User-initiated content imports (SRT/VTT/JSON) also dispatch
   // hyperaudioInit; a surviving identity from an errored transcription must
   // not hijack THEIR media. The import paths call this before dispatching.
   function clearPendingTranscription() {
     pendingIdentity = null;
+    pendingProvenance = null;
     if (pendingTranscription !== null) {
       pendingTranscription = null;
       document.documentElement.classList.remove('ha-transcribing');
@@ -3003,6 +3259,7 @@
     pendingIdentity.playerSrc = canon;
     if (pendingTranscription !== null) {
       pendingTranscription.name = mediaDisplayName2(canon) || pendingTranscription.name;
+      pendingIdentity.name = pendingTranscription.name;
     }
     const t = document.getElementById('hypertranscript');
     const player = document.getElementById('hyperplayer');
@@ -3060,6 +3317,7 @@
     } finally {
       suppressCapture = false;
     }
+    pendingOnScreen = true;
     notifyLibraryChanged(false);
     return true;
   }
@@ -3072,6 +3330,7 @@
   // ENGINE's lifecycle signal (the wrapper above reads busy(false) without
   // spans as an engine failure and would drop the in-progress row).
   function leaveTranscriptionView() {
+    pendingOnScreen = false; // a project is taking the screen
     const t = document.getElementById('hypertranscript');
     if (t !== null && t.getAttribute('aria-busy') === 'true') {
       // Move the loader's LIVE NODES aside rather than snapshotting HTML: a
@@ -3731,46 +3990,24 @@
     const originalSetInfo = window.setTranscriptionInfo;
     if (typeof originalSetInfo === 'function') {
       window.setTranscriptionInfo = function (info) {
+        // finishing off screen (#715): the report describes the transcription,
+        // and the session and the details panel describe the open project
+        if (transcriptionInBackground()) {
+          try { pendingProvenance = provenanceOf(info, pendingMediaName(pendingIdentity)); } catch (e) { /* best-effort */ }
+          return undefined;
+        }
         try {
-          session.provenance = {
-            engine: (info && info.service ? String(info.service) : '').toLowerCase(),
-            model: info && info.model ? String(info.model) : '',
-            transcribedAt: nowIso(),
-          };
-          // Optional fields (spec § 3.5, format 1.3) — persisted so the info
-          // modal's Time taken / Processing rows survive a reload (#457).
-          if (info && typeof info.seconds === 'number' && Number.isFinite(info.seconds)) {
-            session.provenance.seconds = Math.round(info.seconds * 10) / 10;
-          }
-          if (info && info.device) {
-            session.provenance.device = String(info.device);
-          }
-          // What was really run (#668), recorded at transcription whatever
-          // the settings say: TPME exists to "capture what can be known about
-          // a transcript at the time of creation … but which may not be
-          // capturable later", and a project transcribed with provenance
-          // files switched off must still be able to describe itself fully
-          // when they are switched on. Never a key or a token: the engines
-          // hand over parameters, not credentials.
-          if (info && info.modelId) session.provenance.modelId = String(info.modelId);
-          if (info && info.engineVersion) session.provenance.engineVersion = String(info.engineVersion);
-          if (info && info.runtime) session.provenance.runtime = String(info.runtime);
-          if (info && info.parameters !== undefined && info.parameters !== null) {
-            try { session.provenance.parameters = JSON.parse(JSON.stringify(info.parameters)); } catch (e) { /* not plain data */ }
-          }
-          {
-            // the file, or the address, that was transcribed — as it was named
-            const player = document.querySelector('#hyperplayer');
-            const src = player !== null ? player.src : '';
-            const named = session.mediaFile !== null && !(isLinkUrl(src) && session.mediaFileFromUrl !== src)
-              ? session.mediaFile.name : (isLinkUrl(src) ? src : '');
-            if (named) session.provenance.mediaFile = String(named);
-          }
+          const player = document.querySelector('#hyperplayer');
+          const src = player !== null ? player.src : '';
+          // the file, or the address, that was transcribed — as it was named
+          const named = session.mediaFile !== null && !(isLinkUrl(src) && session.mediaFileFromUrl !== src)
+            ? session.mediaFile.name : (isLinkUrl(src) ? src : '');
+          const reported = provenanceOf(info, named);
+          session.provenance = reported.provenance;
           session.provenanceAt = Date.now();
           // the engine's own code first — it is the DETECTED language when
           // the picker said "auto" — then the picker's label, read as a name
-          const tag = languageTag(info && info.languageCode) || languageTag(info && info.language);
-          session.language = tag || (info && info.language ? String(info.language) : session.language);
+          if (reported.language) session.language = reported.language;
         } catch (e) { /* provenance is best-effort */ }
         return originalSetInfo.apply(this, arguments);
       };

@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 0.8.5 — last changed in release 0.8.5
+ * @version 1.3.34 — last changed in release 1.3.34
  * @license MIT
  *
  * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
@@ -244,7 +244,9 @@ function parakeetHfParseData(json) {
   let wordsInPara = 0;
 
   const language = json.language || "";
-  const track = document.querySelector('#hyperplayer-vtt');
+  // finishing while another project is open (#715): its track is not ours
+  const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
+  const track = background ? null : document.querySelector('#hyperplayer-vtt');
   if (track) {
     track.label = language;
     track.srcLang = language;
@@ -271,11 +273,17 @@ function parakeetHfParseData(json) {
   hyperTranscript += "\n </p> \n </section>\n</article>\n ";
   hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
+  const info = parakeetHfTranscriptionStart !== 0
+    ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000 } : null;
+  // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
+  if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html: hyperTranscript, info })) {
+    return;
+  }
   document.querySelector("#hypertranscript").innerHTML = hyperTranscript;
   document.querySelector('#download-html').setAttribute('href', 'data:text/html,' + encodeURIComponent(hyperTranscript));
 
-  if (typeof setTranscriptionInfo === 'function' && parakeetHfTranscriptionStart !== 0) {
-    setTranscriptionInfo({ ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000 });
+  if (typeof setTranscriptionInfo === 'function' && info !== null) {
+    setTranscriptionInfo(info);
   }
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
