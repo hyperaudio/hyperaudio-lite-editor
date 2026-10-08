@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.34 — last changed in release 1.3.34
+ * @version 1.3.35 — last changed in release 1.3.35
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -896,6 +896,12 @@
   // already carries the same information.
   function signatureFor(project, vtt) {
     project.modified = '';
+    // What the player reports about the medium settles after metadata is in,
+    // often after the project was signed — none of it is an edit. Left in,
+    // a document back on its save never compared equal on a fresh page.
+    if (project.media) {
+      project.media = Object.assign({}, project.media, { durationSeconds: 0, hasVideo: null });
+    }
     const syncOn = !!(project.options && project.options.captions
       && project.options.captions.updateFromTranscript !== false);
     return JSON.stringify(project) + '\u001f' + (syncOn ? '' : (vtt || ''));
@@ -1501,6 +1507,10 @@
   // media stay as separate immutable files. gather() and the projectId
   // capture are synchronous, so the write is of ONE document to ITS OWN
   // directory even if a switch lands mid-write.
+  // A draft is only written while the document differs from its last save.
+  // Back on the save — a view switch flipped and flipped back, a typed
+  // character deleted again — there is nothing to keep: any draft is
+  // retired and null comes back, so the caller can take the dot off.
   async function writeStateFile(projectId, filename) {
     // Every component is read and the payload serialised BEFORE the first
     // await (#654). The captions used to be read after the directory lookup,
@@ -1519,6 +1529,10 @@
       html: state.html,
       captionsVtt: vtt !== '' ? vtt : null,
     });
+    if (filename === DRAFT_FILE && savedSignature !== null && signatureOfParts(json, vtt) === savedSignature) {
+      await deleteProjectEntry(projectId, DRAFT_FILE);
+      return null;
+    }
     const dir = await getProjectDir(projectId, true);
     await writeFileTo(dir, filename, payload);
     // Every commit funnels through here (save, project birth, open-seeding),
@@ -1540,7 +1554,8 @@
     return t !== null && t.querySelector('[data-transcript-notice]') !== null;
   }
 
-  // Resolves to what happened (#659): 'persisted', 'skipped' (nothing to
+  // Resolves to what happened (#659): 'persisted', 'clean' (the document is
+  // its save again — any draft retired), 'skipped' (nothing to
   // write, or this tab may not), or 'failed'. A failure used to be swallowed
   // into silence: the pending flag was cleared, the flush resolved, and a
   // project switch went ahead and replaced the document — the newest edit
@@ -1552,8 +1567,22 @@
     if (transcriptIsNotice()) return 'skipped';
     autosavePending = false;
     const projectId = session.projectId;
+    const editAtGather = editGeneration;
     try {
       const state = await writeStateFile(projectId, DRAFT_FILE);
+      if (state === null) {
+        // the document is its save again: the dot comes off, unless an edit
+        // landed while this was being checked
+        await updateLibrary((lib) => {
+          const entry = lib.projects.find((p) => p.id === projectId);
+          if (entry !== undefined) entry.lastDraftAt = 0;
+        });
+        if (session.projectId === projectId && editGeneration === editAtGather) {
+          sessionEdited = false;
+          updateSaveIndicator();
+        }
+        return 'clean';
+      }
       await touchLibraryEntry(projectId, state, { draft: true });
       return 'persisted';
     } catch (e) {
