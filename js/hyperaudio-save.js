@@ -4216,7 +4216,11 @@
     '#project-save-btn', '#strikethrough', '#replace-box', '#replace-actions button',
     '#show-speakers', '#show-timecodes', '#remove-gaps-enabled', '#remove-gaps-threshold',
     '#remove-gaps-buffer', '#regenerate-btn', '#regenerate-float-btn',
-    '#captions-display input', '#captions-display button',
+    // a caption's text and times, and insert, merge and delete — not Play
+    // clip, the two cue buttons or the reading-rate badge, which only play
+    // or show something and change nothing about the project (#719)
+    '#captions-display input',
+    '#captions-display button:not(.play):not(.play-start):not(.play-end):not(.caption-rate)',
   ];
   // Idempotent by construction: it is called from setTranscriptBusy and from
   // every caption-editor rebuild, and an attribute written to the value it
