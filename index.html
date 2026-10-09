@@ -51,8 +51,11 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=1.3.34"></script>
   <script src="js/hyperaudio-lite-editor-parakeet.js?v=1.3.34"></script>
   <script src="js/transcribe-prefs.js?v=1.3.14"></script>
-  <script src="js/settings.js?v=1.3.25"></script>
+  <script src="js/settings.js?v=1.3.35"></script>
   <script src="js/experimental-features.js?v=1.3.25"></script>
+  <!-- the tour (#718): driver.js, vendored, and the steps -->
+  <script src="js/vendor/driver-1.9.0.js"></script>
+  <script src="js/tour.js?v=1.3.35"></script>
   <script src="js/transcription-progress.js?v=1.3.23"></script>
   <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.34"></script>
   <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.34"></script>
@@ -134,7 +137,8 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.34">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.35">
+   <link rel="stylesheet" href="js/vendor/driver-1.9.0.css">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
 </head>
@@ -599,6 +603,13 @@ If you are creating an open source application under a license compatible with t
                       <span id="settings-models-hint" class="settings-hint">Measuring…</span>
                     </span>
                     <ul id="settings-models" class="settings-models" aria-label="Downloaded models"></ul>
+                  </div>
+                  <div class="settings-row">
+                    <span class="settings-text">
+                      Tour of the editor
+                      <span class="settings-hint">A few cards pointing out the main parts of the editor.</span>
+                    </span>
+                    <button type="button" id="settings-tour" class="btn btn-sm btn-outline">Take the tour</button>
                   </div>
                   <div class="settings-row">
                     <span class="settings-text">
