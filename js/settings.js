@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.25 — last changed in release 1.3.25
+ * @version 1.3.35 — last changed in release 1.3.35
  * @license MIT
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -72,6 +72,8 @@
     // are opt-in and come with a warning. The larger Whisper models were the
     // first, until the GPU-memory fix (#462) let them out.
     experimentalFeatures: false,
+    // The tour (js/tour.js, #718) has been shown, or closed, once
+    tourSeen: false,
   });
 
   // caption.js takes a maximum AND a minimum line length: the minimum is the

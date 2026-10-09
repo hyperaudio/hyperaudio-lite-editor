@@ -1722,6 +1722,44 @@ label[data-a11y-wired]:focus-visible {
   #project-progress { transition: none; }
 }
 
+/* The tour's cards (#718): driver.js's own layout, in the editor's type and
+   colours. */
+.driver-popover.hyperaudio-tour {
+  font-family: inherit;
+  border-radius: 12px;
+  max-width: 320px;
+}
+.driver-popover.hyperaudio-tour .driver-popover-title { font-size: 1rem; font-weight: 700; }
+.driver-popover.hyperaudio-tour .driver-popover-description { font-size: 0.9rem; line-height: 1.45; }
+.driver-popover.hyperaudio-tour .driver-popover-progress-text { font-size: 0.8rem; opacity: 0.6; }
+.driver-popover.hyperaudio-tour .driver-popover-navigation-btns button {
+  font-family: inherit;
+  text-shadow: none;
+  border-radius: 6px;
+}
+/* the ✕ keeps driver's own look: the page's button hover (grey box) must not reach it */
+.driver-popover.hyperaudio-tour .driver-popover-close-btn,
+.driver-popover.hyperaudio-tour .driver-popover-close-btn:hover,
+.driver-popover.hyperaudio-tour .driver-popover-close-btn:focus {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+  color: #8a8a8a;
+}
+.driver-popover.hyperaudio-tour .driver-popover-close-btn:hover,
+.driver-popover.hyperaudio-tour .driver-popover-close-btn:focus { color: #2d2d2d; }
+.driver-popover.hyperaudio-tour .driver-popover-next-btn {
+  background: oklch(var(--p, 0.49 0.27 275));
+  color: oklch(var(--pc, 0.98 0 0));
+  border-color: transparent;
+}
+
+/* While the tour runs, dialogs appear without their fade or pop, so the
+   cut-out around one is never drawn over a half-shown dialog. */
+body.hyperaudio-touring .modal { transition: none; }
+body.hyperaudio-touring .modal-box { animation: none; transition: none; } /* the box scales up as it opens: not now */
+
 /* A transcript that finished while another project was open (#715): the same
    pill in the same corner, and it stays until closed or until its project is
    opened. */
