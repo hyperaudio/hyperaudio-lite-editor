@@ -1,7 +1,7 @@
 /**
  * tour.js
  * (C) The Hyperaudio Project
- * @version 1.3.35 — last changed in release 1.3.35
+ * @version 1.3.36 — last changed in release 1.3.36
  * @license MIT
  *
  * A tour of the editor (#718): a few cards, each pointing at one part of the
@@ -78,7 +78,12 @@
     {
       targets: ['#hypertranscript'],
       title: 'The transcript',
-      text: 'Click any word to play from there, and type straight into the text to correct it. Your changes are saved as you go.',
+      // one point per paragraph: driver renders the description as HTML
+      text: '<p>Double-click any word to move the playhead and press play.</p>'
+        + '<p>For faster navigation select "Double-click a word to play from it" from Settings → Playback.</p>'
+        + '<p>Type straight into the transcript to correct it.</p>'
+        + '<p>Press return for a new paragraph.</p>'
+        + '<p>Add speaker names between [square brackets].</p>',
     },
     {
       targets: ['#strikethrough'],
