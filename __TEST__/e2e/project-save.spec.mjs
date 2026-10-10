@@ -1887,15 +1887,27 @@ test('a second tab is read-only until it owns the project (#653)', async ({ page
   await page2.waitForSelector('#captions-display .caption');
   const divergence = page2.locator('#project-dialog.modal-open');   // the #506 notice on entry
   if (await divergence.isVisible()) await page2.click('#project-dialog-confirm');
+  // — the editing controls, that is. Play clip, the cue buttons and the
+  // reading-rate badge only play or show something, and stay usable (#719)
   const captionGate = await page2.evaluate(() => {
     const inputs = [...document.querySelectorAll('#captions-display input')];
     const buttons = [...document.querySelectorAll('#captions-display button')];
+    const playback = (b) => b.matches('.play, .play-start, .play-end, .caption-rate');
     return { inputs: inputs.length, disabledInputs: inputs.filter((i) => i.disabled).length,
-      buttons: buttons.length, disabledButtons: buttons.filter((b) => b.disabled).length };
+      editing: buttons.filter((b) => !playback(b)).length,
+      disabledEditing: buttons.filter((b) => !playback(b) && b.disabled).length,
+      playback: buttons.filter(playback).length,
+      disabledPlayback: buttons.filter((b) => playback(b) && b.disabled).length };
   });
   expect(captionGate.inputs).toBeGreaterThan(0);
   expect(captionGate.disabledInputs).toBe(captionGate.inputs);
-  expect(captionGate.disabledButtons).toBe(captionGate.buttons);
+  expect(captionGate.editing).toBeGreaterThan(0);
+  expect(captionGate.disabledEditing).toBe(captionGate.editing);
+  expect(captionGate.playback).toBeGreaterThan(0);
+  expect(captionGate.disabledPlayback).toBe(0);
+  // and Play clip plays
+  await page2.locator('#captions-display .caption .play').first().click();
+  await expect.poll(() => page2.evaluate(() => !document.getElementById('hyperplayer').paused)).toBe(true);
 
   // typing into the transcript does nothing
   await page2.click('#transcript-editor-btn');

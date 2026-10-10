@@ -6,10 +6,11 @@ Third-party libraries vendored for offline use (#381). Loaded lazily by
 
 | File | Package | Version | License | Source |
 |---|---|---|---|---|
-| `mediabunny-1.50.3.min.js` | [mediabunny](https://www.npmjs.com/package/mediabunny) | 1.50.3 | MPL-2.0 | `dist/bundles/mediabunny.min.mjs` |
-| `mediabunny-mp3-encoder-1.50.3.min.js` | [@mediabunny/mp3-encoder](https://www.npmjs.com/package/@mediabunny/mp3-encoder) | 1.50.3 | MPL-2.0 | `dist/bundles/mediabunny-mp3-encoder.min.mjs` |
+| `mediabunny-1.61.3.min.js` | [mediabunny](https://www.npmjs.com/package/mediabunny) | 1.61.3 | MPL-2.0 | `dist/bundles/mediabunny.min.mjs` |
+| `mediabunny-mp3-encoder-1.61.3.min.js` | [@mediabunny/mp3-encoder](https://www.npmjs.com/package/@mediabunny/mp3-encoder) | 1.61.3 | MPL-2.0 | `dist/bundles/mediabunny-mp3-encoder.min.mjs` |
 | `soundtouchjs-0.3.0.js` | [soundtouchjs](https://www.npmjs.com/package/soundtouchjs) | 0.3.0 | LGPL-2.1 | `dist/soundtouch.js` |
 | `jszip-3.10.1.min.js` | [jszip](https://www.npmjs.com/package/jszip) | 3.10.1 | MIT (dual MIT/GPL-3.0; used under MIT) | `dist/jszip.min.js` |
+| `driver-1.9.0.js`, `driver-1.9.0.css` | [driver.js](https://www.npmjs.com/package/driver.js) | 1.9.0 | MIT | `dist/driver.js.iife.js`, `dist/driver.css` (the tour, `js/tour.js`, #718; loaded by `<script>` and `<link>` tags, not the import map) |
 
 All files are unmodified copies of the packages' published dist builds;
 license headers are retained in each file — except the one below.

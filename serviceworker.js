@@ -20,7 +20,7 @@
  */
 'use strict';
 
-const VERSION = '1.3.34';
+const VERSION = '1.3.35';
 const PREFIX = 'hyperaudio-editor-';
 const CACHE = PREFIX + VERSION;
 // the old worker's cache. Finding it means this visitor was pinned.
@@ -48,15 +48,16 @@ const PRECACHE = [
   'js/hyperaudio-push-notification.js', 'js/hyperaudio-save.js', 'js/ionosphere-reader.js',
   'js/language-guess.js', 'js/media-export.js', 'js/media-first-frame.js',
   'js/media-posters.js', 'js/paragraph-timecodes.js', 'js/parakeet.worker.js',
-  'js/responsive.js', 'js/search-match.js', 'js/settings.js', 'js/stream-stretch.js', 'js/tpme.js', 'js/transcribe-prefs.js', 'js/transcription-progress.js',
+  'js/responsive.js', 'js/search-match.js', 'js/settings.js', 'js/stream-stretch.js', 'js/tour.js', 'js/tpme.js', 'js/transcribe-prefs.js', 'js/transcription-progress.js',
   'js/transcript-bench.js', 'js/transcript-doc-export.js', 'js/transcript-gateway.js',
   'js/transcript-history.js', 'js/transcript-lifecycle.js', 'js/transcript-maintenance.js',
   'js/transcript-selection.js', 'js/transcript-serializer.js', 'js/transcript-to-ionosphere.js', 'js/whisper-json-import.js',
   'js/whisper.worker.js', 'js/word-alignment.js', 'js/word-vtt.js',
   // vendored libraries: export, project zip, HLS — what offline export and saving need
   'js/vendor/hls-1.6.16.js', 'js/vendor/jszip-3.10.1.min.js',
-  'js/vendor/mediabunny-1.50.3.min.js', 'js/vendor/mediabunny-mp3-encoder-1.50.3.min.js',
+  'js/vendor/mediabunny-1.61.3.min.js', 'js/vendor/mediabunny-mp3-encoder-1.61.3.min.js',
   'js/vendor/mp4box-0.5.2.all.min.js', 'js/vendor/soundtouchjs-0.3.0.js',
+  'js/vendor/driver-1.9.0.js', 'js/vendor/driver-1.9.0.css',
   // icons the manifest and the page name
   'images/favicon-16x16.png', 'images/favicon-32x32.png', 'images/icon-192x192.png',
   'images/icon-512x512.png', 'images/maskable-icon-192x192.png',

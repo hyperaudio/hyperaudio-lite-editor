@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.32 — last changed in release 1.3.32
+ * @version 1.3.35 — last changed in release 1.3.35
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -354,10 +354,17 @@
   // Cues onto the exported timeline. Times only — a cue whose words were cut
   // away collapses to nothing and is dropped, but a cue that survives keeps
   // every word it had.
+  // Retimed to whole milliseconds, as the retimed transcript's words are
+  // (#720): a cue ends where the next cue's first word starts, and with the
+  // cue's end left a few microseconds above the word's rounded start that
+  // word fell inside the earlier cue, which then had one word too many and
+  // lost its word times to the syllable spread. The sidecar VTT and SRT
+  // carry the same milliseconds as the transcript, too.
+  const ms = (t) => Math.round(t * 1000) / 1000;
   const retimeCues = (cues, sections, rate) => cues
     .map((c) => ({
-      start: mapTime(c.start, sections) / rate,
-      end: mapTime(c.end, sections) / rate,
+      start: ms(mapTime(c.start, sections) / rate),
+      end: ms(mapTime(c.end, sections) / rate),
       lines: c.lines.slice(),
     }))
     .filter((c) => c.end - c.start > 0.05);
@@ -463,7 +470,9 @@
     lines.forEach((line) => line.forEach((text) => flat.push({ text })));
     if (flat.length === 0) return null;
 
-    const inCue = words.filter((w) => w.start >= cue.start - 0.001 && w.start < cue.end);
+    // compared at the words' own precision, milliseconds (#720)
+    const end = ms(cue.end);
+    const inCue = words.filter((w) => w.start >= cue.start - 0.001 && w.start < end);
     if (inCue.length === flat.length) {
       flat.forEach((word, i) => { word.start = inCue[i].start; });
     } else {
@@ -614,12 +623,104 @@
   const audioBitrate = (mb) => (mb.QUALITY_MEDIUM !== undefined ? mb.QUALITY_MEDIUM : 128e3);
   const videoBitrate = (mb) => (mb.QUALITY_MEDIUM !== undefined ? mb.QUALITY_MEDIUM : 2.5e6);
 
+  /* --------------------------------------------------------------------------
+   * The H.264 encoder, checked once (#721). On macOS 27.0 WebKit's GPU
+   * process is denied a VideoToolbox property, VideoToolbox falls back to
+   * its software encoder, which buffers up to 16 frames against WebCodecs'
+   * queue of 4, and an encoder in Main or High profile in the default
+   * (quality) latency mode takes a few frames and never emits a packet: the
+   * export sits on its status line for ever. Baseline has no reordering and
+   * is not affected. Fixed in WebKit (bug 324827), not shipped at the time
+   * of writing. The page cannot tell the OS or chip reliably, so it asks the
+   * encoder itself, once per page load: High profile, default latency, eight
+   * frames at 640×360 (the stall does not depend on size), and a packet
+   * within a second and a half means all is well. Nothing changes where the
+   * default works, and the workaround retires itself once Apple ships the
+   * fix. 'unknown' (no WebCodecs, H.264 not supported, an error) also leaves
+   * the export as it was.
+   * ------------------------------------------------------------------------ */
+  const H264_PROBE_CONFIG = { codec: 'avc1.64001f', width: 640, height: 360, bitrate: 1e6, avc: { format: 'avc' } };
+  const H264_PROBE_MS = 1500;
+  const probeH264Encoder = async () => {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return 'unknown';
+    try {
+      const support = await VideoEncoder.isConfigSupported(H264_PROBE_CONFIG);
+      if (!support || !support.supported) return 'unknown';
+    } catch (e) {
+      return 'unknown';
+    }
+    return new Promise((resolve) => {
+      let encoder = null;
+      let packets = 0;
+      let settled = false;
+      const done = (answer) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { if (encoder !== null && encoder.state !== 'closed') encoder.close(); } catch (e) { /* gone already */ }
+        resolve(answer);
+      };
+      const timer = setTimeout(() => done('stalled'), H264_PROBE_MS);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = H264_PROBE_CONFIG.width;
+        canvas.height = H264_PROBE_CONFIG.height;
+        const c = canvas.getContext('2d');
+        encoder = new VideoEncoder({
+          output: () => { packets += 1; done('ok'); },
+          error: () => done('unknown'),
+        });
+        encoder.configure(H264_PROBE_CONFIG);
+        (async () => {
+          for (let i = 0; i < 8 && !settled; i += 1) {
+            c.fillStyle = `hsl(${i * 40}, 70%, 40%)`;
+            c.fillRect(0, 0, canvas.width, canvas.height);
+            const frame = new VideoFrame(canvas, { timestamp: i * 40000, duration: 40000 });
+            encoder.encode(frame, { keyFrame: i === 0 });
+            frame.close();
+            if (encoder.encodeQueueSize >= 4) {
+              await new Promise((r) => encoder.addEventListener('dequeue', r, { once: true }));
+            }
+          }
+          if (!settled) await encoder.flush();
+          // a flush that resolves with nothing emitted is a stall too
+          done(packets > 0 ? 'ok' : 'stalled');
+        })().catch(() => done('unknown'));
+      } catch (e) {
+        done('unknown');
+      }
+    });
+  };
+  let h264Verdict = null; // Promise<'ok' | 'stalled' | 'unknown'>, once per page
+  const h264Check = () => {
+    if (h264Verdict === null) h264Verdict = probeH264Encoder();
+    return h264Verdict;
+  };
+  // Baseline profile, in place of whatever profile mediabunny chose, for an
+  // encoder that stalls on the others. mediabunny calls this with the
+  // config it is about to use and takes it as changed here.
+  const toBaselineProfile = (config) => {
+    if (config && typeof config.codec === 'string') {
+      config.codec = config.codec.replace(/^avc1\.[0-9a-fA-F]{2}/, 'avc1.42');
+    }
+  };
+  // The video encoding options for an output, with the fallback applied
+  // when the check calls for it (H.264 outputs only).
+  const videoEncodingOptions = async (mb, fmt) => {
+    const options = { codec: fmt.vcodec, bitrate: videoBitrate(mb) };
+    if (fmt.vcodec === 'avc' && (await h264Check()) === 'stalled') options.onEncoderConfig = toBaselineProfile;
+    return options;
+  };
+
   // Entire media: one straight conversion.
   const exportEntire = async (mb, fmt, ctx, onProgress) => {
     const input = await makeInput(mb, ctx);
     const output = new mb.Output({ format: fmt.make(mb), target: new mb.BufferTarget() });
     const options = { input, output };
     if (fmt.kind === 'audio') options.video = { discard: true };
+    // a source the container cannot carry is re-encoded on the way: the
+    // same encoder, the same fallback (#721)
+    else if (fmt.vcodec === 'avc' && (await h264Check()) === 'stalled') options.video = { onEncoderConfig: toBaselineProfile };
     const conversion = await mb.Conversion.init(options);
     conversion.onProgress = (p) => onProgress(p);
     try {
@@ -704,6 +805,196 @@
     }
   };
 
+  /* --------------------------------------------------------------------------
+   * AAC priming (#722). An AAC encoder's first packet decodes to a run of
+   * silence before the audio proper, 2112 samples for Apple's encoder, and
+   * WebCodecs does not say how many. Written at time 0, that silence IS the
+   * start of the track, and every player that takes the file at its word
+   * (Chrome, ffmpeg, VLC) heard the audio 40 ms behind the picture. Apple's
+   * decoders strip the run on their own, so Safari and QuickTime were in
+   * sync, which is why the edit list is the answer and trimming samples is
+   * not: an edit list tells both kinds of player the same thing, and neither
+   * counts it twice (the ffmpeg-made clip in #722 shows as much).
+   *
+   * The length is measured, once per page: a tone starting at 0.1 s goes
+   * through the same encoder and muxer as an export and comes back through
+   * decodeAudioData, and the onset's shift is the priming. A decoder that
+   * strips the run reports none, and that decoder is Apple's, which means
+   * the encoder is Apple's too: 2112. The audio track then starts that
+   * much before zero, which mediabunny (1.61+) writes as an edit list.
+   * ------------------------------------------------------------------------ */
+  const APPLE_AAC_PRIMING = 2112;
+  const PROBE_RATE = 48000;
+  const measureAacPriming = async (mb) => {
+    if (typeof OfflineAudioContext === 'undefined' || typeof AudioBuffer === 'undefined') return 0;
+    try {
+      const onsetAt = Math.round(PROBE_RATE * 0.1);
+      const length = Math.round(PROBE_RATE * 0.3);
+      const buffer = new AudioBuffer({ length, numberOfChannels: 1, sampleRate: PROBE_RATE });
+      const data = buffer.getChannelData(0);
+      for (let i = onsetAt; i < length; i += 1) data[i] = 0.8 * Math.sin((2 * Math.PI * 1000 * i) / PROBE_RATE);
+      const output = new mb.Output({ format: new mb.Mp4OutputFormat(), target: new mb.BufferTarget() });
+      const source = new mb.AudioBufferSource({ codec: 'aac', bitrate: audioBitrate(mb) });
+      output.addAudioTrack(source);
+      await output.start();
+      await source.add(buffer);
+      source.close();
+      await output.finalize();
+      const ctx = new OfflineAudioContext(1, length + PROBE_RATE, PROBE_RATE);
+      const decoded = await ctx.decodeAudioData(output.target.buffer.slice(0));
+      const out = decoded.getChannelData(0);
+      let onset = -1;
+      for (let i = 0; i < out.length; i += 1) {
+        if (Math.abs(out[i]) > 0.1) { onset = i; break; }
+      }
+      if (onset < 0) return 0;
+      const shift = Math.round((onset - onsetAt) * (PROBE_RATE / decoded.sampleRate));
+      // a few samples of onset smear either way is the decoder stripping the
+      // run itself; anything like a frame is the run
+      return shift >= 512 ? shift : APPLE_AAC_PRIMING;
+    } catch (e) {
+      console.warn('media-export: could not measure the AAC priming — the audio track starts at zero', e);
+      return 0;
+    }
+  };
+  let aacPrimingPromise = null; // Promise<number>, in samples, once per page
+  const aacPriming = (mb) => {
+    if (aacPrimingPromise === null) aacPrimingPromise = measureAacPriming(mb);
+    return aacPrimingPromise;
+  };
+  // The rate the encoder will see for this track's audio: the lift (#579)
+  // raises anything below MIN_ENCODE_RATE
+  const encodeRateFor = (track) => {
+    const rate = (track && track.sampleRate) || PROBE_RATE;
+    return rate >= MIN_ENCODE_RATE ? rate : liftTargetFor(rate);
+  };
+  // An audio source for the output: an AAC track starts its priming before
+  // zero, so the muxer's edit list puts the audio proper at zero
+  const makeAudioSource = async (mb, codec, track) => {
+    const options = {};
+    let primed = false;
+    if (codec === 'aac') {
+      const priming = await aacPriming(mb);
+      if (priming > 0) {
+        options.startTimestamp = -priming / encodeRateFor(track);
+        primed = true;
+      }
+    }
+    const source = new mb.AudioBufferSource({ codec, bitrate: audioBitrate(mb) }, options);
+    source._primed = primed; // the finished file then gets its roll groups
+    return source;
+  };
+
+  /* --------------------------------------------------------------------------
+   * The edit list alone is not enough for Apple's players (#722). AVFoundation
+   * strips 2112 samples of AAC priming on its own, and with an edit list
+   * saying the same thing it did both, so Safari and QuickTime heard the
+   * audio 44 ms EARLY. A file whose AAC track also carries pre-roll sample
+   * groups (sgpd/sbgp 'roll', as ffmpeg writes them) is read right by
+   * everything: ffmpeg, Chrome, AVFoundation, Safari's own playback, all
+   * measured on the clip in #722. mediabunny writes no sample groups, so the
+   * two boxes are added to the finished file here: 54 bytes at the end of
+   * the audio track's sample table, the sizes of the boxes above it grown
+   * to match, and, since the sample table precedes the media data, every
+   * chunk offset moved along by the same 54 bytes. A file not laid out as
+   * expected (a 64-bit box size, no audio track) is returned as it was.
+   * ------------------------------------------------------------------------ */
+  const addAacRollGroups = (buffer) => {
+    const b = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+    const u32 = (o) => b.getUint32(o);
+    const fourcc = (o) => String.fromCharCode(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+    const boxesIn = (start, end) => {
+      const list = [];
+      let o = start;
+      while (o + 8 <= end) {
+        let size = u32(o);
+        if (size === 1) return null; // 64-bit sizes: not what the muxer writes, leave the file alone
+        if (size === 0) size = end - o;
+        if (size < 8 || o + size > end) return null;
+        list.push({ o, size, type: fourcc(o + 4) });
+        o += size;
+      }
+      return list;
+    };
+    const find = (list, type) => (list === null ? null : (list.find((x) => x.type === type) || null));
+    try {
+      const top = boxesIn(0, buffer.byteLength);
+      const moov = find(top, 'moov');
+      if (moov === null) return buffer;
+      let chain = null;
+      let sampleCount = 0;
+      for (const trak of (boxesIn(moov.o + 8, moov.o + moov.size) || []).filter((x) => x.type === 'trak')) {
+        const mdia = find(boxesIn(trak.o + 8, trak.o + trak.size), 'mdia');
+        if (mdia === null) continue;
+        const inMdia = boxesIn(mdia.o + 8, mdia.o + mdia.size);
+        const hdlr = find(inMdia, 'hdlr');
+        if (hdlr === null || fourcc(hdlr.o + 16) !== 'soun') continue;
+        const minf = find(inMdia, 'minf');
+        const stbl = minf === null ? null : find(boxesIn(minf.o + 8, minf.o + minf.size), 'stbl');
+        const inStbl = stbl === null ? null : boxesIn(stbl.o + 8, stbl.o + stbl.size);
+        const stsz = find(inStbl, 'stsz');
+        if (stsz === null || find(inStbl, 'sgpd') !== null) return buffer; // no sample table, or groups already there
+        sampleCount = u32(stsz.o + 16);
+        chain = [moov, trak, mdia, minf, stbl];
+        break;
+      }
+      if (chain === null || sampleCount === 0) return buffer;
+      const stbl = chain[chain.length - 1];
+      const insert = new Uint8Array(54);
+      const iv = new DataView(insert.buffer);
+      const put = (o, text) => { for (let i = 0; i < 4; i += 1) insert[o + i] = text.charCodeAt(i); };
+      // sgpd, version 1: one 'roll' entry of default length 2, roll distance -1
+      iv.setUint32(0, 26); put(4, 'sgpd'); insert[8] = 1; put(12, 'roll'); iv.setUint32(16, 2); iv.setUint32(20, 1); iv.setInt16(24, -1);
+      // sbgp: every sample belongs to that group
+      iv.setUint32(26, 28); put(30, 'sbgp'); put(38, 'roll'); iv.setUint32(42, 1); iv.setUint32(46, sampleCount); iv.setUint32(50, 1);
+      const at = stbl.o + stbl.size;
+      const out = new Uint8Array(buffer.byteLength + insert.length);
+      out.set(bytes.subarray(0, at), 0);
+      out.set(insert, at);
+      out.set(bytes.subarray(at), at + insert.length);
+      const ov = new DataView(out.buffer);
+      chain.forEach((box) => ov.setUint32(box.o, box.size + insert.length));
+      // chunk offsets are absolute: those past the insertion point move along
+      const shiftOffsets = (start, end) => {
+        let o = start;
+        while (o + 8 <= end) {
+          let size = ov.getUint32(o);
+          if (size === 0) size = end - o;
+          const type = String.fromCharCode(out[o + 4], out[o + 5], out[o + 6], out[o + 7]);
+          if (type === 'stco') {
+            const n = ov.getUint32(o + 12);
+            for (let i = 0; i < n; i += 1) {
+              const p = o + 16 + i * 4;
+              if (ov.getUint32(p) >= at) ov.setUint32(p, ov.getUint32(p) + insert.length);
+            }
+          } else if (type === 'co64') {
+            const n = ov.getUint32(o + 12);
+            for (let i = 0; i < n; i += 1) {
+              const p = o + 16 + i * 8;
+              if (ov.getBigUint64(p) >= BigInt(at)) ov.setBigUint64(p, ov.getBigUint64(p) + BigInt(insert.length));
+            }
+          } else if (type === 'moov' || type === 'trak' || type === 'mdia' || type === 'minf' || type === 'stbl') {
+            shiftOffsets(o + 8, o + size);
+          }
+          o += size;
+        }
+      };
+      shiftOffsets(moov.o, moov.o + moov.size + insert.length);
+      return out.buffer;
+    } catch (e) {
+      console.warn('media-export: could not add the AAC roll groups — the file is as the muxer wrote it', e);
+      return buffer;
+    }
+  };
+  // The finished file, with the roll groups when its AAC track starts
+  // before zero (the source says so): MP4 and M4A only
+  const finishedFile = (output, fmt, source) => {
+    const buffer = output.target.buffer;
+    const aac = fmt.id === 'mp4' || fmt.id === 'm4a';
+    return new Blob([aac && source !== null && source._primed === true ? addAacRollGroups(buffer) : buffer], { type: fmt.mime });
+  };
+
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
   // the sections concatenate without any timestamp bookkeeping.
@@ -715,7 +1006,7 @@
 
     const sink = new mb.AudioBufferSink(track);
     const output = new mb.Output({ format: fmt.make(mb), target: new mb.BufferTarget() });
-    const source = new mb.AudioBufferSource({ codec: fmt.codec, bitrate: audioBitrate(mb) });
+    const source = await makeAudioSource(mb, fmt.codec, track);
     output.addAudioTrack(source);
     await output.start();
 
@@ -750,7 +1041,7 @@
       try { await output.cancel(); } catch (_) { /* already torn down */ }
       throw err;
     }
-    return new Blob([output.target.buffer], { type: fmt.mime });
+    return finishedFile(output, fmt, source);
   };
 
   // Edited media with video: decode frames per kept section and re-timestamp
@@ -845,12 +1136,12 @@
     const ctx2d = canvas.getContext('2d');
     const drawFrame = makeFrameDrawer(ctx.frame, srcW, srcH, width, height);
 
-    const vSource = new mb.CanvasSource(canvas, { codec: fmt.vcodec, bitrate: videoBitrate(mb) });
+    const vSource = new mb.CanvasSource(canvas, await videoEncodingOptions(mb, fmt));
     output.addVideoTrack(vSource);
     let aSource = null;
     let aSink = null;
     if (aTrack) {
-      aSource = new mb.AudioBufferSource({ codec: fmt.acodec, bitrate: audioBitrate(mb) });
+      aSource = await makeAudioSource(mb, fmt.acodec, aTrack);
       output.addAudioTrack(aSource);
       aSink = new mb.AudioBufferSink(aTrack);
     }
@@ -917,7 +1208,7 @@
       try { await output.cancel(); } catch (_) { /* already torn down */ }
       throw err;
     }
-    return new Blob([output.target.buffer], { type: fmt.mime });
+    return finishedFile(output, fmt, aSource);
   };
 
   // ---------------------------------------------------------------------------
@@ -1703,9 +1994,12 @@
         blob = await exportEntire(mb, fmt, ctx, setProgress);
       } else {
         const captions = burn ? buildCaptionChunks(ctx) : null;
-        setStatus(burn ? 'Exporting with captions…'
-          : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…`
-            : (clip !== null ? 'Exporting clip…' : 'Exporting edited media…')));
+        // the status says when the compatible encoder is in use (#721)
+        const compat = fmt.kind === 'video' && fmt.vcodec === 'avc' && (await h264Check()) === 'stalled'
+          ? ' (compatible video encoder)' : '';
+        setStatus((burn ? 'Exporting with captions'
+          : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved`
+            : (clip !== null ? 'Exporting clip' : 'Exporting edited media'))) + compat + '…');
         blob = fmt.kind === 'video'
           ? await exportEditedVideo(mb, fmt, ctx, setProgress, captions)
           : await exportEditedAudio(mb, fmt, ctx, setProgress);
@@ -1970,5 +2264,13 @@
   });
   // The framing geometry for portrait and square output (#690), pure, so it
   // can be checked without rendering a video
+  // the encoder checks, for tests: the verdicts, and a way to ask again
+  window.MediaExportEncoders = Object.freeze({
+    h264Check,
+    resetH264Check: () => { h264Verdict = null; },
+    aacPriming: async () => aacPriming(await loadMediabunny()),
+    resetAacPriming: () => { aacPrimingPromise = null; },
+    addAacRollGroups,
+  });
   window.MediaExportFrame = Object.freeze({ FRAME_SIZES, outputSize, coverRegion, coverPlacement, containRegion, makeFrameDrawer, captionLayout });
 })();
