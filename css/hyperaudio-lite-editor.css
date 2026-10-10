@@ -1731,6 +1731,9 @@ label[data-a11y-wired]:focus-visible {
 }
 .driver-popover.hyperaudio-tour .driver-popover-title { font-size: 1rem; font-weight: 700; }
 .driver-popover.hyperaudio-tour .driver-popover-description { font-size: 0.9rem; line-height: 1.45; }
+/* the page's own paragraph rule (padding, a transcript line-height) must not reach the card */
+.driver-popover.hyperaudio-tour .driver-popover-description p { margin: 0 0 0.55em; padding: 0; line-height: inherit; }
+.driver-popover.hyperaudio-tour .driver-popover-description p:last-child { margin-bottom: 0; }
 .driver-popover.hyperaudio-tour .driver-popover-progress-text { font-size: 0.8rem; opacity: 0.6; }
 .driver-popover.hyperaudio-tour .driver-popover-navigation-btns button {
   font-family: inherit;

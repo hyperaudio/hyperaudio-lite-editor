@@ -78,7 +78,12 @@
     {
       targets: ['#hypertranscript'],
       title: 'The transcript',
-      text: 'Double-click any word to move the playhead and press play. For faster navigation select "Double-click a word to play from it" from Settings → Playback. Type straight into the transcript to correct it. Press return for a new paragraph. Add speaker names between [square brackets].',
+      // one point per paragraph: driver renders the description as HTML
+      text: '<p>Double-click any word to move the playhead and press play.</p>'
+        + '<p>For faster navigation select "Double-click a word to play from it" from Settings → Playback.</p>'
+        + '<p>Type straight into the transcript to correct it.</p>'
+        + '<p>Press return for a new paragraph.</p>'
+        + '<p>Add speaker names between [square brackets].</p>',
     },
     {
       targets: ['#strikethrough'],
