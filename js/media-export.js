@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.32 — last changed in release 1.3.32
+ * @version 1.3.35 — last changed in release 1.3.35
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -354,10 +354,17 @@
   // Cues onto the exported timeline. Times only — a cue whose words were cut
   // away collapses to nothing and is dropped, but a cue that survives keeps
   // every word it had.
+  // Retimed to whole milliseconds, as the retimed transcript's words are
+  // (#720): a cue ends where the next cue's first word starts, and with the
+  // cue's end left a few microseconds above the word's rounded start that
+  // word fell inside the earlier cue, which then had one word too many and
+  // lost its word times to the syllable spread. The sidecar VTT and SRT
+  // carry the same milliseconds as the transcript, too.
+  const ms = (t) => Math.round(t * 1000) / 1000;
   const retimeCues = (cues, sections, rate) => cues
     .map((c) => ({
-      start: mapTime(c.start, sections) / rate,
-      end: mapTime(c.end, sections) / rate,
+      start: ms(mapTime(c.start, sections) / rate),
+      end: ms(mapTime(c.end, sections) / rate),
       lines: c.lines.slice(),
     }))
     .filter((c) => c.end - c.start > 0.05);
@@ -463,7 +470,9 @@
     lines.forEach((line) => line.forEach((text) => flat.push({ text })));
     if (flat.length === 0) return null;
 
-    const inCue = words.filter((w) => w.start >= cue.start - 0.001 && w.start < cue.end);
+    // compared at the words' own precision, milliseconds (#720)
+    const end = ms(cue.end);
+    const inCue = words.filter((w) => w.start >= cue.start - 0.001 && w.start < end);
     if (inCue.length === flat.length) {
       flat.forEach((word, i) => { word.start = inCue[i].start; });
     } else {
