@@ -55,7 +55,7 @@ const PRECACHE = [
   'js/whisper.worker.js', 'js/word-alignment.js', 'js/word-vtt.js',
   // vendored libraries: export, project zip, HLS — what offline export and saving need
   'js/vendor/hls-1.6.16.js', 'js/vendor/jszip-3.10.1.min.js',
-  'js/vendor/mediabunny-1.50.3.min.js', 'js/vendor/mediabunny-mp3-encoder-1.50.3.min.js',
+  'js/vendor/mediabunny-1.61.3.min.js', 'js/vendor/mediabunny-mp3-encoder-1.61.3.min.js',
   'js/vendor/mp4box-0.5.2.all.min.js', 'js/vendor/soundtouchjs-0.3.0.js',
   'js/vendor/driver-1.9.0.js', 'js/vendor/driver-1.9.0.css',
   // icons the manifest and the page name
