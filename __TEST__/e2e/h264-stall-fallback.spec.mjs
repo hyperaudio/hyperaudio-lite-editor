@@ -66,6 +66,12 @@ const formats = (page) => page.evaluate(() => [...document.querySelectorAll('#ex
 const exportProfile = async (page) => {
   await settle(page, 'export-format', 'mp4');
   await settle(page, 'export-burn', true);
+  // every status the dialog shows on the way, however briefly
+  await page.evaluate(() => {
+    window.__statuses = [];
+    const el = document.getElementById('export-status');
+    new MutationObserver(() => window.__statuses.push(el.textContent)).observe(el, { childList: true, characterData: true, subtree: true });
+  });
   const downloadPromise = page.waitForEvent('download');
   await page.click('#export-start');
   const download = await downloadPromise;
@@ -77,7 +83,8 @@ const exportProfile = async (page) => {
     const bytes = Uint8Array.from(atob(data), (ch) => ch.charCodeAt(0));
     const input = new mb.Input({ source: new mb.BufferSource(bytes.buffer), formats: mb.ALL_FORMATS });
     const track = await input.getPrimaryVideoTrack();
-    return { codec: await track.getCodecParameterString(), frames: await track.computePacketStats().then((s) => s.packetCount) };
+    return { codec: await track.getCodecParameterString(), frames: await track.computePacketStats().then((s) => s.packetCount),
+      statuses: window.__statuses };
   }, b64);
 };
 
@@ -98,14 +105,10 @@ test('where Main and High stall, the check says so and the export completes in B
   const t0 = Date.now();
   expect(await page.evaluate(() => window.MediaExportEncoders.h264Check())).toBe('stalled');
   expect(Date.now() - t0).toBeLessThan(4000); // the check gives up quickly
-  const statuses = [];
-  const statusEl = page.locator('#export-status');
-  const watch = setInterval(async () => { try { statuses.push(await statusEl.textContent()); } catch (e) { /* page gone */ } }, 100);
   const out = await exportProfile(page);
-  clearInterval(watch);
   expect(out.codec).toMatch(/^avc1\.42/);
   expect(out.frames).toBeGreaterThan(0);
-  expect(statuses.some((s) => s && s.includes('compatible video encoder'))).toBe(true);
+  expect(out.statuses.some((s) => s.includes('compatible video encoder'))).toBe(true);
 });
 
 test('without WebCodecs H.264 the check is unknown and changes nothing', async ({ page }) => {
