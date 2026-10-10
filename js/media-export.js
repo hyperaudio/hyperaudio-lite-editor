@@ -805,6 +805,196 @@
     }
   };
 
+  /* --------------------------------------------------------------------------
+   * AAC priming (#722). An AAC encoder's first packet decodes to a run of
+   * silence before the audio proper, 2112 samples for Apple's encoder, and
+   * WebCodecs does not say how many. Written at time 0, that silence IS the
+   * start of the track, and every player that takes the file at its word
+   * (Chrome, ffmpeg, VLC) heard the audio 40 ms behind the picture. Apple's
+   * decoders strip the run on their own, so Safari and QuickTime were in
+   * sync, which is why the edit list is the answer and trimming samples is
+   * not: an edit list tells both kinds of player the same thing, and neither
+   * counts it twice (the ffmpeg-made clip in #722 shows as much).
+   *
+   * The length is measured, once per page: a tone starting at 0.1 s goes
+   * through the same encoder and muxer as an export and comes back through
+   * decodeAudioData, and the onset's shift is the priming. A decoder that
+   * strips the run reports none, and that decoder is Apple's, which means
+   * the encoder is Apple's too: 2112. The audio track then starts that
+   * much before zero, which mediabunny (1.61+) writes as an edit list.
+   * ------------------------------------------------------------------------ */
+  const APPLE_AAC_PRIMING = 2112;
+  const PROBE_RATE = 48000;
+  const measureAacPriming = async (mb) => {
+    if (typeof OfflineAudioContext === 'undefined' || typeof AudioBuffer === 'undefined') return 0;
+    try {
+      const onsetAt = Math.round(PROBE_RATE * 0.1);
+      const length = Math.round(PROBE_RATE * 0.3);
+      const buffer = new AudioBuffer({ length, numberOfChannels: 1, sampleRate: PROBE_RATE });
+      const data = buffer.getChannelData(0);
+      for (let i = onsetAt; i < length; i += 1) data[i] = 0.8 * Math.sin((2 * Math.PI * 1000 * i) / PROBE_RATE);
+      const output = new mb.Output({ format: new mb.Mp4OutputFormat(), target: new mb.BufferTarget() });
+      const source = new mb.AudioBufferSource({ codec: 'aac', bitrate: audioBitrate(mb) });
+      output.addAudioTrack(source);
+      await output.start();
+      await source.add(buffer);
+      source.close();
+      await output.finalize();
+      const ctx = new OfflineAudioContext(1, length + PROBE_RATE, PROBE_RATE);
+      const decoded = await ctx.decodeAudioData(output.target.buffer.slice(0));
+      const out = decoded.getChannelData(0);
+      let onset = -1;
+      for (let i = 0; i < out.length; i += 1) {
+        if (Math.abs(out[i]) > 0.1) { onset = i; break; }
+      }
+      if (onset < 0) return 0;
+      const shift = Math.round((onset - onsetAt) * (PROBE_RATE / decoded.sampleRate));
+      // a few samples of onset smear either way is the decoder stripping the
+      // run itself; anything like a frame is the run
+      return shift >= 512 ? shift : APPLE_AAC_PRIMING;
+    } catch (e) {
+      console.warn('media-export: could not measure the AAC priming — the audio track starts at zero', e);
+      return 0;
+    }
+  };
+  let aacPrimingPromise = null; // Promise<number>, in samples, once per page
+  const aacPriming = (mb) => {
+    if (aacPrimingPromise === null) aacPrimingPromise = measureAacPriming(mb);
+    return aacPrimingPromise;
+  };
+  // The rate the encoder will see for this track's audio: the lift (#579)
+  // raises anything below MIN_ENCODE_RATE
+  const encodeRateFor = (track) => {
+    const rate = (track && track.sampleRate) || PROBE_RATE;
+    return rate >= MIN_ENCODE_RATE ? rate : liftTargetFor(rate);
+  };
+  // An audio source for the output: an AAC track starts its priming before
+  // zero, so the muxer's edit list puts the audio proper at zero
+  const makeAudioSource = async (mb, codec, track) => {
+    const options = {};
+    let primed = false;
+    if (codec === 'aac') {
+      const priming = await aacPriming(mb);
+      if (priming > 0) {
+        options.startTimestamp = -priming / encodeRateFor(track);
+        primed = true;
+      }
+    }
+    const source = new mb.AudioBufferSource({ codec, bitrate: audioBitrate(mb) }, options);
+    source._primed = primed; // the finished file then gets its roll groups
+    return source;
+  };
+
+  /* --------------------------------------------------------------------------
+   * The edit list alone is not enough for Apple's players (#722). AVFoundation
+   * strips 2112 samples of AAC priming on its own, and with an edit list
+   * saying the same thing it did both, so Safari and QuickTime heard the
+   * audio 44 ms EARLY. A file whose AAC track also carries pre-roll sample
+   * groups (sgpd/sbgp 'roll', as ffmpeg writes them) is read right by
+   * everything: ffmpeg, Chrome, AVFoundation, Safari's own playback, all
+   * measured on the clip in #722. mediabunny writes no sample groups, so the
+   * two boxes are added to the finished file here: 54 bytes at the end of
+   * the audio track's sample table, the sizes of the boxes above it grown
+   * to match, and, since the sample table precedes the media data, every
+   * chunk offset moved along by the same 54 bytes. A file not laid out as
+   * expected (a 64-bit box size, no audio track) is returned as it was.
+   * ------------------------------------------------------------------------ */
+  const addAacRollGroups = (buffer) => {
+    const b = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+    const u32 = (o) => b.getUint32(o);
+    const fourcc = (o) => String.fromCharCode(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+    const boxesIn = (start, end) => {
+      const list = [];
+      let o = start;
+      while (o + 8 <= end) {
+        let size = u32(o);
+        if (size === 1) return null; // 64-bit sizes: not what the muxer writes, leave the file alone
+        if (size === 0) size = end - o;
+        if (size < 8 || o + size > end) return null;
+        list.push({ o, size, type: fourcc(o + 4) });
+        o += size;
+      }
+      return list;
+    };
+    const find = (list, type) => (list === null ? null : (list.find((x) => x.type === type) || null));
+    try {
+      const top = boxesIn(0, buffer.byteLength);
+      const moov = find(top, 'moov');
+      if (moov === null) return buffer;
+      let chain = null;
+      let sampleCount = 0;
+      for (const trak of (boxesIn(moov.o + 8, moov.o + moov.size) || []).filter((x) => x.type === 'trak')) {
+        const mdia = find(boxesIn(trak.o + 8, trak.o + trak.size), 'mdia');
+        if (mdia === null) continue;
+        const inMdia = boxesIn(mdia.o + 8, mdia.o + mdia.size);
+        const hdlr = find(inMdia, 'hdlr');
+        if (hdlr === null || fourcc(hdlr.o + 16) !== 'soun') continue;
+        const minf = find(inMdia, 'minf');
+        const stbl = minf === null ? null : find(boxesIn(minf.o + 8, minf.o + minf.size), 'stbl');
+        const inStbl = stbl === null ? null : boxesIn(stbl.o + 8, stbl.o + stbl.size);
+        const stsz = find(inStbl, 'stsz');
+        if (stsz === null || find(inStbl, 'sgpd') !== null) return buffer; // no sample table, or groups already there
+        sampleCount = u32(stsz.o + 16);
+        chain = [moov, trak, mdia, minf, stbl];
+        break;
+      }
+      if (chain === null || sampleCount === 0) return buffer;
+      const stbl = chain[chain.length - 1];
+      const insert = new Uint8Array(54);
+      const iv = new DataView(insert.buffer);
+      const put = (o, text) => { for (let i = 0; i < 4; i += 1) insert[o + i] = text.charCodeAt(i); };
+      // sgpd, version 1: one 'roll' entry of default length 2, roll distance -1
+      iv.setUint32(0, 26); put(4, 'sgpd'); insert[8] = 1; put(12, 'roll'); iv.setUint32(16, 2); iv.setUint32(20, 1); iv.setInt16(24, -1);
+      // sbgp: every sample belongs to that group
+      iv.setUint32(26, 28); put(30, 'sbgp'); put(38, 'roll'); iv.setUint32(42, 1); iv.setUint32(46, sampleCount); iv.setUint32(50, 1);
+      const at = stbl.o + stbl.size;
+      const out = new Uint8Array(buffer.byteLength + insert.length);
+      out.set(bytes.subarray(0, at), 0);
+      out.set(insert, at);
+      out.set(bytes.subarray(at), at + insert.length);
+      const ov = new DataView(out.buffer);
+      chain.forEach((box) => ov.setUint32(box.o, box.size + insert.length));
+      // chunk offsets are absolute: those past the insertion point move along
+      const shiftOffsets = (start, end) => {
+        let o = start;
+        while (o + 8 <= end) {
+          let size = ov.getUint32(o);
+          if (size === 0) size = end - o;
+          const type = String.fromCharCode(out[o + 4], out[o + 5], out[o + 6], out[o + 7]);
+          if (type === 'stco') {
+            const n = ov.getUint32(o + 12);
+            for (let i = 0; i < n; i += 1) {
+              const p = o + 16 + i * 4;
+              if (ov.getUint32(p) >= at) ov.setUint32(p, ov.getUint32(p) + insert.length);
+            }
+          } else if (type === 'co64') {
+            const n = ov.getUint32(o + 12);
+            for (let i = 0; i < n; i += 1) {
+              const p = o + 16 + i * 8;
+              if (ov.getBigUint64(p) >= BigInt(at)) ov.setBigUint64(p, ov.getBigUint64(p) + BigInt(insert.length));
+            }
+          } else if (type === 'moov' || type === 'trak' || type === 'mdia' || type === 'minf' || type === 'stbl') {
+            shiftOffsets(o + 8, o + size);
+          }
+          o += size;
+        }
+      };
+      shiftOffsets(moov.o, moov.o + moov.size + insert.length);
+      return out.buffer;
+    } catch (e) {
+      console.warn('media-export: could not add the AAC roll groups — the file is as the muxer wrote it', e);
+      return buffer;
+    }
+  };
+  // The finished file, with the roll groups when its AAC track starts
+  // before zero (the source says so): MP4 and M4A only
+  const finishedFile = (output, fmt, source) => {
+    const buffer = output.target.buffer;
+    const aac = fmt.id === 'mp4' || fmt.id === 'm4a';
+    return new Blob([aac && source !== null && source._primed === true ? addAacRollGroups(buffer) : buffer], { type: fmt.mime });
+  };
+
   // Edited media, audio-only: decode each kept section, trim the edge buffers,
   // append. AudioBufferSource plays appended buffers back-to-back from 0, so
   // the sections concatenate without any timestamp bookkeeping.
@@ -816,7 +1006,7 @@
 
     const sink = new mb.AudioBufferSink(track);
     const output = new mb.Output({ format: fmt.make(mb), target: new mb.BufferTarget() });
-    const source = new mb.AudioBufferSource({ codec: fmt.codec, bitrate: audioBitrate(mb) });
+    const source = await makeAudioSource(mb, fmt.codec, track);
     output.addAudioTrack(source);
     await output.start();
 
@@ -851,7 +1041,7 @@
       try { await output.cancel(); } catch (_) { /* already torn down */ }
       throw err;
     }
-    return new Blob([output.target.buffer], { type: fmt.mime });
+    return finishedFile(output, fmt, source);
   };
 
   // Edited media with video: decode frames per kept section and re-timestamp
@@ -951,7 +1141,7 @@
     let aSource = null;
     let aSink = null;
     if (aTrack) {
-      aSource = new mb.AudioBufferSource({ codec: fmt.acodec, bitrate: audioBitrate(mb) });
+      aSource = await makeAudioSource(mb, fmt.acodec, aTrack);
       output.addAudioTrack(aSource);
       aSink = new mb.AudioBufferSink(aTrack);
     }
@@ -1018,7 +1208,7 @@
       try { await output.cancel(); } catch (_) { /* already torn down */ }
       throw err;
     }
-    return new Blob([output.target.buffer], { type: fmt.mime });
+    return finishedFile(output, fmt, aSource);
   };
 
   // ---------------------------------------------------------------------------
@@ -2074,10 +2264,13 @@
   });
   // The framing geometry for portrait and square output (#690), pure, so it
   // can be checked without rendering a video
-  // the encoder check, for tests: the verdict, and a way to ask again
+  // the encoder checks, for tests: the verdicts, and a way to ask again
   window.MediaExportEncoders = Object.freeze({
     h264Check,
     resetH264Check: () => { h264Verdict = null; },
+    aacPriming: async () => aacPriming(await loadMediabunny()),
+    resetAacPriming: () => { aacPrimingPromise = null; },
+    addAacRollGroups,
   });
   window.MediaExportFrame = Object.freeze({ FRAME_SIZES, outputSize, coverRegion, coverPlacement, containRegion, makeFrameDrawer, captionLayout });
 })();
