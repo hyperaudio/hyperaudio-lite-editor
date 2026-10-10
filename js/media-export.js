@@ -623,12 +623,104 @@
   const audioBitrate = (mb) => (mb.QUALITY_MEDIUM !== undefined ? mb.QUALITY_MEDIUM : 128e3);
   const videoBitrate = (mb) => (mb.QUALITY_MEDIUM !== undefined ? mb.QUALITY_MEDIUM : 2.5e6);
 
+  /* --------------------------------------------------------------------------
+   * The H.264 encoder, checked once (#721). On macOS 27.0 WebKit's GPU
+   * process is denied a VideoToolbox property, VideoToolbox falls back to
+   * its software encoder, which buffers up to 16 frames against WebCodecs'
+   * queue of 4, and an encoder in Main or High profile in the default
+   * (quality) latency mode takes a few frames and never emits a packet: the
+   * export sits on its status line for ever. Baseline has no reordering and
+   * is not affected. Fixed in WebKit (bug 324827), not shipped at the time
+   * of writing. The page cannot tell the OS or chip reliably, so it asks the
+   * encoder itself, once per page load: High profile, default latency, eight
+   * frames at 640×360 (the stall does not depend on size), and a packet
+   * within a second and a half means all is well. Nothing changes where the
+   * default works, and the workaround retires itself once Apple ships the
+   * fix. 'unknown' (no WebCodecs, H.264 not supported, an error) also leaves
+   * the export as it was.
+   * ------------------------------------------------------------------------ */
+  const H264_PROBE_CONFIG = { codec: 'avc1.64001f', width: 640, height: 360, bitrate: 1e6, avc: { format: 'avc' } };
+  const H264_PROBE_MS = 1500;
+  const probeH264Encoder = async () => {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return 'unknown';
+    try {
+      const support = await VideoEncoder.isConfigSupported(H264_PROBE_CONFIG);
+      if (!support || !support.supported) return 'unknown';
+    } catch (e) {
+      return 'unknown';
+    }
+    return new Promise((resolve) => {
+      let encoder = null;
+      let packets = 0;
+      let settled = false;
+      const done = (answer) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { if (encoder !== null && encoder.state !== 'closed') encoder.close(); } catch (e) { /* gone already */ }
+        resolve(answer);
+      };
+      const timer = setTimeout(() => done('stalled'), H264_PROBE_MS);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = H264_PROBE_CONFIG.width;
+        canvas.height = H264_PROBE_CONFIG.height;
+        const c = canvas.getContext('2d');
+        encoder = new VideoEncoder({
+          output: () => { packets += 1; done('ok'); },
+          error: () => done('unknown'),
+        });
+        encoder.configure(H264_PROBE_CONFIG);
+        (async () => {
+          for (let i = 0; i < 8 && !settled; i += 1) {
+            c.fillStyle = `hsl(${i * 40}, 70%, 40%)`;
+            c.fillRect(0, 0, canvas.width, canvas.height);
+            const frame = new VideoFrame(canvas, { timestamp: i * 40000, duration: 40000 });
+            encoder.encode(frame, { keyFrame: i === 0 });
+            frame.close();
+            if (encoder.encodeQueueSize >= 4) {
+              await new Promise((r) => encoder.addEventListener('dequeue', r, { once: true }));
+            }
+          }
+          if (!settled) await encoder.flush();
+          // a flush that resolves with nothing emitted is a stall too
+          done(packets > 0 ? 'ok' : 'stalled');
+        })().catch(() => done('unknown'));
+      } catch (e) {
+        done('unknown');
+      }
+    });
+  };
+  let h264Verdict = null; // Promise<'ok' | 'stalled' | 'unknown'>, once per page
+  const h264Check = () => {
+    if (h264Verdict === null) h264Verdict = probeH264Encoder();
+    return h264Verdict;
+  };
+  // Baseline profile, in place of whatever profile mediabunny chose, for an
+  // encoder that stalls on the others. mediabunny calls this with the
+  // config it is about to use and takes it as changed here.
+  const toBaselineProfile = (config) => {
+    if (config && typeof config.codec === 'string') {
+      config.codec = config.codec.replace(/^avc1\.[0-9a-fA-F]{2}/, 'avc1.42');
+    }
+  };
+  // The video encoding options for an output, with the fallback applied
+  // when the check calls for it (H.264 outputs only).
+  const videoEncodingOptions = async (mb, fmt) => {
+    const options = { codec: fmt.vcodec, bitrate: videoBitrate(mb) };
+    if (fmt.vcodec === 'avc' && (await h264Check()) === 'stalled') options.onEncoderConfig = toBaselineProfile;
+    return options;
+  };
+
   // Entire media: one straight conversion.
   const exportEntire = async (mb, fmt, ctx, onProgress) => {
     const input = await makeInput(mb, ctx);
     const output = new mb.Output({ format: fmt.make(mb), target: new mb.BufferTarget() });
     const options = { input, output };
     if (fmt.kind === 'audio') options.video = { discard: true };
+    // a source the container cannot carry is re-encoded on the way: the
+    // same encoder, the same fallback (#721)
+    else if (fmt.vcodec === 'avc' && (await h264Check()) === 'stalled') options.video = { onEncoderConfig: toBaselineProfile };
     const conversion = await mb.Conversion.init(options);
     conversion.onProgress = (p) => onProgress(p);
     try {
@@ -854,7 +946,7 @@
     const ctx2d = canvas.getContext('2d');
     const drawFrame = makeFrameDrawer(ctx.frame, srcW, srcH, width, height);
 
-    const vSource = new mb.CanvasSource(canvas, { codec: fmt.vcodec, bitrate: videoBitrate(mb) });
+    const vSource = new mb.CanvasSource(canvas, await videoEncodingOptions(mb, fmt));
     output.addVideoTrack(vSource);
     let aSource = null;
     let aSink = null;
@@ -1712,9 +1804,12 @@
         blob = await exportEntire(mb, fmt, ctx, setProgress);
       } else {
         const captions = burn ? buildCaptionChunks(ctx) : null;
-        setStatus(burn ? 'Exporting with captions…'
-          : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved…`
-            : (clip !== null ? 'Exporting clip…' : 'Exporting edited media…')));
+        // the status says when the compatible encoder is in use (#721)
+        const compat = fmt.kind === 'video' && fmt.vcodec === 'avc' && (await h264Check()) === 'stalled'
+          ? ' (compatible video encoder)' : '';
+        setStatus((burn ? 'Exporting with captions'
+          : (rate !== 1 ? `Exporting at ${rateLabel}× — pitch preserved`
+            : (clip !== null ? 'Exporting clip' : 'Exporting edited media'))) + compat + '…');
         blob = fmt.kind === 'video'
           ? await exportEditedVideo(mb, fmt, ctx, setProgress, captions)
           : await exportEditedAudio(mb, fmt, ctx, setProgress);
@@ -1979,5 +2074,10 @@
   });
   // The framing geometry for portrait and square output (#690), pure, so it
   // can be checked without rendering a video
+  // the encoder check, for tests: the verdict, and a way to ask again
+  window.MediaExportEncoders = Object.freeze({
+    h264Check,
+    resetH264Check: () => { h264Verdict = null; },
+  });
   window.MediaExportFrame = Object.freeze({ FRAME_SIZES, outputSize, coverRegion, coverPlacement, containRegion, makeFrameDrawer, captionLayout });
 })();
