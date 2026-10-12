@@ -1,7 +1,7 @@
 /**
  * tour.js
  * (C) The Hyperaudio Project
- * @version 1.3.36 — last changed in release 1.3.36
+ * @version 1.3.37 — last changed in release 1.3.37
  * @license MIT
  *
  * A tour of the editor (#718): a few cards, each pointing at one part of the
@@ -72,8 +72,8 @@
       targets: ['#new-transcription-btn'],
       open: modal('transcribe-modal'),
       inside: modalBox('transcribe-modal'),
-      title: 'Choose an engine',
-      text: 'Transcribe on this device, where nothing is uploaded, or in the cloud with your own key for longer recordings and faster results.',
+      title: 'Transcribe',
+      text: 'Choose an audio or video file, or a link, and transcribe it. Transcribing on this device uploads nothing.',
     },
     {
       targets: ['#hypertranscript'],
@@ -91,6 +91,18 @@
       text: 'Select words and strike them out to cut them. Playback and exports skip struck words.',
     },
     {
+      targets: ['#remove-gaps-btn'],
+      title: 'Skip the gaps',
+      text: 'Silences between speech can be skipped, in playback and in exports, without touching the transcript.',
+    },
+    {
+      targets: ['#remove-gaps-btn'],
+      open: modal('remove-gaps-modal'),
+      inside: modalBox('remove-gaps-modal'),
+      title: 'The gaps dialog',
+      text: 'Switch the skipping on. Under Advanced settings, say how long a silence has to be before it goes.',
+    },
+    {
       targets: ['#view-switch'],
       title: 'Transcript and captions',
       text: 'Switch between the transcript and the captions made from it.',
@@ -105,7 +117,7 @@
     {
       targets: ['#recents-card', '#sidebar-toggle'],
       title: 'Recents',
-      text: 'Every project you open or transcribe is kept here, in this browser. Click one to switch to it.',
+      text: 'Every project you open or transcribe is kept here. Click one to switch to it.',
     },
     {
       targets: ['#file-picker .recents-kebab'],
