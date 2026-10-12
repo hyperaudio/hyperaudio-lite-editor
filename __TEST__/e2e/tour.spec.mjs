@@ -30,7 +30,7 @@ test('the tour runs once on first use, after the intro project is on screen', as
   expect(await transcribeOpen()).toBe(false);
   expect(await page.evaluate(() => document.querySelector('.driver-active-element').id)).toBe('new-transcription-btn');
   await page.locator('.driver-popover-next-btn').click();
-  await expect(popover(page)).toContainText('Choose an engine');
+  await expect(popover(page)).toContainText('Transcribe');
   expect(await transcribeOpen()).toBe(true);
   expect(await page.evaluate(() => document.querySelector('.driver-active-element').closest('.modal') !== null)).toBe(true);
   await page.locator('.driver-popover-next-btn').click();
@@ -38,7 +38,7 @@ test('the tour runs once on first use, after the intro project is on screen', as
   expect(await transcribeOpen()).toBe(false);
   expect(await page.evaluate(() => document.querySelector('.driver-active-element').id)).toBe('hypertranscript');
   await page.locator('.driver-popover-prev-btn').click();
-  await expect(popover(page)).toContainText('Choose an engine');
+  await expect(popover(page)).toContainText('Transcribe');
   expect(await transcribeOpen()).toBe(true);
   // closed part-way, it does not come back, and what it opened is closed with it
   await page.locator('.driver-popover-close-btn').click();
@@ -74,6 +74,7 @@ test('it does not run by itself under automation, and can be taken again from Se
     opened[title] = await page.evaluate(() => ({
       exportModal: document.getElementById('export-modal').checked,
       settings: document.getElementById('settings-modal').checked,
+      gaps: document.getElementById('remove-gaps-modal').checked,
       rowMenu: document.getElementById('recents-menu') !== null,
       captionsView: document.getElementById('caption-editor-btn').getAttribute('aria-pressed') === 'true',
       target: document.querySelector('.driver-active-element').id,
@@ -84,7 +85,9 @@ test('it does not run by itself under automation, and can be taken again from Se
   }
   await expect(popover(page)).toHaveCount(0);
   // the button first, with nothing open, then what it opens
-  expect(opened['Transcript and captions']).toMatchObject({ captionsView: false });
+  expect(opened['Skip the gaps']).toMatchObject({ gaps: false, target: 'remove-gaps-btn' });
+  expect(opened['The gaps dialog']).toMatchObject({ gaps: true });
+  expect(opened['Transcript and captions']).toMatchObject({ captionsView: false, gaps: false });
   expect(opened['The captions view']).toMatchObject({ captionsView: true, target: 'captions-display' });
   expect(opened.Recents).toMatchObject({ rowMenu: false, captionsView: false });
   expect(opened['A project\'s actions']).toMatchObject({ rowMenu: true, target: 'recents-menu' });
@@ -101,7 +104,7 @@ test('it does not run by itself under automation, and can be taken again from Se
   // while it runs, dialogs cut rather than fade; afterwards they fade again
   expect(await page.evaluate(() => document.body.classList.contains('hyperaudio-touring'))).toBe(false);
   expect(await page.evaluate(() => document.querySelector('.modal-toggle:checked') === null)).toBe(true);
-  expect(titles).toEqual(['Start with a recording', 'Choose an engine', 'The transcript', 'Strikethrough', 'Transcript and captions', 'The captions view',
+  expect(titles).toEqual(['Start with a recording', 'Transcribe', 'The transcript', 'Strikethrough', 'Skip the gaps', 'The gaps dialog', 'Transcript and captions', 'The captions view',
     'Recents', 'A project\'s actions', 'Export media', 'The export dialog', 'Settings', 'Taking the tour again']);
   expect(await seen(page)).toBe(true);
 });
