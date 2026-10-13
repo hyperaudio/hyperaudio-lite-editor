@@ -2210,7 +2210,11 @@
     }
   };
 
-  modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
+  modalToggle.addEventListener('change', () => {
+    if (modalToggle.checked) { populateModal(); return; }
+    // closing: the selection the dialog was opened on, shown as selected again (#732)
+    if (window.TranscriptSelection && typeof window.TranscriptSelection.show === 'function') window.TranscriptSelection.show();
+  });
   [aspectSelect, fitCrop, fitFit].forEach((el) => {
     if (el !== null) el.addEventListener('change', () => { updateFrameVisibility(); saveExportOpts(); });
   });
