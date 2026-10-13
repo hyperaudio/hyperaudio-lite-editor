@@ -1386,6 +1386,12 @@
   const destRow = document.getElementById('export-dest-row');
   const destRecents = document.getElementById('export-dest-recents');
   const destDownload = document.getElementById('export-dest-download');
+  const destNote = document.getElementById('export-dest-note');
+  // each destination in its own words (#731): what you get, and what happens to the editor
+  const DEST_NOTES = {
+    file: 'Saves the exported media to your computer. Nothing changes in the editor.',
+    project: 'Creates a new project from the exported media, with its transcript, in Recents. The project you have open stays open.',
+  };
   const openProjectBtn = document.getElementById('export-open-project');
   // Add to Recents (#693): offered when the project library can take a new
   // project, and there is a transcript to make one of
@@ -1654,9 +1660,10 @@
     if (recents) {
       if (extrasBox !== null) extrasBox.style.display = 'none';
       if (zipRow !== null) zipRow.style.display = 'none';
-      if (nameNote !== null) nameNote.textContent = 'The new project is named this. It appears in Recents; the project you have open stays open.';
+      if (nameNote !== null) nameNote.textContent = 'The new project is named this.';
     }
-    startBtn.textContent = finished ? 'DONE' : (recents ? 'ADD TO RECENTS' : 'EXPORT');
+    if (destNote !== null) destNote.textContent = recents ? DEST_NOTES.project : DEST_NOTES.file;
+    startBtn.textContent = finished ? 'DONE' : (recents ? 'SAVE AS PROJECT' : 'EXPORT');
   };
 
   // A finished run leaves a finished dialog (#693): the button becomes Done,
