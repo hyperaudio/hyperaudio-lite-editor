@@ -27,21 +27,22 @@ const setup = async (page) => {
 const videoFormat = (page) => page.evaluate(() =>
   [...document.querySelectorAll('#export-format option')].map((o) => o.value).find((v) => v === 'mp4' || v === 'webm'));
 
-// the exported file's picture size, read by the browser itself
-const exportedSize = async (page) => {
+// the exported file's picture size, read by the browser itself, and its name
+const exported = async (page) => {
   const downloadPromise = page.waitForEvent('download');
   await page.click('#export-start');
   const download = await downloadPromise;
   await page.waitForFunction(() => document.getElementById('export-status').textContent.startsWith('Done'), null, { timeout: 120000 });
   const fs = await import('node:fs/promises');
   const b64 = (await fs.readFile(await download.path())).toString('base64');
-  return page.evaluate(async ({ data, name }) => {
+  const size = await page.evaluate(async ({ data, name }) => {
     const bytes = Uint8Array.from(atob(data), (ch) => ch.charCodeAt(0));
     const v = document.createElement('video');
     v.src = URL.createObjectURL(new Blob([bytes], { type: name.endsWith('.webm') ? 'video/webm' : 'video/mp4' }));
     await new Promise((r, j) => { v.onloadedmetadata = r; v.onerror = () => j(new Error('unreadable')); });
     return [v.videoWidth, v.videoHeight];
   }, { data: b64, name: download.suggestedFilename() });
+  return { size, name: download.suggestedFilename() };
 };
 
 const settle = (page, id, value) => page.evaluate(([i, v]) => {
@@ -150,15 +151,19 @@ test('a cropped frame is drawn whole and placed, never with a source rectangle',
   expect(r.fit[1]).toEqual([0, 656.25, 1080, 607.5]);
 });
 
-for (const [aspect, fit, size] of [['portrait', 'crop', [1080, 1920]], ['square', 'fit', [1080, 1080]], ['original', 'crop', [640, 360]]]) {
-  test(`a ${aspect} export (${fit}) comes out ${size.join('×')}`, async ({ page }) => {
+// ... and is named for its aspect (#727), the original keeping the bare name
+for (const [aspect, fit, size, suffix] of [['portrait', 'crop', [1080, 1920], '-9x16'], ['square', 'fit', [1080, 1080], '-1x1'], ['original', 'crop', [640, 360], '']]) {
+  test(`a ${aspect} export (${fit}) comes out ${size.join('×')}, named ${suffix || 'plainly'}`, async ({ page }) => {
     await setup(page);
     const video = await videoFormat(page);
     test.skip(!video, 'no video encoder in this browser');
     await page.selectOption('#export-format', video);
     await settle(page, 'export-aspect', aspect);
     await settle(page, fit === 'fit' ? 'export-fit-fit' : 'export-fit-crop', true);
-    expect(await exportedSize(page)).toEqual(size);
+    const out = await exported(page);
+    expect(out.size).toEqual(size);
+    expect(out.name).toMatch(new RegExp(`^[^.]+${suffix}\\.(mp4|webm)$`));
+    if (suffix === '') expect(out.name).not.toMatch(/-(9x16|1x1)\./);
   });
 }
 
