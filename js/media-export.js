@@ -1052,6 +1052,8 @@
   // (or top and bottom) with `position` 0..1 choosing what is kept; 'fit'
   // shows the whole picture over a blurred, darkened copy of itself.
   const FRAME_SIZES = { portrait: { w: 1080, h: 1920 }, square: { w: 1080, h: 1080 } };
+  const FRAME_SUFFIX = { portrait: '-9x16', square: '-1x1' };
+  const frameSuffix = (frame) => (frame && FRAME_SUFFIX[frame.aspect]) || '';
   const outputSize = (frame, srcW, srcH) =>
     (frame && FRAME_SIZES[frame.aspect]) || { w: srcW, h: srcH };
 
@@ -2019,7 +2021,10 @@
           ? await exportEditedVideo(mb, fmt, ctx, setProgress, captions)
           : await exportEditedAudio(mb, fmt, ctx, setProgress);
       }
-      const mediaName = `${baseName}.${fmt.ext}`;
+      // a portrait or square export is named for it (#727), so the files of
+      // one project exported for several platforms sit side by side; the
+      // original keeps the bare name, which existing links point at
+      const mediaName = `${baseName}${frameSuffix(ctx.frame)}.${fmt.ext}`;
 
       // 1b. Add to Recents (#693): the render becomes a project of its own,
       // written into the library without opening it; nothing is downloaded
