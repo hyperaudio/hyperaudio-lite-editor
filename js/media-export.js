@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.35 — last changed in release 1.3.35
+ * @version 1.3.38 — last changed in release 1.3.38
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -1709,7 +1709,22 @@
       previewVideo.playsInline = true;
       previewVideo.dataset.src = src;
       previewReady = false;
-      previewVideo.addEventListener('seeked', () => { previewReady = true; drawFramePreview(); });
+      // Ready once the sought frame can be DRAWN (#726): 'seeked' can arrive
+      // with the size known but the frame not yet decoded, and drawImage
+      // then copies black, which stayed until the next change redrew. So
+      // the draw waits for HAVE_CURRENT_DATA, and where the browser reports
+      // presented frames it draws once more when this one is.
+      const ready = () => {
+        previewReady = true;
+        drawFramePreview();
+        if (typeof previewVideo.requestVideoFrameCallback === 'function') {
+          previewVideo.requestVideoFrameCallback(() => drawFramePreview());
+        }
+      };
+      previewVideo.addEventListener('seeked', () => {
+        if (previewVideo.readyState >= 2) ready();
+        else previewVideo.addEventListener('loadeddata', ready, { once: true });
+      });
       previewVideo.addEventListener('loadedmetadata', () => {
         previewVideo.currentTime = Math.min(at, Math.max(0, previewVideo.duration - 0.05));
       });
