@@ -2211,9 +2211,11 @@
   };
 
   modalToggle.addEventListener('change', () => {
-    if (modalToggle.checked) { populateModal(); return; }
-    // closing: the selection the dialog was opened on, shown as selected again (#732)
+    // the selection the dialog is opened on, shown as selected while it is
+    // open (the native one collapses on the first click inside) and after
+    // it closes (#732)
     if (window.TranscriptSelection && typeof window.TranscriptSelection.show === 'function') window.TranscriptSelection.show();
+    if (modalToggle.checked) populateModal();
   });
   [aspectSelect, fitCrop, fitFit].forEach((el) => {
     if (el !== null) el.addEventListener('change', () => { updateFrameVisibility(); saveExportOpts(); });

@@ -56,7 +56,15 @@
       if (ht.contains(range.startContainer)) { last = null; hide(); }   // a click in the transcript
       return;
     }
-    if (range.intersectsNode(ht)) { last = range.cloneRange(); hide(); }   // the real one shows now
+    if (range.intersectsNode(ht)) {
+      // a different selection: the real one shows now. The same one again
+      // (the native selection is still alive when a dialog opens) keeps the mark.
+      const same = last !== null && last.startContainer.isConnected && last.endContainer.isConnected
+        && range.compareBoundaryPoints(Range.START_TO_START, last) === 0
+        && range.compareBoundaryPoints(Range.END_TO_END, last) === 0;
+      last = range.cloneRange();
+      if (!same) hide();
+    }
   });
   // an edit is a selection gone, as it would be natively
   document.addEventListener('input', (e) => {
