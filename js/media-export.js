@@ -80,14 +80,17 @@
     }
   };
 
+  // Listed as the dialog offers them (#728): video then audio, the format
+  // most people want first in each, each described by what it is for.
   const FORMATS = [
-    { id: 'wav',  label: 'WAV (uncompressed audio)', ext: 'wav',  mime: 'audio/wav',  kind: 'audio', codec: 'pcm-s16', make: (mb) => new mb.WavOutputFormat() },
-    { id: 'm4a',  label: 'M4A (AAC audio)',          ext: 'm4a',  mime: 'audio/mp4',  kind: 'audio', codec: 'aac',     make: (mb) => new mb.Mp4OutputFormat() },
-    { id: 'ogg',  label: 'Ogg (Opus audio)',         ext: 'ogg',  mime: 'audio/ogg',  kind: 'audio', codec: 'opus',    make: (mb) => new mb.OggOutputFormat() },
-    { id: 'mp3',  label: 'MP3 (audio)',              ext: 'mp3',  mime: 'audio/mpeg', kind: 'audio', codec: 'mp3',     make: (mb) => new mb.Mp3OutputFormat(), needsMp3: true },
-    { id: 'mp4',  label: 'MP4 (H.264 video + AAC)',  ext: 'mp4',  mime: 'video/mp4',  kind: 'video', vcodec: 'avc',  acodec: 'aac',  make: (mb) => new mb.Mp4OutputFormat() },
-    { id: 'webm', label: 'WebM (VP9 video + Opus)',  ext: 'webm', mime: 'video/webm', kind: 'video', vcodec: 'vp9', acodec: 'opus', make: (mb) => new mb.WebMOutputFormat() },
+    { id: 'mp4',  label: 'MP4 — video that plays everywhere',        ext: 'mp4',  mime: 'video/mp4',  kind: 'video', vcodec: 'avc',  acodec: 'aac',  make: (mb) => new mb.Mp4OutputFormat() },
+    { id: 'webm', label: 'WebM — open video format for the web',     ext: 'webm', mime: 'video/webm', kind: 'video', vcodec: 'vp9', acodec: 'opus', make: (mb) => new mb.WebMOutputFormat() },
+    { id: 'mp3',  label: 'MP3 — audio that plays everywhere',        ext: 'mp3',  mime: 'audio/mpeg', kind: 'audio', codec: 'mp3',     make: (mb) => new mb.Mp3OutputFormat(), needsMp3: true },
+    { id: 'm4a',  label: 'M4A — smaller audio, good quality',        ext: 'm4a',  mime: 'audio/mp4',  kind: 'audio', codec: 'aac',     make: (mb) => new mb.Mp4OutputFormat() },
+    { id: 'wav',  label: 'WAV — uncompressed, for further editing',  ext: 'wav',  mime: 'audio/wav',  kind: 'audio', codec: 'pcm-s16', make: (mb) => new mb.WavOutputFormat() },
+    { id: 'ogg',  label: 'Ogg — open audio format for the web',      ext: 'ogg',  mime: 'audio/ogg',  kind: 'audio', codec: 'opus',    make: (mb) => new mb.OggOutputFormat() },
   ];
+  const FORMAT_GROUPS = { video: 'Video', audio: 'Audio' };
 
   const canEncodeAudio = async (mb, codec) => {
     if (codec === 'pcm-s16') return true; // PCM needs no encoder
@@ -1912,6 +1915,8 @@
     try {
       const mb = await loadMediabunny();
       const withVideo = sourceHasVideo();
+      // grouped Video / Audio (#728); a group with nothing in it is not shown
+      const groups = {};
       const options = [];
       for (const fmt of FORMATS) {
         if (fmt.kind === 'video' && !withVideo) continue;
@@ -1925,19 +1930,21 @@
           const option = document.createElement('option');
           option.value = fmt.id;
           option.textContent = fmt.label;
-          options.push(option);
+          if (groups[fmt.kind] === undefined) {
+            groups[fmt.kind] = document.createElement('optgroup');
+            groups[fmt.kind].label = FORMAT_GROUPS[fmt.kind];
+            options.push(groups[fmt.kind]);
+          }
+          groups[fmt.kind].appendChild(option);
         }
       }
       // append atomically so the list is never seen half-populated
       options.forEach((o) => formatSelect.appendChild(o));
-      // default to a video format when the source has video: MP4, or WebM
-      // where the browser cannot encode H.264/AAC (Chromium on Linux, #706).
-      // Falling through to the first option, WAV, dropped the picture — and
-      // failed outright for a video with no sound.
-      if (withVideo) {
-        const video = ['mp4', 'webm'].find((id) => formatSelect.querySelector(`option[value="${id}"]`) !== null);
-        if (video !== undefined) formatSelect.value = video;
-      }
+      // the first format listed is the one to start on: a video format when
+      // the source has video (MP4, or WebM where the browser cannot encode
+      // H.264/AAC, #706 — WAV would drop the picture), else the first audio one
+      const first = formatSelect.querySelector('option');
+      if (first !== null) formatSelect.value = first.value;
       updateBurnVisibility();
       setStatus('');
     } catch (e) {
