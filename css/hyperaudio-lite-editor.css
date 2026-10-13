@@ -1722,6 +1722,14 @@ label[data-a11y-wired]:focus-visible {
   #project-progress { transition: none; }
 }
 
+/* The remembered selection, shown as selected after a dialog closes (#732):
+   the system's own selection colours, so it reads as the selection it stands
+   in for. */
+.hyperaudio-transcript .transcript-selected {
+  background-color: Highlight;
+  color: HighlightText;
+}
+
 /* The tour's cards (#718): driver.js's own layout, in the editor's type and
    colours. */
 .driver-popover.hyperaudio-tour {
