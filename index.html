@@ -1049,6 +1049,11 @@ If you are creating an open source application under a license compatible with t
         <input type="checkbox" id="export-burn" class="toggle toggle-primary" />
         <span class="label-text">Burn captions into the video (word-level highlight)</span>
       </label>
+      <!-- the colour of the word being spoken (#729); the rest stays white -->
+      <label id="export-caption-colour-row" style="display:none; gap:10px; align-items:center; margin-top:8px; padding-left:2px; cursor:pointer">
+        <span class="label-text">Highlight colour</span>
+        <input type="color" id="export-caption-colour" value="#ffe14d" style="width:44px; height:28px; padding:2px; border:1px solid oklch(var(--bc) / 0.2); border-radius:6px; background:transparent; cursor:pointer" aria-label="Highlight colour of burned-in captions" />
+      </label>
       <!-- Portrait and square video for Reels, TikTok and Shorts (#690):
            video formats only. The preview is the player's current frame as
            the export will frame it. -->
