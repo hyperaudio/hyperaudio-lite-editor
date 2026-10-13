@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.35 — last changed in release 1.3.35
+ * @version 1.3.38 — last changed in release 1.3.38
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -80,14 +80,17 @@
     }
   };
 
+  // Listed as the dialog offers them (#728): video then audio, the format
+  // most people want first in each, each described by what it is for.
   const FORMATS = [
-    { id: 'wav',  label: 'WAV (uncompressed audio)', ext: 'wav',  mime: 'audio/wav',  kind: 'audio', codec: 'pcm-s16', make: (mb) => new mb.WavOutputFormat() },
-    { id: 'm4a',  label: 'M4A (AAC audio)',          ext: 'm4a',  mime: 'audio/mp4',  kind: 'audio', codec: 'aac',     make: (mb) => new mb.Mp4OutputFormat() },
-    { id: 'ogg',  label: 'Ogg (Opus audio)',         ext: 'ogg',  mime: 'audio/ogg',  kind: 'audio', codec: 'opus',    make: (mb) => new mb.OggOutputFormat() },
-    { id: 'mp3',  label: 'MP3 (audio)',              ext: 'mp3',  mime: 'audio/mpeg', kind: 'audio', codec: 'mp3',     make: (mb) => new mb.Mp3OutputFormat(), needsMp3: true },
-    { id: 'mp4',  label: 'MP4 (H.264 video + AAC)',  ext: 'mp4',  mime: 'video/mp4',  kind: 'video', vcodec: 'avc',  acodec: 'aac',  make: (mb) => new mb.Mp4OutputFormat() },
-    { id: 'webm', label: 'WebM (VP9 video + Opus)',  ext: 'webm', mime: 'video/webm', kind: 'video', vcodec: 'vp9', acodec: 'opus', make: (mb) => new mb.WebMOutputFormat() },
+    { id: 'mp4',  label: 'MP4 — video that plays everywhere',        ext: 'mp4',  mime: 'video/mp4',  kind: 'video', vcodec: 'avc',  acodec: 'aac',  make: (mb) => new mb.Mp4OutputFormat() },
+    { id: 'webm', label: 'WebM — open video format for the web',     ext: 'webm', mime: 'video/webm', kind: 'video', vcodec: 'vp9', acodec: 'opus', make: (mb) => new mb.WebMOutputFormat() },
+    { id: 'mp3',  label: 'MP3 — audio that plays everywhere',        ext: 'mp3',  mime: 'audio/mpeg', kind: 'audio', codec: 'mp3',     make: (mb) => new mb.Mp3OutputFormat(), needsMp3: true },
+    { id: 'm4a',  label: 'M4A — smaller audio, good quality',        ext: 'm4a',  mime: 'audio/mp4',  kind: 'audio', codec: 'aac',     make: (mb) => new mb.Mp4OutputFormat() },
+    { id: 'wav',  label: 'WAV — uncompressed, for further editing',  ext: 'wav',  mime: 'audio/wav',  kind: 'audio', codec: 'pcm-s16', make: (mb) => new mb.WavOutputFormat() },
+    { id: 'ogg',  label: 'Ogg — open audio format for the web',      ext: 'ogg',  mime: 'audio/ogg',  kind: 'audio', codec: 'opus',    make: (mb) => new mb.OggOutputFormat() },
   ];
+  const FORMAT_GROUPS = { video: 'Video', audio: 'Audio' };
 
   const canEncodeAudio = async (mb, codec) => {
     if (codec === 'pcm-s16') return true; // PCM needs no encoder
@@ -170,7 +173,7 @@
   // sections/rate/dropStruck are the retiming inputs every helper below
   // takes; withProject adds the project metadata the flattened container
   // needs, which costs a transcript parse and is only read when asked for.
-  const captureContext = ({ sections, rate, dropStruck, withProject, clip, frame }) => {
+  const captureContext = ({ sections, rate, dropStruck, withProject, clip, frame, captionStyle }) => {
     const save = window.HyperaudioSave;
     const root = typeof window.currentTranscriptRoot === 'function'
       ? window.currentTranscriptRoot() : document.getElementById('hypertranscript');
@@ -181,6 +184,8 @@
       // a clip's selected words, by their own times (unpadded): { from, to }
       // the first word's start and the last word's end; null for no clip
       clip: clip ? { from: clip.from, to: clip.to } : null,
+      // how burned-in captions are coloured (#729): { accent } or null for the defaults
+      captionStyle: captionStyle ? { accent: captionStyle.accent } : null,
       // portrait/square framing for video (#690): { aspect, fit, position }
       frame: frame ? { aspect: frame.aspect, fit: frame.fit, position: frame.position } : null,
       transcript: root !== null && root !== undefined ? root.cloneNode(true) : null,
@@ -541,7 +546,9 @@
     centreX: w / 2,
   });
 
-  const drawCaptionOverlay = (ctx, t, chunks, w, h) => {
+  const drawCaptionOverlay = (ctx, t, chunks, w, h, style) => {
+    const accent = style && typeof style.accent === 'string' && /^#[0-9a-f]{6}$/i.test(style.accent)
+      ? style.accent : CAPTION_ACTIVE;
     const startOf = (c) => (Array.isArray(c) ? c[0].start : c.start);
     let active = null;
     for (const c of chunks) {
@@ -606,7 +613,7 @@
         // crisp fill with the shadow disabled so interiors stay clean
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
-        ctx.fillStyle = word === activeWord ? CAPTION_ACTIVE
+        ctx.fillStyle = word === activeWord ? accent
           : (seen.has(word) ? CAPTION_READ : CAPTION_UNREAD);
         ctx.fillText(text, x, y);
         x += ctx.measureText(text).width;
@@ -1052,6 +1059,8 @@
   // (or top and bottom) with `position` 0..1 choosing what is kept; 'fit'
   // shows the whole picture over a blurred, darkened copy of itself.
   const FRAME_SIZES = { portrait: { w: 1080, h: 1920 }, square: { w: 1080, h: 1080 } };
+  const FRAME_SUFFIX = { portrait: '-9x16', square: '-1x1' };
+  const frameSuffix = (frame) => (frame && FRAME_SUFFIX[frame.aspect]) || '';
   const outputSize = (frame, srcW, srcH) =>
     (frame && FRAME_SIZES[frame.aspect]) || { w: srcW, h: srcH };
 
@@ -1169,7 +1178,7 @@
             drawFrame(sample, ctx2d);
             sample.close();
             closed = true;
-            if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
+            if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height, ctx.captionStyle);
             await vSource.add(t, frameDur);
             done += frameDur * rate;
             onProgress(Math.min(0.99, done / total));
@@ -1377,6 +1386,12 @@
   const destRow = document.getElementById('export-dest-row');
   const destRecents = document.getElementById('export-dest-recents');
   const destDownload = document.getElementById('export-dest-download');
+  const destNote = document.getElementById('export-dest-note');
+  // each destination in its own words (#731): what you get, and what happens to the editor
+  const DEST_NOTES = {
+    file: 'Saves the exported media to your computer. Nothing changes in the editor.',
+    project: 'Creates a new project from the exported media, with its transcript, in Recents. The project you have open stays open.',
+  };
   const openProjectBtn = document.getElementById('export-open-project');
   // Add to Recents (#693): offered when the project library can take a new
   // project, and there is a transcript to make one of
@@ -1390,6 +1405,12 @@
   const projectRow = document.getElementById('export-project-row');
   const projectCheck = document.getElementById('export-project');
   const burnRow = document.getElementById('export-burn-row');
+  // the highlight colour of burned-in captions (#729), offered while burning is on
+  const captionColourRow = document.getElementById('export-caption-colour-row');
+  const captionColourInput = document.getElementById('export-caption-colour');
+  const captionStyle = () => ({
+    accent: captionColourInput !== null && /^#[0-9a-f]{6}$/i.test(captionColourInput.value) ? captionColourInput.value : CAPTION_ACTIVE,
+  });
   const burnCheck = document.getElementById('export-burn');
   const progressBar = document.getElementById('export-progress');
   const statusEl = document.getElementById('export-status');
@@ -1639,9 +1660,10 @@
     if (recents) {
       if (extrasBox !== null) extrasBox.style.display = 'none';
       if (zipRow !== null) zipRow.style.display = 'none';
-      if (nameNote !== null) nameNote.textContent = 'The new project is named this. It appears in Recents; the project you have open stays open.';
+      if (nameNote !== null) nameNote.textContent = 'The new project is named this.';
     }
-    startBtn.textContent = finished ? 'DONE' : (recents ? 'ADD TO RECENTS' : 'EXPORT');
+    if (destNote !== null) destNote.textContent = recents ? DEST_NOTES.project : DEST_NOTES.file;
+    startBtn.textContent = finished ? 'DONE' : (recents ? 'SAVE AS PROJECT' : 'EXPORT');
   };
 
   // A finished run leaves a finished dialog (#693): the button becomes Done,
@@ -1665,6 +1687,7 @@
     const fmt = FORMATS.find((f) => f.id === formatSelect.value);
     const show = fmt && fmt.kind === 'video' && hasTranscript();
     burnRow.style.display = show ? 'flex' : 'none';
+    if (captionColourRow !== null) captionColourRow.style.display = show && burnCheck.checked ? 'flex' : 'none';
   };
 
   // Portrait and square (#690): offered for video formats
@@ -1709,7 +1732,22 @@
       previewVideo.playsInline = true;
       previewVideo.dataset.src = src;
       previewReady = false;
-      previewVideo.addEventListener('seeked', () => { previewReady = true; drawFramePreview(); });
+      // Ready once the sought frame can be DRAWN (#726): 'seeked' can arrive
+      // with the size known but the frame not yet decoded, and drawImage
+      // then copies black, which stayed until the next change redrew. So
+      // the draw waits for HAVE_CURRENT_DATA, and where the browser reports
+      // presented frames it draws once more when this one is.
+      const ready = () => {
+        previewReady = true;
+        drawFramePreview();
+        if (typeof previewVideo.requestVideoFrameCallback === 'function') {
+          previewVideo.requestVideoFrameCallback(() => drawFramePreview());
+        }
+      };
+      previewVideo.addEventListener('seeked', () => {
+        if (previewVideo.readyState >= 2) ready();
+        else previewVideo.addEventListener('loadeddata', ready, { once: true });
+      });
       previewVideo.addEventListener('loadedmetadata', () => {
         previewVideo.currentTime = Math.min(at, Math.max(0, previewVideo.duration - 0.05));
       });
@@ -1769,6 +1807,7 @@
     try {
       window.localStorage.setItem(EXPORT_OPTS_KEY, JSON.stringify({
         burn: burnCheck.checked,
+        captionColour: captionStyle().accent,
         aspect: aspectSelect !== null ? aspectSelect.value : 'original',
         fit: fitFit !== null && fitFit.checked ? 'fit' : 'crop',
         position: positionInput !== null ? Number(positionInput.value) : 50,
@@ -1863,6 +1902,9 @@
     // restore the user's last export-option choices (default: all off)
     const opts = loadExportOpts();
     burnCheck.checked = opts.burn === true;
+    if (captionColourInput !== null) {
+      captionColourInput.value = /^#[0-9a-f]{6}$/i.test(opts.captionColour) ? opts.captionColour : CAPTION_ACTIVE;
+    }
     if (aspectSelect !== null) aspectSelect.value = FRAME_SIZES[opts.aspect] ? opts.aspect : 'original';
     if (fitFit !== null && fitCrop !== null) {
       fitFit.checked = opts.fit === 'fit';
@@ -1895,6 +1937,8 @@
     try {
       const mb = await loadMediabunny();
       const withVideo = sourceHasVideo();
+      // grouped Video / Audio (#728); a group with nothing in it is not shown
+      const groups = {};
       const options = [];
       for (const fmt of FORMATS) {
         if (fmt.kind === 'video' && !withVideo) continue;
@@ -1908,19 +1952,21 @@
           const option = document.createElement('option');
           option.value = fmt.id;
           option.textContent = fmt.label;
-          options.push(option);
+          if (groups[fmt.kind] === undefined) {
+            groups[fmt.kind] = document.createElement('optgroup');
+            groups[fmt.kind].label = FORMAT_GROUPS[fmt.kind];
+            options.push(groups[fmt.kind]);
+          }
+          groups[fmt.kind].appendChild(option);
         }
       }
       // append atomically so the list is never seen half-populated
       options.forEach((o) => formatSelect.appendChild(o));
-      // default to a video format when the source has video: MP4, or WebM
-      // where the browser cannot encode H.264/AAC (Chromium on Linux, #706).
-      // Falling through to the first option, WAV, dropped the picture — and
-      // failed outright for a video with no sound.
-      if (withVideo) {
-        const video = ['mp4', 'webm'].find((id) => formatSelect.querySelector(`option[value="${id}"]`) !== null);
-        if (video !== undefined) formatSelect.value = video;
-      }
+      // the first format listed is the one to start on: a video format when
+      // the source has video (MP4, or WebM where the browser cannot encode
+      // H.264/AAC, #706 — WAV would drop the picture), else the first audio one
+      const first = formatSelect.querySelector('option');
+      if (first !== null) formatSelect.value = first.value;
       updateBurnVisibility();
       setStatus('');
     } catch (e) {
@@ -1977,6 +2023,7 @@
     }
     const ctx = Object.freeze(captureContext({
       sections, rate, dropStruck: edited || clip !== null, withProject: wantProject || recents, clip, frame,
+      captionStyle: burn ? captionStyle() : null,
     }));
 
     try {
@@ -2004,7 +2051,10 @@
           ? await exportEditedVideo(mb, fmt, ctx, setProgress, captions)
           : await exportEditedAudio(mb, fmt, ctx, setProgress);
       }
-      const mediaName = `${baseName}.${fmt.ext}`;
+      // a portrait or square export is named for it (#727), so the files of
+      // one project exported for several platforms sit side by side; the
+      // original keeps the bare name, which existing links point at
+      const mediaName = `${baseName}${frameSuffix(ctx.frame)}.${fmt.ext}`;
 
       // 1b. Add to Recents (#693): the render becomes a project of its own,
       // written into the library without opening it; nothing is downloaded
@@ -2160,7 +2210,13 @@
     }
   };
 
-  modalToggle.addEventListener('change', () => { if (modalToggle.checked) populateModal(); });
+  modalToggle.addEventListener('change', () => {
+    // the selection the dialog is opened on, shown as selected while it is
+    // open (the native one collapses on the first click inside) and after
+    // it closes (#732)
+    if (window.TranscriptSelection && typeof window.TranscriptSelection.show === 'function') window.TranscriptSelection.show();
+    if (modalToggle.checked) populateModal();
+  });
   [aspectSelect, fitCrop, fitFit].forEach((el) => {
     if (el !== null) el.addEventListener('change', () => { updateFrameVisibility(); saveExportOpts(); });
   });
@@ -2236,6 +2292,11 @@
   [burnCheck, retimeCheck, vttCheck, srtCheck, projectCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', saveExportOpts);
   });
+  burnCheck.addEventListener('change', updateBurnVisibility);
+  if (captionColourInput !== null) {
+    captionColourInput.addEventListener('input', saveExportOpts);
+    captionColourInput.addEventListener('change', saveExportOpts);
+  }
   startBtn.addEventListener('click', () => {
     if (!finished) { runExport(); return; }
     modalToggle.checked = false;

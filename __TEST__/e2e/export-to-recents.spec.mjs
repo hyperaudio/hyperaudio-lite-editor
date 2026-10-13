@@ -79,7 +79,7 @@ test('Add to Recents is offered beside Download, and hides what only downloads u
   await page.check('#export-dest-recents');
   await expect(page.locator('#export-extras')).toBeHidden();
   await expect(page.locator('#export-zip-row')).toBeHidden();
-  await expect(page.locator('#export-start')).toHaveText('ADD TO RECENTS');
+  await expect(page.locator('#export-start')).toHaveText('SAVE AS PROJECT');
   await page.check('#export-dest-download');
   await expect(page.locator('#export-extras')).toBeVisible();
   await expect(page.locator('#export-start')).toHaveText('EXPORT');
@@ -160,7 +160,7 @@ test('after a run the button is Done and closes the dialog; any change brings th
   await expect(page.locator('#export-status')).toHaveText('Done — check your downloads.', { timeout: 60000 });
   await expect(page.locator('#export-start')).toHaveText('DONE');
   await page.check('#export-dest-recents');                 // a change: an action again
-  await expect(page.locator('#export-start')).toHaveText('ADD TO RECENTS');
+  await expect(page.locator('#export-start')).toHaveText('SAVE AS PROJECT');
 
   // Add to Recents, then Done closes
   await page.fill('#export-name', 'Whole Copy');
@@ -196,4 +196,28 @@ test('Add to Recents turns WAV into M4A, and Download turns it back; a format pi
   await page.selectOption('#export-format', 'ogg');
   await page.check('#export-dest-download');
   expect(await page.inputValue('#export-format')).toBe('ogg');
+});
+
+// #731 — the destinations say what they do: a note under the radios follows
+// the choice, so "Save as a file" and "Save as a new project" each explain
+// themselves rather than one help line describing only one of them.
+test('each destination explains itself, and the note follows the choice (#731)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(() => {
+    const m = document.getElementById('export-modal');
+    m.checked = true;
+    m.dispatchEvent(new Event('change'));
+  });
+  await page.waitForFunction(() => document.getElementById('export-format').options.length > 0, null, { timeout: 60000 });
+  const note = page.locator('#export-dest-note');
+  await expect(page.locator('label:has(#export-dest-download)')).toContainText('Save as a file');
+  await expect(page.locator('label:has(#export-dest-recents)')).toContainText('Save as a new project');
+  await expect(note).toContainText('Saves the exported media to your computer');
+  await page.check('#export-dest-recents');
+  await expect(note).toContainText('Creates a new project');
+  await expect(page.locator('#export-start')).toHaveText('SAVE AS PROJECT');
+  await page.check('#export-dest-download');
+  await expect(note).toContainText('Nothing changes in the editor');
+  await expect(page.locator('#export-start')).toHaveText('EXPORT');
 });

@@ -1,7 +1,7 @@
 /**
  * transcript-selection.js
  * (C) The Hyperaudio Project
- * @version 1.3.27 — last changed in release 1.3.27
+ * @version 1.3.38 — last changed in release 1.3.38
  * @license MIT
  *
  * What is selected in the transcript, as a stretch of media — for anything
@@ -22,10 +22,30 @@
  * A word counts when some of its text is selected, not merely its edge.
  * Speaker labels are not words. Remove this file and every dialog simply
  * offers no selection.
+ *
+ * The native selection collapses the moment a dialog is used, so when the
+ * dialog closes the remembered words are shown as selected again (#732):
+ * a mark of our own on each word, drawn like the selection, which a dialog
+ * asks for with show(). It is a selection for the dialogs' purposes, since
+ * they read the record it is drawn from, and it goes the way a selection
+ * would: a new selection, a click in the transcript, or an edit.
  */
 (function () {
   const PAD = 0.1;   // seconds either side, so no word is clipped at its edge
+  const MARK = 'transcript-selected';
   let last = null;
+
+  function hide() {
+    document.querySelectorAll('.' + MARK).forEach((el) => el.classList.remove(MARK));
+  }
+  // Show the remembered selection as selected, when there is one on screen.
+  // Returns whether anything was shown.
+  function show() {
+    hide();
+    const selected = words();
+    selected.forEach((el) => el.classList.add(MARK));
+    return selected.length > 0;
+  }
 
   document.addEventListener('selectionchange', () => {
     const sel = window.getSelection();
@@ -33,11 +53,24 @@
     if (sel === null || sel.rangeCount === 0 || ht === null) return;
     const range = sel.getRangeAt(0);
     if (range.collapsed) {
-      if (ht.contains(range.startContainer)) last = null;   // a click in the transcript
+      if (ht.contains(range.startContainer)) { last = null; hide(); }   // a click in the transcript
       return;
     }
-    if (range.intersectsNode(ht)) last = range.cloneRange();
+    if (range.intersectsNode(ht)) {
+      // a different selection: the real one shows now. The same one again
+      // (the native selection is still alive when a dialog opens) keeps the mark.
+      const same = last !== null && last.startContainer.isConnected && last.endContainer.isConnected
+        && range.compareBoundaryPoints(Range.START_TO_START, last) === 0
+        && range.compareBoundaryPoints(Range.END_TO_END, last) === 0;
+      last = range.cloneRange();
+      if (!same) hide();
+    }
   });
+  // an edit is a selection gone, as it would be natively
+  document.addEventListener('input', (e) => {
+    const ht = document.getElementById('hypertranscript');
+    if (ht !== null && e.target && ht.contains(e.target)) hide();
+  }, true);
 
   // The word spans of the remembered selection, in order, or [] when there
   // is none or it no longer belongs to the transcript on screen.
@@ -74,5 +107,5 @@
     return { from, to, start: Math.max(0, from - PAD), end: Math.min(cap, to + PAD) };
   }
 
-  window.TranscriptSelection = Object.freeze({ words, range, PAD });
+  window.TranscriptSelection = Object.freeze({ words, range, show, hide, PAD, MARK });
 })();
