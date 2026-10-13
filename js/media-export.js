@@ -173,7 +173,7 @@
   // sections/rate/dropStruck are the retiming inputs every helper below
   // takes; withProject adds the project metadata the flattened container
   // needs, which costs a transcript parse and is only read when asked for.
-  const captureContext = ({ sections, rate, dropStruck, withProject, clip, frame }) => {
+  const captureContext = ({ sections, rate, dropStruck, withProject, clip, frame, captionStyle }) => {
     const save = window.HyperaudioSave;
     const root = typeof window.currentTranscriptRoot === 'function'
       ? window.currentTranscriptRoot() : document.getElementById('hypertranscript');
@@ -184,6 +184,8 @@
       // a clip's selected words, by their own times (unpadded): { from, to }
       // the first word's start and the last word's end; null for no clip
       clip: clip ? { from: clip.from, to: clip.to } : null,
+      // how burned-in captions are coloured (#729): { accent } or null for the defaults
+      captionStyle: captionStyle ? { accent: captionStyle.accent } : null,
       // portrait/square framing for video (#690): { aspect, fit, position }
       frame: frame ? { aspect: frame.aspect, fit: frame.fit, position: frame.position } : null,
       transcript: root !== null && root !== undefined ? root.cloneNode(true) : null,
@@ -544,7 +546,9 @@
     centreX: w / 2,
   });
 
-  const drawCaptionOverlay = (ctx, t, chunks, w, h) => {
+  const drawCaptionOverlay = (ctx, t, chunks, w, h, style) => {
+    const accent = style && typeof style.accent === 'string' && /^#[0-9a-f]{6}$/i.test(style.accent)
+      ? style.accent : CAPTION_ACTIVE;
     const startOf = (c) => (Array.isArray(c) ? c[0].start : c.start);
     let active = null;
     for (const c of chunks) {
@@ -609,7 +613,7 @@
         // crisp fill with the shadow disabled so interiors stay clean
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
-        ctx.fillStyle = word === activeWord ? CAPTION_ACTIVE
+        ctx.fillStyle = word === activeWord ? accent
           : (seen.has(word) ? CAPTION_READ : CAPTION_UNREAD);
         ctx.fillText(text, x, y);
         x += ctx.measureText(text).width;
@@ -1174,7 +1178,7 @@
             drawFrame(sample, ctx2d);
             sample.close();
             closed = true;
-            if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height);
+            if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height, ctx.captionStyle);
             await vSource.add(t, frameDur);
             done += frameDur * rate;
             onProgress(Math.min(0.99, done / total));
@@ -1395,6 +1399,12 @@
   const projectRow = document.getElementById('export-project-row');
   const projectCheck = document.getElementById('export-project');
   const burnRow = document.getElementById('export-burn-row');
+  // the highlight colour of burned-in captions (#729), offered while burning is on
+  const captionColourRow = document.getElementById('export-caption-colour-row');
+  const captionColourInput = document.getElementById('export-caption-colour');
+  const captionStyle = () => ({
+    accent: captionColourInput !== null && /^#[0-9a-f]{6}$/i.test(captionColourInput.value) ? captionColourInput.value : CAPTION_ACTIVE,
+  });
   const burnCheck = document.getElementById('export-burn');
   const progressBar = document.getElementById('export-progress');
   const statusEl = document.getElementById('export-status');
@@ -1670,6 +1680,7 @@
     const fmt = FORMATS.find((f) => f.id === formatSelect.value);
     const show = fmt && fmt.kind === 'video' && hasTranscript();
     burnRow.style.display = show ? 'flex' : 'none';
+    if (captionColourRow !== null) captionColourRow.style.display = show && burnCheck.checked ? 'flex' : 'none';
   };
 
   // Portrait and square (#690): offered for video formats
@@ -1789,6 +1800,7 @@
     try {
       window.localStorage.setItem(EXPORT_OPTS_KEY, JSON.stringify({
         burn: burnCheck.checked,
+        captionColour: captionStyle().accent,
         aspect: aspectSelect !== null ? aspectSelect.value : 'original',
         fit: fitFit !== null && fitFit.checked ? 'fit' : 'crop',
         position: positionInput !== null ? Number(positionInput.value) : 50,
@@ -1883,6 +1895,9 @@
     // restore the user's last export-option choices (default: all off)
     const opts = loadExportOpts();
     burnCheck.checked = opts.burn === true;
+    if (captionColourInput !== null) {
+      captionColourInput.value = /^#[0-9a-f]{6}$/i.test(opts.captionColour) ? opts.captionColour : CAPTION_ACTIVE;
+    }
     if (aspectSelect !== null) aspectSelect.value = FRAME_SIZES[opts.aspect] ? opts.aspect : 'original';
     if (fitFit !== null && fitCrop !== null) {
       fitFit.checked = opts.fit === 'fit';
@@ -2001,6 +2016,7 @@
     }
     const ctx = Object.freeze(captureContext({
       sections, rate, dropStruck: edited || clip !== null, withProject: wantProject || recents, clip, frame,
+      captionStyle: burn ? captionStyle() : null,
     }));
 
     try {
@@ -2263,6 +2279,11 @@
   [burnCheck, retimeCheck, vttCheck, srtCheck, projectCheck].forEach((el) => {
     if (el !== null) el.addEventListener('change', saveExportOpts);
   });
+  burnCheck.addEventListener('change', updateBurnVisibility);
+  if (captionColourInput !== null) {
+    captionColourInput.addEventListener('input', saveExportOpts);
+    captionColourInput.addEventListener('change', saveExportOpts);
+  }
   startBtn.addEventListener('click', () => {
     if (!finished) { runExport(); return; }
     modalToggle.checked = false;
