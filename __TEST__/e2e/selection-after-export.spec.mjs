@@ -1,6 +1,6 @@
 // #732 — the native selection collapses the moment the Export dialog is used,
-// so when the dialog closes the remembered words are shown as selected again,
-// with a mark of our own. A second export picks the same range up, and the
+// so the remembered words are shown as selected with a mark of our own, from
+// the moment the dialog opens until after it closes. A second export picks the same range up, and the
 // mark goes the way a selection would: a new selection, a click in the
 // transcript, or an edit.
 import { test, expect } from '@playwright/test';
@@ -35,7 +35,7 @@ const toggleExport = async (page, open) => {
 };
 const marked = (page) => page.evaluate(() => [...document.querySelectorAll('#hypertranscript .transcript-selected')].map((el) => el.textContent.trim()));
 
-test('after the dialog closes the selected words show as selected, and the next export offers the same clip', async ({ page }) => {
+test('the selected words show as selected while the dialog is open and after it closes, and the next export offers the same clip', async ({ page }) => {
   await setup(page);
   await select(page, 3, 6);
   await toggleExport(page, true);
@@ -44,7 +44,7 @@ test('after the dialog closes the selected words show as selected, and the next 
   // does it in a real browser; done by hand here, since headless may not)
   await page.click('#export-format');
   await page.evaluate(() => window.getSelection().removeAllRanges());
-  expect(await marked(page)).toEqual([]);
+  expect(await marked(page)).toEqual(['w3', 'w4', 'w5', 'w6']); // still shown while the dialog is open
   await toggleExport(page, false);
   expect(await marked(page)).toEqual(['w3', 'w4', 'w5', 'w6']);
   // a second time round, the same clip is on offer
