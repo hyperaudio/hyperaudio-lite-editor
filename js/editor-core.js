@@ -103,12 +103,13 @@
   let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
   const transcriptInputWired = new WeakSet(); // the transcript elements whose input/blur listeners are attached (#675)
 
-  function mutateTranscript(fn, origin, foldPolicy, captureHistory) {
+  function mutateTranscript(fn, origin, foldPolicy, captureHistory, scopes) {
     if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
       return window.transcriptGateway.mutate(fn, {
         origin,
         foldPolicy,
         captureHistory: captureHistory !== false,
+        scopes,
       });
     }
     return fn();
@@ -1112,11 +1113,14 @@
         const scopes = validLocal.length === requested.length && validLocal.length > 0
           ? validLocal : [rootnode];
         const captureHistory = scopes.some((scope) => scopeNeedsSanitise(scope));
+        // a local pass names its paragraphs, so history can look at those
+        // alone rather than the whole transcript (#734)
         return mutateTranscript(
           () => sanitise(opts),
           origin || 'sanitise',
           'normalization',
           captureHistory,
+          scopes[0] === rootnode ? null : scopes,
         );
       }
 
