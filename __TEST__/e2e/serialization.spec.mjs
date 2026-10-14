@@ -37,8 +37,12 @@ test('the HTML download reflects canonical serialization after the sanitise tick
     document.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
   });
   await page.waitForTimeout(1400); // past the 1s debounce
-  const href = await page.evaluate(() =>
-    decodeURIComponent(document.querySelector('#download-html').getAttribute('href').replace('data:text/html,', '')));
+  // the link is built when it is about to be followed (#734)
+  const href = await page.evaluate(() => {
+    const link = document.querySelector('#download-html');
+    link.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    return decodeURIComponent(link.getAttribute('href').replace('data:text/html,', ''));
+  });
   expect(href.split('\n')[0]).toBe('<article>');
   expect(href).toMatch(/\n      <span data-m="\d+" data-d="\d+">/);
   expect(href).not.toMatch(/class="unread"|class="read"/);

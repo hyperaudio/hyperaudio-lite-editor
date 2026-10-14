@@ -69,12 +69,17 @@ test('blur is a barrier and cancels the delayed duplicate', async ({ page }) => 
 });
 
 test('a real content edit sanitises only its paragraph, then settles globally', async ({ page }) => {
+  // the boot restore replaces the transcript element; edit the one that stays
+  await page.waitForFunction(() => window.HyperaudioSave && window.HyperaudioSave.library.currentId() !== null);
   const result = await page.evaluate(() => {
     const transcript = document.getElementById('hypertranscript');
     const paragraphs = transcript.querySelectorAll('p');
     const localWord = paragraphs[0].querySelector('span[data-m]:not(.speaker)');
     const distantWord = paragraphs[1].querySelector('span[data-m]:not(.speaker)');
-    const hrefBefore = document.getElementById('download-html').getAttribute('href');
+    // the HTML download link is built on demand (#734): ask for it as a click would
+    const link = document.getElementById('download-html');
+    const linkHref = () => { link.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return link.getAttribute('href'); };
+    const hrefBefore = linkHref();
 
     transcript.focus();
     localWord.firstChild.nodeValue = 'two words ';
@@ -88,14 +93,14 @@ test('a real content edit sanitises only its paragraph, then settles globally', 
     distantWord.style.fontSize = '19px';
     window.hyperaudioFlushTranscriptMaintenance('test-local');
     const afterLocal = window.hyperaudioInspectTranscriptMaintenance();
-    const hrefAfterLocal = document.getElementById('download-html').getAttribute('href');
+    const hrefAfterLocal = linkHref();
 
     window.transcriptReconciliation.flush('sanitise-settle');
     const afterGlobal = window.hyperaudioInspectTranscriptMaintenance();
     return {
       distantStyleAfterGlobal: distantWord.style.fontSize,
-      hrefStayedDeferred: hrefAfterLocal === hrefBefore,
-      hrefRefreshed: document.getElementById('download-html').getAttribute('href') !== hrefBefore,
+      hrefFollowsTheEdit: hrefAfterLocal !== hrefBefore && decodeURIComponent(hrefAfterLocal).includes('two words'),
+      hrefRefreshed: linkHref() !== hrefBefore,
       afterLocal,
       afterGlobal,
     };
@@ -104,7 +109,7 @@ test('a real content edit sanitises only its paragraph, then settles globally', 
   expect(result.afterLocal.lastMode).toBe('local');
   expect(result.afterLocal.lastScopeCount).toBe(1);
   expect(result.afterLocal.reconciliation.dirty).toBe(true);
-  expect(result.hrefStayedDeferred).toBe(true);
+  expect(result.hrefFollowsTheEdit).toBe(true);
   expect(result.hrefRefreshed).toBe(true);
   expect(result.distantStyleAfterGlobal).toBe('');
   expect(result.afterGlobal.lastMode).toBe('global');
