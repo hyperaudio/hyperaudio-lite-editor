@@ -9,7 +9,10 @@
       throw new TypeError('createTranscriptMaintenanceQueue expects a run function');
     }
 
-    const delay = Number.isFinite(opts.delay) ? Math.max(0, opts.delay) : 1000;
+    // a number, or a function asked each time something is scheduled, so a
+    // delay can follow the size of what the run will cost (#734)
+    const delayOf = typeof opts.delay === 'function' ? opts.delay
+      : () => (Number.isFinite(opts.delay) ? Math.max(0, opts.delay) : 1000);
     const canRun = typeof opts.canRun === 'function' ? opts.canRun : () => true;
     const setTimer = opts.setTimer || setTimeout;
     const clearTimer = opts.clearTimer || clearTimeout;
@@ -36,7 +39,7 @@
       timer = setTimer(() => {
         timer = null;
         flush(lastReason || 'scheduled');
-      }, delay);
+      }, Math.max(0, Number(delayOf()) || 0));
       return true;
     }
 

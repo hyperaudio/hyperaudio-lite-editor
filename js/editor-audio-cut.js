@@ -169,6 +169,14 @@
     el.style.display = 'block';
   }
 
+  // the span count at the last rebuild, for the typing rule below (#734):
+  // declared before the first rebuild, which records it
+  let spanCountAtLastRebuild = -1;
+  function spanCount() {
+    const t = document.getElementById('hypertranscript');
+    return t === null ? -1 : t.getElementsByTagName('span').length;
+  }
+
   registerStrikeThrus();
   window.document.addEventListener('hyperaudioTranscriptLoaded', registerStrikeThrus, false);
   // Undo/redo replaces the DOM of the current document. Refresh derived audio
@@ -183,14 +191,25 @@
   // transcript (e.g., deletes a word — the time it occupied becomes a gap).
   // Debounced so we coalesce rapid keystrokes. Delegated on document so the
   // listener survives transcript element replacement via restoreTranscript().
+  // Only an edit that changed the STRUCTURE can change the gaps or the word
+  // index (#734): a word deleted, a paragraph split, a paste. Typing inside a
+  // word leaves the spans as they were, and on a long transcript the rebuild
+  // it used to schedule was a whole-transcript pass after every keystroke.
+  // The span count is a live collection's length: cheap, and enough to tell
+  // the two apart.
   let gapRecalcTimer = null;
+  const TYPING = /^(insertText|insertCompositionText|deleteContentBackward|deleteContentForward)$/;
   document.addEventListener('input', (e) => {
     if (!e.target || e.target.id !== 'hypertranscript') return;
+    // plain typing that left every span in place changes no gap; anything
+    // else (a paste, a split, an edit announced without a type) rebuilds
+    if (TYPING.test(e.inputType || '') && spanCount() === spanCountAtLastRebuild) return;
     clearTimeout(gapRecalcTimer);
     gapRecalcTimer = setTimeout(registerStrikeThrus, 150);
   });
 
   function registerStrikeThrus() {
+    spanCountAtLastRebuild = spanCount();
     rebuildAudioDataArray();
     ensureSkipListeners();
     updateGapSavingsMessage();
