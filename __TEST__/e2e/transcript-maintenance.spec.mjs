@@ -99,7 +99,9 @@ test('a real content edit sanitises only its paragraph, then settles globally', 
     const afterGlobal = window.hyperaudioInspectTranscriptMaintenance();
     return {
       distantStyleAfterGlobal: distantWord.style.fontSize,
-      hrefFollowsTheEdit: hrefAfterLocal !== hrefBefore && decodeURIComponent(hrefAfterLocal).includes('two words'),
+      // the edit is in the link, whether or not the sanitise has split it into two word spans
+      hrefFollowsTheEdit: hrefAfterLocal !== hrefBefore
+        && /two(?:\s|<[^>]*>)+words/.test(decodeURIComponent(hrefAfterLocal)),
       hrefRefreshed: linkHref() !== hrefBefore,
       afterLocal,
       afterGlobal,

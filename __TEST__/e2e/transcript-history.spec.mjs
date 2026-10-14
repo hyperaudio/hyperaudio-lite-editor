@@ -402,3 +402,52 @@ test('paste is its own undo entry, severed from typing on both sides (#514)', as
   await page.keyboard.press('Meta+z');
   expect(await text()).not.toContain('AB');
 });
+
+// #734 — a local sanitise names the paragraph it is confined to, so history
+// judges and folds it by that paragraph alone instead of snapshotting the
+// whole transcript twice. Undo still goes back past both the typing and its
+// normalisation in one step, and redo comes back to the normalised text.
+test('a scoped normalisation folds into the typing entry without a full snapshot (#734)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const root = document.getElementById('hypertranscript');
+    const word = root.querySelector('span[data-m]:not(.speaker)');
+    const paragraph = word.closest('p');
+    const original = word.textContent;
+    const originalParagraph = paragraph.textContent;
+    const text = word.firstChild;
+    root.focus();
+    getSelection().setBaseAndExtent(text, 1, text, 1);
+    // typing: a paragraph entry
+    word.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, inputType: 'insertText' }));
+    text.nodeValue = text.nodeValue + 'Q';
+    word.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+    const afterTyping = transcriptHistory.inspect();
+    // its normalisation, scoped to the paragraph as the local sanitise is
+    transcriptGateway.mutate(() => { word.setAttribute('data-d', '777'); }, {
+      origin: 'sanitise-local', foldPolicy: 'normalization', scopes: [paragraph],
+    });
+    const afterFold = transcriptHistory.inspect();
+    // a scoped normalisation that changed nothing adds nothing
+    transcriptGateway.mutate(() => {}, { origin: 'sanitise-local', foldPolicy: 'normalization', scopes: [paragraph] });
+    const afterNoop = transcriptHistory.inspect();
+    const undo = transcriptHistory.undo();
+    const state = () => ({
+      text: root.querySelector('p').textContent,
+      d: root.querySelector('span[data-m]:not(.speaker)').getAttribute('data-d'),
+    });
+    const undone = state();
+    const redo = transcriptHistory.redo();
+    const redone = state();
+    return { original: original.trim(), originalParagraph, afterTyping, afterFold, afterNoop, undo, undone, redo, redone };
+  });
+  expect(r.afterFold.length).toBe(r.afterTyping.length);           // folded, not pushed
+  expect(r.afterFold.localEntries).toBe(r.afterTyping.localEntries);
+  expect(r.afterFold.fullSnapshotCount).toBe(r.afterTyping.fullSnapshotCount); // no whole-transcript snapshot
+  expect(r.afterNoop).toMatchObject({ length: r.afterFold.length, fullSnapshotCount: r.afterFold.fullSnapshotCount });
+  expect(r.undo).toBe(true);
+  expect(r.undone.text).toBe(r.originalParagraph);
+  expect(r.undone.d).not.toBe('777');
+  expect(r.redo).toBe(true);
+  expect(r.redone.text).toContain('Q');
+  expect(r.redone.d).toBe('777');
+});

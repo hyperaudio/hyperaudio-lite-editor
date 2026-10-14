@@ -111,6 +111,8 @@
       origin: opts.origin || 'unknown',
       foldPolicy: opts.foldPolicy || null,
       captureHistory: opts.captureHistory !== false,
+      // the paragraphs a scoped mutation is confined to (#734), or null
+      scopes: Array.isArray(opts.scopes) && opts.scopes.length > 0 ? opts.scopes.slice() : null,
     });
     currentTransaction = transaction;
     mutationDepth = 1;
@@ -132,6 +134,7 @@
         origin: transaction.origin,
         foldPolicy: transaction.foldPolicy,
         captureHistory: transaction.captureHistory,
+        scopes: transaction.scopes,
         error,
       }));
     }

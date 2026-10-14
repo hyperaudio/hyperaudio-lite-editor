@@ -147,16 +147,30 @@ function jsonToHTML(jsonData) {
     // times left gap/trailing words unmatched. Rule: a word belongs to the
     // last paragraph that has started by the word's start time; words before
     // the first paragraph go to the first.
+    //
+    // The paragraph is found by binary search over the paragraphs ordered by
+    // (start, index) (#734): the last one in that order that has started is
+    // the latest-starting paragraph, the later of any that start together,
+    // which is what the scan over every paragraph for every word chose. The
+    // scan was words × paragraphs, and on a long transcript it was most of
+    // the cost of every draft write.
     const assignedWords = paragraphs.map(() => []);
+    const order = paragraphs
+      .map((p, i) => ({ start: p.start, i }))
+      .filter((o) => o.start >= -Infinity)   // drops a NaN start, as the scan's comparisons did
+      .sort((a, b) => (a.start - b.start) || (a.i - b.i));
     words.forEach(word => {
       let idx = 0;
-      let bestStart = -Infinity;
-      paragraphs.forEach((p, i) => {
-        if (word.start >= p.start && p.start >= bestStart) {
-          idx = i;
-          bestStart = p.start;
+      if (word.start >= -Infinity) {
+        let lo = 0;
+        let hi = order.length - 1;
+        let found = -1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (order[mid].start <= word.start) { found = mid; lo = mid + 1; } else hi = mid - 1;
         }
-      });
+        if (found >= 0) idx = order[found].i;
+      }
       assignedWords[idx].push(word);
     });
 
@@ -244,9 +258,14 @@ function jsonToHTML(jsonData) {
  *   }
  */
 function htmlToJSON(html) {
-  // Parse HTML into a queryable DOM structure
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  // Parse HTML into a queryable DOM structure — or read a live transcript
+  // element directly when given one (#734): only data-m/data-d, the speaker
+  // class, the line-through style and text are read, which the live DOM and
+  // its serialisation share, and parsing a long transcript back from its own
+  // markup was a large part of every draft write.
+  const doc = html && typeof html === 'object' && typeof html.querySelectorAll === 'function'
+    ? html
+    : new DOMParser().parseFromString(html, 'text/html');
   
   // ===== EXTRACT WORDS =====
   // Find all spans with timing data that are NOT speaker labels. data-d is

@@ -550,13 +550,64 @@
     return null;
   }
 
+  // A scoped normalisation (#734): the local sanitise names the paragraphs it
+  // is confined to, so whether it changed anything, and folding it into the
+  // entry it normalises, are decided from those paragraphs alone. On a long
+  // transcript the two whole-transcript snapshots this used to take were most
+  // of the pause after a keystroke. Anything unusual (a paragraph gone or
+  // moved, the current entry not that paragraph's) falls back to the full
+  // snapshot, as before.
+  function paragraphFingerprint(paragraph) {
+    return fingerprintHash(semanticFingerprint(cleanClone(paragraph)));
+  }
+  function scopedBefore(transaction) {
+    const root = validTranscript();
+    const scopes = transaction.scopes;
+    if (!root || transaction.foldPolicy !== 'normalization' || !Array.isArray(scopes)) return null;
+    const paragraphs = Array.from(root.querySelectorAll('p'));
+    const items = [];
+    for (const paragraph of scopes) {
+      const index = paragraphs.indexOf(paragraph);
+      if (!paragraph || !paragraph.matches || !paragraph.matches('p') || index < 0) return null;
+      items.push({ paragraph, index, fingerprint: paragraphFingerprint(paragraph) });
+    }
+    return { kind: 'scoped', items, paragraphCount: paragraphs.length };
+  }
+  // after a scoped normalisation: true when handled here, false to fall back
+  function scopedAfter(before, transaction) {
+    const root = validTranscript();
+    if (!root) return false;
+    const paragraphs = root.querySelectorAll('p');
+    if (paragraphs.length !== before.paragraphCount) return false;
+    const changed = [];
+    for (const item of before.items) {
+      if (!item.paragraph.isConnected || paragraphs[item.index] !== item.paragraph) return false;
+      if (paragraphFingerprint(item.paragraph) !== item.fingerprint) changed.push(item);
+    }
+    if (changed.length === 0) { updateControls(); return true; }   // nothing that matters changed
+    const current = position > 0 ? entries[position] : null;
+    if (changed.length !== 1 || current === null || current.kind !== 'paragraph'
+        || current.paragraphIndex !== changed[0].index) return false;
+    // fold into the entry for this paragraph: its after state is the normalised one
+    const afterHtml = cleanClone(changed[0].paragraph).outerHTML;
+    replaceCurrent(Object.freeze({
+      ...current,
+      afterHtml,
+      afterSelection: captureSelection(changed[0].paragraph) || current.afterSelection,
+      origin: transaction.origin,
+      timestamp: Date.now(),
+      bytes: (current.beforeHtml.length + afterHtml.length) * 2,
+    }));
+    return true;
+  }
+
   gateway.onBeforeMutate((transaction) => {
     clearPending();
     if (transaction.captureHistory === false) {
       gatewayBefore = null;
       return;
     }
-    gatewayBefore = snapshot(`before-${transaction.origin}`);
+    gatewayBefore = scopedBefore(transaction) || snapshot(`before-${transaction.origin}`);
   });
 
   gateway.onAfterMutate((transaction) => {
@@ -565,8 +616,14 @@
       updateControls();
       return;
     }
-    const before = gatewayBefore;
+    let before = gatewayBefore;
     gatewayBefore = null;
+    if (before && before.kind === 'scoped') {
+      if (scopedAfter(before, transaction)) return;
+      // the fold below needs only the after state; the before is read from it
+      // when the scoped path cannot decide, so the change is never lost
+      before = { semanticFingerprint: null, selection: null };
+    }
     const after = snapshot(transaction.origin);
     if (!after || !before || before.semanticFingerprint === after.semanticFingerprint) {
       updateControls();
