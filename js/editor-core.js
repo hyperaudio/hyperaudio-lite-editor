@@ -76,17 +76,40 @@
   }
 
 
+  // the HTML download link is rebuilt on click when the transcript changed (#734)
+  let downloadHtmlStale = true;
+  document.addEventListener('DOMContentLoaded', () => {
+    const link = document.getElementById('download-html');
+    if (link === null) return;
+    const build = () => {
+      if (!downloadHtmlStale) return;
+      const root = document.getElementById('hypertranscript');
+      if (root === null) return;
+      const html = typeof serializeTranscriptHtml === 'function'
+        ? serializeTranscriptHtml(root) : root.innerHTML.replace(/ class=".*?"/g, '');
+      link.setAttribute('href', 'data:text/html,' + encodeURIComponent(html));
+      downloadHtmlStale = false;
+    };
+    // before the click's default action reads the href: mousedown for a
+    // pointer, keydown for Enter, and click itself as the last word
+    ['mousedown', 'keydown', 'click'].forEach((type) => link.addEventListener(type, build, true));
+    // any edit makes it stale; the settle pass says so too, for edits it makes itself
+    document.addEventListener('input', (e) => {
+      if (e.target && e.target.closest && e.target.closest('#hypertranscript') !== null) downloadHtmlStale = true;
+    }, true);
+  });
   let updateCaptionsFromTranscript = true;
   let captionMode = false; // used to detect whether we need to sanitise amongst other things
   let transcriptRequiresInit = false; // to know whether a transcript has been loaded while in captionMode and so not initialised
   const transcriptInputWired = new WeakSet(); // the transcript elements whose input/blur listeners are attached (#675)
 
-  function mutateTranscript(fn, origin, foldPolicy, captureHistory) {
+  function mutateTranscript(fn, origin, foldPolicy, captureHistory, scopes) {
     if (window.transcriptGateway && typeof window.transcriptGateway.mutate === 'function') {
       return window.transcriptGateway.mutate(fn, {
         origin,
         foldPolicy,
         captureHistory: captureHistory !== false,
+        scopes,
       });
     }
     return fn();
@@ -1044,12 +1067,16 @@
         // line, two-space indents, data-m before data-d, runtime noise
         // dropped. Replaces the old raw-innerHTML + strip-all-classes regex —
         // which also (wrongly) removed the semantic speaker class.
-        let hypertranscript = typeof serializeTranscriptHtml === 'function'
+        // The HTML download link is built when it is clicked (#734), not on
+        // every settle: serialising a long transcript into a data: URL was a
+        // whole-transcript pass for a link seldom used.
+        const serialized = () => (typeof serializeTranscriptHtml === 'function'
           ? serializeTranscriptHtml(rootnode)
-          : rootnode.innerHTML.replace(/ class=".*?"/g, '');
-        document.querySelector('#download-html').setAttribute('href', 'data:text/html,'+encodeURIComponent(hypertranscript));
+          : rootnode.innerHTML.replace(/ class=".*?"/g, ''));
+        downloadHtmlStale = true;
 
         if (isTranscriptFocused === true && updateCaptionsFromTranscript === true) {
+          const hypertranscript = serialized();
           const words = document.querySelectorAll("[data-m]");
           hyperaudioInstance.wordArr = hyperaudioInstance.createWordArray(words);
           hyperaudioInstance.parentElements = hyperaudioInstance.transcript.getElementsByTagName(hyperaudioInstance.parentTag);
@@ -1086,11 +1113,14 @@
         const scopes = validLocal.length === requested.length && validLocal.length > 0
           ? validLocal : [rootnode];
         const captureHistory = scopes.some((scope) => scopeNeedsSanitise(scope));
+        // a local pass names its paragraphs, so history can look at those
+        // alone rather than the whole transcript (#734)
         return mutateTranscript(
           () => sanitise(opts),
           origin || 'sanitise',
           'normalization',
           captureHistory,
+          scopes[0] === rootnode ? null : scopes,
         );
       }
 
@@ -1168,8 +1198,15 @@
           if (global && reconciliation) reconciliation.cancel();
         },
       });
+      // The settle pass costs in proportion to the whole transcript, so on a
+      // long one it waits for a longer pause in typing (#734): 3 s up to
+      // 20k words, then a further second per 10k words, up to 10 s.
+      const settleDelay = () => {
+        const words = rootnode.getElementsByTagName('span').length;
+        return Math.min(10000, 3000 + Math.max(0, Math.round((words - 20000) / 10000)) * 1000);
+      };
       reconciliation = window.createTranscriptMaintenanceQueue({
-        delay: 3000,
+        delay: settleDelay,
         canRun: () => captionMode !== true && imeComposing !== true,
         run: (origin) => {
           maintenance.cancel();

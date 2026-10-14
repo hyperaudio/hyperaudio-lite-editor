@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.35 — last changed in release 1.3.35
+ * @version 1.3.39 — last changed in release 1.3.39
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -953,6 +953,17 @@
   // from the container outright.
   //
   // NOT getTranscriptData(), whose blanket class strip destroys the speaker class.
+  // The transcript element the editor's state is read from: the live one, or
+  // the cached one while the caption editor has the screen. null when neither.
+  function editorTranscriptRoot() {
+    const el = document.querySelector('#hypertranscript');
+    if (el !== null) return el;
+    if (typeof transcriptCache !== 'undefined' && transcriptCache !== null) {
+      return transcriptCache.querySelector('#hypertranscript');
+    }
+    return null;
+  }
+
   function getEditorTranscriptHtml() {
     const el = document.querySelector('#hypertranscript');
     if (el !== null) return sanitizeTranscriptClasses(el.innerHTML);
@@ -968,10 +979,22 @@
     return htmlToJSON(getEditorTranscriptHtml());
   }
 
+  // Word spans in a piece of transcript markup: <span> start tags carrying
+  // data-m, less the speaker labels. Read off the tags rather than by parsing
+  // the document (#734): this runs twice on every draft write, and two
+  // DOMParser passes over a long transcript were most of that write's cost.
+  // The markup is the editor's own or jsonToHTML's, attributes always quoted.
   const wordSpanCount = (html) => {
     try {
-      return new DOMParser().parseFromString(String(html), 'text/html')
-        .querySelectorAll('span[data-m]:not(.speaker)').length;
+      const tags = String(html).match(/<span\b[^>]*>/gi) || [];
+      let count = 0;
+      for (const tag of tags) {
+        if (!/\sdata-m\s*=/i.test(tag)) continue;
+        const cls = /\sclass\s*=\s*("([^"]*)"|'([^']*)')/i.exec(tag);
+        if (cls !== null && /(^|\s)speaker(\s|$)/.test(cls[2] !== undefined ? cls[2] : cls[3])) continue;
+        count += 1;
+      }
+      return count;
     } catch (e) {
       return -1; // unknown; the invariant below treats that as "don't judge"
     }
@@ -1121,7 +1144,11 @@
     // One read of the DOM, parsed once; the HTML entry is projected from the
     // resulting JSON rather than read again (#489).
     const source = getEditorTranscriptHtml();
-    const transcript = htmlToJSON(source);
+    // the JSON straight from the element the markup came from (#734), not
+    // from parsing that markup back; the markup is kept for the projection's
+    // word-count check and its fallback
+    const root = editorTranscriptRoot();
+    const transcript = htmlToJSON(root !== null ? root : source);
     const html = projectTranscriptHtml(transcript, source);
     const versionMeta = document.querySelector('meta[name="version"]');
     const summaryEl = document.getElementById('summary');
