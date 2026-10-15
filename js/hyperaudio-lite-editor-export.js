@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.25 — last changed in release 1.3.25
+ * @version 1.3.40 — last changed in release 1.3.40
  * @license MIT
  *
  * Export/import custom elements: transcript downloads and the Deepgram JSON,
@@ -200,23 +200,17 @@ class ImportSrt extends HTMLElement {
 
   confirmSrt() {
     let player = document.querySelector("#hyperplayer");
+    // The media goes on the player NOW, before the caption file is read and
+    // the new project is created from it. It used to be read into memory
+    // first (twice over), and a large video only reached the player after the
+    // project had been created, so the project was saved with whatever media
+    // the player held before: the previous project's. A File is a Blob, so it
+    // can go on the player as it is; the save module captures the same File
+    // from this input for the project's media.
     if (document.querySelector('#srt-file').value == ""){
-      console.log("new src ", document.querySelector('#srt-media').value);
       player.src = document.querySelector('#srt-media').value;
     } else {
-      const file = document.querySelector('[name=srt-file]').files[0];
-      // Create a new FileReader instance
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
-      let blob = null;
-
-      reader.addEventListener('load', () => {
-
-        file.arrayBuffer().then((arrayBuffer) => {
-          blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-          player.src = URL.createObjectURL(blob);
-        });
-      });
+      player.src = URL.createObjectURL(document.querySelector('[name=srt-file]').files[0]);
     }
 
     const file = document.querySelector('[name=srt]').files[0];
@@ -332,23 +326,17 @@ class ImportVtt extends HTMLElement {
 
   confirmVtt() {
     let player = document.querySelector("#hyperplayer");
+    // The media goes on the player NOW, before the caption file is read and
+    // the new project is created from it. It used to be read into memory
+    // first (twice over), and a large video only reached the player after the
+    // project had been created, so the project was saved with whatever media
+    // the player held before: the previous project's. A File is a Blob, so it
+    // can go on the player as it is; the save module captures the same File
+    // from this input for the project's media.
     if (document.querySelector('#vtt-file').value == ""){
-      console.log("new src ", document.querySelector('#vtt-media').value);
       player.src = document.querySelector('#vtt-media').value;
     } else {
-      const file = document.querySelector('[name=vtt-file]').files[0];
-      // Create a new FileReader instance
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
-      let blob = null;
-
-      reader.addEventListener('load', () => {
-
-        file.arrayBuffer().then((arrayBuffer) => {
-          blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-          player.src = URL.createObjectURL(blob);
-        });
-      });
+      player.src = URL.createObjectURL(document.querySelector('[name=vtt-file]').files[0]);
     }
 
     const file = document.querySelector('[name=vtt]').files[0];
