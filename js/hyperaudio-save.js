@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.39 — last changed in release 1.3.39
+ * @version 1.3.40 — last changed in release 1.3.40
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -4013,7 +4013,9 @@
   function wireCapture() {
     // The original media File, captured at the existing engine file inputs —
     // no engine code is touched.
-    ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file']
+    ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file',
+      // the local media chosen beside an imported caption file
+      '#srt-file', '#vtt-file']
       .forEach((selector) => {
         const el = document.querySelector(selector);
         if (el === null) return;
