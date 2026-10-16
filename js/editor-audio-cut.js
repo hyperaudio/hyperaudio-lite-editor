@@ -327,6 +327,10 @@
     selectedSpans.forEach(action);
 
     selection.removeAllRanges();
+    // the strike used the selection up: a dialog must not offer it again (#732)
+    if (window.TranscriptSelection && typeof window.TranscriptSelection.forget === 'function') {
+      window.TranscriptSelection.forget();
+    }
   }
 
   function computePlayableSections(transcript) {
