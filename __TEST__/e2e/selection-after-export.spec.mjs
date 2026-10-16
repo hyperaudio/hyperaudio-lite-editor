@@ -86,3 +86,48 @@ test('nothing selected, nothing shown', async ({ page }) => {
   await toggleExport(page, false);
   expect(await marked(page)).toEqual([]);
 });
+
+// Two more ways a selection is used up, and must not come back in Export.
+test('striking the selection uses it up: Export no longer offers it, and nothing is shown', async ({ page }) => {
+  await setup(page);
+  await select(page, 3, 6);
+  await page.waitForTimeout(60);
+  await page.click('#strikethrough');
+  expect(await page.evaluate(() => window.TranscriptSelection.range(12))).toBeNull();
+  await toggleExport(page, true);
+  await expect(page.locator('#export-source-clip-row')).toBeHidden();
+  await toggleExport(page, false);
+  expect(await marked(page)).toEqual([]);
+});
+
+test('typing in the transcript uses the selection up as well', async ({ page }) => {
+  await setup(page);
+  await select(page, 3, 6);
+  await toggleExport(page, true);
+  await toggleExport(page, false);
+  expect(await marked(page)).toHaveLength(4);
+  await page.evaluate(() => {
+    const t = document.getElementById('hypertranscript');
+    const word = t.querySelectorAll('[data-m]')[9];
+    word.firstChild.nodeValue = 'w9x ';
+    t.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'x' }));
+  });
+  expect(await marked(page)).toEqual([]);
+  await toggleExport(page, true);
+  await expect(page.locator('#export-source-clip-row')).toBeHidden();
+});
+
+test('a selection of words already struck out is shown as such, not offered at 0:00', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => {
+    document.querySelectorAll('#hypertranscript [data-m]').forEach((s, i) => { if (i >= 3 && i <= 6) s.style.textDecoration = 'line-through'; });
+  });
+  await select(page, 3, 6);
+  await toggleExport(page, true);
+  await expect(page.locator('#export-source-clip-row')).toBeVisible();
+  await expect(page.locator('#export-clip-summary')).toHaveText('(all struck out)');
+  expect(await page.evaluate(() => ({
+    disabled: document.getElementById('export-source-clip').disabled,
+    clip: document.getElementById('export-source-clip').checked,
+  }))).toEqual({ disabled: true, clip: false });
+});

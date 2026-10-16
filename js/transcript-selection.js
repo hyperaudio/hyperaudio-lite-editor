@@ -1,7 +1,7 @@
 /**
  * transcript-selection.js
  * (C) The Hyperaudio Project
- * @version 1.3.38 — last changed in release 1.3.38
+ * @version 1.3.41 — last changed in release 1.3.41
  * @license MIT
  *
  * What is selected in the transcript, as a stretch of media — for anything
@@ -38,6 +38,12 @@
   function hide() {
     document.querySelectorAll('.' + MARK).forEach((el) => el.classList.remove(MARK));
   }
+  // The selection used up, as a native one is by an edit or a strike: gone,
+  // and no longer offered by a dialog either.
+  function forget() {
+    last = null;
+    hide();
+  }
   // Show the remembered selection as selected, when there is one on screen.
   // Returns whether anything was shown.
   function show() {
@@ -66,10 +72,11 @@
       if (!same) hide();
     }
   });
-  // an edit is a selection gone, as it would be natively
+  // an edit is a selection gone, as it would be natively: forgotten, not
+  // only hidden, or the next export still offered the old range
   document.addEventListener('input', (e) => {
     const ht = document.getElementById('hypertranscript');
-    if (ht !== null && e.target && ht.contains(e.target)) hide();
+    if (ht !== null && e.target && ht.contains(e.target)) forget();
   }, true);
 
   // The word spans of the remembered selection, in order, or [] when there
@@ -107,5 +114,5 @@
     return { from, to, start: Math.max(0, from - PAD), end: Math.min(cap, to + PAD) };
   }
 
-  window.TranscriptSelection = Object.freeze({ words, range, show, hide, PAD, MARK });
+  window.TranscriptSelection = Object.freeze({ words, range, show, hide, forget, PAD, MARK });
 })();
