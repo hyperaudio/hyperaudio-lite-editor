@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.38 — last changed in release 1.3.38
+ * @version 1.3.41 — last changed in release 1.3.41
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -1888,12 +1888,25 @@
     if (clipRow !== null) clipRow.style.display = clipRange !== null ? 'flex' : 'none';
     if (clipRange !== null && sourceClip !== null) {
       const len = keptDuration(clipSections(duration, clipRange));
+      // a selection whose every word is struck out has nothing to export:
+      // shown as such, and not chosen (#732), rather than offered at 0:00
+      const selectedWords = window.TranscriptSelection ? window.TranscriptSelection.words() : [];
+      const allStruck = len < 0.05 || (selectedWords.length > 0
+        && selectedWords.every((w) => (w.style.textDecoration || '').includes('line-through')));
       // the selected words' own times (the padding is ours, not theirs), and
       // the length that will be exported
-      if (clipSummary !== null) clipSummary.textContent = `(${fmtLen(clipRange.from)}–${fmtLen(clipRange.to)}, ${fmtLen(len)})`;
-      sourceClip.checked = true;
+      if (clipSummary !== null) {
+        clipSummary.textContent = allStruck ? '(all struck out)'
+          : `(${fmtLen(clipRange.from)}–${fmtLen(clipRange.to)}, ${fmtLen(len)})`;
+      }
+      sourceClip.disabled = allStruck;
+      if (clipRow !== null) clipRow.classList.toggle('export-source-off', allStruck);
+      sourceClip.checked = !allStruck;
+      if (allStruck && sourceEntire !== null) sourceEntire.checked = true;
     } else if (sourceClip !== null) {
       sourceClip.checked = false;
+      sourceClip.disabled = false;
+      if (clipRow !== null) clipRow.classList.remove('export-source-off');
     }
 
     // default the export name to the project/media base name
