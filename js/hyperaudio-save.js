@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.40 — last changed in release 1.3.40
+ * @version 1.3.42 — last changed in release 1.3.42
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -619,7 +619,13 @@
   async function writeFileTo(dir, name, data) {
     const handle = await dir.getFileHandle(name, { create: true });
     const writable = await handle.createWritable();
-    await writable.write(data);
+    try {
+      await writable.write(data);
+    } catch (e) {
+      // a write that fails (a full disk) is abandoned, not left half open
+      try { await writable.abort(); } catch (_) { /* already gone */ }
+      throw e;
+    }
     await writable.close();
   }
 
@@ -646,7 +652,9 @@
       const dir = await getProjectDir(id, false);
       const mediaDir = await dir.getDirectoryHandle('media');
       const handle = await mediaDir.getFileHandle(filename);
-      return await handle.getFile();
+      const file = await handle.getFile();
+      // an empty file is what a write cut short leaves behind (#738): missing
+      return file.size > 0 ? file : null;
     } catch (e) {
       return null;
     }
@@ -1439,6 +1447,11 @@
         player.src = URL.createObjectURL(loaded.mediaFile);
       } else if (!loaded.recovered && loaded.project.media.kind === 'link' && loaded.project.media.url) {
         player.src = loaded.project.media.url;
+      } else if (!loaded.recovered && loaded.project.media.kind === 'original') {
+        // its own media is missing: nothing, rather than the previous
+        // project's media left playing under this transcript (#738)
+        player.removeAttribute('src');
+        player.load();
       }
 
       // Captions through the one door: fresh track AND a paint flush (#356/#287).
@@ -1892,13 +1905,37 @@
       const src = player !== null ? player.src : '';
       if (isLinkUrl(src) && session.mediaFileFromUrl !== src) return;
     }
+    // Stored under the name the project records (sanitizeMediaFilename), so
+    // the one it is looked up by is the one it was written under.
+    const name = sanitizeMediaFilename(session.mediaFile.name);
+    const file = session.mediaFile;
+    const projectId = session.projectId;
+    mediaWritesInFlight.add(projectId);
     try {
-      const mediaDir = await pruneMediaExcept(session.projectId, session.mediaFile.name);
-      if (mediaDir !== null) await writeFileTo(mediaDir, session.mediaFile.name, session.mediaFile);
+      const mediaDir = await pruneMediaExcept(session.projectId, name);
+      if (mediaDir !== null) {
+        await writeFileTo(mediaDir, name, file);
+        // a write that ended short (a full disk can end one without an
+        // error reaching here) is a failed write, said as one
+        const written = (await (await mediaDir.getFileHandle(name)).getFile()).size;
+        if (written !== file.size) throw new Error(`media write incomplete: ${written} of ${file.size} bytes`);
+      }
     } catch (e) {
       console.warn('hyperaudio-save: media write failed', e);
+      // Said, not only logged (#738): the project is saved without its media,
+      // and on the next visit it would ask for the file with no idea why.
+      const quota = e && (e.name === 'QuotaExceededError' || /quota|space/i.test(String(e.message)));
+      projectAlert('The media file "' + file.name + '" could not be saved with this project'
+        + (quota ? ', as there is not enough free space on this computer.' : '.')
+        + '\n\nThe transcript and captions are saved. Keep the media file: when you open the project again you will be asked to choose it.');
+    } finally {
+      mediaWritesInFlight.delete(projectId);
     }
   }
+  // Projects whose media is being copied into storage right now: a large
+  // video takes a while, and opening the project meanwhile finds an empty
+  // file. That is not missing media, and must not be offered as such.
+  const mediaWritesInFlight = new Set();
 
   // The current session's origin as held in memory, written to the project
   // dir — used when a project is born and when a deleted-but-on-screen
@@ -2892,6 +2929,12 @@
     session.mediaFile = files.mediaFile;
     session.mediaFileFromUrl = null;
     session.pendingReconcile = project.media.kind === 'link' ? project.media : null;
+    // A project whose own media file is missing from storage (a save that
+    // failed or was cut short, #738) says so and offers to take it back,
+    // as one opened from a file without its media does.
+    if (project.media.kind === 'original' && files.mediaFile === null && !mediaWritesInFlight.has(id)) {
+      setTimeout(() => offerMediaReconciliation(project.media), 0);
+    }
     session.hasOriginal = files.originalText !== null;
     session.originalJson = files.originalText;
     session.envelope = project; // §8.1: a save after restore must preserve unknown fields too
