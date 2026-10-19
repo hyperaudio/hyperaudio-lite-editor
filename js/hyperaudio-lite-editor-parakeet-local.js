@@ -70,7 +70,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.23";
+  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.42";
 
   // On Chrome (Chromium) Parakeet runs fp16 on the GPU (WebGPU) – fast, and the
   // default. Firefox's WebGPU underperforms here and Safari's can exhaust memory
@@ -417,7 +417,14 @@ function loadParakeetClient(modal, workerBaseUrl) {
     const forceGpu = gpuOptIn !== null && gpuOptIn.checked;
 
     // transfer the buffer rather than copying it
-    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu }, [audio.buffer]);
+    // Debug switch for #671, off unless set: localStorage.parakeetBlankReset =
+    // "2" resets the decoder's state after that many seconds of blanks that
+    // follow a sentence-final token. Testing whether the decoder is what
+    // drops a stretch of sparse speech; not a feature, and removed once known.
+    let blankResetSeconds = 0;
+    try { blankResetSeconds = Number(localStorage.getItem("parakeetBlankReset")) || 0; } catch (e) { /* no storage */ }
+    if (blankResetSeconds > 0) console.log(`Parakeet: #671 debug — decoder reset after ${blankResetSeconds}s of blanks following a sentence end`);
+    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu, blankResetSeconds }, [audio.buffer]);
   }
 }
 
