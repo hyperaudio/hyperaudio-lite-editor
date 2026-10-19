@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.40 — last changed in release 1.3.40
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  *
  * Export/import custom elements: transcript downloads and the Deepgram JSON,
@@ -655,6 +655,29 @@ window.srtToHtml = srtToHtml;
 window.vttToHtml = vttToHtml;
 window.convertSrtToWebVtt = convertSrtToWebVtt;
 
+// A caption file's words as transcript markup, with paragraphs placed by the
+// one rule every engine and import shares (#743). A caption file has no word
+// timings: each cue's duration is spread over its words, so within a cue the
+// words follow on without a gap, and only the space between one cue's end
+// and the next cue's start is a real pause. Each word therefore ends where
+// the next word in its cue starts, and the last word of a cue at the cue's end.
+function captionWordsToHtml(captionWords) {
+  const plain = (html) => String(html).replace(/<[^>]*>/g, '');
+  const words = captionWords.map((w, i) => ({
+    start: w.ms / 1000,
+    end: w.lastInCue || i === captionWords.length - 1 ? w.cueEnd : captionWords[i + 1].ms / 1000,
+    text: plain(w.html),
+  }));
+  const starts = typeof window !== 'undefined' && typeof window.hyperaudioParagraphStarts === 'function'
+    ? window.hyperaudioParagraphStarts(words) : new Set();
+  let html = '<article><section><p>';
+  captionWords.forEach((w, i) => {
+    if (starts.has(i)) html += '</p><p>';
+    html += '<span data-m="' + w.ms + '">' + w.html + ' </span>';
+  });
+  return html + '</p></section></article>';
+}
+
 function srtToHtml(data) {
   let i = 0,
   len = 0,
@@ -689,12 +712,7 @@ function srtToHtml(data) {
     }
   };
 
-  let paraSplitTime = 1.5;
-  let paraPunct = true;
-  let outputString = '<article><section><p>';
-  let lineBreaks = false;
-  let ltime = 0;
-  let ltext;
+  const captionWords = [];   // { ms, html, cueEnd, lastInCue }, in order
 
   // Here is where the magic happens
   // Split on line breaks
@@ -787,24 +805,10 @@ function srtToHtml(data) {
       wordStart = wordStart + wordTime;
       let stext = swords[si];
 
-      if (stime - ltime > paraSplitTime * 1000 && paraSplitTime > 0) {
-
-        let punctPresent =
-          ltext && (ltext.indexOf('.') > 0 || ltext.indexOf('?') > 0 || ltext.indexOf('!') > 0);
-        if (!paraPunct || (paraPunct && punctPresent)) {
-          outputString += '</p><p>';
-        }
-      }
-
-      outputString += '<span data-m="' + stime + '">' + stext + ' </span>';
-
-      ltime = stime;
-      ltext = stext;
-
-      if (lineBreaks) outputString = outputString + '\n';
+      captionWords.push({ ms: stime, html: stext, cueEnd: sub.end, lastInCue: si === sl - 1 });
     }
   }
-  return outputString + '</p></section></article>';
+  return captionWordsToHtml(captionWords);
 }
 
 /**
@@ -844,12 +848,7 @@ function vttToHtml(data) {
     }
   };
 
-  let paraSplitTime = 1.5;
-  let paraPunct = true;
-  let outputString = '<article><section><p>';
-  let lineBreaks = false;
-  let ltime = 0;
-  let ltext;
+  const captionWords = [];   // { ms, html, cueEnd, lastInCue }, in order
 
   // Split on line breaks
   lines = data.split(/(?:\r\n|\r|\n)/gm);
@@ -949,24 +948,10 @@ function vttToHtml(data) {
         wordStart = wordStart + wordTime;
         let stext = swords[si];
 
-        if (stime - ltime > paraSplitTime * 1000 && paraSplitTime > 0) {
-          let punctPresent =
-            ltext && (ltext.indexOf('.') > 0 || ltext.indexOf('?') > 0 || ltext.indexOf('!') > 0);
-          
-          if (!paraPunct || (paraPunct && punctPresent)) {
-            outputString += '</p><p>';
-          }
-        }
-
-        outputString += '<span data-m="' + stime + '">' + stext + ' </span>';
-
-        ltime = stime;
-        ltext = stext;
-
-        if (lineBreaks) outputString = outputString + '\n';
+        captionWords.push({ ms: stime, html: stext, cueEnd: sub.end, lastInCue: si === sl - 1 });
       }
     }
   }
-  
-  return outputString + '</p></section></article>';
+
+  return captionWordsToHtml(captionWords);
 }
