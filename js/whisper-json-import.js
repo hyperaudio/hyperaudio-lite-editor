@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - Whisper JSON import. @version 1.3.17 — last changed in release 1.3.17 */
+/*! Hyperaudio Lite Editor - Whisper JSON import. @version 1.3.42 — last changed in release 1.3.42 */
 
 // Self-contained, modular import feature (#631). To remove it entirely:
 // delete this file, its <script> tag in index.html, and the
@@ -28,8 +28,6 @@
 (function () {
   'use strict';
 
-  const MAX_WORDS_IN_PARAGRAPH = 100;
-  const SIGNIFICANT_GAP_SECONDS = 4.0;
   const NOMINAL_WORD_SECONDS = 0.3;
 
   // A token that is wholly bracketed is never speech: [BLANK_AUDIO], [Music],
@@ -176,28 +174,22 @@
     return out;
   }
 
-  // Paragraphs where a reader would want them: a change of speaker always, a
-  // long gap, or simply length — the same rule the Deepgram import uses.
+  // Paragraphs where a reader would want them: the one rule every engine and
+  // import shares (#743), js/paragraph-rule.js. Without it, one paragraph.
+  const sharedRule = (typeof window !== 'undefined' && typeof window.hyperaudioParagraphStarts === 'function')
+    ? window.hyperaudioParagraphStarts
+    : (typeof require === 'function' ? (() => { try { return require('./paragraph-rule.js').paragraphStarts; } catch (e) { return null; } })() : null);
   function paragraphsFrom(words) {
+    const starts = sharedRule !== null ? sharedRule(words) : new Set();
     const paragraphs = [];
     let current = null;
-    let count = 0;
     words.forEach((word, index) => {
-      const previous = index > 0 ? words[index - 1] : null;
-      const speakerChanged = previous !== null && (word.speaker || null) !== (previous.speaker || null);
-      const gap = previous !== null ? word.start - previous.end : 0;
-      const tooLong = count >= MAX_WORDS_IN_PARAGRAPH;
-      const endsSentence = previous !== null && /[.?!]["')\]]?$/.test(previous.text);
-      const shouldBreak = current === null || speakerChanged
-        || (gap > SIGNIFICANT_GAP_SECONDS && endsSentence) || (tooLong && endsSentence);
-      if (shouldBreak) {
+      if (current === null || starts.has(index)) {
         current = { start: word.start, end: word.end };
         if (word.speaker) current.speaker = word.speaker;
         paragraphs.push(current);
-        count = 0;
       }
       current.end = word.end;
-      count += 1;
     });
     return paragraphs;
   }

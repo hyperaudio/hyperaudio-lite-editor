@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.34 — last changed in release 1.3.34
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  */
 
@@ -343,39 +343,22 @@ function loadWhisperClient(modal, workerBaseUrl) {
     }
 
     let hypertranscript = "";
-    let sentences = 0;
-    let lastWord = "";
 
-    results.output.chunks.forEach((word) => {
+    // whisper marks word boundaries with a leading space on the text; empty
+    // text and text in square brackets (things like [BLANK_AUDIO]) are dropped
+    // BEFORE paragraphs are placed, so a dropped noise word cannot hide a pause
+    const kept = results.output.chunks
+      .map((word) => ({ text: word.text.trim(), start: word.timestamp[0], end: word.timestamp[1] ?? (word.timestamp[0] + 0.5) }))
+      .filter((w) => w.text.length > 0 && w.text.indexOf("[") < 0 && w.text.indexOf("]") < 0);
+    // where paragraphs start: the one rule every engine and import shares (#743)
+    const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
+      ? window.hyperaudioParagraphStarts(kept) : new Set();
 
-      // whisper marks word boundaries with a leading space on the text
-      const text = word.text.trim();
-
-      // ignore empty text and text with square brackets - usually contains things like [BLANK _AUDIO]
-      if (text.length > 0 && text.indexOf("[") < 0  && text.indexOf("]") < 0) {
-        let start = Math.floor(word.timestamp[0]*1000);
-        let end = word.timestamp[1] ?? (word.timestamp[0] + 0.5);
-        let duration = Math.max(0, Math.floor((end*1000)-1) - start);
-        let wordCapitalised = false;
-
-        if (Array.from(text)[0].toUpperCase() === Array.from(text)[0]){
-          wordCapitalised = true;
-        }
-
-        if (wordCapitalised === true && lastWord.endsWith(".") ){
-          sentences += 1;
-        }
-
-        lastWord = text;
-
-        // new para every 5 sentences
-        if (sentences % 5 === 0 && sentences !== 0) {
-          hypertranscript += "\n  </p>\n  <p>\n";
-          sentences = 0;
-        }
-
-        hypertranscript += `<span data-m='${start}' data-d='${duration}'>${text} </span>\n`;
-      }
+    kept.forEach((w, index) => {
+      const start = Math.floor(w.start * 1000);
+      const duration = Math.max(0, Math.floor((w.end * 1000) - 1) - start);
+      if (paragraphStarts.has(index)) hypertranscript += "\n  </p>\n  <p>\n";
+      hypertranscript += `<span data-m='${start}' data-d='${duration}'>${w.text} </span>\n`;
     });
 
     const html = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
