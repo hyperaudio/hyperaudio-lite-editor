@@ -54,6 +54,9 @@ class ParakeetLocalService extends HTMLElement {
 
 customElements.define('client-parakeet-service', ParakeetLocalService);
 
+// seconds of nothing after a sentence end before Parakeet's decoder is reset (#671)
+const BLANK_RESET_SECONDS = 2;
+
 function loadParakeetClient(modal, workerBaseUrl) {
 
   console.log("loading parakeet local client");
@@ -417,13 +420,20 @@ function loadParakeetClient(modal, workerBaseUrl) {
     const forceGpu = gpuOptIn !== null && gpuOptIn.checked;
 
     // transfer the buffer rather than copying it
-    // Debug switch for #671, off unless set: localStorage.parakeetBlankReset =
-    // "2" resets the decoder's state after that many seconds of blanks that
-    // follow a sentence-final token. Testing whether the decoder is what
-    // drops a stretch of sparse speech; not a feature, and removed once known.
-    let blankResetSeconds = 0;
-    try { blankResetSeconds = Number(localStorage.getItem("parakeetBlankReset")) || 0; } catch (e) { /* no storage */ }
-    if (blankResetSeconds > 0) console.log(`Parakeet: #671 debug — decoder reset after ${blankResetSeconds}s of blanks following a sentence end`);
+    // After a sentence-final word the decoder can stay stuck emitting nothing,
+    // and drop a whole stretch of quieter speech that follows (#671). So it is
+    // reset to its starting state after 2 s of nothing following a sentence
+    // end. Tested on the recording that showed it: 2 s recovers the lost
+    // stretch with no side effects, 1 s starts transcribing faint background
+    // speech. localStorage.parakeetBlankReset overrides the 2 s, for testing
+    // ("0" turns the reset off). The full fix, short windows each decoded
+    // from a fresh state as FluidAudio does, is its own piece of work.
+    let blankResetSeconds = BLANK_RESET_SECONDS;
+    try {
+      const override = localStorage.getItem("parakeetBlankReset");
+      if (override !== null) blankResetSeconds = Number(override) || 0;
+    } catch (e) { /* no storage */ }
+    if (blankResetSeconds !== BLANK_RESET_SECONDS) console.log(`Parakeet: decoder reset after ${blankResetSeconds}s of blanks following a sentence end (overridden; default ${BLANK_RESET_SECONDS}s)`);
     webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu, blankResetSeconds }, [audio.buffer]);
   }
 }
