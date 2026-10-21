@@ -488,12 +488,12 @@ async function transcribeWindow(s, samples, offsetSeconds, blankResetSeconds, on
   let s1 = mkState(), s2 = mkState();
   const tokens = [], stamps = [];
   let t = 0, emitted = 0, last = BLANK;
-  // #671 debug: the decoder's state does not change while it emits blanks,
+  // #671: the decoder's state does not change while it emits blanks,
   // and after a sentence-final token that state leans towards "expect
   // silence" — FluidAudio describe this model's decoder "entering a
   // BLANK-trap after a sentence-final token" when its state persists across
-  // a long stretch. If the switch is set, a run of blanks longer than the
-  // limit that follows such a token puts the decoder back in its starting
+  // a long stretch. A run of blanks longer than the limit (2 s, sent by the
+  // client) that follows such a token puts the decoder back in its starting
   // state, which is how every recording begins anyway.
   const resetFrames = blankResetSeconds > 0 ? Math.round(blankResetSeconds / FRAME_SEC) : 0;
   const SENTENCE_END = /[.?!。？！…]$/;
@@ -532,7 +532,7 @@ async function transcribeWindow(s, samples, offsetSeconds, blankResetSeconds, on
         lastWasSentenceEnd = false;
         blankRun = 0;
         resets++;
-        console.log(`  #671 debug: decoder state reset at ${(offsetSeconds + t * FRAME_SEC).toFixed(1)}s`);
+        console.log(`  decoder state reset at ${(offsetSeconds + t * FRAME_SEC).toFixed(1)}s (#671)`);
       }
     }
     r.outputs.dispose();
