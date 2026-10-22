@@ -413,7 +413,11 @@ dialog::backdrop {
   #player-pane #player-controls {
     height: 40px;
     margin-top: 4px;
+    /* sideways when the buttons outgrow a narrow screen, never up and down:
+       overflow-x alone makes overflow-y auto too, and the buttons' hidden
+       tooltips, placed below the 40px row, let it scroll under the video */
     overflow-x: auto;
+    overflow-y: hidden;
   }
   /* Keep the floating Regenerate button below the pinned player (its top-20
      utility class would sit it on the video); tracks the collapse var. */
