@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 1.3.33 */
+/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 1.3.42 */
 
 // Self-contained, modular display feature. To remove it entirely: delete this
 // file, its <script> tag in index.html, and the #show-timecodes checkbox.
@@ -77,6 +77,7 @@
     // Off, or nothing to label yet (e.g. transcribing) -> no labels.
     if (paragraphs.length === 0) {
       clearTimecodes(holder);
+      holder.classList.remove('with-timecodes');
       return;
     }
 
@@ -95,17 +96,7 @@
       });
     }
 
-    // Place each label in the left margin, OUTSIDE the fixed-width transcript, so
-    // the reading column never shifts. The transcript is centred in the wider
-    // holder; right-anchor the label to end just before the transcript's left
-    // edge, and top-align it to the paragraph's first line.
-    const holderRect = holder.getBoundingClientRect();
-    const transcriptRect = transcript.getBoundingClientRect();
-    const scrollTop = holder.scrollTop;
     const GAP = 12;
-    const rightOffset = holderRect.width - (transcriptRect.left - holderRect.left) + GAP;
-    // Match the paragraph's line-height so the small label aligns with its first line.
-    const lineHeight = getComputedStyle(paragraphs[0].paragraph).lineHeight;
     paragraphs.forEach((item, i) => {
       const tc = tcs[i];
       const label = formatTimecode(item.ms);
@@ -114,6 +105,26 @@
         tc.title = `Jump to ${label}`;
       }
       tc.dataset.ms = String(item.ms);
+    });
+    // The room the labels need beside the text. Where the margin is narrower
+    // than that (a window just wide enough to keep Recents open), the
+    // stylesheet narrows the transcript from the left by the difference (#747).
+    const room = Math.ceil(Math.max(...tcs.map((tc) => tc.offsetWidth))) + GAP;
+    holder.style.setProperty('--timecode-room', `${room}px`);
+    holder.classList.add('with-timecodes');
+
+    // Place each label in the left margin, OUTSIDE the transcript, so the
+    // reading column never shifts. The transcript is centred in the wider
+    // holder; right-anchor the label to end just before the transcript's left
+    // edge, and top-align it to the paragraph's first line.
+    const holderRect = holder.getBoundingClientRect();
+    const transcriptRect = transcript.getBoundingClientRect();
+    const scrollTop = holder.scrollTop;
+    const rightOffset = holderRect.width - (transcriptRect.left - holderRect.left) + GAP;
+    // Match the paragraph's line-height so the small label aligns with its first line.
+    const lineHeight = getComputedStyle(paragraphs[0].paragraph).lineHeight;
+    paragraphs.forEach((item, i) => {
+      const tc = tcs[i];
       tc.style.right = `${rightOffset}px`;
       tc.style.lineHeight = lineHeight;
       const top = item.paragraph.getBoundingClientRect().top - holderRect.top + scrollTop;
