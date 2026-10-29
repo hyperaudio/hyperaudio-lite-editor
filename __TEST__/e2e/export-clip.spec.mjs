@@ -129,8 +129,9 @@ test('the clip exports only its stretch, struck words out, and its transcript ca
   expect(words[5][1]).toBe(5100);          // w16: after the struck second is cut
 
   // the captions are the ones over the selected words: not "w8 w9" or
-  // "w20 w21", which only reach into the padding. (A caption that survives
-  // keeps all its words, so "w14 w15" keeps the struck w15, as in any export.)
+  // "w20 w21", which only reach into the padding. A struck word inside the
+  // selection stays in its caption, so "w14 w15" keeps w15, as in any export
+  // (a caption straddling the selection's edge is cut to it: clip-cue-trim.spec).
   const srt = await zip.file('clip/clip.srt').async('string');
   const spoken = [...srt.matchAll(/\bw(\d+)\b/g)].map((m) => Number(m[1]));
   expect(spoken).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);

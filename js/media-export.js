@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.41 — last changed in release 1.3.41
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -358,7 +358,8 @@
 
   // Cues onto the exported timeline. Times only — a cue whose words were cut
   // away collapses to nothing and is dropped, but a cue that survives keeps
-  // every word it had.
+  // every word it had (a clip's cues are first cut to its selected words, by
+  // clipCues below).
   // Retimed to whole milliseconds, as the retimed transcript's words are
   // (#720): a cue ends where the next cue's first word starts, and with the
   // cue's end left a few microseconds above the word's rounded start that
@@ -384,11 +385,72 @@
   const retimedCues = (ctx) => {
     let cues = parseVttCues(ctx.captionsVtt);
     if (cues.length === 0) return null;   // no track, or one with no cues to begin with
-    // a clip keeps the cues that overlap its selected words, not ones that
-    // only reach into the padding either side (#689)
-    if (ctx.clip !== null) cues = cues.filter((c) => c.end > ctx.clip.from + 0.001 && c.start < ctx.clip.to - 0.001);
+    if (ctx.clip !== null) {
+      // a clip keeps the cues that overlap its selected words, not ones that
+      // only reach into the padding either side (#689) ...
+      cues = cues.filter((c) => c.end > ctx.clip.from + 0.001 && c.start < ctx.clip.to - 0.001);
+      // ... and of those, only the selected words (#748)
+      if (ctx.transcript !== null) cues = clipCues(cues, transcriptWords(ctx.transcript), ctx.clip);
+    }
     return retimeCues(cues, ctx.sections, ctx.rate);
   };
+
+  // The transcript's words on their own timeline, struck ones included: what
+  // a cue's words are lined up against.
+  const transcriptWords = (root) => [...root.querySelectorAll('[data-m]')]
+    .filter((s) => !s.classList.contains('speaker'))
+    .map((s) => ({ text: s.textContent.trim(), start: parseInt(s.getAttribute('data-m'), 10) / 1000 }))
+    .filter((w) => w.text !== '' && !isNaN(w.start));
+
+  // A clip's cues cut to its selected words (#748). A selection that starts or
+  // ends inside a cue kept the whole cue, so the clip burned (and its sidecar
+  // files said) words that were not selected, and the read-along highlight,
+  // with more cue words than transcript words to light, spread over them to
+  // the end of the clip. The test is the one the clip's transcript applies
+  // to its words, by their start, on the original timeline, before retiming.
+  // Nothing else is cut: a struck word inside the selection stays in its cue,
+  // as in every export since #634.
+  //  - a cue whose words line up with the transcript's (the normal case, and
+  //    the same count cuesToChunks goes by) loses the words outside the
+  //    selection, line by line, and a line left empty goes with them;
+  //  - a dual-speaker cue ('-' opening each line) left with one line is a
+  //    plain caption again, and keeps its '-' on a line cut from the front;
+  //  - a cue cut at an end is timed to the selection at that end, so it does
+  //    not outlive the clip, and keeps its own time at an end left whole;
+  //  - a cue whose words do not line up (an edited cue) stays whole: there is
+  //    no word timing to cut by;
+  //  - a cue left with no words goes.
+  const clipCues = (cues, words, clip) => cues.map((cue) => {
+    const lines = cue.lines.map((line) => line.split(/\s+/).filter((t) => t !== ''));
+    const count = lines.reduce((n, line) => n + line.length, 0);
+    const inCue = words.filter((w) => w.start >= cue.start - 0.001 && w.start < ms(cue.end));
+    if (count === 0 || inCue.length !== count) return cue;
+    const selected = (i) => inCue[i].start >= clip.from - 0.001 && inCue[i].start < clip.to;
+    let at = 0;
+    let first = null;
+    let last = null;
+    const kept = lines.map((line) => line.filter(() => {
+      const i = at;
+      at += 1;
+      if (!selected(i)) return false;
+      if (first === null) first = i;
+      last = i;
+      return true;
+    })).filter((line) => line.length > 0);
+    if (kept.length === 0) return null;
+    const dual = lines.length > 1 && cue.lines.every((line) => line.startsWith('-'));
+    const text = kept.map((line) => {
+      const out = line.slice();
+      if (dual && kept.length === 1) out[0] = out[0].replace(/^-/, '');
+      else if (dual && !out[0].startsWith('-')) out[0] = '-' + out[0];
+      return out.join(' ');
+    });
+    return {
+      start: first === 0 ? cue.start : Math.max(cue.start, clip.from),
+      end: last === count - 1 ? cue.end : Math.min(cue.end, clip.to),
+      lines: text,
+    };
+  }).filter((c) => c !== null);
 
   // Re-timed WebVTT + SRT captions for the exported (edited) media. Generated
   // off a DETACHED copy of the re-timed transcript via the shared caption.js, so
@@ -2331,7 +2393,7 @@
   // stands, which is what an export started at that moment would capture.
   const liveContext = (sections, rate, dropStruck) => captureContext({ sections, rate, dropStruck });
   window.MediaExportCaptions = Object.freeze({
-    parseVttCues, retimeCues, cuesToVtt, cuesToSrt, cuesToChunks, drawCaptionOverlay,
+    parseVttCues, retimeCues, clipCues, cuesToVtt, cuesToSrt, cuesToChunks, drawCaptionOverlay,
     retimedCues: (sections, rate) => retimedCues(liveContext(sections, rate, false)),
     genRetimedCaptions: (sections, rate, dropStruck) => genRetimedCaptions(liveContext(sections, rate, dropStruck)),
     buildCaptionChunks: (sections, rate, dropStruck) => buildCaptionChunks(liveContext(sections, rate, dropStruck)),
