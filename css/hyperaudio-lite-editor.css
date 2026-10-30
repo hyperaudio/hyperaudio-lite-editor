@@ -305,6 +305,19 @@ dialog::backdrop {
     width: 520px;
   }
 
+  /* Timecodes sit in the transcript's left margin, which a window only just
+     wide enough to keep Recents open makes narrower than they are (#747).
+     Keep the right edge where centring puts it and give up only what the
+     labels lack on the left: --timecode-room is set by paragraph-timecodes.js.
+     Where the margin is wide enough this is the same 520px, centred. */
+  @media (min-width: 949px) {   /* the narrow layout hides timecodes */
+    .transcript-holder.with-timecodes .hyperaudio-transcript {
+      width: min(520px, calc(50% + 260px - var(--timecode-room, 50px)));
+      margin-left: auto;
+      margin-right: calc(50% - 260px);
+    }
+  }
+
   .transcript-holder {
     /* keep flex-centering and let left:400/right:0 size the holder between the
        sidebar and the edge — width:100% here overflowed past the right edge.
@@ -413,7 +426,11 @@ dialog::backdrop {
   #player-pane #player-controls {
     height: 40px;
     margin-top: 4px;
+    /* sideways when the buttons outgrow a narrow screen, never up and down:
+       overflow-x alone makes overflow-y auto too, and the buttons' hidden
+       tooltips, placed below the 40px row, let it scroll under the video */
     overflow-x: auto;
+    overflow-y: hidden;
   }
   /* Keep the floating Regenerate button below the pinned player (its top-20
      utility class would sit it on the video); tracks the collapse var. */

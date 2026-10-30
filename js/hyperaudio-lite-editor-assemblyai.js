@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 1.3.34 — last changed in release 1.3.34
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -259,14 +259,13 @@ function setAssemblyAIStatus(text) {
 // Build the transcript HTML from AssemblyAI's word list (start/end in ms) — the
 // same data-m / data-d span shape the other engines produce.
 function assemblyaiParseData(json) {
-  const maxWordsInPara = 100;
-  const significantGapInSeconds = 4.0;
   const words = json.words;
   const showDiarization = words.some((w) => w.speaker !== null && w.speaker !== undefined);
+  // where paragraphs start: the one rule every engine and import shares (#743)
+  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
+    ? window.hyperaudioParagraphStarts(words.map((w) => ({ start: w.start / 1000, end: w.end / 1000, text: w.text, speaker: showDiarization ? w.speaker : null }))) : new Set();
 
   let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-  let previousEndSec = 0;
-  let wordsInPara = 0;
 
   const language = json.language_code || (document.querySelector('#assemblyai-language') || {}).value || "";
   // finishing while another project is open (#715): its track is not ours
@@ -278,34 +277,12 @@ function assemblyaiParseData(json) {
   }
 
   words.forEach((element, index) => {
-    const startSec = element.start / 1000;
-    const endSec = element.end / 1000;
-    wordsInPara++;
-
-    // paragraph break on a long gap (only after sentence-final punctuation) or
-    // when a paragraph gets too long
-    if ((previousEndSec !== 0 && (startSec - previousEndSec) > significantGapInSeconds) || wordsInPara > maxWordsInPara) {
-      const prevWord = (words[index - 1] && words[index - 1].text) || "";
-      const lastChar = prevWord.charAt(prevWord.length - 1);
-      if (lastChar === "." || lastChar === "?" || lastChar === "!") {
-        hyperTranscript += "\n  </p>\n  <p>\n   ";
-        wordsInPara = 0;
-      }
+    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
+    // a speaker label at the first word and at every change of speaker
+    if (showDiarization && (index === 0 || element.speaker !== words[index - 1].speaker)) {
+      hyperTranscript += `<span class="speaker" data-m='${element.start}' data-d='0'>[speaker-${element.speaker}] </span>`;
     }
-
-    // new paragraph + speaker label on speaker change (or the first word)
-    if ((showDiarization && index > 0 && element.speaker !== words[index - 1].speaker) || index === 0) {
-      if (index > 0) {
-        hyperTranscript += "\n  </p>\n  <p>\n   ";
-        wordsInPara = 0;
-      }
-      if (showDiarization) {
-        hyperTranscript += `<span class="speaker" data-m='${element.start}' data-d='0'>[speaker-${element.speaker}] </span>`;
-      }
-    }
-
     hyperTranscript += `<span data-m='${element.start}' data-d='${element.end - element.start}'>${element.text} </span>`;
-    previousEndSec = endSec;
   });
 
   hyperTranscript += "\n </p> \n </section>\n</article>\n ";

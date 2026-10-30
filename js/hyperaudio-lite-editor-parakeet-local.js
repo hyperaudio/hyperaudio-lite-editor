@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.34 — last changed in release 1.3.34
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  */
 
@@ -54,6 +54,9 @@ class ParakeetLocalService extends HTMLElement {
 
 customElements.define('client-parakeet-service', ParakeetLocalService);
 
+// seconds of nothing after a sentence end before Parakeet's decoder is reset (#671)
+const BLANK_RESET_SECONDS = 2;
+
 function loadParakeetClient(modal, workerBaseUrl) {
 
   console.log("loading parakeet local client");
@@ -70,7 +73,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.23";
+  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.42";
 
   // On Chrome (Chromium) Parakeet runs fp16 on the GPU (WebGPU) – fast, and the
   // default. Firefox's WebGPU underperforms here and Safari's can exhaust memory
@@ -417,7 +420,21 @@ function loadParakeetClient(modal, workerBaseUrl) {
     const forceGpu = gpuOptIn !== null && gpuOptIn.checked;
 
     // transfer the buffer rather than copying it
-    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu }, [audio.buffer]);
+    // After a sentence-final word the decoder can stay stuck emitting nothing,
+    // and drop a whole stretch of quieter speech that follows (#671). So it is
+    // reset to its starting state after 2 s of nothing following a sentence
+    // end. Tested on the recording that showed it: 2 s recovers the lost
+    // stretch with no side effects, 1 s starts transcribing faint background
+    // speech. localStorage.parakeetBlankReset overrides the 2 s, for testing
+    // ("0" turns the reset off). The full fix, short windows each decoded
+    // from a fresh state as FluidAudio does, is its own piece of work.
+    let blankResetSeconds = BLANK_RESET_SECONDS;
+    try {
+      const override = localStorage.getItem("parakeetBlankReset");
+      if (override !== null) blankResetSeconds = Number(override) || 0;
+    } catch (e) { /* no storage */ }
+    if (blankResetSeconds !== BLANK_RESET_SECONDS) console.log(`Parakeet: decoder reset after ${blankResetSeconds}s of blanks following a sentence end (overridden; default ${BLANK_RESET_SECONDS}s)`);
+    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu, blankResetSeconds }, [audio.buffer]);
   }
 }
 
@@ -426,32 +443,17 @@ function loadParakeetClient(modal, workerBaseUrl) {
 // diarization, so there are no speaker spans and no VTT language label.
 function parakeetParseData(json) {
 
-  const maxWordsInPara = 100;
-  const significantGapInSeconds = 4.0;
-
   const wordData = json.words;
   const ms = (s) => Math.round(s * 1000);
+  // where paragraphs start: the one rule every engine and import shares (#743)
+  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
+    ? window.hyperaudioParagraphStarts(wordData.map((w) => ({ start: w.start, end: w.end, text: w.word }))) : new Set();
 
   let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-  let previousElementEnd = 0;
-  let wordsInPara = 0;
 
   wordData.forEach((element, index) => {
-    const currentWord = element.word;
-    wordsInPara++;
-
-    // split into a new paragraph on a significant silence gap after sentence-end
-    if (previousElementEnd !== 0 && (element.start - previousElementEnd) > significantGapInSeconds || wordsInPara > maxWordsInPara) {
-      const previousWord = wordData[index - 1].word;
-      const previousWordLastChar = previousWord.charAt(previousWord.length - 1);
-      if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
-        hyperTranscript += "\n  </p>\n  <p>\n   ";
-        wordsInPara = 0;
-      }
-    }
-
-    hyperTranscript += `<span data-m='${ms(element.start)}' data-d='${ms(element.end - element.start)}'>${currentWord} </span>`;
-    previousElementEnd = element.end;
+    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
+    hyperTranscript += `<span data-m='${ms(element.start)}' data-d='${ms(element.end - element.start)}'>${element.word} </span>`;
   });
 
   hyperTranscript += "\n </p> \n </section>\n</article>\n ";

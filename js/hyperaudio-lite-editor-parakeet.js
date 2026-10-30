@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.34 — last changed in release 1.3.34
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  *
  * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
@@ -235,13 +235,12 @@ async function runParakeetHF(apiKey, file, media, opts) {
 // Build transcript HTML from the word list (start/end in SECONDS). No speaker
 // labels — Parakeet doesn't diarize.
 function parakeetHfParseData(json) {
-  const maxWordsInPara = 100;
-  const significantGapInSeconds = 4.0;
   const words = json.words;
+  // where paragraphs start: the one rule every engine and import shares (#743)
+  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
+    ? window.hyperaudioParagraphStarts(words.map((w) => ({ start: w.start, end: w.end, text: w.word }))) : new Set();
 
   let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-  let previousEndSec = 0;
-  let wordsInPara = 0;
 
   const language = json.language || "";
   // finishing while another project is open (#715): its track is not ours
@@ -255,19 +254,8 @@ function parakeetHfParseData(json) {
   words.forEach((element, index) => {
     const startMs = Math.round(element.start * 1000);
     const durMs = Math.round((element.end - element.start) * 1000);
-    wordsInPara++;
-
-    if ((previousEndSec !== 0 && (element.start - previousEndSec) > significantGapInSeconds) || wordsInPara > maxWordsInPara) {
-      const prevWord = (words[index - 1] && words[index - 1].word) || "";
-      const lastChar = prevWord.charAt(prevWord.length - 1);
-      if (lastChar === "." || lastChar === "?" || lastChar === "!") {
-        hyperTranscript += "\n  </p>\n  <p>\n   ";
-        wordsInPara = 0;
-      }
-    }
-
+    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
     hyperTranscript += `<span data-m='${startMs}' data-d='${durMs}'>${element.word} </span>`;
-    previousEndSec = element.end;
   });
 
   hyperTranscript += "\n </p> \n </section>\n</article>\n ";

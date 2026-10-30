@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 1.3.34 — last changed in release 1.3.34
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  */
 
@@ -444,8 +444,6 @@ let transcriptionMeta = {};
 
 function parseData(json) {
 
-  const maxWordsInPara = 100;
-  const significantGapInSeconds = 4.0;
 
   const wordData = json.results.channels[0].alternatives[0].words;
   // Kept for hyperaudioSpeakerDebug(): where a speaker label looks wrong, the
@@ -514,8 +512,6 @@ function parseData(json) {
 
   let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
 
-  let previousElementEnd = 0;
-  let wordsInPara = 0;
   let showDiarization = true;
 
   // Finishing while another project is open (#715): the summary, the topics
@@ -541,34 +537,18 @@ function parseData(json) {
     track.srcLang = language;
   }
 
+  // where paragraphs start: the one rule every engine and import shares (#743)
+  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
+    ? window.hyperaudioParagraphStarts(wordData.map((w) => ({ start: w.start, end: w.end, text: textOf(w), speaker: showDiarization ? w.speaker : null })))
+    : new Set();
+
   wordData.forEach((element, index) => {
-
-    let currentWord = textOf(element);
-    wordsInPara++;
-
-    // if there's a gap longer than half a second consider splitting into new para
-
-    if (previousElementEnd !== 0 && (element.start - previousElementEnd) > significantGapInSeconds || wordsInPara > maxWordsInPara){
-      let previousWord = textOf(wordData[index-1]);
-      let previousWordLastChar = previousWord.charAt(previousWord.length-1);
-      if (previousWordLastChar === "." || previousWordLastChar === "?" || previousWordLastChar === "!") {
-        hyperTranscript += "\n  </p>\n  <p>\n   ";
-        wordsInPara = 0;
-      }
-    }
-
-    // change of speaker or first word - always start a new paragraph on speaker change
-    if ((showDiarization === true && index > 0 && element.speaker !== wordData[index-1].speaker) || index === 0) {
-      if (index > 0) {
-        hyperTranscript += "\n  </p>\n  <p>\n   ";
-        wordsInPara = 0;
-      }
+    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
+    // a speaker label at the first word and at every change of speaker
+    if (index === 0 || (showDiarization === true && element.speaker !== wordData[index-1].speaker)) {
       hyperTranscript += `<span class="speaker" data-m='${element.start.toFixed(2)*1000}' data-d='0'>[speaker-${element.speaker}] </span>`;
     }
-
-    hyperTranscript += `<span data-m='${element.start.toFixed(2)*1000}' data-d='${(element.end - element.start).toFixed(2)*1000}'>${currentWord} </span>`;
-
-    previousElementEnd = element.end;
+    hyperTranscript += `<span data-m='${element.start.toFixed(2)*1000}' data-d='${(element.end - element.start).toFixed(2)*1000}'>${textOf(element)} </span>`;
   });
 
   hyperTranscript +=  "\n </p> \n </section>\n</article>\n ";

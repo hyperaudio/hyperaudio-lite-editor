@@ -1,7 +1,7 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 1.3.23 — last changed in release 1.3.23
+ * @version 1.3.42 — last changed in release 1.3.42
  * @license MIT
  */
 
@@ -109,7 +109,7 @@ self.addEventListener("message", async (event) => {
       sessions = await loadSessions(forceGpu);
       sessionsForceGpu = forceGpu;
     }
-    const output = await transcribe(sessions, event.data.audio);
+    const output = await transcribe(sessions, event.data.audio, Number(event.data.blankResetSeconds) || 0);
     // A broken GPU can "complete" with no output at all (async WebGPU
     // validation errors never reject run()) — report that as a failure
     // rather than rendering a blank transcript as if it were done (#460).
@@ -416,7 +416,7 @@ async function warmUp(encoder) {
   }
 }
 
-async function transcribe(s, audio) {
+async function transcribe(s, audio, blankResetSeconds) {
   const startedAt = Date.now();
   const windowSamples = WINDOW_S * SAMPLE_RATE;
   const stepSamples = (WINDOW_S - OVERLAP_S) * SAMPLE_RATE;
@@ -439,7 +439,7 @@ async function transcribe(s, audio) {
     const offsetSeconds = offsetSamples / SAMPLE_RATE;
     const win = audio.subarray(offsetSamples, offsetSamples + windowSamples);
     report({ window: i, windows: windowCount, stage: "encode", seconds: win.length / SAMPLE_RATE });
-    const windowWords = await transcribeWindow(s, win, offsetSeconds, (detail) =>
+    const windowWords = await transcribeWindow(s, win, offsetSeconds, blankResetSeconds, (detail) =>
       report(Object.assign({ window: i, windows: windowCount }, detail)));
     if (i === 0) {
       words = windowWords;
@@ -457,7 +457,7 @@ async function transcribe(s, audio) {
   return { words, seconds };
 }
 
-async function transcribeWindow(s, samples, offsetSeconds, onProgress) {
+async function transcribeWindow(s, samples, offsetSeconds, blankResetSeconds, onProgress) {
   const progress = typeof onProgress === "function" ? onProgress : () => {};
   // Every ort.Tensor we create or receive holds a buffer (a GPU buffer on the
   // WebGPU path). Without explicit dispose() they only go when GC runs, which on
@@ -488,6 +488,16 @@ async function transcribeWindow(s, samples, offsetSeconds, onProgress) {
   let s1 = mkState(), s2 = mkState();
   const tokens = [], stamps = [];
   let t = 0, emitted = 0, last = BLANK;
+  // #671: the decoder's state does not change while it emits blanks,
+  // and after a sentence-final token that state leans towards "expect
+  // silence" — FluidAudio describe this model's decoder "entering a
+  // BLANK-trap after a sentence-final token" when its state persists across
+  // a long stretch. A run of blanks longer than the limit (2 s, sent by the
+  // client) that follows such a token puts the decoder back in its starting
+  // state, which is how every recording begins anyway.
+  const resetFrames = blankResetSeconds > 0 ? Math.round(blankResetSeconds / FRAME_SEC) : 0;
+  const SENTENCE_END = /[.?!。？！…]$/;
+  let blankRun = 0, lastWasSentenceEnd = false, resets = 0;
   while (t < encLen) {
     const encIn = new ort.Tensor("float32", frame(t), [1, D, 1]);
     const tgtIn = new ort.Tensor("int32", Int32Array.from([last]), [1, 1]);
@@ -509,9 +519,21 @@ async function transcribeWindow(s, samples, offsetSeconds, onProgress) {
       s1.dispose(); s2.dispose();
       s1 = r.output_states_1; s2 = r.output_states_2;
       tokens.push(tok); stamps.push(t); last = tok; emitted++;
+      blankRun = 0;
+      lastWasSentenceEnd = SENTENCE_END.test((s.vocab[tok] || "").trim());
     } else {
       // states unchanged this step — the fresh outputs are dead, drop them
       r.output_states_1.dispose(); r.output_states_2.dispose();
+      blankRun += Math.max(1, step);
+      if (resetFrames > 0 && lastWasSentenceEnd && blankRun >= resetFrames) {
+        s1.dispose(); s2.dispose();
+        s1 = mkState(); s2 = mkState();
+        last = BLANK;
+        lastWasSentenceEnd = false;
+        blankRun = 0;
+        resets++;
+        console.log(`  decoder state reset at ${(offsetSeconds + t * FRAME_SEC).toFixed(1)}s (#671)`);
+      }
     }
     r.outputs.dispose();
     encIn.dispose(); tgtIn.dispose(); tgtLenIn.dispose();
@@ -523,7 +545,7 @@ async function transcribeWindow(s, samples, offsetSeconds, onProgress) {
   s1.dispose(); s2.dispose();
   enc.outputs.dispose(); enc.encoded_lengths.dispose();
 
-  console.log(`  window: encoder ${encMs}ms, decode ${Date.now() - decT0}ms (${encLen} frames)`);
+  console.log(`  window: encoder ${encMs}ms, decode ${Date.now() - decT0}ms (${encLen} frames)${resets > 0 ? `, ${resets} #671 decoder reset(s)` : ""}`);
 
   // 4. tokens -> words (▁ marks a word start); times offset by window start.
   // Punctuation-only tokens (. , ? ! …) are emitted AFTER the model has heard
