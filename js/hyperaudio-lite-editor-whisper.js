@@ -89,7 +89,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.3.25";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.3.42";
 
   // Turbo is WebGPU-only (#461): neither of its quantised variants loads on
   // the WASM runtime, so without a usable GPU the worker refuses it. Grey the
@@ -426,7 +426,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
       modelId: model_name,
       parameters: { model: model_name, language: language || 'auto', word_timestamps: true },
       runtime: 'transformers.js',
-      engineVersion: '4.2.0+pr1755',
+      engineVersion: '4.3.1+pr1755',
     };
 
     if (!useUrl) {

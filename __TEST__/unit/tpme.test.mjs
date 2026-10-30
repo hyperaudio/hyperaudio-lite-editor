@@ -140,8 +140,8 @@ test('every engine reports what it really ran, and the local ones name their wor
     assert.match(src, /parameters:/, `${file} reports no parameters`);
     assert.doesNotMatch(src, /parameters:[^;]*(apiKey|token|Authorization)/i, `${file} puts a credential in its parameters`);
   });
-  // the jsDelivr release (transformers@4.2.0), or a vendored build that
-  // carries a patch (vendor/transformers-4.2.0-pr1755.min.js → 4.2.0+pr1755)
+  // the jsDelivr release (transformers@4.3.1), or a vendored build that
+  // carries a patch (vendor/transformers-4.3.1-pr1755.min.js → 4.3.1+pr1755)
   const worker = read('whisper.worker.js');
   const cdn = /from "[^"]*transformers@([0-9.]+)/.exec(worker);
   const vendored = /from "[^"]*vendor\/transformers-([0-9.]+?)(?:-(pr[0-9]+))?\.min\.js"/.exec(worker);
