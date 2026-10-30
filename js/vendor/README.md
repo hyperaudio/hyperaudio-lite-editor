@@ -17,9 +17,9 @@ license headers are retained in each file — except the one below.
 
 ## transformers.js, patched (#462)
 
-`transformers-4.2.0-pr1755.min.js` is **not** a published build. It is
+`transformers-4.3.1-pr1755.min.js` is **not** a published build. It is
 [@huggingface/transformers](https://github.com/huggingface/transformers.js)
-4.2.0 (Apache-2.0) rebuilt from source with the source changes of
+4.3.1 (Apache-2.0) rebuilt from source with the source changes of
 [huggingface/transformers.js#1755](https://github.com/huggingface/transformers.js/pull/1755)
 applied, which free the GPU tensors Whisper's generation leaves behind
 ([huggingface/transformers.js#1739](https://github.com/huggingface/transformers.js/issues/1739), our #462).
@@ -28,25 +28,34 @@ jsDelivr, as with the published build. Not precached: it is only needed to
 transcribe, which needs the network for the model anyway, and the service
 worker caches it on first use like every file here.
 
-- Source: tag `4.2.0`, plus `patches/transformers-4.2.0-pr1755.patch`
+- Source: tag `4.3.1`, plus `patches/transformers-4.3.1-pr1755.patch`
   (`git diff` of `packages/transformers/src` between the PR's merge base and
-  its head, commit `7b2bd3a`).
-- Build: `pnpm install --frozen-lockfile`, then
+  its head, commit `7b2bd3a`; the same patch the 4.2.0 build carried, and it
+  applies to 4.3.1 unchanged).
+- Build: `pnpm install --frozen-lockfile` with the pnpm version the repo's
+  `packageManager` names (10.28.1; corepack's bundled signing keys may be too
+  old to fetch it, `npx pnpm@10.28.1 install --frozen-lockfile` works), then
   `node scripts/build.mjs` in `packages/transformers`; the file is
   `dist/transformers.min.js`.
 - Check: the same build WITHOUT the patch is byte-identical to the file
-  jsDelivr serves for `@huggingface/transformers@4.2.0`, so the patch is the
+  jsDelivr serves for `@huggingface/transformers@4.3.1`, so the patch is the
   only difference.
-- SHA-256: `3818cf2e8bd0a104955368714d5ab924ff2e7861edc94eceed9015b9049b4f29`
-- Verified (M4 Pro, Chrome, 2026-09-24): GPU memory flat across repeated
-  runs on Base and Small, where 4.2.0 grows ~600 MB per 137 s on Base; words
-  and timings identical to 4.2.0 on both the WebGPU and the WASM path.
+- SHA-256: `2308dde829ca0e87852f04e6e8dbe77e31e9d9f1b7785ca80f00c7d917152f6a`
+- Verified (M4 Pro, Chrome, 2026-10-21): Whisper Base, three runs over the
+  same 137 s recording. Stock 4.3.1 grows from 1171 MB to 3149 MB in the GPU
+  process (about 560 MB per run). With the patch it stays at 1322 MB, the
+  same as the patched 4.2.0 it replaces (1247 MB). Words and timings
+  identical across all three builds.
+
+4.3 enables WebGPU in Safari 26 and later, where 4.2.0 quietly fell back to
+the CPU: Whisper in Safari now runs on the GPU. If that misbehaves, Safari
+joins Firefox in `getPipeline()`'s CPU-only rule.
 
 **Remove it** once a transformers.js release includes the fix: go back to the
 jsDelivr import in `js/whisper.worker.js` and delete this file and the patch.
 Whisper Small and Large v3 Turbo were held back behind Settings ▸
 Experimental features until this fix: with it, both ran a 54-minute file with
-GPU memory flat at about 3 GB (M4 Pro, 2026-09-24).
+GPU memory flat at about 3 GB (M4 Pro, 2026-09-24, on the 4.2.0 build).
 
 ## Upgrading
 
