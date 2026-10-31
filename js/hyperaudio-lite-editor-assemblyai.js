@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -256,18 +256,13 @@ function setAssemblyAIStatus(text) {
   if (el) el.textContent = text;
 }
 
-// Build the transcript HTML from AssemblyAI's word list (start/end in ms) — the
-// same data-m / data-d span shape the other engines produce.
+// The transcript on the page from AssemblyAI's completed transcript: the
+// words and the language come from js/converters/assemblyai.js (#751).
 function assemblyaiParseData(json) {
-  const words = json.words;
-  const showDiarization = words.some((w) => w.speaker !== null && w.speaker !== undefined);
-  // where paragraphs start: the one rule every engine and import shares (#743)
-  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(words.map((w) => ({ start: w.start / 1000, end: w.end / 1000, text: w.text, speaker: showDiarization ? w.speaker : null }))) : new Set();
+  const converted = window.HyperaudioConverters.assemblyai(json);
+  const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
 
-  let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-
-  const language = json.language_code || (document.querySelector('#assemblyai-language') || {}).value || "";
+  const language = converted.language || (document.querySelector('#assemblyai-language') || {}).value || "";
   // finishing while another project is open (#715): its track is not ours
   const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
   const track = background ? null : document.querySelector('#hyperplayer-vtt');
@@ -275,18 +270,6 @@ function assemblyaiParseData(json) {
     track.label = language;
     track.srcLang = language;
   }
-
-  words.forEach((element, index) => {
-    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
-    // a speaker label at the first word and at every change of speaker
-    if (showDiarization && (index === 0 || element.speaker !== words[index - 1].speaker)) {
-      hyperTranscript += `<span class="speaker" data-m='${element.start}' data-d='0'>[speaker-${element.speaker}] </span>`;
-    }
-    hyperTranscript += `<span data-m='${element.start}' data-d='${element.end - element.start}'>${element.text} </span>`;
-  });
-
-  hyperTranscript += "\n </p> \n </section>\n</article>\n ";
-  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
   // languageCode: what AssemblyAI says the language IS (it may have been
   // detected), beside the picker's label the info panel shows

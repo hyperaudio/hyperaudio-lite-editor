@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  *
  * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
@@ -232,17 +232,13 @@ async function runParakeetHF(apiKey, file, media, opts) {
   parakeetHfParseData(json);
 }
 
-// Build transcript HTML from the word list (start/end in SECONDS). No speaker
-// labels — Parakeet doesn't diarize.
+// The transcript on the page from the endpoint's word list: the words and
+// the language come from js/converters/parakeet.js (#751).
 function parakeetHfParseData(json) {
-  const words = json.words;
-  // where paragraphs start: the one rule every engine and import shares (#743)
-  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(words.map((w) => ({ start: w.start, end: w.end, text: w.word }))) : new Set();
+  const converted = window.HyperaudioConverters.parakeet(json);
+  const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
 
-  let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-
-  const language = json.language || "";
+  const language = converted.language || "";
   // finishing while another project is open (#715): its track is not ours
   const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
   const track = background ? null : document.querySelector('#hyperplayer-vtt');
@@ -250,16 +246,6 @@ function parakeetHfParseData(json) {
     track.label = language;
     track.srcLang = language;
   }
-
-  words.forEach((element, index) => {
-    const startMs = Math.round(element.start * 1000);
-    const durMs = Math.round((element.end - element.start) * 1000);
-    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
-    hyperTranscript += `<span data-m='${startMs}' data-d='${durMs}'>${element.word} </span>`;
-  });
-
-  hyperTranscript += "\n </p> \n </section>\n</article>\n ";
-  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
   const info = parakeetHfTranscriptionStart !== 0
     ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000 } : null;

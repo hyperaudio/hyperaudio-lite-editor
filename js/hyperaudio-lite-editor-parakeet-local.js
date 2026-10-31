@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  */
 
@@ -438,26 +438,12 @@ function loadParakeetClient(modal, workerBaseUrl) {
   }
 }
 
-// Build the editor's word-span HTML from { words: [{ word, start, end }] }.
-// Adapted from the cloud Parakeet module (#307): local transcription has no
-// diarization, so there are no speaker spans and no VTT language label.
+// The transcript on the page from the worker's { words: [{ word, start, end }] }:
+// the same converter as the endpoint, js/converters/parakeet.js (#751). Local
+// transcription has no diarization and no VTT language label.
 function parakeetParseData(json) {
-
-  const wordData = json.words;
-  const ms = (s) => Math.round(s * 1000);
-  // where paragraphs start: the one rule every engine and import shares (#743)
-  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(wordData.map((w) => ({ start: w.start, end: w.end, text: w.word }))) : new Set();
-
-  let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-
-  wordData.forEach((element, index) => {
-    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
-    hyperTranscript += `<span data-m='${ms(element.start)}' data-d='${ms(element.end - element.start)}'>${element.word} </span>`;
-  });
-
-  hyperTranscript += "\n </p> \n </section>\n</article>\n ";
-  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
+  const converted = window.HyperaudioConverters.parakeet(json);
+  const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
 
   // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
   if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html: hyperTranscript })) {

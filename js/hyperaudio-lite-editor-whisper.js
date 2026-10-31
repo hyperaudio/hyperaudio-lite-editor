@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  */
 
@@ -342,26 +342,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
       setTranscriptBusy(false);
     }
 
-    let hypertranscript = "";
-
-    // whisper marks word boundaries with a leading space on the text; empty
-    // text and text in square brackets (things like [BLANK_AUDIO]) are dropped
-    // BEFORE paragraphs are placed, so a dropped noise word cannot hide a pause
-    const kept = results.output.chunks
-      .map((word) => ({ text: word.text.trim(), start: word.timestamp[0], end: word.timestamp[1] ?? (word.timestamp[0] + 0.5) }))
-      .filter((w) => w.text.length > 0 && w.text.indexOf("[") < 0 && w.text.indexOf("]") < 0);
-    // where paragraphs start: the one rule every engine and import shares (#743)
-    const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-      ? window.hyperaudioParagraphStarts(kept) : new Set();
-
-    kept.forEach((w, index) => {
-      const start = Math.floor(w.start * 1000);
-      const duration = Math.max(0, Math.floor((w.end * 1000) - 1) - start);
-      if (paragraphStarts.has(index)) hypertranscript += "\n  </p>\n  <p>\n";
-      hypertranscript += `<span data-m='${start}' data-d='${duration}'>${w.text} </span>\n`;
-    });
-
-    const html = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
+    // the pipeline's chunks as the transcript: js/converters/whisper.js (#751)
+    const converted = window.HyperaudioConverters.whisper(results.output);
+    const html = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
     // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
     if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html })) {
       return;
