@@ -1,0 +1,28 @@
+{
+  "task": "transcribe",
+  "language": "en",
+  "duration": 7.4,
+  "text": "We could be there at the start. Well if you tap into that potential. There has to be more.",
+  "words": [
+    { "word": "We", "start": 0.08, "end": 0.24 },
+    { "word": "could", "start": 0.24, "end": 0.48 },
+    { "word": "be", "start": 0.48, "end": 0.64 },
+    { "word": "there", "start": 0.64, "end": 0.96 },
+    { "word": "at", "start": 0.96, "end": 1.12 },
+    { "word": "the", "start": 1.12, "end": 1.28 },
+    { "word": "start.", "start": 1.28, "end": 1.76 },
+    { "word": "Well", "start": 1.84, "end": 2.08 },
+    { "word": "if", "start": 2.08, "end": 2.24 },
+    { "word": "you", "start": 2.24, "end": 2.4 },
+    { "word": "tap", "start": 2.4, "end": 2.64 },
+    { "word": "into", "start": 2.64, "end": 2.88 },
+    { "word": "that", "start": 2.88, "end": 3.12 },
+    { "word": "potential.", "start": 3.12, "end": 3.76 },
+    { "word": "There", "start": 8.2, "end": 8.44 },
+    { "word": "has", "start": 8.44, "end": 8.6 },
+    { "word": "to", "start": 8.6, "end": 8.76 },
+    { "word": "be", "start": 8.76, "end": 8.92 },
+    { "word": "more.", "start": 8.92, "end": 9.4 }
+  ],
+  "segments": []
+}

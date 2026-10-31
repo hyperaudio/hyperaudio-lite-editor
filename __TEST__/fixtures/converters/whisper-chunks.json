@@ -1,0 +1,26 @@
+{
+  "text": " We could be there at the start. [BLANK_AUDIO] Well if you tap into that potential. There has to be more.",
+  "chunks": [
+    { "text": " We", "timestamp": [0.08, 0.24] },
+    { "text": " could", "timestamp": [0.24, 0.48] },
+    { "text": " be", "timestamp": [0.48, 0.64] },
+    { "text": " there", "timestamp": [0.64, 0.96] },
+    { "text": " at", "timestamp": [0.96, 1.12] },
+    { "text": " the", "timestamp": [1.12, 1.28] },
+    { "text": " start.", "timestamp": [1.28, 1.76] },
+    { "text": " [BLANK_AUDIO]", "timestamp": [1.76, 5.1] },
+    { "text": " Well", "timestamp": [5.84, 6.08] },
+    { "text": " if", "timestamp": [6.08, 6.24] },
+    { "text": " you", "timestamp": [6.24, 6.4] },
+    { "text": " tap", "timestamp": [6.4, 6.64] },
+    { "text": " into", "timestamp": [6.64, 6.88] },
+    { "text": " that", "timestamp": [6.88, 7.12] },
+    { "text": " potential.", "timestamp": [7.12, 7.76] },
+    { "text": "", "timestamp": [7.76, 7.76] },
+    { "text": " There", "timestamp": [8.2, 8.44] },
+    { "text": " has", "timestamp": [8.44, 8.6] },
+    { "text": " to", "timestamp": [8.6, 8.76] },
+    { "text": " be", "timestamp": [8.76, 8.92] },
+    { "text": " more.", "timestamp": [8.92, null] }
+  ]
+}
