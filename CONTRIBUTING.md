@@ -14,6 +14,7 @@ project's conventions.
 - **Report bugs** and **request features** via [GitHub Issues](https://github.com/hyperaudio/hyperaudio-lite-editor/issues).
 - **Fix issues** — issues tagged `good first issue` are a friendly starting point.
 - **Improve docs** — corrections and clarifications are always welcome.
+- **Add a transcription engine** — [docs/adding-an-stt-engine.md](docs/adding-an-stt-engine.md) walks through the converter, the client and the engine contract.
 
 ## Development setup
 
