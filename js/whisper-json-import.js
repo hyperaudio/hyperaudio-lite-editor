@@ -81,6 +81,12 @@
       if (player !== null) {
         if (mediaFile.files && mediaFile.files[0]) player.src = URL.createObjectURL(mediaFile.files[0]);
         else if (mediaUrl.value.trim() !== '') player.src = mediaUrl.value.trim();
+        else {
+          // no media at all: the player is cleared, so the new project is born
+          // with none rather than the previous project's media (#757)
+          player.removeAttribute('src');
+          player.load();
+        }
       }
 
       const track = document.querySelector('#hyperplayer-vtt');
