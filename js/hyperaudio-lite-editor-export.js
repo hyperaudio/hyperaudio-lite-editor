@@ -52,15 +52,24 @@ class ImportJson extends HTMLElement {
         } else {
           if (typeof window.clearPendingTranscription === 'function') window.clearPendingTranscription();
           hypertranscript.innerHTML = jsonToHtml(jsonData);
+          // The file's own media URL, or none: the player is cleared, so the
+          // new project is born without the previous project's media (#757).
           const mediaUrl = jsonData.sections && jsonData.sections[0] && jsonData.sections[0].mediaUrl;
+          const player = document.querySelector("#hyperplayer");
           if (mediaUrl) {
-            document.querySelector("#hyperplayer").src = mediaUrl;
+            player.src = mediaUrl;
+          } else {
+            player.removeAttribute('src');
+            player.load();
           }
+          // The birth, once the transcript and the player hold the import. It
+          // was dispatched before the file had been read, so the new project
+          // was born from the previous transcript and media.
+          document.dispatchEvent(new CustomEvent('hyperaudioInit'));
         }
       });
       if (hypertranscript !== null) {
         reader.readAsText(file);
-        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
       }
     });
     fileInput.click();
@@ -93,8 +102,15 @@ class ImportDeepgramJson extends HTMLElement {
 
   confirmDeepgramJson() {
     let player = document.querySelector("#hyperplayer");
+    const deepgramJsonMediaUrl = document.querySelector('#deepgram-json-media').value.trim();
     if (document.querySelector('#deepgram-json-file').value == ""){
-      player.src = document.querySelector('#deepgram-json-media').value;
+      // no media at all: the player is cleared, as for SRT below (#757)
+      if (deepgramJsonMediaUrl !== "") {
+        player.src = deepgramJsonMediaUrl;
+      } else {
+        player.removeAttribute('src');
+        player.load();
+      }
     } else {
       const file = document.querySelector('[name=deepgram-json-file]').files[0];
       // Create a new FileReader instance
@@ -207,10 +223,17 @@ class ImportSrt extends HTMLElement {
     // the player held before: the previous project's. A File is a Blob, so it
     // can go on the player as it is; the save module captures the same File
     // from this input for the project's media.
-    if (document.querySelector('#srt-file').value == ""){
-      player.src = document.querySelector('#srt-media').value;
-    } else {
+    // No media at all: the player is CLEARED, so the new project is born with
+    // none (#757). An empty string put on the player resolves to the page's
+    // own address, and the birth saved the project as a link to index.html.
+    const srtMediaUrl = document.querySelector('#srt-media').value.trim();
+    if (document.querySelector('#srt-file').value != "") {
       player.src = URL.createObjectURL(document.querySelector('[name=srt-file]').files[0]);
+    } else if (srtMediaUrl !== "") {
+      player.src = srtMediaUrl;
+    } else {
+      player.removeAttribute('src');
+      player.load();
     }
 
     const file = document.querySelector('[name=srt]').files[0];
@@ -333,10 +356,15 @@ class ImportVtt extends HTMLElement {
     // the player held before: the previous project's. A File is a Blob, so it
     // can go on the player as it is; the save module captures the same File
     // from this input for the project's media.
-    if (document.querySelector('#vtt-file').value == ""){
-      player.src = document.querySelector('#vtt-media').value;
-    } else {
+    // No media at all: the player is cleared, as for SRT above (#757).
+    const vttMediaUrl = document.querySelector('#vtt-media').value.trim();
+    if (document.querySelector('#vtt-file').value != "") {
       player.src = URL.createObjectURL(document.querySelector('[name=vtt-file]').files[0]);
+    } else if (vttMediaUrl !== "") {
+      player.src = vttMediaUrl;
+    } else {
+      player.removeAttribute('src');
+      player.load();
     }
 
     const file = document.querySelector('[name=vtt]').files[0];
