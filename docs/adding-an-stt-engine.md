@@ -159,7 +159,7 @@ Three pieces in `index.html`:
 Give every input an id that starts with the engine's name
 (`acme-key`, `acme-file`, `acme-media`, `acme-model`, `acme-language`,
 `acme-remember-key`, `acme-submit-btn`). Then put those ids where the editor
-keeps its lists, or three things silently fail:
+keeps its lists, or four things silently fail:
 
 - `js/editor-core.js`, the list of file inputs whose value is cleared on
   click. Without it, picking the same file twice fires no change event and
@@ -171,6 +171,9 @@ keeps its lists, or three things silently fail:
   `REMEMBER_MAP`. Without them the dialog forgets the key, the model and the
   language between sessions. A key is only kept while its remember toggle is
   on, and Settings ▸ Forget clears it.
+- `js/transcribe-from-project.js`, `FILE_INPUTS` and `URL_INPUTS`. Transcribe
+  again on a Recents row (#677) puts the project's media into every engine's
+  inputs, and an engine missing from those lists opens with nothing chosen.
 
 An option that is not ready for everyone can carry `data-experimental`: it
 stays out of the page until Settings ▸ Application ▸ Experimental features is
@@ -383,7 +386,7 @@ Expose a function on `window` only when a host calls it. `parseData`
 - [ ] the contract in order: caption mode off, media on the player, `showTranscriptNotice` with `.transcribing-msg`, `setTranscriptBusy(true)`, then background check, `hyperaudioKeepTranscription`, `innerHTML`, `setTranscriptionInfo`, `setTranscriptBusy(false)`, `hyperaudioInit`, `hyperaudioGenerateCaptionsFromTranscript`
 - [ ] errors through `showTranscriptNotice`, always `setTranscriptBusy(false)`
 - [ ] `info` with `service`, `model`, `language`, `languageCode`, `seconds`, `modelId`, `parameters`, no credentials
-- [ ] input ids added in `editor-core.js`, `hyperaudio-save.js` (`wireCapture`) and `transcribe-prefs.js`
+- [ ] input ids added in `editor-core.js`, `hyperaudio-save.js` (`wireCapture`), `transcribe-prefs.js` and `transcribe-from-project.js`
 - [ ] local engine: worker path with `?v=`, device choice and report, progress into `.transcribing-msg`, idle retirement, `HyperaudioModelStores`, the SW test's worker list
 - [ ] script tags with `?v=`, `PRECACHE`, `@version` on every touched file
 - [ ] no duplicate basenames in the tree

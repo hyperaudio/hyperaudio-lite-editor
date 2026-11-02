@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.32 — last changed in release 1.3.32
+ * @version 1.3.43 — last changed in release 1.3.43
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -35,7 +35,9 @@
   const DUPLICATE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
   const KEBAB_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
   const STAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
-  const DELETE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
+  // a microphone (lucide "mic"), for Transcribe again (#677)
+  const TRANSCRIBE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>';
+  const DELETE_SVG ='<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
   const INFO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>';
 
   const lib = () => window.HyperaudioSave && window.HyperaudioSave.library;
@@ -239,10 +241,19 @@
     // Pure file actions (#480): Info moved to the transcript card's ⓘ — the
     // other items act on the project as an object, Info inspects the content.
     // The separator fences the destructive action off from the rest.
+    // Transcribe again (#677) opens the Transcribe dialog with this project's
+    // media chosen; the result is a new project, as every transcription is.
+    // Nothing to transcribe, or an engine already running, leaves the item
+    // in place but disabled, with the reason as its tooltip.
+    const noMedia = !!entry.media && entry.media.kind === 'none';
+    const transcribing = document.documentElement.classList.contains('ha-transcribing');
+    const againHint = noMedia ? 'This project has no media to transcribe'
+      : transcribing ? 'A transcription is already running' : '';
     menu.innerHTML =
       `<button type="button" role="menuitem" class="recents-menu-star">${STAR_SVG}${isStarred ? 'Unstar' : 'Star'}</button>` +
       `<button type="button" role="menuitem" class="recents-menu-rename">${RENAME_SVG}Rename</button>` +
       `<button type="button" role="menuitem" class="recents-menu-duplicate">${DUPLICATE_SVG}Duplicate</button>` +
+      `<button type="button" role="menuitem" class="recents-menu-transcribe"${againHint !== '' ? ` disabled aria-disabled="true" title="${escapeMarkup(againHint)}"` : ''}>${TRANSCRIBE_SVG}Transcribe again</button>` +
       '<hr class="recents-menu-sep" aria-hidden="true" />' +
       `<button type="button" role="menuitem" class="recents-menu-delete">${DELETE_SVG}Delete</button>`;
     document.body.appendChild(menu);
@@ -273,6 +284,16 @@
         await window.HyperaudioSave.dialog(
           'The project could not be copied — nothing was written to Recents. The original is untouched.',
           { title: 'Copy failed', warning: true, cancelButton: false, confirmLabel: 'OK' });
+      }
+    });
+    menu.querySelector('.recents-menu-transcribe').addEventListener('click', async () => {
+      closeMenu();
+      let reason = 'Transcribe again is not available on this page.';
+      if (typeof window.hyperaudioTranscribeFromProject === 'function') {
+        try { reason = await window.hyperaudioTranscribeFromProject(entry.id); } catch (e) { reason = 'The project could not be opened.'; }
+      }
+      if (reason !== null && window.HyperaudioSave && typeof window.HyperaudioSave.dialog === 'function') {
+        await window.HyperaudioSave.dialog(reason, { title: 'Transcribe again', cancelButton: false, confirmLabel: 'OK' });
       }
     });
     // two-step delete lives inside the menu: first click arms ("Delete?"),
