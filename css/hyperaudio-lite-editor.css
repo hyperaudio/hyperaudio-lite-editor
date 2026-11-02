@@ -1556,6 +1556,14 @@ label[data-a11y-wired]:focus-visible {
   color: oklch(var(--er));
   font-weight: 600;
 }
+/* an item that cannot act right now stays in place and says why (#677) */
+#recents-menu button[disabled],
+#recents-menu button[disabled]:hover {
+  opacity: 0.45;
+  cursor: default;
+  background-color: transparent;
+  color: oklch(var(--bc) / 0.85);
+}
 
 /* Starred/Recents section headings (#440, kept for #456) — same weight as
    the panel's static "Recents" h2, which hides while these are rendered

@@ -1447,9 +1447,12 @@
         player.src = URL.createObjectURL(loaded.mediaFile);
       } else if (!loaded.recovered && loaded.project.media.kind === 'link' && loaded.project.media.url) {
         player.src = loaded.project.media.url;
-      } else if (!loaded.recovered && loaded.project.media.kind === 'original') {
-        // its own media is missing: nothing, rather than the previous
-        // project's media left playing under this transcript (#738)
+      } else if (!loaded.recovered && (loaded.project.media.kind === 'original' || loaded.project.media.kind === 'none')) {
+        // its own media is missing (#738), or it has none (#677): nothing,
+        // rather than the previous project's media left playing under this
+        // transcript. Left on the player, that media was also what the next
+        // save recorded as this project's, as a link, so a text-only project
+        // quietly adopted whatever had been playing before it was opened.
         player.removeAttribute('src');
         player.load();
       }
