@@ -112,19 +112,12 @@ class ImportDeepgramJson extends HTMLElement {
         player.load();
       }
     } else {
-      const file = document.querySelector('[name=deepgram-json-file]').files[0];
-      // Create a new FileReader instance
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
-      let blob = null;
-
-      reader.addEventListener('load', () => {
-
-        file.arrayBuffer().then((arrayBuffer) => {
-          blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-          player.src = URL.createObjectURL(blob);
-        });
-      });
+      // The file goes on the player NOW, before the JSON is read and the new
+      // project is born from it (#758, as #738 did for SRT and VTT). It used
+      // to be read into memory and copied first, and a large video reached
+      // the player only after the birth, so the project was saved with the
+      // media the player held before: the previous project's.
+      player.src = URL.createObjectURL(document.querySelector('[name=deepgram-json-file]').files[0]);
     }
 
     const file = document.querySelector('[name=deepgram-json]').files[0];

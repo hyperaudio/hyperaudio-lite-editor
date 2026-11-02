@@ -4066,7 +4066,7 @@
     // no engine code is touched.
     ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file',
       // the local media chosen beside an imported caption file
-      '#srt-file', '#vtt-file']
+      '#srt-file', '#vtt-file', '#deepgram-json-file', '#whisper-json-file']
       .forEach((selector) => {
         const el = document.querySelector(selector);
         if (el === null) return;
