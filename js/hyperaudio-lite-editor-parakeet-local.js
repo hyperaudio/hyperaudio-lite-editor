@@ -386,9 +386,16 @@ function loadParakeetClient(modal, workerBaseUrl) {
 
     if (!useUrl) {
       videoPlayer.src = URL.createObjectURL(file);
+    } else {
+      // The URL goes on the player NOW, before the busy signal, as the cloud
+      // engines do (#643): the save module captures what is being transcribed
+      // at that signal. With the previous project's media still on the player,
+      // the new project was named after that media and saved with its file.
+      // readAudioFromUrl attaches the URL properly once it is classified
+      // (plain or HLS), so playback and click-to-seek are as before.
+      if (typeof detachHls === "function") detachHls(videoPlayer);
+      videoPlayer.src = mediaUrl;
     }
-    // for a URL, playback is set up inside readAudioFromUrl once the source is
-    // classified (HLS vs plain), so click-to-seek works after transcription.
 
     if (document.querySelector('#transcribe-dialog') !== null){
       document.querySelector('#transcribe-dialog').close();

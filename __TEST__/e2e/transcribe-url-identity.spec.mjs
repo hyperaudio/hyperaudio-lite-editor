@@ -65,10 +65,15 @@ test('a Deepgram URL transcription is named after its own media, not the open pr
   expect(await playerSrc(page)).toBe(MEDIA_URL);
 });
 
-test('the engines put the media on the player before they signal busy', async ({ page }) => {
+test('the engines put the media on the player before they signal busy', async ({ page, context }) => {
   // The contract, checked directly: at the moment the engine says it is busy,
-  // the player must already hold what is being transcribed. Every cloud engine
-  // is driven through the same observation.
+  // the player must already hold what is being transcribed. Every engine with
+  // a URL field is driven through the same observation, the two local ones
+  // included: they used to attach the URL only once it was classified, after
+  // the signal, so the capture took the open project's media.
+  await context.route('**/js/parakeet.worker.js*', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+  await context.route('**/js/whisper.worker.js*', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+  await page.route(MEDIA_URL, (route) => route.abort());
   const engines = await page.evaluate(async (url) => {
     const results = [];
     const player = document.getElementById('hyperplayer');
@@ -77,16 +82,18 @@ test('the engines put the media on the player before they signal busy', async ({
       { name: 'Deepgram', key: '#token', media: '#deepgram-media', button: '#transcribe-btn' },
       { name: 'AssemblyAI', key: '#assemblyai-key', media: '#assemblyai-media', button: '#assemblyai-submit-btn' },
       { name: 'Parakeet (HF)', key: '#parakeet-hf-key', media: '#parakeet-hf-media', button: '#parakeet-hf-submit-btn' },
+      { name: 'Parakeet (Local)', key: null, media: '#parakeet-media', button: '#parakeet-form-submit-btn' },
+      { name: 'Whisper', key: null, media: '#media', button: '#form-submit-btn' },
     ]) {
       const button = document.querySelector(engine.button);
-      const keyField = document.querySelector(engine.key);
+      const keyField = engine.key === null ? undefined : document.querySelector(engine.key);
       const mediaField = document.querySelector(engine.media);
       if (button === null || keyField === null || mediaField === null) {
         results.push({ name: engine.name, srcAtBusy: 'NOT FOUND' });
         continue;
       }
       player.src = 'https://example.com/media/previous-project.mp4';
-      keyField.value = 'test-token';
+      if (keyField !== undefined) keyField.value = 'test-token';
       mediaField.value = url;
       mediaField.dispatchEvent(new Event('input', { bubbles: true }));
       let srcAtBusy = null;
@@ -102,6 +109,78 @@ test('the engines put the media on the player before they signal busy', async ({
   }, MEDIA_URL);
 
   engines.forEach((e) => expect(`${e.name}: ${e.srcAtBusy}`).toBe(`${e.name}: ${MEDIA_URL}`));
+});
+
+// The local engines, end to end. A project with its own file is open, then a
+// URL goes through Parakeet (Local): the result must be a project named after
+// the URL, playing from it, with no copy of the other project's file, and
+// the file project must be left exactly as it was. The worker is a script
+// that answers any request with two words, the URL a served WAV.
+const WAV_URL = 'https://media.example.com/talks/interview.wav';
+const SCRIPTED_WORKER = `
+self.addEventListener('message', (e) => {
+  if (e.data.type !== 'INFERENCE_REQUEST') return;
+  self.postMessage({ type: 'device', device: 'wasm', dtype: 'int8' });
+  self.postMessage({ type: 'result', output: { words: [{ word: 'Local', start: 0.1, end: 0.5 }, { word: 'url', start: 0.6, end: 1.0 }], seconds: 1 } });
+});
+`;
+
+test('a Parakeet (Local) URL transcription after a local-file project is its own project', async ({ page, context }) => {
+  const { ladderWav } = await import('./helpers.mjs');
+  await context.route('**/js/parakeet.worker.js*', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: SCRIPTED_WORKER }));
+  await page.route(WAV_URL, (route) => route.fulfill({ body: ladderWav(2), contentType: 'audio/wav' }));
+
+  // project A: a local file through the Deepgram picker, as a user would
+  await page.evaluate(async () => {
+    const res = await fetch('/__TEST__/fixtures/video-640x360.mp4');
+    const dt = new DataTransfer();
+    dt.items.add(new File([await res.blob()], 'local-clip.mp4', { type: 'video/mp4' }));
+    const input = document.querySelector('#deepgram-file');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    document.querySelector('#hypertranscript').innerHTML = '<div>Transcribing….</div>';
+    window.setTranscriptBusy(true);
+    await new Promise((r) => setTimeout(r, 800));
+    document.querySelector('#hypertranscript').innerHTML =
+      "<article><section><p><span data-m='0' data-d='400'>Local </span>"
+      + "<span data-m='400' data-d='400'>clip </span></p></section></article>";
+    window.setTranscriptBusy(false);
+    document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+    document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+  });
+  await expect.poll(() => libraryNames(page)).toContain('local-clip.mp4');
+  const localId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+
+  // then the URL, through the local engine's own button
+  await page.evaluate((url) => {
+    document.getElementById('transcribe-modal').checked = true;
+    document.getElementById('service-local').checked = true;
+    const media = document.querySelector('#parakeet-media');
+    media.value = url;
+    media.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('parakeet-form-submit-btn').click();
+  }, WAV_URL);
+  // the row in flight already names what is being transcribed
+  await expect.poll(() => libraryNames(page)).toContain('interview.wav');
+  await expect(page.locator('#hypertranscript')).toContainText('Local url');
+  await expect.poll(() => libraryNames(page)).toEqual(['interview.wav', 'local-clip.mp4', 'How to use the Editor']);
+  expect(await playerSrc(page)).toBe(WAV_URL);
+
+  const stored = await page.evaluate(async (localId) => {
+    const save = window.HyperaudioSave;
+    const list = await save.library.list();
+    const cur = list.find((e) => String(e.id) === String(save.library.currentId()));
+    const local = list.find((e) => String(e.id) === String(localId));
+    const dir = await save.storage.projectDir(cur.id);
+    const media = [];
+    try { const m = await dir.getDirectoryHandle('media'); for await (const [n] of m.entries()) media.push(n); } catch (e) { /* none */ }
+    return { media, kind: cur.media && cur.media.kind, url: cur.media && cur.media.url, local: local && { name: local.name, kind: local.media && local.media.kind, filename: local.media && local.media.filename } };
+  }, localId);
+  expect(stored.media).toEqual([]);                 // no copy of the other project's file
+  expect(stored.kind).toBe('link');
+  expect(stored.url).toBe(WAV_URL);
+  expect(stored.local).toEqual({ name: 'local-clip.mp4', kind: 'original', filename: 'local-clip.mp4' });
 });
 
 // The File half of the same leak. #643 fixed the NAME and the player src, but

@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -3076,8 +3076,13 @@
       session.mediaFile = pendingIdentity.file;
       session.mediaFileFromUrl = pendingIdentity.fromUrl;
       const player = document.getElementById('hyperplayer');
+      // An HLS URL plays through hls.js, which turns the player's src into a
+      // blob: MediaSource and records the real URL in data-media-ref
+      // (js/hls-source.js): that player already holds the transcription's
+      // media, and putting the .m3u8 URL back on it would break playback.
       if (player !== null && pendingIdentity.playerSrc
-          && player.src !== pendingIdentity.playerSrc) {
+          && player.src !== pendingIdentity.playerSrc
+          && player.dataset.mediaRef !== pendingIdentity.playerSrc) {
         player.src = pendingIdentity.playerSrc; // the transcription's own media back on the player
       }
       pendingIdentity = null;
