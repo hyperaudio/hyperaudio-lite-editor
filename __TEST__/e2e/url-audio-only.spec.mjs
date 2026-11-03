@@ -93,3 +93,26 @@ test('a small file still falls back to a whole-file decode when extraction fails
   });
   expect(length).toBeGreaterThan(4000);
 });
+
+// #762 — a host that never answers. The notice says the URL is being read,
+// not that the model is being prepared, and the sniff gives up after its
+// own timeout with the network error rather than waiting on the browser's.
+test('a URL whose host never answers says so, and gives up after the timeout (#762)', async ({ page, context }) => {
+  test.setTimeout(90000);
+  await context.route('**/js/whisper.worker.js*', (route) => route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+  const DEAD_URL = 'https://dead.example.com/items/clip.mp3';
+  await page.route(DEAD_URL, () => { /* never answered */ });
+  await page.evaluate((url) => {
+    const field = document.querySelector('#media');
+    field.value = url;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('#form-submit-btn').click();
+  }, DEAD_URL);
+  const notice = page.locator('#hypertranscript');
+  await expect(notice).toContainText('Reading the media from the URL');
+  await expect(notice).not.toContainText('Preparing model');
+  const started = Date.now();
+  await expect(notice).toContainText('network error', { timeout: 40000 });
+  // one timeout of 20 s, the HEAD probe skipped: well under two
+  expect(Date.now() - started).toBeLessThan(35000);
+});
