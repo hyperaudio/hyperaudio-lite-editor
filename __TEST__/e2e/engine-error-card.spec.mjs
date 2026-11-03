@@ -175,3 +175,18 @@ test('a cloud refusal arriving after the user has moved to a project becomes a n
   await expect(page.locator('#transcript-ready-notice')).toContainText('“clip.mp3” was not transcribed. The API key appears to be invalid');
   expect(await page.evaluate(() => document.documentElement.classList.contains('ha-transcribing'))).toBe(false);
 });
+
+// Deepgram's status codes each mean one thing, and the card says that one
+// thing rather than hedging between a bad link and a bad key (#764)
+for (const [status, says] of [[400, 'The media could not be read'], [402, 'no credit left'], [403, 'no access to the chosen model']]) {
+  test(`deepgram: a ${status} says what that code means`, async ({ page, context }) => {
+    const cloud = CLOUD.deepgram;
+    await context.route(cloud.api, (route) => route.fulfill({ status, contentType: 'application/json', body: '{"err_code":"x"}' }));
+    await page.route(cloud.media, () => { /* never answered */ });
+    await page.evaluate(cloud.start);
+    const card = page.locator('#hypertranscript');
+    await expect(card).toContainText(says, { timeout: 20000 });
+    await expect(card).not.toContainText('token is invalid');
+    await expect(page.locator('#file-picker .file-item.active')).toHaveCount(0);
+  });
+}
