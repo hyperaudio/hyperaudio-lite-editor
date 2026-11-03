@@ -171,9 +171,13 @@ keeps its lists, or four things silently fail:
   `REMEMBER_MAP`. Without them the dialog forgets the key, the model and the
   language between sessions. A key is only kept while its remember toggle is
   on, and Settings ▸ Forget clears it.
-- `js/transcribe-from-project.js`, `FILE_INPUTS` and `URL_INPUTS`. Transcribe
-  again on a Recents row (#677) puts the project's media into every engine's
+- `js/transcribe-from-project.js`, `FILE_INPUTS` and `URL_INPUTS`. Retranscribe
+  on a Recents row (#677) puts the project's media into every engine's
   inputs, and an engine missing from those lists opens with nothing chosen.
+  The result replacing that project's transcript is the project library's
+  doing, not the engine's, but it has to know the engine's submit button:
+  `SUBMIT_LABELS` in `hyperaudio-save.js`. A button missing from that list
+  makes Retranscribe through that engine quietly produce a new project.
 
 An option that is not ready for everyone can carry `data-experimental`: it
 stays out of the page until Settings ▸ Application ▸ Experimental features is
@@ -386,7 +390,7 @@ Expose a function on `window` only when a host calls it. `parseData`
 - [ ] the contract in order: caption mode off, media on the player, `showTranscriptNotice` with `.transcribing-msg`, `setTranscriptBusy(true)`, then background check, `hyperaudioKeepTranscription`, `innerHTML`, `setTranscriptionInfo`, `setTranscriptBusy(false)`, `hyperaudioInit`, `hyperaudioGenerateCaptionsFromTranscript`
 - [ ] errors through `showTranscriptNotice`, always `setTranscriptBusy(false)`
 - [ ] `info` with `service`, `model`, `language`, `languageCode`, `seconds`, `modelId`, `parameters`, no credentials
-- [ ] input ids added in `editor-core.js`, `hyperaudio-save.js` (`wireCapture`), `transcribe-prefs.js` and `transcribe-from-project.js`
+- [ ] input ids added in `editor-core.js`, `hyperaudio-save.js` (`wireCapture`), `transcribe-prefs.js` and `transcribe-from-project.js`, and the submit button in `hyperaudio-save.js` (`SUBMIT_LABELS`)
 - [ ] local engine: worker path with `?v=`, device choice and report, progress into `.transcribing-msg`, idle retirement, `HyperaudioModelStores`, the SW test's worker list
 - [ ] script tags with `?v=`, `PRECACHE`, `@version` on every touched file
 - [ ] no duplicate basenames in the tree
