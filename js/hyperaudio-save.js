@@ -3009,6 +3009,11 @@
   // and gets it back when they click the in-progress row. What a finished
   // transcription does next turns on this (#715).
   let pendingOnScreen = false;
+  // an engine ended without a transcript while its loader had the screen
+  // (#763): the next notice is its error card, and no project owns the
+  // screen from then. Whisper paints a successful transcript after the same
+  // signal, so hyperaudioInit, and the next start, take the flag down.
+  let errorOnScreen = false;
   // What the engine reported about a run that finishes off screen: kept here
   // rather than on the session, which by then describes the open project.
   let pendingProvenance = null; // { provenance, language }
@@ -3114,6 +3119,7 @@
             }
             retranscribeTarget = null;
             pendingOnScreen = true;
+            errorOnScreen = false;
             pendingProvenance = null;
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /
@@ -3134,6 +3140,13 @@
             if (t === null || t.querySelector('span[data-m]') === null) {
               pendingTranscription = null;
               document.documentElement.classList.remove('ha-transcribing');
+              // The identity stays: an engine that signals an error and then
+              // completes anyway (a measured Parakeet failure) still has its
+              // transcript named and paired right at the birth.
+              // Whether the error card is about to take the screen (#763) is
+              // decided at the card, not here: Whisper signals busy(false)
+              // before it paints a successful transcript too.
+              errorOnScreen = pendingOnScreen;
               notifyLibraryChanged(false);
             }
           }
@@ -3143,9 +3156,56 @@
     }
   }
 
+  // An engine's notice while its transcription runs in the background (#763).
+  // The loader was painted when the engine started, on screen, so a notice
+  // now is its error card, and the screen belongs to the project the user
+  // moved to: painted there it would cover that project's transcript, and
+  // the loader row would stay until the next hyperaudioInit, since busy(false)
+  // cannot tell this error from a completion about to be kept. The card is
+  // not painted. The row and the identity go, and the corner notice says
+  // what the card would have said. The engines that paint their cards
+  // without showTranscriptNotice are not covered here.
+  {
+    const originalShowNotice = window.showTranscriptNotice;
+    if (typeof originalShowNotice === 'function') {
+      window.showTranscriptNotice = function (html) {
+        try {
+          // The error card takes the screen (#763), over the previous
+          // project's media and transcript, both gone from view when the
+          // engine started: its row lit up again as the loader row went, as
+          // if the error were its. No project owns the screen now, as while
+          // the loader ran. The identity stays, as at the busy signal.
+          if (errorOnScreen) {
+            errorOnScreen = false;
+            if (session.projectId !== null) {
+              releaseProjectLock();
+              session.projectId = null;
+              sessionEdited = false;
+              updateSaveIndicator();
+              notifyLibraryChanged(false);
+            }
+          } else if (pendingTranscription !== null && pendingOnScreen === false && session.projectId !== null) {
+            const name = pendingTranscription.name;
+            pendingTranscription = null;
+            document.documentElement.classList.remove('ha-transcribing');
+            notifyLibraryChanged(false);
+            const holder = document.createElement('div');
+            holder.innerHTML = String(html).replace(/<br\s*\/?>/gi, ' ');
+            const said = holder.textContent.replace(/\s+/g, ' ').trim()
+              .replace(/^Sorry\.\s*/, '').replace(/^Transcription failed\.\s*/, '');
+            showReadyNotice({ id: null, name, note: '“' + name + '” was not transcribed. ' + said });
+            return;
+          }
+        } catch (e) { /* observing only — never break the engine's call */ }
+        return originalShowNotice.apply(this, arguments);
+      };
+    }
+  }
+
   // Registered at module load, BEFORE wireCapture registers onNewTranscript —
   // so the pending identity is restored before the birth gathers it.
   document.addEventListener('hyperaudioInit', () => {
+    errorOnScreen = false; // a transcript came after all
     if (pendingIdentity !== null) {
       session.mediaFile = pendingIdentity.file;
       session.mediaFileFromUrl = pendingIdentity.fromUrl;
