@@ -92,6 +92,10 @@
       noticeTimer = setTimeout(() => { el.remove(); }, 8000);
     }
   }
+  // The importers say here when a file is not what they expect (#766): the
+  // screen and the player are left as they are, so the word goes above
+  // Recents rather than over the open project.
+  window.showRecentsNotice = showPanelNotice;
 
   /* ---- Row hover popout: full name + stored summary/topics, floated to the
      RIGHT of the panel so it never covers the row or its kebab. Fixed
