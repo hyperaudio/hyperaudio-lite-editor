@@ -243,7 +243,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
           break;
         case "error":
           scheduleWorkerRetirement();
-          handleError(data.message);
+          handleError(data.message, data.stage);
           break;
       }
     };
@@ -345,15 +345,30 @@ function loadParakeetClient(modal, workerBaseUrl) {
     renderLoadingMessage();
   }
 
-  function handleError(message) {
+  // The advice fits the step that failed (#763): the media could not be read
+  // (the message says why), the model could not be downloaded (the files come
+  // from Hugging Face on first use, and a refused or lost connection shows as
+  // "Failed to fetch"), the model could not be loaded, or inference failed.
+  function adviceFor(stage, message) {
+    if (stage === "media") return "";
+    if (stage === "load") {
+      return /fetch|network|HTTP|status/i.test(String(message || ""))
+        ? "The model could not be downloaded. Check your connection and try again later."
+        : "The model could not be loaded. Reload the page and try again.";
+    }
+    return "Reload the page and try again.";
+  }
+
+  function handleError(message, stage) {
     stopProgressClock();
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(false);
     }
     console.error("Parakeet error: " + message);
+    const advice = adviceFor(stage, message);
     const detail = message ? '<br/><span style="font-size:80%; opacity:0.7">'+String(message).slice(0, 200)+'</span>' : '';
     showTranscriptNotice(
-      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Reload the page and try again.'+detail+'</center></div>');
+      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.'+(advice ? '<br/>' + advice : '')+detail+'</center></div>');
   }
 
   async function handleFormSubmission() {
@@ -421,7 +436,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
         : await decodeToMono16k(file);
     } catch (e) {
       console.error(e);
-      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.");
+      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.", "media");
       return;
     }
 
