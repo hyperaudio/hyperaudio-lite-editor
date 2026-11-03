@@ -175,10 +175,10 @@ class DeepgramService extends HTMLElement {
         }
         fetchData(token, media, language, model);
       } else {
-        document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
         if (typeof setTranscriptBusy === 'function') {
           setTranscriptBusy(false);
         }
+        showDeepgramError('Please include both a link to the media and token in the form. ');
       }
     }
   }
@@ -400,25 +400,40 @@ function displayAppropriateErrorMessage(error) {
   error = error + "";
 
   if (error.indexOf("401") > 0 || error.indexOf("400") > 0) {
-    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
+    showDeepgramError('Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.');
     return;
   }
   if (error.indexOf("402") > 0) {
-    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the token is invalid.</center></div>';
+    showDeepgramError('Sorry.<br/>It appears that the token is invalid.');
     return;
   }
   displayGenericError();
 }
 
 function displayGenericError() {
-  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+  showDeepgramError('Sorry.<br/>An unexpected error has occurred.');
 }
 
 function displayNoWordsError() {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
   }
-  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
+  showDeepgramError('Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.');
+}
+
+// An error card is a message, not a document (#628), and the editor's notice
+// helper is where a failed transcription is accounted for (#763, #764): the
+// previous project's row is left unlit, and a failure that arrives while the
+// user is viewing another project becomes a corner notice instead of a card
+// painted over that project. Written straight into the transcript only when
+// the helper is not there (the engine loaded on its own).
+function showDeepgramError(message) {
+  const html = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>'+message+'</center></div>';
+  if (typeof showTranscriptNotice === 'function') {
+    showTranscriptNotice(html);
+  } else {
+    document.querySelector('#hypertranscript').innerHTML = html;
+  }
 }
 
 
