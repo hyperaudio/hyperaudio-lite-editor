@@ -89,11 +89,10 @@ class ParakeetHFService extends HTMLElement {
     const file = document.querySelector('#parakeet-hf-file').files[0];
 
     if (apiKey === "" || (file === undefined && media === "")) {
-      document.querySelector('#hypertranscript').innerHTML =
-        parakeetHfErrorHtml("Please provide your HuggingFace token and either a media link or a file.");
       if (typeof setTranscriptBusy === 'function') {
         setTranscriptBusy(false);
       }
+      showParakeetHfError("Please provide your HuggingFace token and either a media link or a file.");
       return;
     }
 
@@ -271,6 +270,21 @@ function parakeetHfErrorHtml(message) {
   return '<div class="vertically-centre"><img src="' + errorSvg + '" width="50" alt="error" style="margin: auto; display: block;"><br/><center>' + message + '</center></div>';
 }
 
+// An error card is a message, not a document (#628), and the editor's notice
+// helper is where a failed transcription is accounted for (#763, #764): the
+// previous project's row is left unlit, and a failure that arrives while the
+// user is viewing another project becomes a corner notice instead of a card
+// painted over that project. Written straight into the transcript only when
+// the helper is not there (the engine loaded on its own).
+function showParakeetHfError(message) {
+  const html = parakeetHfErrorHtml(message);
+  if (typeof showTranscriptNotice === 'function') {
+    showTranscriptNotice(html);
+  } else {
+    document.querySelector('#hypertranscript').innerHTML = html;
+  }
+}
+
 function displayParakeetHfError(error) {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
@@ -288,7 +302,7 @@ function displayParakeetHfError(error) {
   } else if (e.indexOf("503") >= 0 || e.indexOf("500") >= 0) {
     msg = "Sorry.<br/>HuggingFace inference is unavailable right now — try again shortly.";
   }
-  document.querySelector('#hypertranscript').innerHTML = parakeetHfErrorHtml(msg);
+  showParakeetHfError(msg);
   console.error("Parakeet (HF) error:", error);
 }
 
@@ -296,6 +310,5 @@ function displayParakeetHfNoWords() {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
   }
-  document.querySelector('#hypertranscript').innerHTML =
-    parakeetHfErrorHtml("Sorry.<br/>No words were detected.<br/>Please verify that the audio contains speech.");
+  showParakeetHfError("Sorry.<br/>No words were detected.<br/>Please verify that the audio contains speech.");
 }

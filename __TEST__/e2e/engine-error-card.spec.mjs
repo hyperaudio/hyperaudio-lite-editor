@@ -87,3 +87,91 @@ test('a model whose files cannot be downloaded says so, not that a smaller one m
   await expect(card).not.toContainText('smaller model');
   await expect(page.locator('#file-picker .file-item.active')).toHaveCount(0);
 });
+
+// #764 — the cloud engines painted their error cards straight into the
+// transcript, so none of the above reached them. Each failure is the API's
+// own refusal, routed, with the media host never answering the player.
+const CLOUD = {
+  deepgram: {
+    api: 'https://api.deepgram.com/**', media: 'https://dg.example.com/items/clip.mp3',
+    start: () => {
+      document.querySelector('#token').value = 'not-a-token';
+      document.querySelector('#deepgram-media').value = 'https://dg.example.com/items/clip.mp3';
+      document.querySelector('deepgram-service').getData();
+    },
+    says: 'the token is invalid',
+  },
+  assemblyai: {
+    api: 'https://api.assemblyai.com/**', media: 'https://aai.example.com/items/clip.mp3',
+    start: () => {
+      document.querySelector('#assemblyai-key').value = 'not-a-key';
+      document.querySelector('#assemblyai-media').value = 'https://aai.example.com/items/clip.mp3';
+      document.querySelector('assemblyai-service').getData();
+    },
+    says: 'The API key appears to be invalid',
+  },
+  'parakeet-hf': {
+    api: 'https://router.huggingface.co/**', media: 'https://hf.example.com/items/clip.mp3',
+    start: () => {
+      document.querySelector('#parakeet-hf-key').value = 'not-a-token';
+      document.querySelector('#parakeet-hf-media').value = 'https://hf.example.com/items/clip.mp3';
+      document.querySelector('parakeet-hf-service').getData();
+    },
+    says: 'The HuggingFace token appears to be invalid',
+  },
+};
+
+for (const [engine, cloud] of Object.entries(CLOUD)) {
+  test(`${engine}: a refused request leaves no project selected (#764)`, async ({ page, context }) => {
+    // the refusal takes a moment, long enough for the loader row to be seen
+    await context.route(cloud.api, async (route) => {
+      await new Promise((r) => setTimeout(r, 1200));
+      await route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthorized"}' });
+    });
+    if (engine === 'parakeet-hf') {
+      // this engine fetches the media itself and forwards it, so the host answers
+      await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+    } else {
+      await page.route(cloud.media, () => { /* never answered */ });
+    }
+    const before = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+    await page.evaluate(cloud.start);
+    await expect(page.locator('#file-picker .recents-transcribing-item')).toHaveClass(/active/);
+
+    const card = page.locator('#hypertranscript');
+    await expect(card).toContainText(cloud.says, { timeout: 20000 });
+    await expect(card.locator('[data-transcript-notice]')).toHaveCount(1);
+    await expect(page.locator('#file-picker .recents-transcribing-item')).toHaveCount(0);
+    await expect(page.locator('#file-picker .file-item.active')).toHaveCount(0);
+    expect(await page.evaluate(() => window.HyperaudioSave.library.currentId())).toBeNull();
+    expect(await page.evaluate(() => document.documentElement.classList.contains('ha-transcribing'))).toBe(false);
+    // and that project opens again from Recents, whole
+    await page.locator(`#file-picker .file-item[data-id="${before}"]`).click();
+    await expect(page.locator('#hypertranscript [data-m]').first()).toBeVisible();
+    expect(await page.evaluate(() => window.HyperaudioSave.library.currentId())).toBe(before);
+  });
+}
+
+test('a cloud refusal arriving after the user has moved to a project becomes a notice, not a card (#764)', async ({ page, context }) => {
+  const cloud = CLOUD.assemblyai;
+  await context.route(cloud.api, async (route) => {
+    await new Promise((r) => setTimeout(r, 2500));
+    await route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthorized"}' });
+  });
+  await page.route(cloud.media, () => { /* never answered */ });
+  const id = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  await page.evaluate(cloud.start);
+  await expect(page.locator('#file-picker .recents-transcribing-item')).toHaveClass(/active/);
+  // back to the project while the API thinks it over
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), id);
+  await expect(page.locator('#file-picker .file-item[data-id].active')).toHaveCount(1);
+  await expect(page.locator('#hypertranscript [data-m]').first()).toBeVisible();
+
+  await expect(page.locator('#file-picker .recents-transcribing-item')).toHaveCount(0, { timeout: 20000 });
+  await expect(page.locator('#file-picker .file-item[data-id].active')).toHaveCount(1);
+  expect(await page.evaluate(() => window.HyperaudioSave.library.currentId())).toBe(id);
+  await expect(page.locator('#hypertranscript [data-m]').first()).toBeVisible();
+  await expect(page.locator('#hypertranscript')).not.toContainText('API key');
+  await expect(page.locator('#transcript-ready-notice')).toContainText('“clip.mp3” was not transcribed. The API key appears to be invalid');
+  expect(await page.evaluate(() => document.documentElement.classList.contains('ha-transcribing'))).toBe(false);
+});
