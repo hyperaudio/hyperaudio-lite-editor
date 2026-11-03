@@ -4,12 +4,16 @@
  * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  *
- * Transcribe again, from a Recents row (#677): opens the project, then the
+ * Retranscribe, from a Recents row (#677): opens the project, then the
  * Transcribe dialog with that project's media already chosen, so the user
  * picks the engine, model and language as usual and presses Transcribe.
- * Nothing runs without that step, and the result lands exactly as any
- * transcription does: a new project named after the media, the one being
- * transcribed left as it was.
+ * Nothing runs without that step. The result replaces the project's
+ * transcript: the project library is told which project the next
+ * transcription is for (HyperaudioSave.library.retranscribe), and it writes
+ * the result into that project instead of a new one, on screen or in the
+ * background, with the project's title and media kept. The engines are not
+ * involved. Closing the dialog without transcribing undoes the arrangement,
+ * and the project is simply left open.
  *
  * The media goes into every engine's own input, because each engine reads
  * its own at submit: the five file inputs for a file the project holds
@@ -76,6 +80,11 @@
     const state = typeof save.captureState === 'function' ? save.captureState() : null;
     const media = state && state.media ? state.media : { kind: 'none' };
     if (media.kind === 'none') return 'This project has no media to transcribe.';
+    // the next transcription is this project's: armed after the open, which
+    // disarms whatever was armed before
+    if (typeof save.library.retranscribe !== 'function' || (await save.library.retranscribe(id)) !== true) {
+      return 'The project could not be set up to be transcribed again.';
+    }
     if (media.kind === 'link' && media.url) {
       urlInputs(media.url);
     } else {
