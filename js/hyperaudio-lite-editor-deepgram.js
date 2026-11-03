@@ -399,12 +399,23 @@ function displayAppropriateErrorMessage(error) {
   console.dir("error is : " + error);
   error = error + "";
 
-  if (error.indexOf("401") > 0 || error.indexOf("400") > 0) {
-    showDeepgramError('Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.');
+  // Deepgram's codes each mean one thing: 400 a request it could not read
+  // (the media, most often), 401 a bad key, 402 no credit, 403 a model the
+  // project may not use. One card each, rather than one hedging between them.
+  if (error.indexOf("400") > 0) {
+    showDeepgramError('Sorry.<br/>The media could not be read.<br/>Check the link or the file.');
+    return;
+  }
+  if (error.indexOf("401") > 0) {
+    showDeepgramError('Sorry.<br/>It appears that the token is invalid.');
     return;
   }
   if (error.indexOf("402") > 0) {
-    showDeepgramError('Sorry.<br/>It appears that the token is invalid.');
+    showDeepgramError('Sorry.<br/>Your Deepgram account has no credit left.');
+    return;
+  }
+  if (error.indexOf("403") > 0) {
+    showDeepgramError('Sorry.<br/>This token has no access to the chosen model.');
     return;
   }
   displayGenericError();
