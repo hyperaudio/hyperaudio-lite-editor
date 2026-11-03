@@ -27,6 +27,44 @@ class ExportJson extends HTMLElement {
 
 customElements.define('export-json', ExportJson);
 
+// A file that is not what an import expects (#766) is refused before anything
+// on screen is touched: the open project's transcript, player and selection
+// stay as they are, and the word goes above Recents. An import used to paint
+// whatever it was given, and a file with no words in it left a blank screen
+// under the previous project's name.
+function rejectImport(message) {
+  if (typeof window.showRecentsNotice === 'function') {
+    window.showRecentsNotice(message);
+  } else {
+    alert(message);
+  }
+}
+
+// What the editor's own export writes: an object with timed words in it
+function isHyperaudioTranscript(data) {
+  return data !== null && typeof data === 'object' && !Array.isArray(data)
+    && Array.isArray(data.words) && data.words.length > 0;
+}
+
+// A Deepgram response with words in its first channel
+function isDeepgramResponse(data) {
+  try {
+    const words = data.results.channels[0].alternatives[0].words;
+    return Array.isArray(words) && words.length > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+function parseImportedJson(text, filename) {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    rejectImport('“' + filename + '” is not valid JSON.');
+    return undefined;
+  }
+}
+
 class ImportJson extends HTMLElement {
 
   constructor() {
@@ -43,7 +81,12 @@ class ImportJson extends HTMLElement {
       const file = event.target.files[0];
       const reader = new FileReader();
       reader.addEventListener('load', (event) => {
-        const jsonData = JSON.parse(event.target.result);
+        const jsonData = parseImportedJson(event.target.result, file.name);
+        if (jsonData === undefined) return;
+        if (!isHyperaudioTranscript(jsonData)) {
+          rejectImport('“' + file.name + '” is not a Hyperaudio JSON transcript.');
+          return;
+        }
         // transform json object in html
         let hypertranscript = document.getElementById('hypertranscript');
 
@@ -101,31 +144,46 @@ class ImportDeepgramJson extends HTMLElement {
   }
 
   confirmDeepgramJson() {
-    let player = document.querySelector("#hyperplayer");
-    const deepgramJsonMediaUrl = document.querySelector('#deepgram-json-media').value.trim();
-    if (document.querySelector('#deepgram-json-file').value == ""){
-      // no media at all: the player is cleared, as for SRT below (#757)
-      if (deepgramJsonMediaUrl !== "") {
-        player.src = deepgramJsonMediaUrl;
-      } else {
-        player.removeAttribute('src');
-        player.load();
-      }
-    } else {
-      // The file goes on the player NOW, before the JSON is read and the new
-      // project is born from it (#758, as #738 did for SRT and VTT). It used
-      // to be read into memory and copied first, and a large video reached
-      // the player only after the birth, so the project was saved with the
-      // media the player held before: the previous project's.
-      player.src = URL.createObjectURL(document.querySelector('[name=deepgram-json-file]').files[0]);
-    }
-
     const file = document.querySelector('[name=deepgram-json]').files[0];
+    if (file === undefined) {
+      rejectImport('Choose a Deepgram JSON file first.');
+      return;
+    }
     const reader = new FileReader();
     reader.addEventListener('load', (event) => {
-      parseData(JSON.parse(event.target.result));
+      // The JSON is read and checked before the player is touched (#766), so
+      // a file that is not a Deepgram response leaves the open project's
+      // media where it is.
+      const json = parseImportedJson(event.target.result, file.name);
+      if (json === undefined) return;
+      if (!isDeepgramResponse(json)) {
+        rejectImport('“' + file.name + '” is not a Deepgram JSON transcript.');
+        return;
+      }
+
+      let player = document.querySelector("#hyperplayer");
+      const deepgramJsonMediaUrl = document.querySelector('#deepgram-json-media').value.trim();
+      if (document.querySelector('#deepgram-json-file').value == ""){
+        // no media at all: the player is cleared, as for SRT below (#757)
+        if (deepgramJsonMediaUrl !== "") {
+          player.src = deepgramJsonMediaUrl;
+        } else {
+          player.removeAttribute('src');
+          player.load();
+        }
+      } else {
+        // The media file goes on the player as a blob URL, with nothing read
+        // into memory, before the new project is born from the JSON (#758, as
+        // #738 did for SRT and VTT). It used to be read and copied first, and
+        // a large video reached the player only after the birth, so the
+        // project was saved with the media the player held before: the
+        // previous project's.
+        player.src = URL.createObjectURL(document.querySelector('[name=deepgram-json-file]').files[0]);
+      }
+
+      parseData(json);
     });
-    
+
     reader.readAsText(file);
   }
 
