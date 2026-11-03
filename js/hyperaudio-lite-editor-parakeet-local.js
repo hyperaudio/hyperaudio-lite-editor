@@ -402,11 +402,14 @@ function loadParakeetClient(modal, workerBaseUrl) {
     }
 
     const loadingMessageContainer = document.getElementById("hypertranscript");
-    showTranscriptNotice('<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>');
+    // the URL is read before the model is touched, and a host that is slow or
+    // dead holds this step (#762): the notice says which step it is
+    const firstStep = useUrl ? "Reading the media from the URL…" : "Preparing model…";
+    showTranscriptNotice('<div class="vertically-centre"><center class="transcribing-msg">' + firstStep + '</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>');
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(true);
     }
-    progressMessage = "Preparing model…";
+    progressMessage = firstStep;
     startProgressClock();
 
     let audio;

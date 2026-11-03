@@ -120,6 +120,27 @@ test('classifyMediaUrl: unreachable host reports a network error, not CORS', () 
     ),
   ));
 
+test('classifyMediaUrl: a host that never answers is given up on after the timeout, as a network error (#762)', () =>
+  withMockFetch(
+    // a connection that never completes: the promise settles only when the
+    // request's signal aborts it, the way fetch() behaves
+    (url, options) => new Promise((resolve, reject) => {
+      if (options && options.signal) {
+        options.signal.addEventListener('abort', () => reject(new DOMException('The user aborted a request.', 'AbortError')));
+      }
+    }),
+    async () => {
+      const started = Date.now();
+      await assert.rejects(
+        classifyMediaUrl('https://media.example.com/clip.mp4', { timeoutMs: 40 }),
+        (e) => /network error/.test(e.message) && !/CORS/.test(e.message),
+      );
+      // the sniff waits out its timeout and the HEAD probe is skipped: a host
+      // that never answered would only make the probe wait the same again
+      assert.ok(Date.now() - started < 500, 'gave up within one timeout');
+    },
+  ));
+
 test('classifyMediaUrl: an HTTP error status is reported as-is', () =>
   withMockFetch(
     () => Promise.resolve({ ok: false, status: 404 }),
