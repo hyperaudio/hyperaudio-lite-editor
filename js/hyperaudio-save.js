@@ -3982,6 +3982,91 @@
     }
   }
 
+  /* Repair of borrowed links (#757). Before 1.3.43 a transcript imported
+   * without media was saved as a link to whatever the player held: the intro
+   * audio, or the page's own address (an empty URL field put on the player).
+   * Such a project plays the wrong media and offers to transcribe it. Every
+   * boot looks the index over for links to either address and sets those
+   * projects to no media, in their saved state, their draft and the index.
+   * The intro project links to the intro audio by right: it is told apart
+   * by its transcript, which opens with the intro's own words. A project
+   * open in another tab is left for the next boot. Nothing else is touched,
+   * and a library with no such link costs one pass over the index.
+   * ----------------------------------------------------------------------- */
+  const NONE_MEDIA = { kind: 'none', path: null, url: null, filename: '', mimeType: '', durationSeconds: 0, sizeBytes: 0 };
+
+  function sameAddress(a, b) {
+    try {
+      const x = new URL(a, window.location.href);
+      const y = new URL(b, window.location.href);
+      const strip = (p) => p.replace(/index\.html$/, '');
+      return x.origin === y.origin && strip(x.pathname) === strip(y.pathname);
+    } catch (e) { return false; }
+  }
+
+  async function repairBorrowedLinks(lib) {
+    const player = document.getElementById('hyperplayer');
+    const introUrl = player !== null ? (player.getAttribute('src') || '') : '';
+    const transcriptEl = document.getElementById('hypertranscript');
+    const wordOf = (text) => String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    const introWords = transcriptEl === null ? []
+      : [...transcriptEl.querySelectorAll('[data-m]:not(.speaker)')].slice(0, 5).map((el) => wordOf(el.textContent)).filter((w) => w !== '');
+    const linksIntro = (url) => introUrl !== '' && sameAddress(url, introUrl);
+    const borrowed = lib.projects.filter((entry) => entry.media && entry.media.kind === 'link' && entry.media.url
+      && (sameAddress(entry.media.url, window.location.href) || linksIntro(entry.media.url)));
+    for (const entry of borrowed) {
+      try {
+        const files = await readProjectFiles(entry.id);
+        if (files === null) continue;
+        if (linksIntro(entry.media.url) && introWords.length > 0) {
+          // the origin, written once and never edited, is the stable tell; a
+          // project without one is judged on its transcript
+          let source = files.project.transcript;
+          try { if (files.originalText !== null) source = JSON.parse(files.originalText); } catch (e) { /* the transcript then */ }
+          const words = ((source && source.words) || []).slice(0, 5).map((w) => wordOf(w.text));
+          const matching = introWords.filter((w, i) => words[i] === w).length;
+          if (matching >= Math.min(3, introWords.length)) continue; // the intro project itself
+        }
+        const repair = async () => {
+          const dir = await getProjectDir(entry.id, false);
+          // Which of the two files is newer decides which one the project
+          // opens on (#659), a tie going to the draft, and rewriting must not
+          // change that. A draft older than the save is dead already and is
+          // dropped. Otherwise the save is rewritten first, the draft after.
+          const saved = await fileOrNull(dir, SAVED_FILE);
+          const draft = await fileOrNull(dir, DRAFT_FILE);
+          const stamped = [];
+          if (saved !== null) stamped.push({ name: SAVED_FILE, text: await saved.text() });
+          if (draft !== null) {
+            if (saved !== null && saved.lastModified > draft.lastModified) await deleteProjectEntry(entry.id, DRAFT_FILE);
+            else stamped.push({ name: DRAFT_FILE, text: await draft.text() });
+          }
+          for (const { name, text } of stamped) {
+            const snapshot = JSON.parse(text);
+            const project = JSON.parse(snapshot.json);
+            project.media = Object.assign({}, NONE_MEDIA);
+            snapshot.json = serializeProjectJson(project);
+            await writeFileTo(dir, name, JSON.stringify(snapshot));
+          }
+          await updateLibrary((l) => {
+            const e = l.projects.find((p) => p.id === entry.id);
+            if (e) e.media = { kind: 'none', filename: '', durationSeconds: 0, hasVideo: null, url: '' };
+          });
+          console.log('hyperaudio-save: "' + entry.name + '" linked to ' + entry.media.url + ' by mistake (#757), now a project with no media');
+        };
+        if ('locks' in navigator) {
+          await navigator.locks.request(PROJECT_LOCK_PREFIX + entry.id, { ifAvailable: true }, async (lock) => {
+            if (lock !== null) await repair(); // held elsewhere: next boot
+          });
+        } else {
+          await repair();
+        }
+      } catch (e) {
+        console.warn('hyperaudio-save: repairing a borrowed link failed', e);
+      }
+    }
+  }
+
   async function bootLibrary() {
     if (!opfsAvailable) {
       revealTranscript();
@@ -3998,6 +4083,7 @@
       await migrateSingleSlotWork();
       const lib = await readLibrary();
       syncProjectsHint(lib); // self-heal a cleared/stale hint (#473)
+      await repairBorrowedLinks(lib); // text-only projects saved as links (#757)
       // First run: adopt the document already on screen as a project (#602).
       // Keyed on a marker, not on "is the library empty?" — otherwise deleting
       // the intro would only last until the next reload.
