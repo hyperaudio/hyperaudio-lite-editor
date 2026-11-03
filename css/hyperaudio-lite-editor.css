@@ -305,6 +305,19 @@ dialog::backdrop {
     width: 520px;
   }
 
+  /* The wide layout's 10px offset stays as a margin, not a relative shift
+     (#761): a shifted box keeps its stretched height and sits 10px lower,
+     which the holder's 8px bottom padding does not cover, so a transcript of
+     a few lines had 2px to scroll. A margin shrinks the box instead. Only
+     down to 949px: the narrow layout below puts the transcript in flow with
+     no offset at all (--text-inset is the holder padding alone there). */
+  @media (min-width: 949px) {
+    .hyperaudio-transcript {
+      top: auto;
+      margin-top: 10px;
+    }
+  }
+
   /* Timecodes sit in the transcript's left margin, which a window only just
      wide enough to keep Recents open makes narrower than they are (#747).
      Keep the right edge where centring puts it and give up only what the
