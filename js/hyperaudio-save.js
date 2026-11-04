@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.43 — last changed in release 1.3.43
+ * @version 1.3.44 — last changed in release 1.3.44
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -3032,14 +3032,22 @@
    * and an import disarm it too. */
   let retranscribeTarget = null; // { id, name, committed }
   let birthReplaces = null;      // the id an on-screen completion replaces, read by onNewTranscript
-  const SUBMIT_LABELS = '#transcribe-btn, #assemblyai-submit-btn, #parakeet-hf-submit-btn, #form-submit-btn, #parakeet-form-submit-btn';
+  // A submit button says so itself (#768): the marker on the element, rather
+  // than a list of ids here, so an engine outside this repository, a host's
+  // own dialog say, commits by the same rule as the five in index.html.
+  const SUBMIT_LABELS = '[data-transcribe-submit]';
 
-  async function armRetranscribe(id) {
+  // options.committed: the caller has already decided the next busy signal
+  // is the replacement (#768), a host that runs its own engine without the
+  // editor's dialog has, by the time it starts. Closing the Transcribe
+  // dialog without transcribing still disarms it, as for a button's commit.
+  async function armRetranscribe(id, options) {
     if (!opfsAvailable || id === null || id === undefined || session.projectId !== id) return false;
     const lib = await readLibrary();
     const entry = lib.projects.find((p) => p.id === id);
     if (entry === undefined) return false;
-    retranscribeTarget = { id, name: entry.name || 'project', committed: false };
+    const committed = !!(options && options.committed === true);
+    retranscribeTarget = { id, name: entry.name || 'project', committed };
     return true;
   }
   document.addEventListener('click', (e) => {
@@ -4869,7 +4877,9 @@
       duplicate: duplicateProject,
       remove: deleteProject,
       // Retranscribe (#677): the open project's transcript is replaced by the
-      // transcription started next, from the dialog the caller then opens
+      // transcription started next, from the dialog the caller then opens.
+      // retranscribe(id, { committed: true }) for a caller that starts the
+      // engine itself, with no submit button of the editor's (#768)
       retranscribe: armRetranscribe,
       pendingTranscription: pendingTranscriptionInfo,
       openPendingTranscription: switchToPendingTranscription,
