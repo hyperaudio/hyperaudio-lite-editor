@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "transaction_key": "deprecated",
+    "request_id": "7b1f0a7e-0000-4000-8000-000000000000",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "created": "2026-10-31T10:00:00.000Z",
+    "duration": 7.4,
+    "channels": 1,
+    "models": ["30089e05-99d1-4376-b32e-c263170674af"],
+    "model_info": {
+      "30089e05-99d1-4376-b32e-c263170674af": { "name": "2-general-nova", "version": "2024-01-06.5664", "arch": "nova-2" }
+    }
+  },
+  "results": {
+    "channels": [
+      {
+        "detected_language": "en",
+        "alternatives": [
+          {
+            "transcript": "We could be there at the start. Well if you tap into that potential. There has to be more.",
+            "confidence": 0.99,
+            "words": [
+              { "word": "we", "start": 0.08, "end": 0.24, "confidence": 0.99, "speaker": 0, "speaker_confidence": 0.9, "punctuated_word": "We" },
+              { "word": "could", "start": 0.24, "end": 0.48, "confidence": 0.99, "speaker": 0, "speaker_confidence": 0.9, "punctuated_word": "could" },
+              { "word": "be", "start": 0.48, "end": 0.64, "confidence": 0.99, "speaker": 0, "speaker_confidence": 0.9, "punctuated_word": "be" },
+              { "word": "there", "start": 0.64, "end": 0.96, "confidence": 0.99, "speaker": 0, "speaker_confidence": 0.9, "punctuated_word": "there" },
+              { "word": "at", "start": 0.96, "end": 1.12, "confidence": 0.99, "speaker": 0, "speaker_confidence": 0.9, "punctuated_word": "at" },
+              { "word": "the", "start": 1.12, "end": 1.28, "confidence": 0.99, "speaker": 0, "speaker_confidence": 0.9, "punctuated_word": "the" },
+              { "word": "start", "start": 1.28, "end": 1.76, "confidence": 0.99, "speaker": 0, "speaker_confidence": 0.9, "punctuated_word": "start." },
+              { "word": "well", "start": 1.84, "end": 2.08, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.6, "punctuated_word": "Well" },
+              { "word": "if", "start": 2.08, "end": 2.24, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "if" },
+              { "word": "you", "start": 2.24, "end": 2.4, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "you" },
+              { "word": "tap", "start": 2.4, "end": 2.64, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "tap" },
+              { "word": "into", "start": 2.64, "end": 2.88, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "into" },
+              { "word": "that", "start": 2.88, "end": 3.12, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "that" },
+              { "word": "potential", "start": 3.12, "end": 3.76, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "potential." },
+              { "word": "there", "start": 5.2, "end": 5.44, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "There" },
+              { "word": "has", "start": 5.44, "end": 5.6, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "has" },
+              { "word": "to", "start": 5.6, "end": 5.76, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "to" },
+              { "word": "be", "start": 5.76, "end": 5.92, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "be" },
+              { "word": "more", "start": 5.92, "end": 6.4, "confidence": 0.99, "speaker": 1, "speaker_confidence": 0.9, "punctuated_word": "more." }
+            ]
+          }
+        ]
+      }
+    ],
+    "summary": { "result": "success", "short": "A talk about potential." },
+    "topics": {
+      "segments": [
+        { "text": "We could be there at the start.", "start_word": 0, "end_word": 6, "topics": [{ "topic": "Industry", "confidence_score": 0.8 }] },
+        { "text": "Well if you tap into that potential.", "start_word": 7, "end_word": 13, "topics": [{ "topic": "Industry", "confidence_score": 0.7 }, { "topic": "Potential", "confidence_score": 0.6 }] }
+      ]
+    }
+  }
+}

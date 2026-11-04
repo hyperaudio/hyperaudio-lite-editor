@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -84,11 +84,10 @@ class AssemblyAIService extends HTMLElement {
     const file = document.querySelector('#assemblyai-file').files[0];
 
     if (apiKey === "" || (file === undefined && media === "")) {
-      document.querySelector('#hypertranscript').innerHTML =
-        assemblyaiErrorHtml("Please provide your AssemblyAI API key and either a media link or a file.");
       if (typeof setTranscriptBusy === 'function') {
         setTranscriptBusy(false);
       }
+      showAssemblyAIError("Please provide your AssemblyAI API key and either a media link or a file.");
       return;
     }
 
@@ -256,18 +255,13 @@ function setAssemblyAIStatus(text) {
   if (el) el.textContent = text;
 }
 
-// Build the transcript HTML from AssemblyAI's word list (start/end in ms) — the
-// same data-m / data-d span shape the other engines produce.
+// The transcript on the page from AssemblyAI's completed transcript: the
+// words and the language come from js/converters/assemblyai.js (#751).
 function assemblyaiParseData(json) {
-  const words = json.words;
-  const showDiarization = words.some((w) => w.speaker !== null && w.speaker !== undefined);
-  // where paragraphs start: the one rule every engine and import shares (#743)
-  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(words.map((w) => ({ start: w.start / 1000, end: w.end / 1000, text: w.text, speaker: showDiarization ? w.speaker : null }))) : new Set();
+  const converted = window.HyperaudioConverters.assemblyai(json);
+  const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
 
-  let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-
-  const language = json.language_code || (document.querySelector('#assemblyai-language') || {}).value || "";
+  const language = converted.language || (document.querySelector('#assemblyai-language') || {}).value || "";
   // finishing while another project is open (#715): its track is not ours
   const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
   const track = background ? null : document.querySelector('#hyperplayer-vtt');
@@ -275,18 +269,6 @@ function assemblyaiParseData(json) {
     track.label = language;
     track.srcLang = language;
   }
-
-  words.forEach((element, index) => {
-    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
-    // a speaker label at the first word and at every change of speaker
-    if (showDiarization && (index === 0 || element.speaker !== words[index - 1].speaker)) {
-      hyperTranscript += `<span class="speaker" data-m='${element.start}' data-d='0'>[speaker-${element.speaker}] </span>`;
-    }
-    hyperTranscript += `<span data-m='${element.start}' data-d='${element.end - element.start}'>${element.text} </span>`;
-  });
-
-  hyperTranscript += "\n </p> \n </section>\n</article>\n ";
-  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
   // languageCode: what AssemblyAI says the language IS (it may have been
   // detected), beside the picker's label the info panel shows
@@ -320,6 +302,21 @@ function assemblyaiErrorHtml(message) {
   return '<div class="vertically-centre"><img src="' + errorSvg + '" width="50" alt="error" style="margin: auto; display: block;"><br/><center>' + message + '</center></div>';
 }
 
+// An error card is a message, not a document (#628), and the editor's notice
+// helper is where a failed transcription is accounted for (#763, #764): the
+// previous project's row is left unlit, and a failure that arrives while the
+// user is viewing another project becomes a corner notice instead of a card
+// painted over that project. Written straight into the transcript only when
+// the helper is not there (the engine loaded on its own).
+function showAssemblyAIError(message) {
+  const html = assemblyaiErrorHtml(message);
+  if (typeof showTranscriptNotice === 'function') {
+    showTranscriptNotice(html);
+  } else {
+    document.querySelector('#hypertranscript').innerHTML = html;
+  }
+}
+
 function displayAssemblyAIError(error) {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
@@ -331,7 +328,7 @@ function displayAssemblyAIError(error) {
   } else if (e.indexOf("400") >= 0 || e.indexOf("422") >= 0) {
     msg = "Sorry.<br/>The media could not be read — check the file or URL.";
   }
-  document.querySelector('#hypertranscript').innerHTML = assemblyaiErrorHtml(msg);
+  showAssemblyAIError(msg);
   console.error("AssemblyAI error:", error);
 }
 
@@ -339,6 +336,5 @@ function displayAssemblyAINoWords() {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
   }
-  document.querySelector('#hypertranscript').innerHTML =
-    assemblyaiErrorHtml("Sorry.<br/>No words were detected.<br/>Please verify that the audio contains speech.");
+  showAssemblyAIError("Sorry.<br/>No words were detected.<br/>Please verify that the audio contains speech.");
 }

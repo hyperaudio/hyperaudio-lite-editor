@@ -231,3 +231,24 @@ test('left-edge player controls anchor their tooltips on-screen (#546)', async (
     expect(tip.transform, tip.id).toBe('none');
   }
 });
+
+// #761 — between 949px and 1120px the transcript is positioned relative and
+// used to carry the wide layout's 10px top offset. A relative offset keeps
+// the box at its stretched height and moves it down, 2px past what the
+// holder's bottom padding covers, so a transcript of a few lines could
+// scroll. The card has nothing to scroll with a short transcript at any width.
+test('a short transcript gives the card nothing to scroll (#761)', async ({ page }) => {
+  await page.evaluate(() => {
+    document.getElementById('hypertranscript').innerHTML =
+      '<article><section><p><span data-m="320" data-d="520">Short </span><span data-m="900" data-d="400">text. </span></p></section></article>';
+  });
+  for (const width of [1200, 1100, 1000, 960, 780, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(350); // the holder's 0.25s top transition
+    const holder = await page.evaluate(() => {
+      const h = document.querySelector('.transcript-holder');
+      return { scroll: h.scrollHeight, client: h.clientHeight };
+    });
+    expect(holder.scroll, `the card scrolls at ${width}px`).toBeLessThanOrEqual(holder.client);
+  }
+});

@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1447,9 +1447,12 @@
         player.src = URL.createObjectURL(loaded.mediaFile);
       } else if (!loaded.recovered && loaded.project.media.kind === 'link' && loaded.project.media.url) {
         player.src = loaded.project.media.url;
-      } else if (!loaded.recovered && loaded.project.media.kind === 'original') {
-        // its own media is missing: nothing, rather than the previous
-        // project's media left playing under this transcript (#738)
+      } else if (!loaded.recovered && (loaded.project.media.kind === 'original' || loaded.project.media.kind === 'none')) {
+        // its own media is missing (#738), or it has none (#677): nothing,
+        // rather than the previous project's media left playing under this
+        // transcript. Left on the player, that media was also what the next
+        // save recorded as this project's, as a link, so a text-only project
+        // quietly adopted whatever had been playing before it was opened.
         player.removeAttribute('src');
         player.load();
       }
@@ -1992,10 +1995,27 @@
     clearTimeout(autosaveTimer);
     autosaveTimer = null;
     autosavePending = false;
-    releaseProjectLock();
+    // Retranscribe (#677): the result replaces the project it was started
+    // from, which is the one the session still points at (or none, when the
+    // user watched the loader from its Recents row). The project keeps its
+    // id, title, creation date and envelope, and gets a new origin, a new
+    // saved state and the engine's provenance. Its media stays as it is.
+    const replaces = birthReplaces;
+    birthReplaces = null;
+    const replacing = replaces !== null && opfsAvailable
+      && (session.projectId === replaces || session.projectId === null);
+    // The lock on the project being replaced is kept: released and asked for
+    // again at once, the browser still held it, the session went read-only,
+    // and the promotion that followed re-read the project from disk, over
+    // the result. A fresh project releases the outgoing one's lock as before.
+    if (!replacing) releaseProjectLock();
     session.active = true;
-    session.projectId = opfsAvailable ? newProjectId() : null;
-    session.created = nowIso();
+    if (replacing) {
+      session.projectId = replaces;
+    } else {
+      session.projectId = opfsAvailable ? newProjectId() : null;
+      session.created = nowIso();
+    }
     session.hasOriginal = false;
     session.mediaFileFromUrl = null;
     // A birth with NO source in the player is a text-only document (a JSON/SRT
@@ -2020,8 +2040,10 @@
       }
     }
     session.pendingReconcile = null;
-    session.title = '';
-    session.envelope = null; // a fresh document has no envelope to preserve
+    if (!replacing) {
+      session.title = '';
+      session.envelope = null; // a fresh document has no envelope to preserve
+    }
     // With OPFS the birth is committed below and the project starts CLEAN;
     // without it nothing persists, so the session stays marked edited and
     // the quit guard keeps protecting the on-screen work.
@@ -2041,10 +2063,16 @@
     signalDocumentIdentity('transcription-or-import');
     try {
       if (opfsAvailable && session.projectId !== null) {
-        await acquireProjectLock(session.projectId); // fresh id: always granted
+        // a fresh id is always granted; a replaced project's lock is already
+        // held, unless the loader was watched from its row, which let it go
+        if (!replacing || !hasProjectLock) await acquireProjectLock(session.projectId);
         await writeOriginOnce(getEditorTranscriptJson());
         await resolveMediaFile();
-        await writeMediaOnce();
+        // a replaced project's media is already in its directory: writing it
+        // again would copy the whole file back into storage for nothing
+        if (!replacing) await writeMediaOnce();
+        // a draft of the transcript being replaced must not outlive it
+        if (replacing) await deleteProjectEntry(session.projectId, DRAFT_FILE);
         await commitInitialState(session.projectId); // v0: as transcribed/imported
         updateSaveIndicator();
       }
@@ -2929,6 +2957,7 @@
     session.mediaFile = files.mediaFile;
     session.mediaFileFromUrl = null;
     session.pendingReconcile = project.media.kind === 'link' ? project.media : null;
+    retranscribeTarget = null; // a project taking the screen is not the one armed (#677)
     // A project whose own media file is missing from storage (a save that
     // failed or was cut short, #738) says so and offers to take it back,
     // as one opened from a file without its media does.
@@ -2980,9 +3009,48 @@
   // and gets it back when they click the in-progress row. What a finished
   // transcription does next turns on this (#715).
   let pendingOnScreen = false;
+  // an engine ended without a transcript while its loader had the screen
+  // (#763): the next notice is its error card, and no project owns the
+  // screen from then. Whisper paints a successful transcript after the same
+  // signal, so hyperaudioInit, and the next start, take the flag down.
+  let errorOnScreen = false;
   // What the engine reported about a run that finishes off screen: kept here
   // rather than on the session, which by then describes the open project.
   let pendingProvenance = null; // { provenance, language }
+
+  /* Retranscribe (#677). A transcription started from a Recents row's
+   * Retranscribe item replaces THAT project's transcript instead of making a
+   * new project. The target is armed when the item opens the Transcribe
+   * dialog (library.retranscribe), committed when one of the engines' submit
+   * buttons is pressed, and consumed at the engine's busy signal, where it
+   * rides on the pending identity to the completion, on screen or in the
+   * background. The engines know nothing of it. Every submit button and the
+   * dialog's close button are labels for the same checkbox, so the checkbox
+   * change alone cannot tell a submit from a close: the submit's click comes
+   * first and marks the target committed, and a change without that mark,
+   * or one that opens the dialog afresh, disarms it. Opening another project
+   * and an import disarm it too. */
+  let retranscribeTarget = null; // { id, name, committed }
+  let birthReplaces = null;      // the id an on-screen completion replaces, read by onNewTranscript
+  const SUBMIT_LABELS = '#transcribe-btn, #assemblyai-submit-btn, #parakeet-hf-submit-btn, #form-submit-btn, #parakeet-form-submit-btn';
+
+  async function armRetranscribe(id) {
+    if (!opfsAvailable || id === null || id === undefined || session.projectId !== id) return false;
+    const lib = await readLibrary();
+    const entry = lib.projects.find((p) => p.id === id);
+    if (entry === undefined) return false;
+    retranscribeTarget = { id, name: entry.name || 'project', committed: false };
+    return true;
+  }
+  document.addEventListener('click', (e) => {
+    if (retranscribeTarget === null || !(e.target instanceof Element)) return;
+    const label = e.target.closest(SUBMIT_LABELS);
+    if (label !== null && !label.classList.contains('btn-disabled')) retranscribeTarget.committed = true;
+  }, true);
+  document.addEventListener('change', (e) => {
+    if (retranscribeTarget === null || !e.target || e.target.id !== 'transcribe-modal') return;
+    if (e.target.checked === true || !retranscribeTarget.committed) retranscribeTarget = null;
+  });
 
   function pendingTranscriptionInfo() {
     return pendingTranscription === null ? null : { name: pendingTranscription.name };
@@ -3039,7 +3107,19 @@
               playerSrc,
               name: pendingTranscription.name,
             };
+            // Retranscribe (#677): this run replaces the armed project, which
+            // is the one on screen, and the in-progress row carries its name
+            if (retranscribeTarget !== null && retranscribeTarget.committed
+                && session.projectId === retranscribeTarget.id) {
+              pendingIdentity.replaceId = retranscribeTarget.id;
+              pendingIdentity.startedAt = Date.now();
+              pendingIdentity.name = retranscribeTarget.name;
+              // the in-progress row says which project, beside that project's own row
+              pendingTranscription.name = 'Retranscribing ' + retranscribeTarget.name;
+            }
+            retranscribeTarget = null;
             pendingOnScreen = true;
+            errorOnScreen = false;
             pendingProvenance = null;
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /
@@ -3060,6 +3140,13 @@
             if (t === null || t.querySelector('span[data-m]') === null) {
               pendingTranscription = null;
               document.documentElement.classList.remove('ha-transcribing');
+              // The identity stays: an engine that signals an error and then
+              // completes anyway (a measured Parakeet failure) still has its
+              // transcript named and paired right at the birth.
+              // Whether the error card is about to take the screen (#763) is
+              // decided at the card, not here: Whisper signals busy(false)
+              // before it paints a successful transcript too.
+              errorOnScreen = pendingOnScreen;
               notifyLibraryChanged(false);
             }
           }
@@ -3069,17 +3156,70 @@
     }
   }
 
+  // An engine's notice while its transcription runs in the background (#763).
+  // The loader was painted when the engine started, on screen, so a notice
+  // now is its error card, and the screen belongs to the project the user
+  // moved to: painted there it would cover that project's transcript, and
+  // the loader row would stay until the next hyperaudioInit, since busy(false)
+  // cannot tell this error from a completion about to be kept. The card is
+  // not painted. The row and the identity go, and the corner notice says
+  // what the card would have said. The engines that paint their cards
+  // without showTranscriptNotice are not covered here.
+  {
+    const originalShowNotice = window.showTranscriptNotice;
+    if (typeof originalShowNotice === 'function') {
+      window.showTranscriptNotice = function (html) {
+        try {
+          // The error card takes the screen (#763), over the previous
+          // project's media and transcript, both gone from view when the
+          // engine started: its row lit up again as the loader row went, as
+          // if the error were its. No project owns the screen now, as while
+          // the loader ran. The identity stays, as at the busy signal.
+          if (errorOnScreen) {
+            errorOnScreen = false;
+            if (session.projectId !== null) {
+              releaseProjectLock();
+              session.projectId = null;
+              sessionEdited = false;
+              updateSaveIndicator();
+              notifyLibraryChanged(false);
+            }
+          } else if (pendingTranscription !== null && pendingOnScreen === false && session.projectId !== null) {
+            const name = pendingTranscription.name;
+            pendingTranscription = null;
+            document.documentElement.classList.remove('ha-transcribing');
+            notifyLibraryChanged(false);
+            const holder = document.createElement('div');
+            holder.innerHTML = String(html).replace(/<br\s*\/?>/gi, ' ');
+            const said = holder.textContent.replace(/\s+/g, ' ').trim()
+              .replace(/^Sorry\.\s*/, '').replace(/^Transcription failed\.\s*/, '');
+            showReadyNotice({ id: null, name, note: '“' + name + '” was not transcribed. ' + said });
+            return;
+          }
+        } catch (e) { /* observing only — never break the engine's call */ }
+        return originalShowNotice.apply(this, arguments);
+      };
+    }
+  }
+
   // Registered at module load, BEFORE wireCapture registers onNewTranscript —
   // so the pending identity is restored before the birth gathers it.
   document.addEventListener('hyperaudioInit', () => {
+    errorOnScreen = false; // a transcript came after all
     if (pendingIdentity !== null) {
       session.mediaFile = pendingIdentity.file;
       session.mediaFileFromUrl = pendingIdentity.fromUrl;
       const player = document.getElementById('hyperplayer');
+      // An HLS URL plays through hls.js, which turns the player's src into a
+      // blob: MediaSource and records the real URL in data-media-ref
+      // (js/hls-source.js): that player already holds the transcription's
+      // media, and putting the .m3u8 URL back on it would break playback.
       if (player !== null && pendingIdentity.playerSrc
-          && player.src !== pendingIdentity.playerSrc) {
+          && player.src !== pendingIdentity.playerSrc
+          && player.dataset.mediaRef !== pendingIdentity.playerSrc) {
         player.src = pendingIdentity.playerSrc; // the transcription's own media back on the player
       }
+      birthReplaces = pendingIdentity.replaceId || null; // Retranscribe (#677): onNewTranscript reads it
       pendingIdentity = null;
     }
     if (pendingTranscription !== null) {
@@ -3286,7 +3426,7 @@
     el.setAttribute('aria-live', 'polite');
     const text = document.createElement('span');
     text.className = 'transcript-ready-text';
-    text.textContent = '“' + kept.name + '” transcript is ready';
+    text.textContent = kept.note || ('“' + kept.name + '” transcript is ready');
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'transcript-ready-close';
@@ -3303,6 +3443,73 @@
     if (readyNotice !== null && session.projectId === readyNotice.id) closeReadyNotice();
   });
 
+  // Retranscribe finishing off screen (#677): the result goes into the
+  // project it was started from. Not when that project was edited meanwhile
+  // (a draft or a save stamped after the run began): then it is kept as a
+  // new project, as any other, and the notice says why. When the project is
+  // the one on screen, its edits go to its draft first and the result lands
+  // on screen through the same door as a completion there, with the identity
+  // still carrying the project it replaces.
+  async function replaceKeptTranscription(result, identity, reported) {
+    const id = identity.replaceId;
+    const entry = (await readLibrary()).projects.find((p) => p.id === id);
+    const files = entry !== undefined ? await readProjectFiles(id) : null;
+    if (entry === undefined || files === null) return writeKeptTranscription(result, identity, reported);
+    const editedSince = async () => {
+      const fresh = (await readLibrary()).projects.find((p) => p.id === id);
+      return fresh === undefined || Math.max(fresh.lastDraftAt || 0, fresh.lastSavedAt || 0) > identity.startedAt;
+    };
+    const asNewProject = async () => {
+      const kept = await writeKeptTranscription(result, identity, reported);
+      kept.note = '“' + entry.name + '” was edited meanwhile, so the new transcript is saved as “' + kept.name + '”';
+      return kept;
+    };
+    if (session.projectId === id) {
+      // edits that could not reach the draft are edits all the same
+      if ((await flushPendingDraft()) === 'failed' || (await editedSince())) return asNewProject();
+      await landKeptTranscriptionOnScreen(result, identity);
+      return null; // on screen: no notice to show
+    }
+    if (await editedSince()) return asNewProject();
+    const transcript = htmlToJSON(result.html);
+    if (!transcript.words || transcript.words.length === 0) throw new Error('the result holds no timed words');
+    const previous = files.project;
+    const base = gather();
+    const now = nowIso();
+    const language = reported !== null ? reported.language : '';
+    const state = Object.assign({}, base, {
+      envelope: previous,
+      created: previous.created || now,
+      modified: now,
+      media: previous.media,
+      // the project's own options, not the open project's
+      options: Object.assign({}, previous.options || base.options, { captionSpeakers: [] }),
+      texts: {
+        title: entry.name || (previous.texts && previous.texts.title) || 'project',
+        language: languageTag(language) || language || (previous.texts && previous.texts.language) || '',
+        summary: typeof result.summary === 'string' ? result.summary.trim() : '',
+        topics: Array.isArray(result.topics) ? result.topics.map((t) => String(t).trim()).filter((t) => t.length > 0) : [],
+      },
+      provenance: reported !== null ? reported.provenance : null,
+      hasOriginal: true,
+      transcript,
+      html: projectTranscriptHtml(transcript, result.html),
+    });
+    const project = buildProjectJson(state);
+    const valid = validateProjectJson(project);
+    if (!valid.ok) throw new Error('the replaced project failed validation: ' + valid.errors.map((e) => e.code).join(', '));
+    const dir = await getProjectDir(id, true);
+    await writeFileTo(dir, ENTRY.original, originJsonOf(transcript));
+    await writeFileTo(dir, SAVED_FILE, JSON.stringify({
+      json: serializeProjectJson(project),
+      html: state.html,
+      captionsVtt: null, // made from the transcript when the project is opened
+    }));
+    await deleteProjectEntry(id, DRAFT_FILE);
+    await touchLibraryEntry(id, state, { saved: true, active: false });
+    return { id, name: state.texts.title };
+  }
+
   window.hyperaudioKeepTranscription = function (result) {
     if (!transcriptionInBackground() || !result || typeof result.html !== 'string') return false;
     const identity = pendingIdentity;
@@ -3318,8 +3525,12 @@
       document.documentElement.classList.remove('ha-transcribing');
       notifyLibraryChanged(false);
     };
-    writeKeptTranscription(result, identity, reported).then((kept) => {
+    const written = identity.replaceId
+      ? replaceKeptTranscription(result, identity, reported)
+      : writeKeptTranscription(result, identity, reported);
+    written.then((kept) => {
       finish();
+      if (kept === null) return; // landed on screen
       showReadyNotice(kept);
       document.dispatchEvent(new CustomEvent('hyperaudioTranscriptionKept', { detail: kept }));
     }).catch((e) => {
@@ -3336,6 +3547,8 @@
   function clearPendingTranscription() {
     pendingIdentity = null;
     pendingProvenance = null;
+    retranscribeTarget = null;
+    birthReplaces = null;
     if (pendingTranscription !== null) {
       pendingTranscription = null;
       document.documentElement.classList.remove('ha-transcribing');
@@ -3829,6 +4042,91 @@
     }
   }
 
+  /* Repair of borrowed links (#757). Before 1.3.43 a transcript imported
+   * without media was saved as a link to whatever the player held: the intro
+   * audio, or the page's own address (an empty URL field put on the player).
+   * Such a project plays the wrong media and offers to transcribe it. Every
+   * boot looks the index over for links to either address and sets those
+   * projects to no media, in their saved state, their draft and the index.
+   * The intro project links to the intro audio by right: it is told apart
+   * by its transcript, which opens with the intro's own words. A project
+   * open in another tab is left for the next boot. Nothing else is touched,
+   * and a library with no such link costs one pass over the index.
+   * ----------------------------------------------------------------------- */
+  const NONE_MEDIA = { kind: 'none', path: null, url: null, filename: '', mimeType: '', durationSeconds: 0, sizeBytes: 0 };
+
+  function sameAddress(a, b) {
+    try {
+      const x = new URL(a, window.location.href);
+      const y = new URL(b, window.location.href);
+      const strip = (p) => p.replace(/index\.html$/, '');
+      return x.origin === y.origin && strip(x.pathname) === strip(y.pathname);
+    } catch (e) { return false; }
+  }
+
+  async function repairBorrowedLinks(lib) {
+    const player = document.getElementById('hyperplayer');
+    const introUrl = player !== null ? (player.getAttribute('src') || '') : '';
+    const transcriptEl = document.getElementById('hypertranscript');
+    const wordOf = (text) => String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    const introWords = transcriptEl === null ? []
+      : [...transcriptEl.querySelectorAll('[data-m]:not(.speaker)')].slice(0, 5).map((el) => wordOf(el.textContent)).filter((w) => w !== '');
+    const linksIntro = (url) => introUrl !== '' && sameAddress(url, introUrl);
+    const borrowed = lib.projects.filter((entry) => entry.media && entry.media.kind === 'link' && entry.media.url
+      && (sameAddress(entry.media.url, window.location.href) || linksIntro(entry.media.url)));
+    for (const entry of borrowed) {
+      try {
+        const files = await readProjectFiles(entry.id);
+        if (files === null) continue;
+        if (linksIntro(entry.media.url) && introWords.length > 0) {
+          // the origin, written once and never edited, is the stable tell; a
+          // project without one is judged on its transcript
+          let source = files.project.transcript;
+          try { if (files.originalText !== null) source = JSON.parse(files.originalText); } catch (e) { /* the transcript then */ }
+          const words = ((source && source.words) || []).slice(0, 5).map((w) => wordOf(w.text));
+          const matching = introWords.filter((w, i) => words[i] === w).length;
+          if (matching >= Math.min(3, introWords.length)) continue; // the intro project itself
+        }
+        const repair = async () => {
+          const dir = await getProjectDir(entry.id, false);
+          // Which of the two files is newer decides which one the project
+          // opens on (#659), a tie going to the draft, and rewriting must not
+          // change that. A draft older than the save is dead already and is
+          // dropped. Otherwise the save is rewritten first, the draft after.
+          const saved = await fileOrNull(dir, SAVED_FILE);
+          const draft = await fileOrNull(dir, DRAFT_FILE);
+          const stamped = [];
+          if (saved !== null) stamped.push({ name: SAVED_FILE, text: await saved.text() });
+          if (draft !== null) {
+            if (saved !== null && saved.lastModified > draft.lastModified) await deleteProjectEntry(entry.id, DRAFT_FILE);
+            else stamped.push({ name: DRAFT_FILE, text: await draft.text() });
+          }
+          for (const { name, text } of stamped) {
+            const snapshot = JSON.parse(text);
+            const project = JSON.parse(snapshot.json);
+            project.media = Object.assign({}, NONE_MEDIA);
+            snapshot.json = serializeProjectJson(project);
+            await writeFileTo(dir, name, JSON.stringify(snapshot));
+          }
+          await updateLibrary((l) => {
+            const e = l.projects.find((p) => p.id === entry.id);
+            if (e) e.media = { kind: 'none', filename: '', durationSeconds: 0, hasVideo: null, url: '' };
+          });
+          console.log('hyperaudio-save: "' + entry.name + '" linked to ' + entry.media.url + ' by mistake (#757), now a project with no media');
+        };
+        if ('locks' in navigator) {
+          await navigator.locks.request(PROJECT_LOCK_PREFIX + entry.id, { ifAvailable: true }, async (lock) => {
+            if (lock !== null) await repair(); // held elsewhere: next boot
+          });
+        } else {
+          await repair();
+        }
+      } catch (e) {
+        console.warn('hyperaudio-save: repairing a borrowed link failed', e);
+      }
+    }
+  }
+
   async function bootLibrary() {
     if (!opfsAvailable) {
       revealTranscript();
@@ -3845,6 +4143,7 @@
       await migrateSingleSlotWork();
       const lib = await readLibrary();
       syncProjectsHint(lib); // self-heal a cleared/stale hint (#473)
+      await repairBorrowedLinks(lib); // text-only projects saved as links (#757)
       // First run: adopt the document already on screen as a project (#602).
       // Keyed on a marker, not on "is the library empty?" — otherwise deleting
       // the intro would only last until the next reload.
@@ -4058,7 +4357,7 @@
     // no engine code is touched.
     ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file',
       // the local media chosen beside an imported caption file
-      '#srt-file', '#vtt-file']
+      '#srt-file', '#vtt-file', '#deepgram-json-file', '#whisper-json-file']
       .forEach((selector) => {
         const el = document.querySelector(selector);
         if (el === null) return;
@@ -4569,6 +4868,9 @@
       setStarred: setProjectStarred,
       duplicate: duplicateProject,
       remove: deleteProject,
+      // Retranscribe (#677): the open project's transcript is replaced by the
+      // transcription started next, from the dialog the caller then opens
+      retranscribe: armRetranscribe,
       pendingTranscription: pendingTranscriptionInfo,
       openPendingTranscription: switchToPendingTranscription,
     },

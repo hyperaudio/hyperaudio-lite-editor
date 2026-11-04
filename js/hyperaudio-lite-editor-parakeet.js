@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  *
  * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
@@ -89,11 +89,10 @@ class ParakeetHFService extends HTMLElement {
     const file = document.querySelector('#parakeet-hf-file').files[0];
 
     if (apiKey === "" || (file === undefined && media === "")) {
-      document.querySelector('#hypertranscript').innerHTML =
-        parakeetHfErrorHtml("Please provide your HuggingFace token and either a media link or a file.");
       if (typeof setTranscriptBusy === 'function') {
         setTranscriptBusy(false);
       }
+      showParakeetHfError("Please provide your HuggingFace token and either a media link or a file.");
       return;
     }
 
@@ -232,17 +231,13 @@ async function runParakeetHF(apiKey, file, media, opts) {
   parakeetHfParseData(json);
 }
 
-// Build transcript HTML from the word list (start/end in SECONDS). No speaker
-// labels — Parakeet doesn't diarize.
+// The transcript on the page from the endpoint's word list: the words and
+// the language come from js/converters/parakeet.js (#751).
 function parakeetHfParseData(json) {
-  const words = json.words;
-  // where paragraphs start: the one rule every engine and import shares (#743)
-  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(words.map((w) => ({ start: w.start, end: w.end, text: w.word }))) : new Set();
+  const converted = window.HyperaudioConverters.parakeet(json);
+  const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
 
-  let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-
-  const language = json.language || "";
+  const language = converted.language || "";
   // finishing while another project is open (#715): its track is not ours
   const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
   const track = background ? null : document.querySelector('#hyperplayer-vtt');
@@ -250,16 +245,6 @@ function parakeetHfParseData(json) {
     track.label = language;
     track.srcLang = language;
   }
-
-  words.forEach((element, index) => {
-    const startMs = Math.round(element.start * 1000);
-    const durMs = Math.round((element.end - element.start) * 1000);
-    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
-    hyperTranscript += `<span data-m='${startMs}' data-d='${durMs}'>${element.word} </span>`;
-  });
-
-  hyperTranscript += "\n </p> \n </section>\n</article>\n ";
-  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
 
   const info = parakeetHfTranscriptionStart !== 0
     ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000 } : null;
@@ -285,6 +270,21 @@ function parakeetHfErrorHtml(message) {
   return '<div class="vertically-centre"><img src="' + errorSvg + '" width="50" alt="error" style="margin: auto; display: block;"><br/><center>' + message + '</center></div>';
 }
 
+// An error card is a message, not a document (#628), and the editor's notice
+// helper is where a failed transcription is accounted for (#763, #764): the
+// previous project's row is left unlit, and a failure that arrives while the
+// user is viewing another project becomes a corner notice instead of a card
+// painted over that project. Written straight into the transcript only when
+// the helper is not there (the engine loaded on its own).
+function showParakeetHfError(message) {
+  const html = parakeetHfErrorHtml(message);
+  if (typeof showTranscriptNotice === 'function') {
+    showTranscriptNotice(html);
+  } else {
+    document.querySelector('#hypertranscript').innerHTML = html;
+  }
+}
+
 function displayParakeetHfError(error) {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
@@ -302,7 +302,7 @@ function displayParakeetHfError(error) {
   } else if (e.indexOf("503") >= 0 || e.indexOf("500") >= 0) {
     msg = "Sorry.<br/>HuggingFace inference is unavailable right now — try again shortly.";
   }
-  document.querySelector('#hypertranscript').innerHTML = parakeetHfErrorHtml(msg);
+  showParakeetHfError(msg);
   console.error("Parakeet (HF) error:", error);
 }
 
@@ -310,6 +310,5 @@ function displayParakeetHfNoWords() {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
   }
-  document.querySelector('#hypertranscript').innerHTML =
-    parakeetHfErrorHtml("Sorry.<br/>No words were detected.<br/>Please verify that the audio contains speech.");
+  showParakeetHfError("Sorry.<br/>No words were detected.<br/>Please verify that the audio contains speech.");
 }

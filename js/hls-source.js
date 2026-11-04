@@ -1,7 +1,7 @@
 /**
  * hls-source.js
  * (C) The Hyperaudio Project
- * @version 1.3.17 — last changed in release 1.3.17
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  *
  * Transcribe from a remote media URL — including HLS VOD (.m3u8) — by resolving
@@ -132,7 +132,22 @@ function describeSize(bytes) {
   return Math.round(bytes / 1e6) + ' MB';
 }
 
-async function classifyMediaUrl(url) {
+// A host that accepts no connection at all would otherwise hold the sniff
+// below for the browser's own connection timeout, minutes on some, with the
+// screen saying the model is being prepared the whole time (#762). Long
+// enough for a slow host to answer with its first bytes, not for a dead one.
+const SNIFF_TIMEOUT_MS = 20000;
+
+// fetch() that gives up after ms, with the same rejection a network error
+// gives, so the callers' "network error" handling covers it.
+function fetchWithin(url, init, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+async function classifyMediaUrl(url, options) {
+  const timeoutMs = options && Number.isFinite(options.timeoutMs) ? options.timeoutMs : SNIFF_TIMEOUT_MS;
   // A URL never contains literal whitespace; strip any that crept in from
   // copy/paste (e.g. a long URL that wrapped across lines) so it doesn't break
   // the request.
@@ -144,7 +159,14 @@ async function classifyMediaUrl(url) {
 
   const sniffInit = { headers: { Range: `bytes=0-${SNIFF_BYTES - 1}` } };
   let workingUrl = url;
-  let response = await fetch(url, sniffInit).catch(() => null);
+  // a sniff that ran out of time is a host that never answered: the probe
+  // below would only wait out the same timeout again
+  let timedOut = false;
+  const sniff = (u) => fetchWithin(u, sniffInit, timeoutMs).catch((e) => {
+    if (e && e.name === 'AbortError') timedOut = true;
+    return null;
+  });
+  let response = await sniff(url);
 
   // Recover from a double-percent-encoded URL (e.g. an already-encoded link
   // re-copied through an address bar: %3A → %253A), which servers reject as a
@@ -152,7 +174,7 @@ async function classifyMediaUrl(url) {
   // correctly single-encoded URL untouched. Retry once with that.
   if ((response === null || !response.ok) && /%25/i.test(url)) {
     const collapsed = url.replace(/%25/gi, '%');
-    const retry = await fetch(collapsed, sniffInit).catch(() => null);
+    const retry = await sniff(collapsed);
     if (retry !== null && retry.ok) {
       response = retry;
       workingUrl = collapsed;
@@ -167,7 +189,8 @@ async function classifyMediaUrl(url) {
     // matters because playback and fetching are gated differently: a URL that
     // plays fine in the <video> element can still be unreadable to fetch(),
     // which reads as an app bug unless the message says otherwise.
-    const reachable = await fetch(url, { method: 'HEAD', mode: 'no-cors' }).then(() => true, () => false);
+    const reachable = !timedOut
+      && await fetchWithin(url, { method: 'HEAD', mode: 'no-cors' }, timeoutMs).then(() => true, () => false);
     if (reachable) {
       throw new Error("This media host doesn't allow web pages to read it (no CORS headers), so it can play but can't be transcribed from a URL. Download it and transcribe the local file, or enable CORS on the host.");
     }

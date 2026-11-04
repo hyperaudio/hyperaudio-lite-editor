@@ -20,7 +20,7 @@
  */
 'use strict';
 
-const VERSION = '1.3.42';
+const VERSION = '1.3.43';
 const PREFIX = 'hyperaudio-editor-';
 const CACHE = PREFIX + VERSION;
 // the old worker's cache. Finding it means this visitor was pinned.
@@ -40,7 +40,10 @@ const PRECACHE = [
   'js/caption-speaker-colours.js', 'js/caption.js', 'js/editor-audio-cut.js',
   'js/editor-core.js', 'js/editor-file-menu.js', 'js/editor-main.js',
   'js/editor-service-worker.js', 'js/editor-svg.js', 'js/experimental-features.js', 'js/find-replace.js', 'js/hls-source.js',
-  'js/html-json-converter.js', 'js/hyperaudio-library.js',
+  'js/html-json-converter.js', 'js/hyperaudio-library.js', 'js/transcribe-from-project.js',
+  'js/converters/transcript-words.js', 'js/converters/deepgram.js',
+  'js/converters/assemblyai.js', 'js/converters/parakeet.js', 'js/converters/whisper.js',
+  'js/converters/whisper-json.js', 'js/converters/captions.js',
   'js/hyperaudio-lite-editor-assemblyai.js', 'js/hyperaudio-lite-editor-deepgram.js',
   'js/hyperaudio-lite-editor-export.js', 'js/hyperaudio-lite-editor-parakeet-local.js',
   'js/hyperaudio-lite-editor-parakeet.js', 'js/hyperaudio-lite-editor-whisper.js',

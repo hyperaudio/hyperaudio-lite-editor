@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  */
 
@@ -175,10 +175,10 @@ class DeepgramService extends HTMLElement {
         }
         fetchData(token, media, language, model);
       } else {
-        document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Please include both a link to the media and token in the form. </center></div>';
         if (typeof setTranscriptBusy === 'function') {
           setTranscriptBusy(false);
         }
+        showDeepgramError('Please include both a link to the media and token in the form. ');
       }
     }
   }
@@ -399,36 +399,61 @@ function displayAppropriateErrorMessage(error) {
   console.dir("error is : " + error);
   error = error + "";
 
-  if (error.indexOf("401") > 0 || error.indexOf("400") > 0) {
-    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the media URL does not exist<br/> or the token is invalid.</center></div>';
+  // Deepgram's codes each mean one thing: 400 a request it could not read
+  // (the media, most often), 401 a bad key, 402 no credit, 403 a model the
+  // project may not use. One card each, rather than one hedging between them.
+  if (error.indexOf("400") > 0) {
+    showDeepgramError('Sorry.<br/>The media could not be read.<br/>Check the link or the file.');
+    return;
+  }
+  if (error.indexOf("401") > 0) {
+    showDeepgramError('Sorry.<br/>It appears that the token is invalid.');
     return;
   }
   if (error.indexOf("402") > 0) {
-    document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>It appears that the token is invalid.</center></div>';
+    showDeepgramError('Sorry.<br/>Your Deepgram account has no credit left.');
+    return;
+  }
+  if (error.indexOf("403") > 0) {
+    showDeepgramError('Sorry.<br/>This token has no access to the chosen model.');
     return;
   }
   displayGenericError();
 }
 
 function displayGenericError() {
-  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>An unexpected error has occurred.</center></div>';
+  showDeepgramError('Sorry.<br/>An unexpected error has occurred.');
 }
 
 function displayNoWordsError() {
   if (typeof setTranscriptBusy === 'function') {
     setTranscriptBusy(false);
   }
-  document.querySelector('#hypertranscript').innerHTML = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.</center></div>';
+  showDeepgramError('Sorry.<br/>No words were detected.<br/>Please verify that audio contains speech.');
+}
+
+// An error card is a message, not a document (#628), and the editor's notice
+// helper is where a failed transcription is accounted for (#763, #764): the
+// previous project's row is left unlit, and a failure that arrives while the
+// user is viewing another project becomes a corner notice instead of a card
+// painted over that project. Written straight into the transcript only when
+// the helper is not there (the engine loaded on its own).
+function showDeepgramError(message) {
+  const html = '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>'+message+'</center></div>';
+  if (typeof showTranscriptNotice === 'function') {
+    showTranscriptNotice(html);
+  } else {
+    document.querySelector('#hypertranscript').innerHTML = html;
+  }
 }
 
 
-function getLanguageCode(json){
+function getLanguageCode(detectedLanguage){
   // prepare the VTT track so that the correct language is defined
 
   let language = document.querySelector('#language').value;
 
   if (language === undefined) {
-    let detectedLanguage = extractLanguage(json);
     if (detectedLanguage !== undefined) {
       language = detectedLanguage;
     } else {
@@ -443,83 +468,23 @@ let transcriptionStart = 0;
 let transcriptionMeta = {};
 
 function parseData(json) {
-
-
-  const wordData = json.results.channels[0].alternatives[0].words;
   // Kept for hyperaudioSpeakerDebug(): where a speaker label looks wrong, the
   // question is whether Deepgram said the speaker changed there, and only
   // their own flags answer it.
   window.hyperaudioLastDeepgram = json;
-  // The visible text comes off each word, beside that word's own timing and
-  // speaker. It used to come from a SECOND list — the formatted transcript
-  // split on spaces — matched to the word array by position alone, with
-  // nothing checking the two were the same length. smart_format is exactly
-  // what breaks that: it rewrites spoken numbers and the like into forms with
-  // a different token count, and from the first mismatch every word after it
-  // is drawn from the wrong slot, so labels land against the wrong text. The
-  // formatted word is already on the object smart_format put it there for.
-  const textOf = (w) => (typeof w.punctuated_word === 'string' && w.punctuated_word !== ''
-    ? w.punctuated_word : w.word);
   console.log("wordData...");
-  console.log(wordData);
+  console.log(json.results.channels[0].alternatives[0].words);
 
-  // Deepgram's `diarize` tags every word on its own, with no regard for what
-  // was being said, so a boundary lands a few words short of where the turn
-  // actually ended and the next speaker is credited with the tail of the
-  // previous one's sentence: the label reads as mid-sentence. Measured on a
-  // six-way debate, eight or nine of about thirty changes fell inside a
-  // sentence, against essentially none from AssemblyAI on the same audio.
-  //
-  // Two attempts to correct it here were tried against that audio and both
-  // failed, so the speakers are left exactly as Deepgram reports them:
-  //
-  //   Taking each word's speaker from the `utterances` segment it falls in
-  //   merged distinct speakers — 374 words moved, the host swallowed into the
-  //   answer before it. Their segmentation runs through a speaker change when
-  //   the pause is short, so it is coarser than their own per-word flags.
-  //
-  //   Moving each change onto the nearest utterance edge, keeping every
-  //   change and only correcting its position, moved 16 of them and changed
-  //   nothing anyone could see. With about one utterance every nine seconds
-  //   the edges are too sparse to land on, and where one is near it is
-  //   generally mid-sentence too, being cut from the same diarization.
-  //
-  // The single-word repair below stays: it is narrow, it predates this, and
-  // it addresses a signature that is demonstrably theirs. Anything broader
-  // needs better data than the API gives us, and AssemblyAI, which returns
-  // speaker-tagged utterances, is the engine to reach for on diarized
-  // material. hyperaudioSpeakerDebug() reports what their flags actually say.
-
-  // Fix Deepgram diarization edge case where the last word of a speaker turn
-  // gets attached to the next speaker. Signature: the word starts essentially
-  // on top of the previous speaker's word, but the next word from this "new"
-  // speaker is far away. In that case, reassign the word back. The same fault
-  // as the snap above addresses, patched a word at a time, and it still earns
-  // its place where a response carries no utterances.
-  const speakerReassignGap = 0.3;
-  for (let i = 1; i < wordData.length - 1; i++) {
-    const prev = wordData[i - 1];
-    const cur = wordData[i];
-    const next = wordData[i + 1];
-    if (cur.speaker !== prev.speaker && next.speaker === cur.speaker) {
-      const gapBefore = cur.start - prev.end;
-      const gapAfter = next.start - cur.end;
-      if (gapBefore < speakerReassignGap && gapAfter > speakerReassignGap) {
-        cur.speaker = prev.speaker;
-      }
-    }
-  }
-
-  let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-
-  let showDiarization = true;
+  // the response as a transcript: js/converters/deepgram.js (#751)
+  const converted = window.HyperaudioConverters.deepgram(json);
+  const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
+  const summary = converted.summary;
+  const topics = converted.topics;
 
   // Finishing while another project is open (#715): the summary, the topics
   // and the caption track on screen are that project's, so nothing is written
   // to them. The result is handed over whole further down.
   const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
-  const summary = extractSummary(json);
-  const topics = extractTopics(json);
 
   if (!background) {
     if (document.querySelector("#summary") !== null) {
@@ -530,43 +495,17 @@ function parseData(json) {
       document.querySelector("#topics").innerHTML = topics.join(", ");
     }
 
-    language = getLanguageCode(json);
+    language = getLanguageCode(converted.language);
 
     let track = document.querySelector('#hyperplayer-vtt');
     track.label = language;
     track.srcLang = language;
   }
 
-  // where paragraphs start: the one rule every engine and import shares (#743)
-  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(wordData.map((w) => ({ start: w.start, end: w.end, text: textOf(w), speaker: showDiarization ? w.speaker : null })))
-    : new Set();
-
-  wordData.forEach((element, index) => {
-    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
-    // a speaker label at the first word and at every change of speaker
-    if (index === 0 || (showDiarization === true && element.speaker !== wordData[index-1].speaker)) {
-      hyperTranscript += `<span class="speaker" data-m='${element.start.toFixed(2)*1000}' data-d='0'>[speaker-${element.speaker}] </span>`;
-    }
-    hyperTranscript += `<span data-m='${element.start.toFixed(2)*1000}' data-d='${(element.end - element.start).toFixed(2)*1000}'>${textOf(element)} </span>`;
-  });
-
-  hyperTranscript +=  "\n </p> \n </section>\n</article>\n ";
-
-  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
-
   let transcriptionInfo = null;
   if (transcriptionStart !== 0) {
     // a detected language is the better answer when there is one
-    let detected;
-    try { detected = extractLanguage(json); } catch (e) { detected = undefined; }
-    // Deepgram names the exact model build that answered
-    let engineVersion;
-    try {
-      const info = Object.values((json.metadata && json.metadata.model_info) || {})[0];
-      engineVersion = info && info.version ? String(info.version) : undefined;
-    } catch (e) { engineVersion = undefined; }
-    transcriptionInfo = { ...transcriptionMeta, engineVersion, languageCode: detected || transcriptionMeta.languageCode, seconds: (Date.now() - transcriptionStart) / 1000 };
+    transcriptionInfo = { ...transcriptionMeta, engineVersion: converted.engineVersion, languageCode: converted.language || transcriptionMeta.languageCode, seconds: (Date.now() - transcriptionStart) / 1000 };
   }
 
   // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
@@ -604,31 +543,6 @@ function parseData(json) {
   document.dispatchEvent(initEvent);
   const capEvent = new CustomEvent('hyperaudioGenerateCaptionsFromTranscript');
   document.dispatchEvent(capEvent);
-}
-
-function extractSummary(json) {
-  const summary = json.results && json.results.summary;
-  if (!summary) return "";
-  return summary.short || summary.text || "";
-}
-
-function extractTopics(json) {
-  const topicsData = json.results && json.results.topics;
-  if (!topicsData || !Array.isArray(topicsData.segments)) return [];
-  const seen = new Set();
-  topicsData.segments.forEach(segment => {
-    (segment.topics || []).forEach(t => {
-      if (t && t.topic && !seen.has(t.topic)) {
-        seen.add(t.topic);
-      }
-    });
-  });
-  return Array.from(seen);
-}
-
-function extractLanguage(json) {
-  let language = json.results.channels[0].detected_language;
-  return (language);
 }
 
 function populateLanguagesForModel(modelValue) {

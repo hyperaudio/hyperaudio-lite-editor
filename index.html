@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 1.3.42 (last changed in release 1.3.42) -->
+<!--  Hyperaudio Lite Editor - Version 1.3.43 (last changed in release 1.3.43) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,12 +18,12 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="1.3.42">
+  <meta name="version" content="1.3.43">
   <!-- The version is bumped with the FIRST change of a release, like the
        per-file cache stamps, so a working tree reports the release it is
        becoming. The date is set by the release commit and stays empty until
        then: Settings shows "unreleased" in its place (#615). -->
-  <meta name="release-date" content="2026-10-31">
+  <meta name="release-date" content="2026-11-03">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -47,11 +47,18 @@ If you are creating an open source application under a license compatible with t
 
   <!-- where paragraphs start, for every engine and import (#743) -->
   <script src="js/paragraph-rule.js?v=1.3.42"></script>
+  <script src="js/converters/transcript-words.js?v=1.3.43"></script>
+  <script src="js/converters/deepgram.js?v=1.3.43"></script>
+  <script src="js/converters/assemblyai.js?v=1.3.43"></script>
+  <script src="js/converters/parakeet.js?v=1.3.43"></script>
+  <script src="js/converters/whisper.js?v=1.3.43"></script>
+  <script src="js/converters/whisper-json.js?v=1.3.43"></script>
+  <script src="js/converters/captions.js?v=1.3.43"></script>
   <script src="js/audio-source.js?v=1.3.17"></script>
-  <script src="js/hls-source.js?v=1.3.17"></script>
-  <script src="js/hyperaudio-lite-editor-deepgram.js?v=1.3.42"></script>
-  <script src="js/hyperaudio-lite-editor-assemblyai.js?v=1.3.42"></script>
-  <script src="js/hyperaudio-lite-editor-parakeet.js?v=1.3.42"></script>
+  <script src="js/hls-source.js?v=1.3.43"></script>
+  <script src="js/hyperaudio-lite-editor-deepgram.js?v=1.3.43"></script>
+  <script src="js/hyperaudio-lite-editor-assemblyai.js?v=1.3.43"></script>
+  <script src="js/hyperaudio-lite-editor-parakeet.js?v=1.3.43"></script>
   <script src="js/transcribe-prefs.js?v=1.3.14"></script>
   <script src="js/settings.js?v=1.3.35"></script>
   <script src="js/experimental-features.js?v=1.3.25"></script>
@@ -59,13 +66,13 @@ If you are creating an open source application under a license compatible with t
   <script src="js/vendor/driver-1.9.0.js"></script>
   <script src="js/tour.js?v=1.3.37"></script>
   <script src="js/transcription-progress.js?v=1.3.23"></script>
-  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.42"></script>
-  <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.42"></script>
+  <script src="js/hyperaudio-lite-editor-whisper.js?v=1.3.43"></script>
+  <script src="js/hyperaudio-lite-editor-parakeet-local.js?v=1.3.43"></script>
   <script src="js/word-alignment.js?v=1.3.8"></script>
   <script src="js/html-json-converter.js?v=1.3.39"></script>
   <script src="js/ionosphere-reader.js?v=1.3.16"></script>
   <script src="js/transcript-to-ionosphere.js?v=1.3.16"></script>
-  <script src="js/whisper-json-import.js?v=1.3.42"></script>
+  <script src="js/whisper-json-import.js?v=1.3.43"></script>
   <script src="js/paragraph-timecodes.js?v=1.3.42"></script>
 
   <!-- Meta Tags required for
@@ -139,7 +146,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.42">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.43">
    <link rel="stylesheet" href="js/vendor/driver-1.9.0.css">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
@@ -1306,7 +1313,7 @@ If you are creating an open source application under a license compatible with t
 
   <script src="js/editor-file-menu.js?v=1.2.5"></script>
 
-  <script src="./js/hyperaudio-lite-editor-export.js?v=1.3.42" type="module"> </script>
+  <script src="./js/hyperaudio-lite-editor-export.js?v=1.3.43" type="module"> </script>
   <!-- end of localstorage additions -->
 
   <!-- caption editor additions -->
@@ -1358,9 +1365,10 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=1.3.41"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=1.3.42"></script>
+  <script src="js/hyperaudio-save.js?v=1.3.43"></script>
   <script src="js/tpme.js?v=1.3.22"></script>
-  <script src="js/hyperaudio-library.js?v=1.3.32"></script>
+  <script src="js/hyperaudio-library.js?v=1.3.43"></script>
+  <script src="js/transcribe-from-project.js?v=1.3.43"></script>
   <script src="js/media-first-frame.js?v=1.3.20"></script>
   <script src="js/media-posters.js?v=1.3.20"></script>
   <!-- transcript document exports: TXT / Markdown (#467) -->

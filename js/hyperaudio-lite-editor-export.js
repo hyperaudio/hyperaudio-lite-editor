@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  *
  * Export/import custom elements: transcript downloads and the Deepgram JSON,
@@ -27,6 +27,44 @@ class ExportJson extends HTMLElement {
 
 customElements.define('export-json', ExportJson);
 
+// A file that is not what an import expects (#766) is refused before anything
+// on screen is touched: the open project's transcript, player and selection
+// stay as they are, and the word goes above Recents. An import used to paint
+// whatever it was given, and a file with no words in it left a blank screen
+// under the previous project's name.
+function rejectImport(message) {
+  if (typeof window.showRecentsNotice === 'function') {
+    window.showRecentsNotice(message);
+  } else {
+    alert(message);
+  }
+}
+
+// What the editor's own export writes: an object with timed words in it
+function isHyperaudioTranscript(data) {
+  return data !== null && typeof data === 'object' && !Array.isArray(data)
+    && Array.isArray(data.words) && data.words.length > 0;
+}
+
+// A Deepgram response with words in its first channel
+function isDeepgramResponse(data) {
+  try {
+    const words = data.results.channels[0].alternatives[0].words;
+    return Array.isArray(words) && words.length > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+function parseImportedJson(text, filename) {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    rejectImport('“' + filename + '” is not valid JSON.');
+    return undefined;
+  }
+}
+
 class ImportJson extends HTMLElement {
 
   constructor() {
@@ -43,7 +81,12 @@ class ImportJson extends HTMLElement {
       const file = event.target.files[0];
       const reader = new FileReader();
       reader.addEventListener('load', (event) => {
-        const jsonData = JSON.parse(event.target.result);
+        const jsonData = parseImportedJson(event.target.result, file.name);
+        if (jsonData === undefined) return;
+        if (!isHyperaudioTranscript(jsonData)) {
+          rejectImport('“' + file.name + '” is not a Hyperaudio JSON transcript.');
+          return;
+        }
         // transform json object in html
         let hypertranscript = document.getElementById('hypertranscript');
 
@@ -52,15 +95,24 @@ class ImportJson extends HTMLElement {
         } else {
           if (typeof window.clearPendingTranscription === 'function') window.clearPendingTranscription();
           hypertranscript.innerHTML = jsonToHtml(jsonData);
+          // The file's own media URL, or none: the player is cleared, so the
+          // new project is born without the previous project's media (#757).
           const mediaUrl = jsonData.sections && jsonData.sections[0] && jsonData.sections[0].mediaUrl;
+          const player = document.querySelector("#hyperplayer");
           if (mediaUrl) {
-            document.querySelector("#hyperplayer").src = mediaUrl;
+            player.src = mediaUrl;
+          } else {
+            player.removeAttribute('src');
+            player.load();
           }
+          // The birth, once the transcript and the player hold the import. It
+          // was dispatched before the file had been read, so the new project
+          // was born from the previous transcript and media.
+          document.dispatchEvent(new CustomEvent('hyperaudioInit'));
         }
       });
       if (hypertranscript !== null) {
         reader.readAsText(file);
-        document.dispatchEvent(new CustomEvent('hyperaudioInit'));
       }
     });
     fileInput.click();
@@ -92,31 +144,46 @@ class ImportDeepgramJson extends HTMLElement {
   }
 
   confirmDeepgramJson() {
-    let player = document.querySelector("#hyperplayer");
-    if (document.querySelector('#deepgram-json-file').value == ""){
-      player.src = document.querySelector('#deepgram-json-media').value;
-    } else {
-      const file = document.querySelector('[name=deepgram-json-file]').files[0];
-      // Create a new FileReader instance
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
-      let blob = null;
-
-      reader.addEventListener('load', () => {
-
-        file.arrayBuffer().then((arrayBuffer) => {
-          blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
-          player.src = URL.createObjectURL(blob);
-        });
-      });
-    }
-
     const file = document.querySelector('[name=deepgram-json]').files[0];
+    if (file === undefined) {
+      rejectImport('Choose a Deepgram JSON file first.');
+      return;
+    }
     const reader = new FileReader();
     reader.addEventListener('load', (event) => {
-      parseData(JSON.parse(event.target.result));
+      // The JSON is read and checked before the player is touched (#766), so
+      // a file that is not a Deepgram response leaves the open project's
+      // media where it is.
+      const json = parseImportedJson(event.target.result, file.name);
+      if (json === undefined) return;
+      if (!isDeepgramResponse(json)) {
+        rejectImport('“' + file.name + '” is not a Deepgram JSON transcript.');
+        return;
+      }
+
+      let player = document.querySelector("#hyperplayer");
+      const deepgramJsonMediaUrl = document.querySelector('#deepgram-json-media').value.trim();
+      if (document.querySelector('#deepgram-json-file').value == ""){
+        // no media at all: the player is cleared, as for SRT below (#757)
+        if (deepgramJsonMediaUrl !== "") {
+          player.src = deepgramJsonMediaUrl;
+        } else {
+          player.removeAttribute('src');
+          player.load();
+        }
+      } else {
+        // The media file goes on the player as a blob URL, with nothing read
+        // into memory, before the new project is born from the JSON (#758, as
+        // #738 did for SRT and VTT). It used to be read and copied first, and
+        // a large video reached the player only after the birth, so the
+        // project was saved with the media the player held before: the
+        // previous project's.
+        player.src = URL.createObjectURL(document.querySelector('[name=deepgram-json-file]').files[0]);
+      }
+
+      parseData(json);
     });
-    
+
     reader.readAsText(file);
   }
 
@@ -207,10 +274,17 @@ class ImportSrt extends HTMLElement {
     // the player held before: the previous project's. A File is a Blob, so it
     // can go on the player as it is; the save module captures the same File
     // from this input for the project's media.
-    if (document.querySelector('#srt-file').value == ""){
-      player.src = document.querySelector('#srt-media').value;
-    } else {
+    // No media at all: the player is CLEARED, so the new project is born with
+    // none (#757). An empty string put on the player resolves to the page's
+    // own address, and the birth saved the project as a link to index.html.
+    const srtMediaUrl = document.querySelector('#srt-media').value.trim();
+    if (document.querySelector('#srt-file').value != "") {
       player.src = URL.createObjectURL(document.querySelector('[name=srt-file]').files[0]);
+    } else if (srtMediaUrl !== "") {
+      player.src = srtMediaUrl;
+    } else {
+      player.removeAttribute('src');
+      player.load();
     }
 
     const file = document.querySelector('[name=srt]').files[0];
@@ -333,10 +407,15 @@ class ImportVtt extends HTMLElement {
     // the player held before: the previous project's. A File is a Blob, so it
     // can go on the player as it is; the save module captures the same File
     // from this input for the project's media.
-    if (document.querySelector('#vtt-file').value == ""){
-      player.src = document.querySelector('#vtt-media').value;
-    } else {
+    // No media at all: the player is cleared, as for SRT above (#757).
+    const vttMediaUrl = document.querySelector('#vtt-media').value.trim();
+    if (document.querySelector('#vtt-file').value != "") {
       player.src = URL.createObjectURL(document.querySelector('[name=vtt-file]').files[0]);
+    } else if (vttMediaUrl !== "") {
+      player.src = vttMediaUrl;
+    } else {
+      player.removeAttribute('src');
+      player.load();
     }
 
     const file = document.querySelector('[name=vtt]').files[0];
@@ -655,160 +734,14 @@ window.srtToHtml = srtToHtml;
 window.vttToHtml = vttToHtml;
 window.convertSrtToWebVtt = convertSrtToWebVtt;
 
-// A caption file's words as transcript markup, with paragraphs placed by the
-// one rule every engine and import shares (#743). A caption file has no word
-// timings: each cue's duration is spread over its words, so within a cue the
-// words follow on without a gap, and only the space between one cue's end
-// and the next cue's start is a real pause. Each word therefore ends where
-// the next word in its cue starts, and the last word of a cue at the cue's end.
+// A caption file as transcript markup: js/converters/captions.js (#751).
+// These stay as globals: a native host calls srtToHtml and vttToHtml.
 function captionWordsToHtml(captionWords) {
-  const plain = (html) => String(html).replace(/<[^>]*>/g, '');
-  const words = captionWords.map((w, i) => ({
-    start: w.ms / 1000,
-    end: w.lastInCue || i === captionWords.length - 1 ? w.cueEnd : captionWords[i + 1].ms / 1000,
-    text: plain(w.html),
-  }));
-  const starts = typeof window !== 'undefined' && typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(words) : new Set();
-  let html = '<article><section><p>';
-  captionWords.forEach((w, i) => {
-    if (starts.has(i)) html += '</p><p>';
-    html += '<span data-m="' + w.ms + '">' + w.html + ' </span>';
-  });
-  return html + '</p></section></article>';
+  return window.HyperaudioConverters.captionWordsToHtml(captionWords);
 }
 
 function srtToHtml(data) {
-  let i = 0,
-  len = 0,
-  idx = 0,
-  lines,
-  time,
-  text,
-  sub;
-
-  // Simple function to convert HH:MM:SS,MMM or HH:MM:SS.MMM to SS.MMM
-  // Assume valid, returns 0 on error
-
-  let toSeconds = function(t_in) {
-    let t = t_in.split(':');
-
-    try {
-      let s = t[2].split(',');
-
-      // Just in case a . is decimal seperator
-      if (s.length === 1) {
-        s = t[2].split('.');
-      }
-
-      return (
-        parseFloat(t[0], 10) * 3600 +
-        parseFloat(t[1], 10) * 60 +
-        parseFloat(s[0], 10) +
-        parseFloat(s[1], 10) / 1000
-      );
-    } catch (e) {
-      return 0;
-    }
-  };
-
-  const captionWords = [];   // { ms, html, cueEnd, lastInCue }, in order
-
-  // Here is where the magic happens
-  // Split on line breaks
-  lines = data.split(/(?:\r\n|\r|\n)/gm);
-  len = lines.length;
-
-  for (i = 0; i < len; i++) {
-    sub = {};
-    text = [];
-
-    sub.id = parseInt(lines[i++], 10);
-
-    // Split on '-->' delimiter, trimming spaces as well
-
-    try {
-      time = lines[i++].split(/[\t ]*-->[\t ]*/);
-    } catch (e) {
-      console.log('Warning. Possible issue on line ' + i + ": '" + lines[i] + "'.");
-      break;
-    }
-
-    sub.start = toSeconds(time[0]);
-
-    // So as to trim positioning information from end
-    if (!time[1]) {
-      alert('Warning. Issue on line ' + i + ": '" + lines[i] + "'.");
-      return;
-    }
-
-    idx = time[1].indexOf(' ');
-    if (idx !== -1) {
-      time[1] = time[1].substr(0, idx);
-    }
-    sub.end = toSeconds(time[1]);
-
-    // Build single line of text from multi-line subtitle in file
-    while (i < len && lines[i]) {
-      text.push(lines[i++]);
-    }
-
-    // Join into 1 line, SSA-style linebreaks
-    // Strip out other SSA-style tags
-    sub.text = text.join('\\N').replace(/\{(\[\w]+\(?([\w\d]+,?)+\)?)+\}/gi, '');
-
-    // Escape HTML entities
-    sub.text = sub.text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    // Unescape great than and less than when it makes a valid html tag of a supported style (font, b, u, s, i)
-    // Modified version of regex from Phil Haack's blog: http://haacked.com/archive/2004/10/25/usingregularexpressionstomatchhtml.aspx
-    // Later modified by kev: http://kevin.deldycke.com/2007/03/ultimate-regular-expression-for-html-tag-parsing-with-php/
-    sub.text = sub.text.replace(
-      /&lt;(\/?(font|b|u|i|s))((\s+(\w|\w[\w\-]*\w)(\s*=\s*(?:\".*?\"|'.*?'|[^'\">\s]+))?)+\s*|\s*)(\/?)&gt;/gi,
-      '<$1$3$7>'
-    );
-    //sub.text = sub.text.replace( /\\N/gi, "<br />" );
-    sub.text = sub.text.replace(/\\N/gi, ' ');
-
-    let splitMode = 0;
-
-    let wordLengthSplit = true; //$('#word-length').prop('checked');
-
-    // enhancements to take account of word length
-
-    let swords = sub.text.split(' ');
-    let sduration = sub.end - sub.start;
-    let stimeStep = sduration / swords.length;
-
-    // determine length of words
-
-    let swordLengths = [];
-
-    let totalLetters = 0;
-    for (let si = 0, sl = swords.length; si < sl; ++si) {
-      totalLetters = totalLetters + swords[si].length;
-      swordLengths[si] = swords[si].length;
-    }
-
-    let letterTime = sduration / totalLetters;
-    let wordStart = 0;
-
-    for (let si = 0, sl = swords.length; si < sl; ++si) {
-      let wordTime = swordLengths[si] * letterTime;
-      let stime;
-      if (wordLengthSplit) {
-        stime = Math.round((sub.start + si * stimeStep) * 1000);
-      } else {
-        stime = Math.round((wordStart + sub.start) * 1000);
-      }
-
-      wordStart = wordStart + wordTime;
-      let stext = swords[si];
-
-      captionWords.push({ ms: stime, html: stext, cueEnd: sub.end, lastInCue: si === sl - 1 });
-    }
-  }
-  return captionWordsToHtml(captionWords);
+  return window.HyperaudioConverters.srt(data);
 }
 
 /**
@@ -817,141 +750,5 @@ function srtToHtml(data) {
  * @returns {string} - The converted HTML content
  */
 function vttToHtml(data) {
-  let i = 0,
-  len = 0,
-  lines,
-  time,
-  text,
-  sub;
-
-  // Simple function to convert HH:MM:SS.MMM to seconds
-  // Assume valid, returns 0 on error
-  let toSeconds = function(t_in) {
-    let t = t_in.split(':');
-
-    try {
-      let s = t[2].split('.');
-
-      // Just in case a , is decimal separator
-      if (s.length === 1) {
-        s = t[2].split(',');
-      }
-
-      return (
-        parseFloat(t[0], 10) * 3600 +
-        parseFloat(t[1], 10) * 60 +
-        parseFloat(s[0], 10) +
-        parseFloat(s[1], 10) / 1000
-      );
-    } catch (e) {
-      return 0;
-    }
-  };
-
-  const captionWords = [];   // { ms, html, cueEnd, lastInCue }, in order
-
-  // Split on line breaks
-  lines = data.split(/(?:\r\n|\r|\n)/gm);
-  len = lines.length;
-
-  // Skip the WEBVTT header line
-  let startLine = 0;
-  if (lines[0].indexOf('WEBVTT') === 0) {
-    startLine = 1;
-    
-    // Skip any header metadata lines
-    while (startLine < len && lines[startLine].trim() !== '') {
-      startLine++;
-    }
-    
-    // Skip the blank line after the header
-    startLine++;
-  }
-
-  for (i = startLine; i < len; i++) {
-    sub = {};
-    text = [];
-
-    // Skip empty lines
-    if (!lines[i].trim()) {
-      continue;
-    }
-
-    // Check if the line is a cue identifier (optional in WebVTT)
-    if (lines[i].indexOf('-->') === -1) {
-      // This might be a cue identifier, skip to the next line
-      i++;
-      
-      // Skip if we've reached the end
-      if (i >= len) break;
-    }
-
-    // Parse the timestamp line
-    if (lines[i].indexOf('-->') !== -1) {
-      time = lines[i].split(/[\t ]*-->[\t ]*/);
-      
-      sub.start = toSeconds(time[0]);
-
-      // Extract end time, removing any cue settings
-      let endTimeStr = time[1].split(/[\t ]/)[0];
-      sub.end = toSeconds(endTimeStr);
-
-      // Move to the next line, which should be the start of the text
-      i++;
-
-      // Collect all lines of text until we hit an empty line
-      while (i < len && lines[i].trim() !== '') {
-        text.push(lines[i]);
-        i++;
-      }
-
-      // Join the text lines
-      sub.text = text.join(' ').replace(/\{(\[\w]+\(?([\w\d]+,?)+\)?)+\}/gi, '');
-
-      // Escape HTML entities
-      sub.text = sub.text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-      // Unescape specific HTML tags
-      sub.text = sub.text.replace(
-        /&lt;(\/?(font|b|u|i|s))((\s+(\w|\w[\w\-]*\w)(\s*=\s*(?:\".*?\"|'.*?'|[^'\">\s]+))?)+\s*|\s*)(\/?)&gt;/gi,
-        '<$1$3$7>'
-      );
-
-      // Split into words for timestamping
-      let swords = sub.text.split(' ');
-      let sduration = sub.end - sub.start;
-      let stimeStep = sduration / swords.length;
-
-      // Determine length of words
-      let swordLengths = [];
-      let totalLetters = 0;
-      
-      for (let si = 0, sl = swords.length; si < sl; ++si) {
-        totalLetters = totalLetters + swords[si].length;
-        swordLengths[si] = swords[si].length;
-      }
-
-      let letterTime = sduration / totalLetters;
-      let wordStart = 0;
-      let wordLengthSplit = true;
-
-      for (let si = 0, sl = swords.length; si < sl; ++si) {
-        let wordTime = swordLengths[si] * letterTime;
-        let stime;
-        
-        if (wordLengthSplit) {
-          stime = Math.round((sub.start + si * stimeStep) * 1000);
-        } else {
-          stime = Math.round((wordStart + sub.start) * 1000);
-        }
-
-        wordStart = wordStart + wordTime;
-        let stext = swords[si];
-
-        captionWords.push({ ms: stime, html: stext, cueEnd: sub.end, lastInCue: si === sl - 1 });
-      }
-    }
-  }
-
-  return captionWordsToHtml(captionWords);
+  return window.HyperaudioConverters.vtt(data);
 }

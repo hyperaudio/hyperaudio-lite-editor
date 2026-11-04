@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  */
 
@@ -243,7 +243,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
           break;
         case "error":
           scheduleWorkerRetirement();
-          handleError(data.message);
+          handleError(data.message, data.stage);
           break;
       }
     };
@@ -345,15 +345,30 @@ function loadParakeetClient(modal, workerBaseUrl) {
     renderLoadingMessage();
   }
 
-  function handleError(message) {
+  // The advice fits the step that failed (#763): the media could not be read
+  // (the message says why), the model could not be downloaded (the files come
+  // from Hugging Face on first use, and a refused or lost connection shows as
+  // "Failed to fetch"), the model could not be loaded, or inference failed.
+  function adviceFor(stage, message) {
+    if (stage === "media") return "";
+    if (stage === "load") {
+      return /fetch|network|HTTP|status/i.test(String(message || ""))
+        ? "The model could not be downloaded. Check your connection and try again later."
+        : "The model could not be loaded. Reload the page and try again.";
+    }
+    return "Reload the page and try again.";
+  }
+
+  function handleError(message, stage) {
     stopProgressClock();
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(false);
     }
     console.error("Parakeet error: " + message);
+    const advice = adviceFor(stage, message);
     const detail = message ? '<br/><span style="font-size:80%; opacity:0.7">'+String(message).slice(0, 200)+'</span>' : '';
     showTranscriptNotice(
-      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Reload the page and try again.'+detail+'</center></div>');
+      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.'+(advice ? '<br/>' + advice : '')+detail+'</center></div>');
   }
 
   async function handleFormSubmission() {
@@ -386,20 +401,30 @@ function loadParakeetClient(modal, workerBaseUrl) {
 
     if (!useUrl) {
       videoPlayer.src = URL.createObjectURL(file);
+    } else {
+      // The URL goes on the player NOW, before the busy signal, as the cloud
+      // engines do (#643): the save module captures what is being transcribed
+      // at that signal. With the previous project's media still on the player,
+      // the new project was named after that media and saved with its file.
+      // readAudioFromUrl attaches the URL properly once it is classified
+      // (plain or HLS), so playback and click-to-seek are as before.
+      if (typeof detachHls === "function") detachHls(videoPlayer);
+      videoPlayer.src = mediaUrl;
     }
-    // for a URL, playback is set up inside readAudioFromUrl once the source is
-    // classified (HLS vs plain), so click-to-seek works after transcription.
 
     if (document.querySelector('#transcribe-dialog') !== null){
       document.querySelector('#transcribe-dialog').close();
     }
 
     const loadingMessageContainer = document.getElementById("hypertranscript");
-    showTranscriptNotice('<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>');
+    // the URL is read before the model is touched, and a host that is slow or
+    // dead holds this step (#762): the notice says which step it is
+    const firstStep = useUrl ? "Reading the media from the URL…" : "Preparing model…";
+    showTranscriptNotice('<div class="vertically-centre"><center class="transcribing-msg">' + firstStep + '</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>');
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(true);
     }
-    progressMessage = "Preparing model…";
+    progressMessage = firstStep;
     startProgressClock();
 
     let audio;
@@ -411,7 +436,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
         : await decodeToMono16k(file);
     } catch (e) {
       console.error(e);
-      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.");
+      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.", "media");
       return;
     }
 
@@ -438,26 +463,12 @@ function loadParakeetClient(modal, workerBaseUrl) {
   }
 }
 
-// Build the editor's word-span HTML from { words: [{ word, start, end }] }.
-// Adapted from the cloud Parakeet module (#307): local transcription has no
-// diarization, so there are no speaker spans and no VTT language label.
+// The transcript on the page from the worker's { words: [{ word, start, end }] }:
+// the same converter as the endpoint, js/converters/parakeet.js (#751). Local
+// transcription has no diarization and no VTT language label.
 function parakeetParseData(json) {
-
-  const wordData = json.words;
-  const ms = (s) => Math.round(s * 1000);
-  // where paragraphs start: the one rule every engine and import shares (#743)
-  const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-    ? window.hyperaudioParagraphStarts(wordData.map((w) => ({ start: w.start, end: w.end, text: w.word }))) : new Set();
-
-  let hyperTranscript = "<article>\n <section>\n  <p>\n   ";
-
-  wordData.forEach((element, index) => {
-    if (paragraphStarts.has(index)) hyperTranscript += "\n  </p>\n  <p>\n   ";
-    hyperTranscript += `<span data-m='${ms(element.start)}' data-d='${ms(element.end - element.start)}'>${element.word} </span>`;
-  });
-
-  hyperTranscript += "\n </p> \n </section>\n</article>\n ";
-  hyperTranscript = hyperTranscript.replace(/<p>\s*<\/p>\s*/g, '');
+  const converted = window.HyperaudioConverters.parakeet(json);
+  const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
 
   // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
   if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html: hyperTranscript })) {

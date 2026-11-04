@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
+ * @version 1.3.43 — last changed in release 1.3.43
  * @license MIT
  */
 
@@ -230,7 +230,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
           break;
         case "error":
           scheduleWorkerRetirement();
-          handleError(data.message);
+          handleError(data.message, data.stage);
           break;
       }
     };
@@ -325,15 +325,30 @@ function loadWhisperClient(modal, workerBaseUrl) {
     renderLoadingMessage();
   }
 
-  function handleError(message) {
+  // The advice fits the step that failed (#763): the media could not be read
+  // (the message says why), the model could not be downloaded (the files come
+  // from Hugging Face on first use, and a refused or lost connection shows as
+  // "Failed to fetch"), the model could not be loaded, or inference failed.
+  function adviceFor(stage, message) {
+    if (stage === "media") return "";
+    if (stage === "load") {
+      return /fetch|network|HTTP|status/i.test(String(message || ""))
+        ? "The model could not be downloaded. Check your connection and try again later."
+        : "The model could not be loaded. Try a smaller model or reload the page.";
+    }
+    return "Try a smaller model or reload the page.";
+  }
+
+  function handleError(message, stage) {
     stopProgressClock();
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(false);
     }
     console.error("Whisper error: " + message);
+    const advice = adviceFor(stage, message);
     const detail = message ? '<br/><span style="font-size:80%; opacity:0.7">'+String(message).slice(0, 200)+'</span>' : '';
     showTranscriptNotice(
-      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.<br/>Try a smaller model or reload the page.'+detail+'</center></div>');
+      '<div class="vertically-centre"><img src="'+errorSvg+'" width="50" alt="error" style="margin: auto; display: block;"><br/><center>Sorry.<br/>Transcription failed.'+(advice ? '<br/>' + advice : '')+detail+'</center></div>');
   }
 
   function handleInferenceDone(results) {
@@ -342,26 +357,9 @@ function loadWhisperClient(modal, workerBaseUrl) {
       setTranscriptBusy(false);
     }
 
-    let hypertranscript = "";
-
-    // whisper marks word boundaries with a leading space on the text; empty
-    // text and text in square brackets (things like [BLANK_AUDIO]) are dropped
-    // BEFORE paragraphs are placed, so a dropped noise word cannot hide a pause
-    const kept = results.output.chunks
-      .map((word) => ({ text: word.text.trim(), start: word.timestamp[0], end: word.timestamp[1] ?? (word.timestamp[0] + 0.5) }))
-      .filter((w) => w.text.length > 0 && w.text.indexOf("[") < 0 && w.text.indexOf("]") < 0);
-    // where paragraphs start: the one rule every engine and import shares (#743)
-    const paragraphStarts = typeof window.hyperaudioParagraphStarts === 'function'
-      ? window.hyperaudioParagraphStarts(kept) : new Set();
-
-    kept.forEach((w, index) => {
-      const start = Math.floor(w.start * 1000);
-      const duration = Math.max(0, Math.floor((w.end * 1000) - 1) - start);
-      if (paragraphStarts.has(index)) hypertranscript += "\n  </p>\n  <p>\n";
-      hypertranscript += `<span data-m='${start}' data-d='${duration}'>${w.text} </span>\n`;
-    });
-
-    const html = "<article>\n <section>\n  <p>\n" + hypertranscript + "  </p>\n </section>\n</article>\n";
+    // the pipeline's chunks as the transcript: js/converters/whisper.js (#751)
+    const converted = window.HyperaudioConverters.whisper(results.output);
+    const html = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
     // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
     if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html })) {
       return;
@@ -431,20 +429,30 @@ function loadWhisperClient(modal, workerBaseUrl) {
 
     if (!useUrl) {
       videoPlayer.src = URL.createObjectURL(file);
+    } else {
+      // The URL goes on the player NOW, before the busy signal, as the cloud
+      // engines do (#643): the save module captures what is being transcribed
+      // at that signal. With the previous project's media still on the player,
+      // the new project was named after that media and saved with its file.
+      // readAudioFromUrl attaches the URL properly once it is classified
+      // (plain or HLS), so playback and click-to-seek are as before.
+      if (typeof detachHls === "function") detachHls(videoPlayer);
+      videoPlayer.src = mediaUrl;
     }
-    // for a URL, playback is set up inside readAudioFromUrl once the source is
-    // classified (HLS vs plain), so click-to-seek works after transcription.
 
     if (document.querySelector('#transcribe-dialog') !== null){
       document.querySelector('#transcribe-dialog').close();
     }
 
     const loadingMessageContainer = document.getElementById("hypertranscript");
-    showTranscriptNotice('<div class="vertically-centre"><center class="transcribing-msg">Preparing model…</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>');
+    // the URL is read before the model is touched, and a host that is slow or
+    // dead holds this step (#762): the notice says which step it is
+    const firstStep = useUrl ? "Reading the media from the URL…" : "Preparing model…";
+    showTranscriptNotice('<div class="vertically-centre"><center class="transcribing-msg">' + firstStep + '</center><br/><img src="'+transcribingSvg+'" width="50" alt="transcribing" style="margin: auto; display: block;"></div>');
     if (typeof setTranscriptBusy === "function") {
       setTranscriptBusy(true);
     }
-    progressMessage = "Preparing model…";
+    progressMessage = firstStep;
     startProgressClock();
 
     let audio;
@@ -456,7 +464,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
         : await decodeToMono16k(file);
     } catch (e) {
       console.error(e);
-      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.");
+      handleError(useUrl ? (e.message || "Could not load audio from the URL.") : "Could not decode the media file.", "media");
       return;
     }
 
