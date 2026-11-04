@@ -351,7 +351,7 @@
       let duration = endTime - startTime;
 
       document.querySelector('video').currentTime = startTime;
-      document.querySelector('video').play();
+      playReporting(document.querySelector('video'));
 
       let clipTimer = setInterval(function(){
         if(document.querySelector('video').currentTime > endTime){
@@ -426,13 +426,26 @@
 
     // Docked play bar: a play/pause button + a full-width seek bar below the
     // transcript, an alternative to the player's own (cramped) native scrubber.
+    // play() answers with a promise that rejects when the browser cannot
+    // play the source (Safari and an avc3 MP4, #740). Left alone, that was an
+    // unhandled rejection and nothing more. The rejection is announced, and
+    // media-unplayable.js says so under the picture.
+    function playReporting(video) {
+      const started = video.play();
+      if (started && typeof started.catch === 'function') {
+        started.catch((e) => {
+          document.dispatchEvent(new CustomEvent('hyperaudioPlayRejected', { detail: e }));
+        });
+      }
+    }
+
     function togglePlay() {
       const video = document.querySelector('#hyperplayer');
       if (video === null) {
         return;
       }
       if (video.paused) {
-        video.play();
+        playReporting(video);
       } else {
         video.pause();
       }

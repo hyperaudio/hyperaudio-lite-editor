@@ -1928,7 +1928,15 @@
     sourceEdited.disabled = !edits;
     if (editedLabel !== null) editedLabel.classList.toggle('export-source-off', !edits);
     setSourceNote(edits);
-    if (edits) {
+    // media the browser never loaded (#740): no length to trade against, so
+    // nothing to export, and no "saves NaNs" from Infinity minus Infinity
+    const unplayable = !Number.isFinite(duration);
+    if (unplayable) {
+      editSummary.textContent = '(media length unknown)';
+      sourceEdited.disabled = true;
+      sourceEntire.checked = true;
+      startBtn.classList.add('btn-disabled');
+    } else if (edits) {
       const saved = duration - keptDuration(sections);
       editSummary.textContent = `(${sections.length - 1} cut${sections.length - 1 === 1 ? '' : 's'}, saves ${saved.toFixed(1)}s)`;
       sourceEdited.checked = true;
@@ -2047,6 +2055,10 @@
     } catch (e) {
       console.error(e);
       setStatus('Could not load the export library — check your connection and try again.');
+      startBtn.classList.add('btn-disabled');
+    }
+    if (unplayable) {
+      setStatus('The media has not loaded in this browser, so there is nothing to export.');
       startBtn.classList.add('btn-disabled');
     }
   };
