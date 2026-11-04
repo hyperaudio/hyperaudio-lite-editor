@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 1.3.42 */
+/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 1.3.44 */
 
 // Self-contained, modular display feature. To remove it entirely: delete this
 // file, its <script> tag in index.html, and the #show-timecodes checkbox.
@@ -81,19 +81,28 @@
       return;
     }
 
-    // Reuse existing timecode elements where possible (cheap reflow updates);
-    // only rebuild when the paragraph count changes.
+    // Reads and writes in separate passes (#735). A style write followed by a
+    // read of a rectangle makes the browser lay the transcript out again
+    // before it can answer, and the old loop did that once per paragraph, so
+    // a toggle on a long transcript cost thousands of layouts. Now: the
+    // labels are written, their widths read in one go, the room written,
+    // every paragraph's top read in one go, and the positions written.
+
+    // Reuse existing timecode elements where possible; only rebuild when the
+    // paragraph count changes, and then append them all at once.
     let tcs = Array.prototype.slice.call(
       holder.querySelectorAll(':scope > .para-timecode'),
     );
     if (tcs.length !== paragraphs.length) {
       clearTimecodes(holder);
+      const fragment = document.createDocumentFragment();
       tcs = paragraphs.map(() => {
         const tc = document.createElement('div');
         tc.className = 'para-timecode';
-        holder.appendChild(tc);
+        fragment.appendChild(tc);
         return tc;
       });
+      holder.appendChild(fragment);
     }
 
     const GAP = 12;
@@ -109,27 +118,34 @@
     // The room the labels need beside the text. Where the margin is narrower
     // than that (a window just wide enough to keep Recents open), the
     // stylesheet narrows the transcript from the left by the difference (#747).
-    const room = Math.ceil(Math.max(...tcs.map((tc) => tc.offsetWidth))) + GAP;
+    let widest = 0;
+    for (let i = 0; i < tcs.length; i++) {
+      const w = tcs[i].offsetWidth;
+      if (w > widest) widest = w;
+    }
+    const room = Math.ceil(widest) + GAP;
     holder.style.setProperty('--timecode-room', `${room}px`);
     holder.classList.add('with-timecodes');
 
     // Place each label in the left margin, OUTSIDE the transcript, so the
     // reading column never shifts. The transcript is centred in the wider
     // holder; right-anchor the label to end just before the transcript's left
-    // edge, and top-align it to the paragraph's first line.
+    // edge, and top-align it to the paragraph's first line. Every rectangle
+    // is read before any position is written.
     const holderRect = holder.getBoundingClientRect();
     const transcriptRect = transcript.getBoundingClientRect();
     const scrollTop = holder.scrollTop;
     const rightOffset = holderRect.width - (transcriptRect.left - holderRect.left) + GAP;
     // Match the paragraph's line-height so the small label aligns with its first line.
     const lineHeight = getComputedStyle(paragraphs[0].paragraph).lineHeight;
-    paragraphs.forEach((item, i) => {
-      const tc = tcs[i];
-      tc.style.right = `${rightOffset}px`;
-      tc.style.lineHeight = lineHeight;
-      const top = item.paragraph.getBoundingClientRect().top - holderRect.top + scrollTop;
-      tc.style.top = `${top}px`;
-    });
+    const tops = paragraphs.map((item) => item.paragraph.getBoundingClientRect().top - holderRect.top + scrollTop);
+    const right = `${rightOffset}px`;
+    for (let i = 0; i < tcs.length; i++) {
+      const style = tcs[i].style;
+      style.right = right;
+      style.lineHeight = lineHeight;
+      style.top = `${tops[i]}px`;
+    }
   }
 
   function scheduleReposition() {
