@@ -1517,9 +1517,14 @@
     return keptDuration(edited ? editedSections(dur) : [{ start: 0, end: dur }]);
   };
 
+  // m:ss under an hour, h:mm:ss from an hour on (#737), as the play bar, the
+  // paragraph timecodes and Recents show it
   const fmtLen = (s) => {
     s = Math.max(0, Math.round(s));
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = String(s % 60).padStart(2, '0');
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
   };
   // The target length is entered as SEPARATE minutes/seconds boxes (#441):
   // the old single m:ss text field read a bare "15" as 15 seconds, so a
@@ -1907,7 +1912,11 @@
     const base = exportBaseName();
     if (!clipChosen()) return base;
     const s = Math.round(clipRange.from);   // the first word's own start
-    return `${base}-${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = String(s % 60).padStart(2, '0');
+    // "talk-0m42s", or "talk-1h15m20s" from an hour on (#737)
+    return h > 0 ? `${base}-${h}h${String(m).padStart(2, '0')}m${ss}s` : `${base}-${m}m${ss}s`;
   };
   const applyDefaultName = (force) => {
     if (nameInput === null) return;
