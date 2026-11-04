@@ -1,8 +1,8 @@
 /**
  * tpme.js
  * (C) The Hyperaudio Project
- * @version 1.3.22 — last changed in release 1.3.22
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Transcript provenance sidecars (#668): how a transcript came to be — which
  * engine and model made it, with what settings, whether a person corrected

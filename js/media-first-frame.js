@@ -1,8 +1,8 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.20 — last changed in release 1.3.20
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * First-frame display for video media (#556). A <video> shows its poster —
  * or nothing — until a frame is decoded, which with preload=metadata never

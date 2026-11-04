@@ -71,18 +71,18 @@ with your change. This keeps fixes from silently regressing later.
 
 ## Contributor License Agreement
 
-Hyperaudio Lite Editor is provided under a **triple license model** (see
-[README](./README.md#licensing) and [LICENSES](./LICENSES)):
+Hyperaudio Lite Editor is provided under a **dual license model** (see
+[README](./README.md#licensing)):
 
-- **AGPL-3.0** — the default open-source license;
-- **MIT** — for non-commercial / not-for-profit use;
-- a **commercial license** — for proprietary/commercial use.
+- **AGPL-3.0** — the default open-source license, for everyone who shares
+  their changes under the same terms.
+- A **commercial license** — for proprietary use.
 
-Because the project is distributed under these different licenses (including a
-commercial one), we ask every contributor to agree to a **Contributor License
+Because the project is distributed under these two licenses (one of them
+commercial), we ask every contributor to agree to a **Contributor License
 Agreement (CLA)** before their contribution can be merged. In short, the CLA
 lets you keep the copyright to your work while granting the project the rights
-it needs to include your contribution under **all** of the licenses above.
+it needs to include your contribution under **both** of the licenses above.
 
 - Read the agreement: **[CLA.md](./CLA.md)**.
 - **How to sign:** we use [CLA Assistant](https://cla-assistant.io/). The bot

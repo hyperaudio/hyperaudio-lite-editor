@@ -1,8 +1,8 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
  * v3 served through HuggingFace's inference router, called directly from the

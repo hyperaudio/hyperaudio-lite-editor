@@ -1,8 +1,8 @@
 /**
  * whisper.worker.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  */
 
 // transformers.js 4.3.1 with the fix from huggingface/transformers.js#1755,

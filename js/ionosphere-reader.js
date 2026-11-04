@@ -1,8 +1,8 @@
 /**
  * ionosphere-reader.js
  * (C) The Hyperaudio Project
- * @version 1.3.16 — last changed in release 1.3.16
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Reads an ionosphere talk (tv.ionosphere / pub.layers records, #346) from
  * any AT Protocol repository — public, no sign-in — and rebuilds the

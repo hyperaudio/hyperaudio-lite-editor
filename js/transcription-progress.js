@@ -1,8 +1,8 @@
 /**
  * transcription-progress.js
  * (C) The Hyperaudio Project
- * @version 1.3.23 — last changed in release 1.3.23
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * A percentage for a local transcription that moves within each window
  * (#676), from the facts a worker can report:

@@ -1,8 +1,8 @@
 /**
  * converters/assemblyai.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * AssemblyAI's transcript (#751): its word list, with times in MILLISECONDS
  * and a `speaker` letter on each word when the request asked for speaker

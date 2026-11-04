@@ -1,8 +1,8 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  */
 
 import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort.all.min.mjs";

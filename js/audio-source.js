@@ -1,8 +1,8 @@
 /**
  * audio-source.js
  * (C) The Hyperaudio Project
- * @version 1.3.17 — last changed in release 1.3.17
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Shared audio-decode helper for the local transcription engines.
  *

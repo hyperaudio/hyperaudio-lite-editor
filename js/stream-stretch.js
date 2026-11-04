@@ -1,8 +1,8 @@
 /**
  * stream-stretch.js
  * (C) The Hyperaudio Project
- * @version 0.8.6 — extracted from media-export.js in release 0.8.6
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Incremental pitch-preserved time-stretch for export (#405).
  *

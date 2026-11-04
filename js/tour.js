@@ -1,8 +1,8 @@
 /**
  * tour.js
  * (C) The Hyperaudio Project
- * @version 1.3.37 — last changed in release 1.3.37
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * A tour of the editor (#718): a few cards, each pointing at one part of the
  * page, driven by driver.js (js/vendor/driver-1.9.0.js). It runs once, the

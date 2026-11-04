@@ -1,8 +1,8 @@
 /**
  * editor-service-worker.js
  * (C) The Hyperaudio Project
- * @version 1.3.21 — last changed in release 1.3.21
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Registers serviceworker.js, which is what lets the editor open offline.
  * Extracted from index.html (#334).

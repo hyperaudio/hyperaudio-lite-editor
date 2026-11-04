@@ -1,8 +1,8 @@
 /**
  * converters/whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * The editor's own Whisper (#751): what the transformers.js pipeline returns
  * from the worker, `{ chunks: [{ text, timestamp: [start, end] }] }` with

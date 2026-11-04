@@ -1,8 +1,8 @@
 /**
  * responsive.js
  * (C) The Hyperaudio Project
- * @version 1.3.11 — last changed in release 1.3.11
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Small-screen UI toggles for the responsive layout (#349):
  * open/close the Recents off-canvas drawer via the existing #sidebar-toggle.

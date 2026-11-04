@@ -1,8 +1,8 @@
 /**
  * caption-speaker-colours.js
  * (C) The Hyperaudio Project
- * @version 1.3.21 — last changed in release 1.3.21
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Speaker-coloured caption downloads (#536), export only.
  *

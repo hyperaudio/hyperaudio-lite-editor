@@ -1,8 +1,8 @@
 /**
  * transcript-serializer.js
  * (C) The Hyperaudio Project
- * @version 1.1.8 — last changed in release 1.1.8
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Canonical transcript serialization for the HTML and interactive-transcript
  * exports. The live DOM accumulates editing noise (runtime classes, WebKit

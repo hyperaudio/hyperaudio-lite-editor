@@ -1,8 +1,8 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  */
 
 // Where this engine keeps its downloaded models (#615), so Settings can size
@@ -73,7 +73,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.42";
+  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.44";
 
   // On Chrome (Chromium) Parakeet runs fp16 on the GPU (WebGPU) – fast, and the
   // default. Firefox's WebGPU underperforms here and Safari's can exhaust memory
