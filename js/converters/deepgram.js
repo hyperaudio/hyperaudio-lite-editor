@@ -1,8 +1,8 @@
 /**
  * converters/deepgram.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Deepgram's response (#751): the words of the first channel's first
  * alternative, with the summary, the topics, the detected language and the

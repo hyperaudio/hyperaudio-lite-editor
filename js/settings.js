@@ -1,8 +1,8 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.35 — last changed in release 1.3.35
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
  * The rule for what belongs here is whether it travels in the .hyperaudio —

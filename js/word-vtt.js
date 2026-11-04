@@ -1,8 +1,8 @@
 /**
  * word-vtt.js
  * (C) The Hyperaudio Project
- * @version 1.1.9 — last changed in release 1.1.9
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Word-level ("karaoke") WebVTT export (#387, part 1).
  *

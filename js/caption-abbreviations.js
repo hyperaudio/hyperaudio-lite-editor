@@ -1,8 +1,8 @@
 /**
  * caption-abbreviations.js
  * (C) The Hyperaudio Project
- * @version 1.3.21 — last changed in release 1.3.21
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Words that end in a full stop and never end a sentence, per language (#662).
  * Data only. caption.js is handed the list for the project's language and

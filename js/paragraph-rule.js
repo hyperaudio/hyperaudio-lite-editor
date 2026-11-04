@@ -1,8 +1,8 @@
 /**
  * paragraph-rule.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Where a transcript's paragraphs start (#743). One rule for every engine and
  * every import, so the same recording reads the same however it arrived. It

@@ -1,4 +1,5 @@
 {
+  "license": "AGPL-3.0-only",
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "autoprefixer": "^10.4.14",

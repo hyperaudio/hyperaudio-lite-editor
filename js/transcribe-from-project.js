@@ -1,8 +1,8 @@
 /**
  * transcribe-from-project.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Retranscribe, from a Recents row (#677): opens the project, then the
  * Transcribe dialog with that project's media already chosen, so the user

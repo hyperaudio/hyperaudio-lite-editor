@@ -1,8 +1,8 @@
 /**
  * media-posters.js
  * (C) The Hyperaudio Project
- * @version 1.3.20 — last changed in release 1.3.20
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Project posters (#523 phase A): a first-frame JPEG captured from each
  * video project's media, stored as poster.jpg beside the project's other

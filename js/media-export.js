@@ -1,8 +1,8 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.42 — last changed in release 1.3.42
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
  * WAV / M4A (AAC) / Ogg (Opus) / MP3, or — when the source has video — MP4 /

@@ -206,19 +206,17 @@ Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to g
 
 ### Licensing
 
-`Hyperaudio Lite Editor`'s source code is provided under a **triple license model**.
+`Hyperaudio Lite Editor`'s source code is provided under a **dual license model**.
 
 #### Open source license
 
-If you are creating an open source application under a license compatible with the GNU Affero GPL license v3, you may use `Hyperaudio Lite Editor` for free under the terms of the [AGPL-3.0](./LICENSE). This is the default license for `Hyperaudio Lite Editor`.
-
-#### Non-commercial use
-
-If you are a non-commerical / not-for-profit entity or organisation and wish to to use this software for non-commercial please contact [mark@hyperaud.io](mailto:mark@hyperaud.io) to use `Hyperaudio Lite Editor` for free under the terms of the [MIT License](/.LICENSE-MIT)
+If you are creating an application under a license compatible with the GNU Affero GPL license v3, you may use `Hyperaudio Lite Editor` for free under the terms of the [AGPL-3.0](./LICENSE). This is the default license for `Hyperaudio Lite Editor`, and it applies to everyone, companies and not-for-profit organisations alike. In short, you may use, change and share the editor freely, and anyone who changes it and runs it for others or passes it on makes their changes available under the same terms.
 
 #### Commercial license
 
-If you'd like to use `Hyperaudio Lite Editor` to develop commercial sites, tools, and applications, the Commercial License is the appropriate license. With this option, your source code is kept proprietary. To enquire about a `Hyperaudio Lite Editor` Commercial License please contact [mark@hyperaud.io](mailto:mark@hyperaud.io).
+If you'd like to use `Hyperaudio Lite Editor` to develop sites, tools and applications whose source code is kept proprietary, the Commercial License is the appropriate license. To enquire about a `Hyperaudio Lite Editor` Commercial License please contact [mark@hyperaud.io](mailto:mark@hyperaud.io).
+
+The vendored `hyperaudio-lite` player and caption library in `js/` and `css/` are separate projects under the MIT license and keep their own notices.
 
 ### Support
 

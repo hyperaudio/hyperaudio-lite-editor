@@ -63,7 +63,7 @@ explains the folder. A converter is a classic script that registers itself on
  * converters/acme.js
  * (C) The Hyperaudio Project
  * @version 1.3.44 — last changed in release 1.3.44
- * @license MIT
+ * @license AGPL-3.0-only
  *
  * Acme's transcript (#NNN): its word list, with times in milliseconds, as the
  * editor's canonical transcript. The client (js/hyperaudio-lite-editor-acme.js)
