@@ -208,7 +208,9 @@ test.describe('short viewport', () => {
     // #346's publish and import entries). Scrolled to its end, its LAST
     // entry must actually reach the play-bar zone, or this asserts nothing.
     await page.evaluate(() => { const ul = document.getElementById('file-dropdown'); ul.scrollTop = ul.scrollHeight; });
-    const item = page.locator('#file-download-submenu ul > li').last().locator('> *');
+    // the last entry that is shown: Original media (#752) is hidden for a
+    // project that plays from a link, as the intro does
+    const item = page.locator('#file-download-submenu ul > li:not([hidden])').last().locator('> *');
     const itemBox = await item.boundingBox();
     const barBox = await page.locator('#playbar').boundingBox();
     expect(itemBox.y + itemBox.height).toBeGreaterThan(barBox.y);

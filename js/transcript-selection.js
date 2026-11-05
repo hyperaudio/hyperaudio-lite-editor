@@ -1,8 +1,8 @@
 /**
  * transcript-selection.js
  * (C) The Hyperaudio Project
- * @version 1.3.41 — last changed in release 1.3.41
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * What is selected in the transcript, as a stretch of media — for anything
  * that acts on "the selection" from a dialog: exporting a clip (#689), and

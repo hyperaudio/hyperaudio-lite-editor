@@ -1,8 +1,8 @@
 /**
  * converters/captions.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * A caption file, SRT or WebVTT, as transcript markup (#751). The file's
  * cues are read, each cue's duration is spread over its words, and the

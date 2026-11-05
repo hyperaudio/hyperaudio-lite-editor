@@ -1,8 +1,8 @@
 /**
  * converters/whisper-json.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * A Whisper JSON file (#631, #751) as the editor's canonical transcript. The
  * import dialog (js/whisper-json-import.js) reads the file and puts the

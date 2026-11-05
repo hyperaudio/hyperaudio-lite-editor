@@ -63,7 +63,7 @@ explains the folder. A converter is a classic script that registers itself on
  * converters/acme.js
  * (C) The Hyperaudio Project
  * @version 1.3.44 — last changed in release 1.3.44
- * @license MIT
+ * @license AGPL-3.0-only
  *
  * Acme's transcript (#NNN): its word list, with times in milliseconds, as the
  * editor's canonical transcript. The client (js/hyperaudio-lite-editor-acme.js)
@@ -175,9 +175,13 @@ keeps its lists, or four things silently fail:
   on a Recents row (#677) puts the project's media into every engine's
   inputs, and an engine missing from those lists opens with nothing chosen.
   The result replacing that project's transcript is the project library's
-  doing, not the engine's, but it has to know the engine's submit button:
-  `SUBMIT_LABELS` in `hyperaudio-save.js`. A button missing from that list
-  makes Retranscribe through that engine quietly produce a new project.
+  doing, not the engine's, but it has to know when the engine was started:
+  mark the engine's submit button `data-transcribe-submit`, as the five in
+  `index.html` are. A button without the marker makes Retranscribe through
+  that engine quietly produce a new project. An engine with no button of its
+  own in the page, a host's own dialog say, arms the replacement itself with
+  `HyperaudioSave.library.retranscribe(id, { committed: true })` before it
+  signals busy.
 
 An option that is not ready for everyone can carry `data-experimental`: it
 stays out of the page until Settings ▸ Application ▸ Experimental features is
@@ -390,7 +394,7 @@ Expose a function on `window` only when a host calls it. `parseData`
 - [ ] the contract in order: caption mode off, media on the player, `showTranscriptNotice` with `.transcribing-msg`, `setTranscriptBusy(true)`, then background check, `hyperaudioKeepTranscription`, `innerHTML`, `setTranscriptionInfo`, `setTranscriptBusy(false)`, `hyperaudioInit`, `hyperaudioGenerateCaptionsFromTranscript`
 - [ ] errors through `showTranscriptNotice`, always `setTranscriptBusy(false)`
 - [ ] `info` with `service`, `model`, `language`, `languageCode`, `seconds`, `modelId`, `parameters`, no credentials
-- [ ] input ids added in `editor-core.js`, `hyperaudio-save.js` (`wireCapture`), `transcribe-prefs.js` and `transcribe-from-project.js`, and the submit button in `hyperaudio-save.js` (`SUBMIT_LABELS`)
+- [ ] input ids added in `editor-core.js`, `hyperaudio-save.js` (`wireCapture`), `transcribe-prefs.js` and `transcribe-from-project.js`, and `data-transcribe-submit` on the submit button
 - [ ] local engine: worker path with `?v=`, device choice and report, progress into `.transcribing-msg`, idle retirement, `HyperaudioModelStores`, the SW test's worker list
 - [ ] script tags with `?v=`, `PRECACHE`, `@version` on every touched file
 - [ ] no duplicate basenames in the tree

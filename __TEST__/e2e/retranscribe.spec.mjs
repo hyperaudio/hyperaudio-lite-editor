@@ -350,3 +350,80 @@ test('while an engine is running the item is disabled too', async ({ page }, tes
   await expect(item(page)).toBeDisabled();
   await expect(item(page)).toHaveAttribute('title', 'A transcription is already running');
 });
+
+// #768 — the commit is a thing an engine says, not an id the library knows.
+// A host's own submit button qualifies by carrying data-transcribe-submit,
+// and a host that runs its engine with no button at all arms the replacement
+// itself. Both then run the engine contract by hand, as a host would.
+const hostTranscribe = (page) => page.evaluate(async () => {
+  document.querySelector('#hypertranscript').innerHTML = '<div>Transcribing….</div>';
+  window.setTranscriptBusy(true);
+  await new Promise((r) => setTimeout(r, 300));
+  document.querySelector('#hypertranscript').innerHTML =
+    "<article><section><p><span data-m='100' data-d='500'>Host </span><span data-m='700' data-d='400'>result. </span></p></section></article>";
+  window.setTranscriptBusy(false);
+  document.dispatchEvent(new CustomEvent('hyperaudioInit'));
+  document.dispatchEvent(new CustomEvent('hyperaudioGenerateCaptionsFromTranscript'));
+});
+
+async function expectReplaced(page, interview) {
+  await expect(page.locator('#hypertranscript')).toContainText('Host result.');
+  await pollPage(page, async (id) => {
+    const e = (await window.HyperaudioSave.library.list()).find((p) => p.id === id);
+    return !!(e && e.lastSavedAt > Date.parse('2026-07-10T11:30:00Z'));
+  }, interview);
+  expect(await names(page)).toEqual(['Interview', 'Other work']);
+  expect((await entryOf(page, 'Interview')).id).toBe(interview);
+}
+
+test('a submit button marked data-transcribe-submit commits the replacement, whoever added it (#768)', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Interview', 'original');
+  await openProject(page, testInfo, 'Other work', 'original');
+  const interview = (await entryOf(page, 'Interview')).id;
+  await retranscribe(page, 'Interview');
+  // a host's button, in the dialog, closing it like the editor's own
+  await page.evaluate(() => {
+    const label = document.createElement('label');
+    label.id = 'host-submit';
+    label.htmlFor = 'transcribe-modal';
+    label.setAttribute('data-transcribe-submit', '');
+    label.textContent = 'HOST TRANSCRIBE';
+    document.querySelector('#transcribe-modal ~ .modal, .modal').appendChild(label);
+  });
+  await page.evaluate(() => document.getElementById('host-submit').click());
+  await expect.poll(() => modalOpen(page)).toBe(false);
+  await hostTranscribe(page);
+  await expectReplaced(page, interview);
+});
+
+test('a host that runs its own engine arms the replacement with { committed: true } and uses no dialog (#768)', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Interview', 'original');
+  await openProject(page, testInfo, 'Other work', 'original');
+  const interview = (await entryOf(page, 'Interview')).id;
+  await page.evaluate(async (id) => {
+    const save = window.HyperaudioSave;
+    await save.library.open(id);
+    if ((await save.library.retranscribe(id, { committed: true })) !== true) throw new Error('not armed');
+  }, interview);
+  await expect(page.locator('#file-picker .file-item.active')).toHaveText('Interview');
+  await hostTranscribe(page);
+  await expectReplaced(page, interview);
+});
+
+test('an unmarked button is not a commit: the next transcription is a new project (#768)', async ({ page }, testInfo) => {
+  await openProject(page, testInfo, 'Interview', 'original');
+  await openProject(page, testInfo, 'Other work', 'original');
+  await retranscribe(page, 'Interview');
+  await page.evaluate(() => {
+    const label = document.createElement('label');
+    label.id = 'plain-close';
+    label.htmlFor = 'transcribe-modal';
+    label.textContent = 'CLOSE';
+    document.querySelector('.modal').appendChild(label);
+  });
+  await page.evaluate(() => document.getElementById('plain-close').click());
+  await expect.poll(() => modalOpen(page)).toBe(false);
+  await hostTranscribe(page);
+  await expect(page.locator('#hypertranscript')).toContainText('Host result.');
+  await expect.poll(() => names(page)).toHaveLength(3);
+});

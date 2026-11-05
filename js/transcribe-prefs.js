@@ -1,8 +1,8 @@
 /**
  * transcribe-prefs.js
  * (C) The Hyperaudio Project
- * @version 1.3.14 — last changed in release 1.3.14
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Remembers the Transcribe modal's choices across sessions (#390): the
  * Local/Cloud service switch, the selected engine tab in each group, each

@@ -1,8 +1,8 @@
 /**
  * hyperaudio-lite-editor-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Export/import custom elements: transcript downloads and the Deepgram JSON,
  * SRT and WebVTT import dialogs.

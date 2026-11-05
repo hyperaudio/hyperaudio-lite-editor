@@ -1,8 +1,8 @@
 /**
  * converters/transcript-words.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * The converters (#751). Each file in this folder turns one source's own
  * output into the editor's canonical transcript, `{ words, paragraphs }`:

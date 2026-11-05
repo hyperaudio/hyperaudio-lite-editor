@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.43 — last changed in release 1.3.43
+ * @version 1.3.44 — last changed in release 1.3.44
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -707,6 +707,53 @@
      copy button: hidden in caption mode (view-switch wiring below) and while
      the transcript is aria-busy (CSS). ---- */
 
+  // What Project info says about a project that plays from a link (#744).
+  // An http(s) link shows its URL, shortened in the middle when long, as a
+  // link. A link on a scheme the host declared (globalThis.hyperaudioLinkSchemes)
+  // is the host's to describe: window.hyperaudioMediaInfo(entry) answers
+  // with [label, value] rows, or a Promise of them, following the
+  // hyperaudioMediaPoster pattern. Without the hook, or when it answers with
+  // nothing, the URL's last path segment stands in as the file's name,
+  // which is what such a link usually is: the user's own file.
+  const URL_SHOWN_MAX = 72;
+  function shortenMiddle(text, max) {
+    if (text.length <= max) return text;
+    const keep = Math.floor((max - 1) / 2);
+    return text.slice(0, keep) + '…' + text.slice(text.length - keep);
+  }
+  function lastSegmentOf(url) {
+    try {
+      const path = new URL(url).pathname;
+      return decodeURIComponent(path.split('/').filter(Boolean).pop() || '');
+    } catch (e) {
+      return decodeURIComponent((String(url).split('?')[0].split('/').filter(Boolean).pop() || ''));
+    }
+  }
+  function isHostScheme(url) {
+    const declared = globalThis.hyperaudioLinkSchemes;
+    return Array.isArray(declared) && declared.some((s) => typeof s === 'string' && String(url).startsWith(s));
+  }
+  async function linkRows(entry, media) {
+    const url = typeof media.url === 'string' ? media.url : '';
+    if (url === '') return [['Source', 'remote URL']];
+    if (/^https?:/i.test(url)) return [['Source', shortenMiddle(url, URL_SHOWN_MAX), url]];
+    if (isHostScheme(url)) {
+      const hook = window.hyperaudioMediaInfo;
+      if (typeof hook === 'function') {
+        try {
+          const answered = await hook(entry);
+          const rows = Array.isArray(answered)
+            ? answered.filter((r) => Array.isArray(r) && r.length >= 2).map((r) => [String(r[0]), String(r[1])])
+            : [];
+          if (rows.length > 0) return rows;
+        } catch (e) { /* the host's problem: the fallback below */ }
+      }
+      const name = lastSegmentOf(url);
+      return [[name !== '' ? 'File' : 'Source', name !== '' ? name : 'remote URL']];
+    }
+    return [['Source', 'remote URL']];
+  }
+
   function bootInfoButton() {
     const btn = document.createElement('button');
     btn.id = 'transcript-info-btn';
@@ -730,7 +777,7 @@
         const media = (entry && entry.media) || {};
         const rows = [];
         if (media.kind === 'original' && media.filename) rows.push(['File', media.filename]);
-        if (media.kind === 'link') rows.push(['Source', 'remote URL']);
+        if (media.kind === 'link') rows.push(...(await linkRows(entry, media)));
         if (media.durationSeconds > 0) rows.push(['Duration', formatDuration(media.durationSeconds)]);
         mediaEl.textContent = '';
         if (rows.length === 0) {
@@ -738,12 +785,26 @@
           p.textContent = 'No media — text only.';
           mediaEl.appendChild(p);
         }
-        rows.forEach(([label, value]) => {
+        // the values are text, whoever supplied them: the host's rows as
+        // much as the index's
+        rows.forEach(([label, value, href]) => {
           const p = document.createElement('p');
           const strong = document.createElement('strong');
           strong.textContent = label + ':';
           p.appendChild(strong);
-          p.appendChild(document.createTextNode(' ' + value));
+          p.appendChild(document.createTextNode(' '));
+          if (href) {
+            const a = document.createElement('a');
+            a.href = href;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.className = 'info-link';
+            a.title = href;
+            a.textContent = value;
+            p.appendChild(a);
+          } else {
+            p.appendChild(document.createTextNode(value));
+          }
           mediaEl.appendChild(p);
         });
       }

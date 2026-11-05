@@ -1,8 +1,8 @@
 /**
  * a11y.js
  * (C) The Hyperaudio Project
- * @version 0.8.3 — last changed in release 0.8.3
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Keyboard operability for the DaisyUI modal pattern (#402).
  *

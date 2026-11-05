@@ -1,8 +1,8 @@
 /**
  * find-replace.js
  * (C) The Hyperaudio Project
- * @version 1.3.25 — last changed in release 1.3.25
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * Find & replace for the transcript (#25). "Find" reuses the vendored
  * searchPhrase() (js/hyperaudio-lite-extension.js), which highlights matches by

@@ -1,8 +1,8 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
  * user's own API key, no backend (#390). AssemblyAI's REST API is CORS-open

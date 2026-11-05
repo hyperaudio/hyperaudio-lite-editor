@@ -8,9 +8,8 @@
 Thank you for contributing to Hyperaudio Lite Editor. This Contributor License
 Agreement (the **"Agreement"**) sets out the terms under which You contribute
 material to the project. It exists because the project is distributed under more
-than one license — AGPL-3.0, MIT (for non-commercial use), and a commercial
-license — and we need your permission to include Your contributions under all of
-them.
+than one license — AGPL-3.0 and a commercial license — and we need your
+permission to include Your contributions under both of them.
 
 **You keep the copyright to Your contributions.** This Agreement is a license,
 not an assignment — You are granting rights, not giving them away.
@@ -39,8 +38,8 @@ perform, and distribute Your Contributions and such derivative works.
 
 You further grant to Us the right to **sublicense and relicense** Your
 Contributions, and derivative works of them, **under any license terms**,
-including without limitation the AGPL-3.0, the MIT License, and the Project's
-commercial (proprietary) license, and any future license the Maintainer applies
+including without limitation the AGPL-3.0 and the Project's commercial
+(proprietary) license, and any future license the Maintainer applies
 to the Project. This includes the right to distribute Your Contributions as part
 of the Project under a proprietary license without making the corresponding
 source available.

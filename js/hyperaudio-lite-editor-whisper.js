@@ -1,8 +1,8 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.43 — last changed in release 1.3.43
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  */
 
 // Where this engine keeps its downloaded models (#615), so Settings can size
@@ -89,7 +89,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
     workerBaseUrl = "./";
   }
 
-  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.3.42";
+  const whisperWorkerPath = workerBaseUrl + "js/whisper.worker.js?v=1.3.44";
 
   // Turbo is WebGPU-only (#461): neither of its quantised variants loads on
   // the WASM runtime, so without a usable GPU the worker refuses it. Grey the

@@ -1,8 +1,8 @@
 /**
  * search-match.js
  * (C) The Hyperaudio Project
- * @version 1.3.25 — last changed in release 1.3.25
- * @license MIT
+ * @version 1.3.44 — last changed in release 1.3.44
+ * @license AGPL-3.0-only
  *
  * How the transcript search matches (#395), shared by the search in
  * js/hyperaudio-lite-extension.js and the one-span phrase pass in

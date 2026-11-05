@@ -2149,3 +2149,20 @@ html.ha-transcribing #upload-transcribe-btn {
   outline: 2px solid oklch(var(--p));
   outline-offset: 1px;
 }
+
+/* Media the browser cannot play says so under the picture (#740). A strip
+   along the bottom of the player frame, over the poster, cleared by
+   media-unplayable.js when the next source loads. */
+#media-unplayable {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  border-radius: 0 0 0.5rem 0.5rem;
+}
