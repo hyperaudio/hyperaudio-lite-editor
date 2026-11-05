@@ -1209,6 +1209,15 @@
 
     const vSource = new mb.CanvasSource(canvas, await videoEncodingOptions(mb, fmt));
     output.addVideoTrack(vSource);
+    // Burned-in captions are drawn once per decoded source frame. A screen
+    // recording, a slideshow or a still with narration writes a frame only
+    // when the picture changes, so one frame can last seconds, and every cue
+    // change inside it was never drawn: the captions froze and jumped where
+    // the picture was static (#769). A frame that outlasts a tick is kept and
+    // emitted again with the caption redrawn at each tick. Ordinary video,
+    // and any export without captions, writes the same frames as before.
+    const CAPTION_TICK = 1 / 15;   // keeps the word highlight moving
+    let picture = null;            // a long frame's picture, before its caption
     let aSource = null;
     let aSink = null;
     if (aTrack) {
@@ -1240,8 +1249,33 @@
             drawFrame(sample, ctx2d);
             sample.close();
             closed = true;
-            if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height, ctx.captionStyle);
-            await vSource.add(t, frameDur);
+            // where the frame's picture really ends on the edited timeline: a
+            // frame that began before the section was clamped to its start but
+            // keeps its whole length in frameDur, and one that runs past the
+            // section's end is cut there
+            const srcEnd = Math.min(sample.timestamp + (sample.duration || 1 / 30), sec.end);
+            const frameEnd = (offset + srcEnd - sec.start) / rate;
+            // two ticks: a source at 10 fps or faster is never ticked, however
+            // its timescale rounds a frame's length
+            if (captions && frameEnd - t > CAPTION_TICK * 2) {
+              if (picture === null) {
+                picture = document.createElement('canvas');
+                picture.width = width;
+                picture.height = height;
+              }
+              picture.getContext('2d').drawImage(canvas, 0, 0);
+              for (let at = t; at < frameEnd - 0.0005;) {
+                const dur = Math.min(CAPTION_TICK, frameEnd - at);
+                ctx2d.drawImage(picture, 0, 0);
+                drawCaptionOverlay(ctx2d, at, captions, width, height, ctx.captionStyle);
+                await vSource.add(at, dur);
+                prevT = at;
+                at += dur;
+              }
+            } else {
+              if (captions) drawCaptionOverlay(ctx2d, t, captions, width, height, ctx.captionStyle);
+              await vSource.add(t, frameDur);
+            }
             done += frameDur * rate;
             onProgress(Math.min(0.99, done / total));
           } finally {
