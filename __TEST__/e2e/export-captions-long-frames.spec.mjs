@@ -7,6 +7,7 @@
 // Now a frame that outlasts a tick is emitted again with the caption redrawn
 // at each tick. Without captions the frames are written as they were.
 import { test, expect } from '@playwright/test';
+import { transcriptHtml } from './helpers.mjs';
 
 // A short video whose middle frame lasts six seconds, as a screen recording's
 // does, built in the page by the same library the export uses: ten frames a
@@ -66,13 +67,18 @@ const VTT = ['WEBVTT', '']
   .concat(CUE_STARTS.flatMap((s) => [`00:00:0${s}.000 --> 00:00:0${s}.900`, `cue ${s}`, '']))
   .join('\n');
 
+const TICK = 1 / 15;
+const near = (times, at) => times.filter((t) => t >= at - TICK - 0.002 && t <= at + 0.002);
+
 const settle = (page, id, value) => page.evaluate(([i, v]) => {
   const el = document.getElementById(i);
   if (el.type === 'radio' || el.type === 'checkbox') el.checked = v; else el.value = v;
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }, [id, value]);
 
-const setup = async (page) => {
+// words at the start and the end, and one in the middle of the long frame
+// that a test may strike, cutting a second out of the static stretch
+const setup = async (page, { strike = false } = {}) => {
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
   const durations = await buildLongFrameVideo(page);
@@ -82,11 +88,12 @@ const setup = async (page) => {
     const p = document.getElementById('hyperplayer');
     return p.readyState >= 2 && p.videoWidth === 320;
   });
-  await page.evaluate((vtt) => {
+  const words = [[0, 500, 0], [2000, 1000, strike ? 1 : 0], [6500, 500, 0]];
+  const sections = await page.evaluate(([vtt, html]) => {
     document.getElementById('hyperplayer-vtt').src = 'data:text/vtt,' + encodeURIComponent(vtt);
-    document.getElementById('hypertranscript').innerHTML =
-      '<article><section><p><span data-m="0" data-d="500">one </span><span data-m="6500" data-d="500">two </span></p></section></article>';
-  }, VTT);
+    document.getElementById('hypertranscript').innerHTML = html;
+    return window.getPlayableSections();
+  }, [VTT, transcriptHtml(words)]);
   await page.evaluate(() => {
     document.activeElement && document.activeElement.blur();
     const m = document.getElementById('export-modal');
@@ -98,7 +105,8 @@ const setup = async (page) => {
     [...document.querySelectorAll('#export-format option')].map((o) => o.value).find((v) => v === 'mp4' || v === 'webm'));
   test.skip(!video, 'no video encoder in this browser');
   await page.selectOption('#export-format', video);
-  await settle(page, 'export-source-entire', true);
+  await settle(page, strike ? 'export-source-edited' : 'export-source-entire', true);
+  return sections;
 };
 
 const exportFile = async (page) => {
@@ -115,19 +123,45 @@ test('with captions burned in, a long source frame is redrawn at every cue chang
   const times = await exportFile(page);
   // a frame begins within a tick before each cue start, so no cue change
   // falls inside a frame that holds the previous caption
-  const TICK = 1 / 15;
   for (const start of CUE_STARTS) {
-    const near = times.filter((t) => t >= start - TICK - 0.002 && t <= start + 0.002);
-    expect(near.length, `a frame starts near ${start}s: ${times.map((t) => t.toFixed(2)).join(' ')}`).toBeGreaterThan(0);
+    expect(near(times, start).length, `a frame starts near ${start}s: ${times.map((t) => t.toFixed(2)).join(' ')}`).toBeGreaterThan(0);
   }
   // and the six-second frame became ninety ticks, not one
   expect(times.length).toBeGreaterThanOrEqual(11 + 85);
 });
 
+test('a cut inside the long frame: the ticks stop where the picture does, and the frames after the cut keep their places (#769)', async ({ page }) => {
+  const sections = await setup(page, { strike: true });
+  expect(sections.length).toBe(2);
+  // the cut on the edited timeline, and where source time resumes
+  const cutAt = sections[0].end;
+  const resume = sections[1].start;
+  const onEdited = (src) => (src < cutAt ? src : cutAt + (src - resume));
+  await settle(page, 'export-burn', true);
+  const times = await exportFile(page);
+  // the long frame is ticked up to the cut, and again from the cut to its
+  // true end, then the frames at 6.5s onward land where the edit puts them
+  for (const start of CUE_STARTS) {
+    if (start > cutAt && start < resume) continue;         // this cue was cut away
+    expect(near(times, onEdited(start)).length, `a frame starts near cue ${start}s`).toBeGreaterThan(0);
+  }
+  const tail = times.filter((t) => t > onEdited(6.5) - 0.01);
+  expect(tail.map((t) => +t.toFixed(2))).toEqual([6.5, 6.6, 6.7, 6.8, 6.9].map((s) => +onEdited(s).toFixed(2)));
+  // no frames squeezed together: the ticks never ran past the picture's end
+  for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThan(0.005);
+});
+
 test('without captions, the long source frame is written as the one frame it is (#769)', async ({ page }) => {
-  await setup(page);
+  // the edited export takes the frame-by-frame path with nothing to burn in
+  const sections = await setup(page, { strike: true });
   await settle(page, 'export-burn', false);
   const times = await exportFile(page);
-  expect(times.length).toBe(11);
-  expect(times.filter((t) => t > 0.55 && t < 6.45)).toEqual([]);
+  // the eleven source frames, and the long one a second time: it is the first
+  // frame of the section after the cut, clamped to the cut, as it always was
+  expect(times.length).toBe(12);
+  // between the first half second and the tail there is only that one
+  const cutAt = sections[0].end;
+  const middle = times.filter((t) => t > 0.55 && t < cutAt + (6.5 - sections[1].start) - 0.01);
+  expect(middle.length).toBe(1);
+  expect(Math.abs(middle[0] - cutAt)).toBeLessThan(0.01);
 });

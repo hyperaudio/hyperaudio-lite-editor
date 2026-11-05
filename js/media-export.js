@@ -1249,18 +1249,23 @@
             drawFrame(sample, ctx2d);
             sample.close();
             closed = true;
-            if (captions && frameDur > CAPTION_TICK * 1.5) {
+            // where the frame's picture really ends on the edited timeline: a
+            // frame that began before the section was clamped to its start but
+            // keeps its whole length in frameDur, and one that runs past the
+            // section's end is cut there
+            const srcEnd = Math.min(sample.timestamp + (sample.duration || 1 / 30), sec.end);
+            const frameEnd = (offset + srcEnd - sec.start) / rate;
+            // two ticks: a source at 10 fps or faster is never ticked, however
+            // its timescale rounds a frame's length
+            if (captions && frameEnd - t > CAPTION_TICK * 2) {
               if (picture === null) {
                 picture = document.createElement('canvas');
                 picture.width = width;
                 picture.height = height;
               }
               picture.getContext('2d').drawImage(canvas, 0, 0);
-              // the ticks stop at the section's end: a frame that began before
-              // the section was clamped to its start but kept its whole length
-              const end = Math.max(t + CAPTION_TICK, Math.min(t + frameDur, (offset + sec.end - sec.start) / rate));
-              for (let at = t; at < end - 0.0005;) {
-                const dur = Math.min(CAPTION_TICK, end - at);
+              for (let at = t; at < frameEnd - 0.0005;) {
+                const dur = Math.min(CAPTION_TICK, frameEnd - at);
                 ctx2d.drawImage(picture, 0, 0);
                 drawCaptionOverlay(ctx2d, at, captions, width, height, ctx.captionStyle);
                 await vSource.add(at, dur);
