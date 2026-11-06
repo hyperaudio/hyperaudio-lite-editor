@@ -97,6 +97,19 @@
     if (action) action(row, button);
   });
 
+  // a click anywhere outside an open menu closes it, as does Escape
+  const closeMenus = (except) => rowsOf(display()).forEach((row) => {
+    const menu = row.querySelector('details.caption-menu');
+    if (menu !== null && menu !== except && menu.open) menu.open = false;
+  });
+  document.addEventListener('click', (event) => {
+    const within = event.target && event.target.closest ? event.target.closest('details.caption-menu') : null;
+    closeMenus(within);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && display() !== null) closeMenus(null);
+  });
+
   // Opening a menu: the items that need a row after this one are disabled on
   // the last row, and a menu near the bottom of the list opens upward so it
   // is not clipped by the scrolling holder. toggle does not bubble, so it is

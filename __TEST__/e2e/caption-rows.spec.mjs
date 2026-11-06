@@ -198,6 +198,25 @@ test('Snap Out takes the next In, and the last row offers neither that nor merge
   expect(await page.locator(`${ROW}:first-child details.caption-menu`).evaluate((el) => el.open)).toBe(false);
 });
 
+test('a click elsewhere, or Escape, closes an open menu', async ({ page }) => {
+  await openCaptions(page);
+  const menu = page.locator(`${ROW}:nth-child(2) details.caption-menu`);
+  const isOpen = () => menu.evaluate((el) => el.open);
+  await menu.locator('summary').click();
+  expect(await isOpen()).toBe(true);
+  await page.locator(`${ROW}:nth-child(5) textarea.lines`).click();
+  expect(await isOpen()).toBe(false);
+  await menu.locator('summary').click();
+  expect(await isOpen()).toBe(true);
+  await page.keyboard.press('Escape');
+  expect(await isOpen()).toBe(false);
+  // opening another closes the first
+  await menu.locator('summary').click();
+  await page.locator(`${ROW}:nth-child(3) details.caption-menu summary`).click();
+  expect(await isOpen()).toBe(false);
+  expect(await page.locator(`${ROW}:nth-child(3) details.caption-menu`).evaluate((el) => el.open)).toBe(true);
+});
+
 test('insert, merge and delete still work from the menu', async ({ page }) => {
   await openCaptions(page);
   const before = await page.locator(ROW).count();
