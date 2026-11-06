@@ -1,4 +1,4 @@
-// #775 — how long the selected passage runs, shown beside the player's clock
+// #775 — how long the selected passage runs, shown just under the selection
 // while something is selected: the selected words' times, and the length a
 // clip of them would be exported at, struck words and skipped silences left
 // out. The same reading as the Export dialog's Selection option.
@@ -23,9 +23,9 @@ const select = (page, from, to) => page.evaluate(([a, b]) => {
   sel.addRange(range);
 }, [from, to]);
 const clear = (page) => page.evaluate(() => window.getSelection().removeAllRanges());
-const chip = (page) => page.locator('#playbar-selection');
-const length = (page) => page.locator('#playbar-selection-length');
-const span = (page) => page.locator('#playbar-selection-span');
+const chip = (page) => page.locator('#selection-length');
+const length = (page) => page.locator('#selection-length .selection-length-length');
+const span = (page) => page.locator('#selection-length .selection-length-span');
 
 test('nothing selected, nothing shown', async ({ page }) => {
   await setup(page);
@@ -43,6 +43,34 @@ test('a selection shows its times and its length, and follows the selection as i
   await expect(span(page)).toHaveText('0:03–0:10');
   await clear(page);
   await expect(chip(page)).toBeHidden();
+});
+
+test('the badge sits in the margin, level with the selection\'s last line, inside the card and outside the transcript', async ({ page }) => {
+  await setup(page);
+  await select(page, 3, 6);
+  await expect(chip(page)).toBeVisible();
+  const at = await page.evaluate(() => {
+    const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
+    const sel = window.getSelection().getRangeAt(0).getClientRects();
+    const last = sel[sel.length - 1];
+    return {
+      selection: { top: last.top, bottom: last.bottom, right: last.right },
+      badge: r(document.getElementById('selection-length')),
+      card: r(document.querySelector('.transcript-holder')),
+      text: r(document.getElementById('hypertranscript')),
+      insideTranscript: document.getElementById('hypertranscript').contains(document.getElementById('selection-length')),
+    };
+  });
+  // level with the line, not on the next one
+  const lineMid = (at.selection.top + at.selection.bottom) / 2;
+  const badgeMid = (at.badge.top + at.badge.bottom) / 2;
+  expect(Math.abs(badgeMid - lineMid)).toBeLessThan(3);
+  // in the margin to the right of the transcript, within the card
+  expect(at.badge.left).toBeGreaterThanOrEqual(at.text.right);
+  expect(at.badge.right).toBeLessThanOrEqual(at.card.right);
+  expect(at.insideTranscript).toBe(false);
+  // and it is not written into the transcript's content
+  expect(await page.evaluate(() => document.getElementById('hypertranscript').innerHTML.includes('selection-length'))).toBe(false);
 });
 
 test('the length leaves out struck words, as the exported clip does', async ({ page }) => {
