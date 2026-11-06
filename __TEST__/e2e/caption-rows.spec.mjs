@@ -45,7 +45,7 @@ const nthStart = (page, n) => page.evaluate((i) => {
 test('one cue is one row, with the text beside the times', async ({ page }) => {
   await openCaptions(page);
   const row = await rect(page, `${ROW}:first-child`);
-  expect(row.height).toBeLessThan(90);
+  expect(row.height).toBeLessThan(100);
   const times = await rect(page, `${ROW}:first-child .caption-times`);
   const text = await rect(page, `${ROW}:first-child textarea.lines`);
   expect(Math.abs(text.top - times.top)).toBeLessThan(12);

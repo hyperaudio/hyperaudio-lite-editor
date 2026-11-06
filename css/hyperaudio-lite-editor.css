@@ -2174,26 +2174,26 @@ html.ha-transcribing #upload-transcribe-btn {
   grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   grid-template-areas: "play times text rate menu";
   align-items: start;
-  column-gap: 10px;
-  row-gap: 4px;
-  padding: 6px 8px 6px 6px;
+  column-gap: 14px;
+  row-gap: 8px;
+  padding: 12px 12px 12px 10px;
   border-left: 3px solid transparent;
   border-radius: 6px;
 }
-#captions-display .caption + .caption { margin-top: 2px; }
+#captions-display .caption + .caption { margin-top: 10px; }
 /* the cue that is playing */
 #captions-display .caption.caption-current {
   background: oklch(var(--p) / 0.07);
   border-left-color: oklch(var(--p));
 }
-.caption-play { grid-area: play; margin-top: 4px; }
+.caption-play { grid-area: play; margin-top: 6px; }
 .caption-times {
   grid-area: times;
   display: flex;
   align-items: center;
   gap: 0;
   white-space: nowrap;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 .caption-times input {
   width: 11.5ch;
@@ -2226,10 +2226,10 @@ html.ha-transcribing #upload-transcribe-btn {
   box-sizing: border-box;
   resize: none;
   margin: 0;
-  padding: 3px 4.5ch 3px 8px;
+  padding: 6px 4.5ch 6px 10px;
   font: inherit;
   font-size: 1rem;
-  line-height: 1.4rem;
+  line-height: 1.5rem;
   white-space: pre;
   overflow: hidden;
   border: 1px solid oklch(var(--bc) / 0.15);
@@ -2248,7 +2248,7 @@ html.ha-transcribing #upload-transcribe-btn {
   top: 1px;
   right: 1px;
   bottom: 1px;
-  padding: 3px 7px 0 4px;
+  padding: 6px 8px 0 6px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -2258,14 +2258,14 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 .caption-count {
   font-size: 0.68rem;
-  line-height: 1.4rem;
+  line-height: 1.5rem;
   font-variant-numeric: tabular-nums;
   color: oklch(var(--bc) / 0.72);
 }
 .caption-count-over { color: #b91c1c; font-weight: 700; }
-#captions-display .caption-rate { grid-area: rate; margin-top: 4px; justify-self: end; text-align: right; }
+#captions-display .caption-rate { grid-area: rate; margin-top: 6px; justify-self: end; text-align: right; }
 /* the row menu: a details element, so it opens with no script of its own */
-.caption-menu { grid-area: menu; position: relative; margin-top: 2px; }
+.caption-menu { grid-area: menu; position: relative; margin-top: 4px; }
 /* a row is painted within its own box (content-visibility, index.html), which
    would clip its open menu: while the menu is open the row paints freely */
 #captions-display .caption.caption-menu-open { content-visibility: visible; }
