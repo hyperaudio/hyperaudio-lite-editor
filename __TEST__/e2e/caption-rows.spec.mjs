@@ -212,9 +212,9 @@ test('a click elsewhere, or Escape, closes an open menu', async ({ page }) => {
   expect(await isOpen()).toBe(false);
   // opening another closes the first
   await menu.locator('summary').click();
-  await page.locator(`${ROW}:nth-child(3) details.caption-menu summary`).click();
+  await page.locator(`${ROW}:nth-child(7) details.caption-menu summary`).click();
   expect(await isOpen()).toBe(false);
-  expect(await page.locator(`${ROW}:nth-child(3) details.caption-menu`).evaluate((el) => el.open)).toBe(true);
+  expect(await page.locator(`${ROW}:nth-child(7) details.caption-menu`).evaluate((el) => el.open)).toBe(true);
 });
 
 test('insert, merge and delete still work from the menu', async ({ page }) => {
