@@ -1,7 +1,7 @@
 /**
  * transcript-selection.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
  * What is selected in the transcript, as a stretch of media — for anything
@@ -114,5 +114,12 @@
     return { from, to, start: Math.max(0, from - PAD), end: Math.min(cap, to + PAD) };
   }
 
-  window.TranscriptSelection = Object.freeze({ words, range, show, hide, forget, PAD, MARK });
+  // A selection of one word is slight (#776): a double-click, or a click that
+  // dragged a little, as often as a choice. It is offered, since a one-word
+  // clip has its uses, but nothing chooses it or measures it unasked.
+  function slight() {
+    return words().length === 1;
+  }
+
+  window.TranscriptSelection = Object.freeze({ words, range, show, hide, forget, slight, PAD, MARK });
 })();
