@@ -2167,12 +2167,17 @@ html.ha-transcribing #upload-transcribe-btn {
   border-radius: 0 0 0.5rem 0.5rem;
 }
 
-/* The selected passage's times and length (#775), a badge just under the
-   selection's last line, at its end, inside the scrolling card so it moves
-   with the text. It takes no clicks and is not part of the transcript. */
+/* The selected passage's times and length (#775): a pill pinned inside the
+   transcript card's bottom-left corner, the read-only badge's mirror, 12px
+   in from the card's edges. The card's left edge moves with the sidebar
+   (400 <-> 0), so the pill tracks body.sidebar-collapsed as the ⓘ does.
+   Solid white, since text scrolls under it. It takes no clicks. */
 #selection-length {
-  position: absolute;
-  z-index: 5;
+  position: fixed;
+  left: 412px;                /* holder left (400px) + 12 */
+  bottom: 72px;               /* holder bottom (60px) + 12 */
+  z-index: 20;
+  transition: left 0.5s ease;
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
@@ -2180,12 +2185,17 @@ html.ha-transcribing #upload-transcribe-btn {
   line-height: 18px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  padding: 2px 9px;
+  padding: 5px 10px;
   border-radius: 999px;
-  background: oklch(var(--p) / 0.1);
+  background-color: #ffffff;
   color: oklch(var(--bc) / 0.85);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   pointer-events: none;
 }
+body.sidebar-collapsed #selection-length { left: 12px; }
 #selection-length[hidden] { display: none; }
+@media screen and (max-width: 948px) {
+  #selection-length { left: 12px; bottom: 64px; }   /* the holder spans the width, the play bar is 52px */
+}
 #selection-length .selection-length-span { opacity: 0.7; }
 #selection-length .selection-length-length { font-weight: 600; }

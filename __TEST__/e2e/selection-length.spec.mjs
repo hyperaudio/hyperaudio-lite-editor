@@ -45,30 +45,24 @@ test('a selection shows its times and its length, and follows the selection as i
   await expect(chip(page)).toBeHidden();
 });
 
-test('the badge sits in the margin, level with the selection\'s last line, inside the card and outside the transcript', async ({ page }) => {
+test('the pill sits in the card\'s bottom-left corner, the read-only badge\'s mirror, outside the transcript', async ({ page }) => {
   await setup(page);
   await select(page, 3, 6);
   await expect(chip(page)).toBeVisible();
   const at = await page.evaluate(() => {
     const r = (el) => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
-    const sel = window.getSelection().getRangeAt(0).getClientRects();
-    const last = sel[sel.length - 1];
     return {
-      selection: { top: last.top, bottom: last.bottom, right: last.right },
-      badge: r(document.getElementById('selection-length')),
+      pill: r(document.getElementById('selection-length')),
       card: r(document.querySelector('.transcript-holder')),
-      text: r(document.getElementById('hypertranscript')),
       insideTranscript: document.getElementById('hypertranscript').contains(document.getElementById('selection-length')),
     };
   });
-  // level with the line, not on the next one
-  const lineMid = (at.selection.top + at.selection.bottom) / 2;
-  const badgeMid = (at.badge.top + at.badge.bottom) / 2;
-  expect(Math.abs(badgeMid - lineMid)).toBeLessThan(3);
-  // in the margin to the right of the transcript, within the card
-  expect(at.badge.left).toBeGreaterThanOrEqual(at.text.right);
-  expect(at.badge.right).toBeLessThanOrEqual(at.card.right);
+  expect(at.pill.left - at.card.left).toBeCloseTo(12, 0);
+  expect(at.card.bottom - at.pill.bottom).toBeCloseTo(12, 0);
   expect(at.insideTranscript).toBe(false);
+  // and it follows the card's edge when the sidebar collapses
+  await page.evaluate(() => document.body.classList.add('sidebar-collapsed'));
+  await expect.poll(() => page.evaluate(() => document.getElementById('selection-length').getBoundingClientRect().left)).toBeCloseTo(12, 0);
   // and it is not written into the transcript's content
   expect(await page.evaluate(() => document.getElementById('hypertranscript').innerHTML.includes('selection-length'))).toBe(false);
 });
