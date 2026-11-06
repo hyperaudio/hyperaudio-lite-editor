@@ -77,6 +77,16 @@
         + (m[4] === undefined ? 0 : Number(m[4].padEnd(3, '0')) / 1000);
     }
 
+    // seconds -> "00:01:13.520", the form the rows and the VTT use
+    function captionTimecode(value) {
+      const total = Math.max(0, Math.round(Number(value) * 1000)) / 1000;
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total - h * 3600 - m * 60;
+      const two = (n) => String(n).padStart(2, '0');
+      return `${two(h)}:${two(m)}:${s.toFixed(3).padStart(6, '0')}`;
+    }
+
     function updateCaptionRates() {
       const measure = captionRateMeasure();
       const other = measure === 'cps' ? 'words per minute' : 'characters per second';
@@ -635,14 +645,26 @@
 
       let captionTempl = template.querySelector('#caption-template').cloneNode(true);
       setCaptionLines(captionTempl, '', '');
-      captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
-      captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
+      // The new caption takes the gap it is inserted into (#773): it begins
+      // just after this caption ends and ends just before the next begins,
+      // or runs two seconds when there is no next. A gap too small to hold
+      // it still gives it a moment, which overlaps the next cue and is for
+      // the user to settle.
+      const above = elem.closest('.caption');
+      const GAP = 0.04;
+      const afterAbove = captionTimecodeSeconds(above.querySelector('.end').value);
+      const next = above.nextElementSibling;
+      const beforeNext = next !== null && next.classList.contains('caption')
+        ? captionTimecodeSeconds(next.querySelector('.start').value) : NaN;
+      const start = Number.isFinite(afterAbove) ? afterAbove + GAP : 0;
+      const end = Number.isFinite(beforeNext) ? Math.max(start + 0.2, beforeNext - GAP) : start + 2;
+      captionTempl.getElementsByClassName('start')[0].value = captionTimecode(start);
+      captionTempl.getElementsByClassName('end')[0].value = captionTimecode(end);
       captionTempl.classList.add('caption-new');
       // Inherit the speaker of the row this one is inserted after (#536): a
       // caption added inside someone's turn belongs to them. Merge needs no
       // such rule — the surviving row keeps its own, and a cue can only be one
       // colour — and delete none at all.
-      const above = elem.closest('.caption');
       // after a caption two speakers share, the turn is the second speaker's
       const inherited = above.getAttribute('data-speaker2') || above.getAttribute('data-speaker');
       if (inherited !== null && inherited !== '') captionTempl.setAttribute('data-speaker', inherited);
@@ -650,8 +672,14 @@
       // Remove animation class after animation completes
       setTimeout(() => {
         captionTempl.classList.remove('caption-new');
-      }, 300);
+      }, 1200);
       makeCaptionEditorActive();
+      // the text is what comes next, so the caret goes there
+      const box = captionTempl.querySelector('textarea.lines');
+      if (box !== null) {
+        captionTempl.scrollIntoView({ block: 'nearest' });
+        box.focus();
+      }
     }
 
     function deleteCaption(elem) {

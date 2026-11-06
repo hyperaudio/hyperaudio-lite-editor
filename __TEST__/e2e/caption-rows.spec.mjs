@@ -211,6 +211,30 @@ test('a click elsewhere, or Escape, closes an open menu', async ({ page }) => {
   expect(await page.locator(`${ROW}:nth-child(7) details.caption-menu`).evaluate((el) => el.open)).toBe(true);
 });
 
+test('a new caption takes the gap it is inserted into, and the caret goes to its text', async ({ page }) => {
+  await openCaptions(page);
+  await page.locator(`${ROW}:first-child .end`).fill('00:00:03.000');
+  await page.locator(`${ROW}:nth-child(2) .start`).fill('00:00:05.000');
+  await page.locator(`${ROW}:first-child [data-caption-action="insert"]`).evaluate((el) => el.click());
+  const added = page.locator(`${ROW}:nth-child(2)`);
+  await expect(added.locator('.start')).toHaveValue('00:00:03.040');
+  await expect(added.locator('.end')).toHaveValue('00:00:04.960');
+  await expect(added.locator('textarea.lines')).toBeFocused();
+  await expect(added).toHaveClass(/caption-new/);
+  // after the last caption it runs for two seconds
+  const last = page.locator(ROW).last();
+  await last.locator('.end').fill('00:01:00.000');
+  await last.locator('[data-caption-action="insert"]').evaluate((el) => el.click());
+  await expect(page.locator(ROW).last().locator('.start')).toHaveValue('00:01:00.040');
+  await expect(page.locator(ROW).last().locator('.end')).toHaveValue('00:01:02.040');
+  // a gap too small to hold one still gives it a moment
+  await page.locator(`${ROW}:first-child .end`).fill('00:00:03.000');
+  await page.locator(`${ROW}:nth-child(2) .start`).fill('00:00:03.010');
+  await page.locator(`${ROW}:first-child [data-caption-action="insert"]`).evaluate((el) => el.click());
+  await expect(page.locator(`${ROW}:nth-child(2) .start`)).toHaveValue('00:00:03.040');
+  await expect(page.locator(`${ROW}:nth-child(2) .end`)).toHaveValue('00:00:03.240');
+});
+
 test('insert, merge and delete still work from the menu', async ({ page }) => {
   await openCaptions(page);
   const before = await page.locator(ROW).count();
