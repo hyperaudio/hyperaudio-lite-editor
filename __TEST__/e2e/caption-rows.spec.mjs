@@ -52,7 +52,7 @@ test('one cue is one row, with the text beside the times', async ({ page }) => {
   expect(text.left).toBeGreaterThan(times.right);
   // the old stack is gone: no line inputs, no button group
   expect(await page.locator(`${ROW}:first-child input`).count()).toBe(2);
-  expect(await page.locator(`${ROW}:first-child [data-caption-action]`).count()).toBe(6);
+  expect(await page.locator(`${ROW}:first-child [data-caption-action]`).count()).toBe(3);
 });
 
 test('below 700px the row folds: the text goes under the times', async ({ page }) => {
@@ -147,12 +147,9 @@ test('the count turns red past 42 characters', async ({ page }) => {
   await expect(first).toHaveClass(/caption-count-over/);
 });
 
-test('In and Out are set from the playhead, by the menu and by Alt with a bracket', async ({ page }) => {
+test('In and Out are set from the playhead with Alt and a bracket', async ({ page }) => {
   await openCaptions(page);
   await fakeClock(page);
-  await tick(page, 12.345);
-  await page.locator(`${ROW}:nth-child(2) [data-caption-action="in-now"]`).evaluate((el) => el.click());
-  await expect(page.locator(`${ROW}:nth-child(2) .start`)).toHaveValue('00:00:12.345');
   await tick(page, 75.5);
   await page.locator(`${ROW}:nth-child(2) textarea.lines`).click();
   await page.keyboard.press('Alt+BracketRight');
@@ -175,16 +172,13 @@ test('Alt+Up and Alt+Down nudge a focused time by a tenth of a second', async ({
   await expect(start).toHaveValue('00:00:12.245');
 });
 
-test('Snap Out takes the next In, and the last row offers neither that nor merge', async ({ page }) => {
+test('the menu holds insert, merge and delete, the last row withholds merge, and an item closes it', async ({ page }) => {
   await openCaptions(page);
-  const nextIn = await page.locator(`${ROW}:nth-child(2) .start`).inputValue();
-  await page.locator(`${ROW}:first-child [data-caption-action="snap-out"]`).evaluate((el) => el.click());
-  await expect(page.locator(`${ROW}:first-child .end`)).toHaveValue(nextIn);
   const last = page.locator(ROW).last();
   await last.scrollIntoViewIfNeeded();
   await last.locator('details.caption-menu').evaluate((el) => { el.open = true; });
   await expect(last.locator('[data-caption-action="merge"]')).toBeDisabled();
-  await expect(last.locator('[data-caption-action="snap-out"]')).toBeDisabled();
+  await expect(last.locator('[data-caption-action="insert"]')).toBeEnabled();
   await expect(last.locator('[data-caption-action="delete"]')).toBeEnabled();
   // and the open menu is on top, not clipped by its row's box
   await expect.poll(() => last.locator('[data-caption-action="delete"]').evaluate((el) => {
@@ -194,7 +188,7 @@ test('Snap Out takes the next In, and the last row offers neither that nor merge
   })).toBe(true);
   // a menu item closes its menu
   await page.locator(`${ROW}:first-child details.caption-menu`).evaluate((el) => { el.open = true; });
-  await page.locator(`${ROW}:first-child [data-caption-action="in-now"]`).evaluate((el) => el.click());
+  await page.locator(`${ROW}:first-child [data-caption-action="insert"]`).evaluate((el) => el.click());
   expect(await page.locator(`${ROW}:first-child details.caption-menu`).evaluate((el) => el.open)).toBe(false);
 });
 

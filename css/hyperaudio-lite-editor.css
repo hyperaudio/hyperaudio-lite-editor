@@ -2302,13 +2302,6 @@ html.ha-transcribing #upload-transcribe-btn {
 .caption-menu li button:hover,
 .caption-menu li button:focus-visible { background: oklch(var(--bc) / 0.08); outline: none; }
 .caption-menu li button:disabled { opacity: 0.4; cursor: default; background: none; }
-/* a rule between the time actions and the structural ones */
-.caption-menu li button[data-caption-action="insert"] {
-  border-top: 1px solid oklch(var(--bc) / 0.1);
-  border-radius: 0;
-  margin-top: 4px;
-  padding-top: 8px;
-}
 @container (max-width: 640px) {
   #captions-display .caption {
     grid-template-columns: auto minmax(0, 1fr) auto auto;

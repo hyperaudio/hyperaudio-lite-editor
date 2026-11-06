@@ -9,8 +9,8 @@
  * and insert, merge and delete live there too. This module adds, by
  * delegation so that rebuilt rows need no wiring of their own:
  *
- *  - the row menu: In and Out from the playhead, Snap Out to the next In,
- *    then the three structural actions
+ *  - the row menu: insert, merge and delete, with merge withheld on the
+ *    last row, and the menu closed by a click elsewhere or Escape
  *  - the editor follows the media: the playing cue is marked and kept in
  *    view, and clicking a time seeks there
  *  - the text: Enter moves to the second line and a third line is refused,
@@ -72,15 +72,13 @@
 
   /* ---- the row menu ------------------------------------------------------ */
 
+  // In or Out from the playhead, reached from the keyboard below
+  const fromPlayhead = (row, which) => {
+    const p = player();
+    if (p !== null) setTime(row, which, p.currentTime);
+  };
+
   const actions = {
-    'in-now': (row) => { const p = player(); if (p !== null) setTime(row, 'start', p.currentTime); },
-    'out-now': (row) => { const p = player(); if (p !== null) setTime(row, 'end', p.currentTime); },
-    'snap-out': (row) => {
-      const next = nextRow(row);
-      if (next === null) return;
-      const at = seconds(next.querySelector('.start').value);
-      if (Number.isFinite(at)) setTime(row, 'end', at);
-    },
     insert: (row, button) => { if (typeof window.addCaption === 'function') window.addCaption(button); },
     merge: (row, button) => { if (nextRow(row) !== null && typeof window.mergeCaption === 'function') window.mergeCaption(button); },
     delete: (row, button) => { if (typeof window.deleteCaption === 'function') window.deleteCaption(button); },
@@ -123,8 +121,7 @@
     row.classList.toggle('caption-menu-open', menu.open);
     if (!menu.open) return;
     const last = nextRow(row) === null;
-    menu.querySelectorAll('[data-caption-action="merge"], [data-caption-action="snap-out"]')
-      .forEach((item) => { item.disabled = last; });
+    menu.querySelectorAll('[data-caption-action="merge"]').forEach((item) => { item.disabled = last; });
     const holder = row.closest('.transcript-holder') || document.documentElement;
     const room = holder.getBoundingClientRect().bottom - menu.getBoundingClientRect().bottom;
     menu.classList.toggle('caption-menu-up', room < 240);
@@ -181,7 +178,7 @@
       const row = rowOf(document.activeElement) || display().querySelector('.caption-current');
       if (row === null) return;
       event.preventDefault();
-      actions[event.code === 'BracketLeft' ? 'in-now' : 'out-now'](row);
+      fromPlayhead(row, event.code === 'BracketLeft' ? 'start' : 'end');
       return;
     }
     // Enter in the text: to the second line once, never a third
