@@ -2182,11 +2182,10 @@ html.ha-transcribing #upload-transcribe-btn {
   white-space: nowrap;
   padding: 2px 9px;
   border-radius: 999px;
-  background: oklch(var(--p));
-  color: oklch(var(--pc));
-  box-shadow: 0 2px 8px oklch(var(--bc) / 0.18);
+  background: oklch(var(--p) / 0.1);
+  color: oklch(var(--bc) / 0.85);
   pointer-events: none;
 }
 #selection-length[hidden] { display: none; }
-#selection-length .selection-length-span { opacity: 0.75; }
-#selection-length .selection-length-length { font-weight: 700; }
+#selection-length .selection-length-span { opacity: 0.7; }
+#selection-length .selection-length-length { font-weight: 600; }
