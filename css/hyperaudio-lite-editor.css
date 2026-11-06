@@ -2166,3 +2166,25 @@ html.ha-transcribing #upload-transcribe-btn {
   line-height: 1.35;
   border-radius: 0 0 0.5rem 0.5rem;
 }
+
+/* The selected stretch of the transcript, beside the player's clock (#775):
+   its times, and its length as a clip would be exported. Shown only while
+   something is selected. */
+#playbar-selection {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 80%;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: oklch(var(--p) / 0.1);
+  color: oklch(var(--bc) / 0.85);
+}
+#playbar-selection[hidden] { display: none; }
+#playbar-selection-span { opacity: 0.7; }
+#playbar-selection-length { font-weight: 600; }
+@media screen and (max-width: 640px) {
+  #playbar-selection-span { display: none; }   /* the length alone, where the bar is tight */
+}

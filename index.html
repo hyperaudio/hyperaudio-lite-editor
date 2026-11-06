@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 1.3.44 (last changed in release 1.3.44) -->
+<!--  Hyperaudio Lite Editor - Version 1.3.45 (last changed in release 1.3.45) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,12 +18,12 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="1.3.44">
+  <meta name="version" content="1.3.45">
   <!-- The version is bumped with the FIRST change of a release, like the
        per-file cache stamps, so a working tree reports the release it is
        becoming. The date is set by the release commit and stays empty until
        then: Settings shows "unreleased" in its place (#615). -->
-  <meta name="release-date" content="2026-11-05">
+  <meta name="release-date" content="">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -146,7 +146,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.44">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.45">
    <link rel="stylesheet" href="js/vendor/driver-1.9.0.css">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
@@ -968,6 +968,8 @@ If you are creating an open source application under a license compatible with t
       </button>
       <input id="playbar-seek" type="range" min="0" max="1000" value="0" step="1" class="range range-xs range-primary" aria-label="Seek" />
       <span id="playbar-time">0:00 / 0:00</span>
+      <!-- the selected stretch of the transcript and its length (#775), by js/selection-length.js -->
+      <span id="playbar-selection" hidden><span id="playbar-selection-span"></span><span id="playbar-selection-length"></span></span>
       <button id="playbar-mute" type="button" class="btn btn-square btn-sm btn-ghost tooltip" data-tip="Mute" aria-label="Mute" onclick="toggleMute()">
         <svg id="playbar-volume-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
         <svg id="playbar-mute-icon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-x"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
@@ -1348,7 +1350,8 @@ If you are creating an open source application under a license compatible with t
   <script src="js/transcript-bench.js?v=1.3.0"></script>
   <script src="js/stream-stretch.js?v=1.3.44"></script>
   <script src="js/transcript-selection.js?v=1.3.44"></script>
-  <script src="js/media-export.js?v=1.3.44"></script>
+  <script src="js/selection-length.js?v=1.3.45"></script>
+  <script src="js/media-export.js?v=1.3.45"></script>
   <!-- speaker-coloured caption downloads (#536) -->
   <script src="js/caption-speaker-colours.js?v=1.3.44"></script>
   <!-- word-level / karaoke VTT export (#387 part 1) -->
