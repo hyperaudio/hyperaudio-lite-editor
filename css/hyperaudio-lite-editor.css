@@ -2171,7 +2171,8 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 #captions-display .caption {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  /* the rate column is one width for every row, so the text boxes line up */
+  grid-template-columns: auto auto minmax(0, 1fr) 5.5rem auto;
   grid-template-areas: "play times text rate menu";
   align-items: start;
   column-gap: 12px;
@@ -2333,7 +2334,7 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 @container (max-width: 640px) {
   #captions-display .caption {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) 5.5rem auto;
     grid-template-areas:
       "play times rate menu"
       "text text text text";

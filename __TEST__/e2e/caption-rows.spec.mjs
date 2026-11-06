@@ -50,6 +50,9 @@ test('one cue is one row, with the text beside the times', async ({ page }) => {
   const text = await rect(page, `${ROW}:first-child textarea.lines`);
   expect(Math.abs(text.top - times.top)).toBeLessThan(12);
   expect(text.left).toBeGreaterThan(times.right);
+  // the text boxes share one right edge, whatever each row's rate reads
+  const rights = await page.$$eval(`${ROW} textarea.lines`, (els) => els.map((e) => Math.round(e.getBoundingClientRect().right)));
+  expect(new Set(rights).size).toBe(1);
   // the old stack is gone: no line inputs, no button group
   expect(await page.locator(`${ROW}:first-child input`).count()).toBe(2);
   expect(await page.locator(`${ROW}:first-child [data-caption-action]`).count()).toBe(3);
