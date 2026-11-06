@@ -1,7 +1,7 @@
 /**
  * media-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
  * Media export via mediabunny (#289, #291, #292): export the loaded media as
@@ -2464,4 +2464,8 @@
     addAacRollGroups,
   });
   window.MediaExportFrame = Object.freeze({ FRAME_SIZES, outputSize, coverRegion, coverPlacement, containRegion, makeFrameDrawer, captionLayout });
+  // The selection as a clip (#775): the words' own times, the kept sections
+  // inside them and their length, as the Selection option reads them, so
+  // what is shown beside the player is what the export would make.
+  window.MediaExportClip = Object.freeze({ selectedClip, clipSections, keptDuration, fmtLen });
 })();
