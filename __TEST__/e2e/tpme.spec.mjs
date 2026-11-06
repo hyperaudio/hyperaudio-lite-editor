@@ -387,7 +387,7 @@ test('the File menu\'s WebVTT download carries the block, and the speaker colour
   const before = await page.evaluate(() => document.querySelectorAll('#captions-display .caption').length);
   await page.evaluate((vtt) => window.populateCaptionEditorFromVtt(vtt), coloured);
   expect(await page.evaluate(() => document.querySelectorAll('#captions-display .caption').length)).toBe(before);
-  expect(await page.evaluate(() => document.querySelector('#captions-display .caption .line1').value)).not.toContain('Type:');
+  expect(await page.evaluate(() => document.querySelector('#captions-display .caption .lines').value)).not.toContain('Type:');
 });
 
 test('a flattened .hyperaudio carries the block in its captions, and the editor opens it plain (#673)', async ({ page }) => {
@@ -416,7 +416,7 @@ test('a flattened .hyperaudio carries the block in its captions, and the editor 
   await page.evaluate(() => { document.getElementById('export-modal').checked = false; });   // the export modal is still up
   await page.click('#caption-editor-btn');
   await page.waitForSelector('#captions-display .caption');
-  expect(await page.evaluate(() => document.querySelector('#captions-display .caption .line1').value)).not.toContain('Type:');
+  expect(await page.evaluate(() => document.querySelector('#captions-display .caption .lines').value)).not.toContain('Type:');
 });
 
 test('FADGI is a switch of its own: on with TPME off, the block is written and no sidecar is (#673)', async ({ page }) => {

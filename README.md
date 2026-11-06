@@ -63,7 +63,7 @@ Skip silences during playback and in export, with a simple on/off switch and adv
 
 ### Caption editor
 
-Switch into caption mode to review and fine‑tune cues line by line, with timings kept in sync.
+Switch to the captions view to work through the cues one row at a time: play, In and Out, the two lines of text with their lengths, and the reading rate. The cue that is playing is marked and kept in view, a time can be set from the playhead or nudged from the keyboard, and the row's menu inserts, merges, deletes and snaps an Out to the next In.
 
 <img alt="Caption editor" src="docs/images/caption-editor.png" width="860">
 

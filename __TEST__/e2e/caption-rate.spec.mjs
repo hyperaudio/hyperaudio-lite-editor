@@ -28,7 +28,7 @@ test('every caption shows a rate, in characters per second by default (#639)', a
   const computed = await page.evaluate(() => {
     const cap = document.querySelector('#captions-display .caption');
     const secs = (v) => { const m = /^(\d+):(\d+):(\d+)[.,](\d+)$/.exec(v.trim()); return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000; };
-    const text = [cap.querySelector('.line1').value.trim(), cap.querySelector('.line2').value.trim()].filter((s) => s !== '').join(' ');
+    const text = cap.querySelector('.lines').value.split('\n').map((s) => s.trim()).filter((s) => s !== '').join(' ');
     const d = secs(cap.querySelector('.end').value) - secs(cap.querySelector('.start').value);
     return { expected: (text.length / d).toFixed(1) + ' cps', shown: cap.querySelector('.caption-rate').textContent };
   });
@@ -57,8 +57,7 @@ test('the measure follows the setting, and switching updates what is on screen (
 test('editing a line recalculates that caption (#639)', async ({ page }) => {
   await openCaptions(page);
   const before = (await rates(page))[0];
-  await page.fill(`${firstCaption} .line1`, 'Short');
-  await page.fill(`${firstCaption} .line2`, '');
+  await page.fill(`${firstCaption} .lines`, 'Short');
   await expect.poll(async () => (await rates(page))[0]).not.toBe(before);
   const after = (await rates(page))[0];
   expect(Number(after.split(' ')[0])).toBeLessThan(Number(before.split(' ')[0]));
@@ -76,7 +75,7 @@ test('merging two captions recalculates the survivor (#639)', async ({ page }) =
   await openCaptions(page);
   const countBefore = (await rates(page)).length;
   const before = (await rates(page))[0];
-  await page.click(`${firstCaption} button:has-text("merge")`);
+  await page.locator(`${firstCaption} [data-caption-action="merge"]`).evaluate((el) => el.click());
   await expect.poll(async () => (await rates(page)).length).toBe(countBefore - 1);
   expect((await rates(page))[0]).not.toBe(before);
   expect((await rates(page))[0]).toMatch(/cps$/);
@@ -88,12 +87,11 @@ test('a caption with no duration or no words shows nothing rather than a nonsens
   await expect.poll(async () => (await rates(page))[0]).toBe('');
 
   await page.fill(`${firstCaption} .end`, '00:00:09.000');
-  await page.fill(`${firstCaption} .line1`, '');
-  await page.fill(`${firstCaption} .line2`, '');
+  await page.fill(`${firstCaption} .lines`, '');
   await expect.poll(async () => (await rates(page))[0]).toBe('');
 
   // a half-typed timecode is not an error either
-  await page.fill(`${firstCaption} .line1`, 'Some words here');
+  await page.fill(`${firstCaption} .lines`, 'Some words here');
   await page.fill(`${firstCaption} .end`, '00:00:0');
   await expect.poll(async () => (await rates(page))[0]).toBe('');
 });

@@ -617,13 +617,7 @@ dialog::backdrop {
 }
 
 @media screen and (max-width: 480px) {
-  .caption-row input.line1, .caption-row input.line2 {
-    width: 24ch;
-  }
-
-  .caption-row input.start, .caption-row input.end {
-    width: 12ch;
-  }
+  /* the caption rows fold below 700px on their own (#773, end of file) */
 }
 
 /* Minimal tooltip styling — mirrors DaisyUI .tooltip + data-tip so a future
@@ -2165,4 +2159,161 @@ html.ha-transcribing #upload-transcribe-btn {
   font-size: 0.8rem;
   line-height: 1.35;
   border-radius: 0 0 0.5rem 0.5rem;
+}
+
+/* The caption editor's rows (#773): one cue per row. A grid, so the play
+   button, the times, the text, the reading rate and the menu share one line
+   and the text takes the room that is left. Below 700px the row folds: the
+   times and the rate on the first line, the text on its own line beneath. */
+#captions-display {
+  width: 100%;
+  container-type: inline-size;   /* the fold below is by the column's width, not the window's */
+}
+#captions-display .caption {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "play times text rate menu";
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 4px;
+  padding: 6px 8px 6px 6px;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+}
+#captions-display .caption + .caption { margin-top: 2px; }
+/* the cue that is playing */
+#captions-display .caption.caption-current {
+  background: oklch(var(--p) / 0.07);
+  border-left-color: oklch(var(--p));
+}
+.caption-play { grid-area: play; margin-top: 4px; }
+.caption-times {
+  grid-area: times;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.caption-times input {
+  width: 11.5ch;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+.caption-times input:hover,
+.caption-times input:focus {
+  border-color: oklch(var(--bc) / 0.2);
+  background: oklch(var(--b1));
+  outline: none;
+}
+/* the cue buttons show when the times are hovered or being edited */
+.caption-seek { opacity: 0; transition: opacity 0.12s; }
+.caption-times:hover .caption-seek,
+.caption-times:focus-within .caption-seek,
+.caption-seek:focus-visible { opacity: 1; }
+.caption-arrow { color: oklch(var(--bc) / 0.5); padding: 0 4px; }
+.caption-text { grid-area: text; position: relative; min-width: 0; }
+/* two lines, never wrapped: a long line scrolls under the caret, and its
+   length is what the count at the right edge says */
+.caption-text textarea.lines {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  margin: 0;
+  padding: 3px 4.5ch 3px 8px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.4rem;
+  white-space: pre;
+  overflow: hidden;
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: 6px;
+  background: oklch(var(--b1));
+  color: inherit;
+}
+.caption-text textarea.lines:focus {
+  outline: none;
+  border-color: oklch(var(--p) / 0.6);
+}
+/* the strip at the right of the box, on the box's own background: a long
+   line runs on underneath it rather than through the numbers */
+.caption-counts {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  padding: 3px 7px 0 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  background: oklch(var(--b1));
+  border-radius: 0 5px 5px 0;
+  pointer-events: none;
+}
+.caption-count {
+  font-size: 0.68rem;
+  line-height: 1.4rem;
+  font-variant-numeric: tabular-nums;
+  color: oklch(var(--bc) / 0.4);
+}
+.caption-count-over { color: oklch(var(--er)); font-weight: 700; }
+#captions-display .caption-rate { grid-area: rate; margin-top: 4px; justify-self: end; text-align: right; }
+/* the row menu: a details element, so it opens with no script of its own */
+.caption-menu { grid-area: menu; position: relative; margin-top: 2px; }
+/* a row is painted within its own box (content-visibility, index.html), which
+   would clip its open menu: while the menu is open the row paints freely */
+#captions-display .caption.caption-menu-open { content-visibility: visible; }
+.caption-menu summary { list-style: none; cursor: pointer; font-size: 1rem; letter-spacing: 1px; }
+.caption-menu summary::-webkit-details-marker { display: none; }
+.caption-menu ul {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  margin: 2px 0 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 12.5rem;
+  background: oklch(var(--b1));
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.caption-menu.caption-menu-up ul { top: auto; bottom: 100%; margin: 0 0 2px; }
+.caption-menu li button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  cursor: pointer;
+}
+.caption-menu li button:hover,
+.caption-menu li button:focus-visible { background: oklch(var(--bc) / 0.08); outline: none; }
+.caption-menu li button:disabled { opacity: 0.4; cursor: default; background: none; }
+/* a rule between the time actions and the structural ones */
+.caption-menu li button[data-caption-action="insert"] {
+  border-top: 1px solid oklch(var(--bc) / 0.1);
+  border-radius: 0;
+  margin-top: 4px;
+  padding-top: 8px;
+}
+@container (max-width: 640px) {
+  #captions-display .caption {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "play times rate menu"
+      "text text text text";
+  }
 }

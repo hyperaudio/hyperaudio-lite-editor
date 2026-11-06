@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 
 const rows = (page) => page.evaluate(() => [...document.querySelectorAll('#captions-display .caption')].map((r) => ({
   start: r.querySelector('.start').value, end: r.querySelector('.end').value,
-  line1: r.querySelector('.line1').value, line2: r.querySelector('.line2').value,
+  line1: r.querySelector('.lines').value.split('\n')[0] || '', line2: r.querySelector('.lines').value.split('\n')[1] || '',
 })));
 
 const FADGI = [

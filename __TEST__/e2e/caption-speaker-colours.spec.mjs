@@ -97,7 +97,7 @@ test('insert inherits, merge keeps the survivor, delete leaves the rest (#536)',
   // insert after the last Mark: the new row belongs to that turn
   await page.evaluate((i) => {
     document.querySelectorAll('#captions-display .caption')[i]
-      .querySelector('button[onclick^="addCaption"]').click();
+      .querySelector('[data-caption-action="insert"]').click();
   }, firstAda - 1);
   let after = await rowSpeakers(page);
   expect(after[firstAda]).toBe('Mark');
@@ -106,7 +106,7 @@ test('insert inherits, merge keeps the survivor, delete leaves the rest (#536)',
   // merge the last Mark with the row below it: the survivor keeps Mark
   await page.evaluate((i) => {
     document.querySelectorAll('#captions-display .caption')[i]
-      .querySelector('button[onclick^="mergeCaption"]').click();
+      .querySelector('[data-caption-action="merge"]').click();
   }, firstAda);
   after = await rowSpeakers(page);
   expect(after[firstAda]).toBe('Mark');
@@ -114,7 +114,7 @@ test('insert inherits, merge keeps the survivor, delete leaves the rest (#536)',
   // delete it: the neighbours keep theirs
   await page.evaluate((i) => {
     document.querySelectorAll('#captions-display .caption')[i]
-      .querySelector('button[onclick^="deleteCaption"]').click();
+      .querySelector('[data-caption-action="delete"]').click();
   }, firstAda);
   after = await rowSpeakers(page);
   expect(after[firstAda - 1]).toBe('Mark');
@@ -188,7 +188,7 @@ test('the speakers travel with the project and come back (#536)', async ({ page 
   // Hand-edit a caption, so the captions diverge from the transcript: from
   // here the saved file is authoritative and cannot be regenerated, which is
   // exactly when the saved list is the only thing carrying the speakers.
-  await page.fill('#captions-display .caption:first-child .line1', 'Edited first line');
+  await page.fill('#captions-display .caption:first-child .lines', 'Edited first line');
   const speakers = await recorded(page);
   expect(new Set(speakers)).toEqual(new Set(['Mark', 'Ada']));
 
@@ -208,13 +208,13 @@ test('the speakers travel with the project and come back (#536)', async ({ page 
   await page.waitForSelector('#hypertranscript [data-m]');
   await openCaptions(page);
   await expect.poll(() => recorded(page)).toEqual(speakers);
-  expect(await page.inputValue('#captions-display .caption:first-child .line1')).toBe('Edited first line');
+  expect(await page.inputValue('#captions-display .caption:first-child .lines')).toBe('Edited first line');
 });
 
 test('a saved list that does not match the cues is dropped, not misapplied (#536)', async ({ page }) => {
   await addSecondSpeaker(page);
   await openCaptions(page);
-  await page.fill('#captions-display .caption:first-child .line1', 'Edited first line');
+  await page.fill('#captions-display .caption:first-child .lines', 'Edited first line');
   await expect.poll(() => recorded(page)).not.toEqual([]);
 
   // save, then shorten the stored list behind the app's back: the cue count

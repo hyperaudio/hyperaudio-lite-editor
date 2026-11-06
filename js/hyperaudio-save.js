@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -4425,7 +4425,7 @@
     // round trip REPLACES #hypertranscript, so direct element listeners died
     // after one switch and the autosave silently stopped. closest() finds the
     // current incarnation of each editable region.
-    const EDIT_SCOPE = '#hypertranscript, #caption-editor, #summary, #topics, #project-title';
+    const EDIT_SCOPE = '#hypertranscript, #captions-display, #summary, #topics, #project-title';
     document.addEventListener('input', (event) => {
       const t = event.target;
       if (t && t.closest && t.closest(EDIT_SCOPE) !== null) scheduleAutosave();
@@ -4594,11 +4594,11 @@
   const READ_ONLY_CONTROLS = [
     '#project-save-btn', '#strikethrough', '#replace-box', '#replace-actions button',
     '#show-speakers', '#show-timecodes', '#remove-gaps-enabled', '#remove-gaps-threshold',
-    '#remove-gaps-buffer', '#regenerate-btn', '#regenerate-float-btn',
+    '#remove-gaps-buffer', '#regenerate-float-btn',
     // a caption's text and times, and insert, merge and delete — not Play
     // clip, the two cue buttons or the reading-rate badge, which only play
     // or show something and change nothing about the project (#719)
-    '#captions-display input',
+    '#captions-display input', '#captions-display textarea',
     '#captions-display button:not(.play):not(.play-start):not(.play-end):not(.caption-rate)',
   ];
   // Idempotent by construction: it is called from setTranscriptBusy and from

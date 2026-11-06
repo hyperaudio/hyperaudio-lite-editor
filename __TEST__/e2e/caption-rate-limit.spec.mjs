@@ -82,7 +82,8 @@ test('editing a caption re-judges it (#641)', async ({ page }) => {
   await openCaptions(page);
   const first = '#captions-display .caption:first-child';
   // make it impossibly fast, then give it room
-  await page.fill(`${first} .line1`, 'A very long line of text indeed, far too much to read');
+  await page.fill(`${first} .lines`, 'A very long line of text indeed, far too much to read\nand a second line as long again, far too much to read');
+  await page.fill(`${first} .end`, '00:00:02.000');
   await expect.poll(async () => (await flagged(page))[0].over).toBe(true);
   await page.fill(`${first} .end`, '00:01:00.000');
   await expect.poll(async () => (await flagged(page))[0].over).toBe(false);

@@ -1,6 +1,6 @@
 <!--  (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html -->
 
-<!--  Hyperaudio Lite Editor - Version 1.3.44 (last changed in release 1.3.44) -->
+<!--  Hyperaudio Lite Editor - Version 1.3.45 (last changed in release 1.3.45) -->
 
 <!--  Hyperaudio Lite Editor's source code is provided under a dual license model.
 
@@ -18,12 +18,12 @@ If you are creating an open source application under a license compatible with t
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="version" content="1.3.44">
+  <meta name="version" content="1.3.45">
   <!-- The version is bumped with the FIRST change of a release, like the
        per-file cache stamps, so a working tree reports the release it is
        becoming. The date is set by the release commit and stays empty until
        then: Settings shows "unreleased" in its place (#615). -->
-  <meta name="release-date" content="2026-11-05">
+  <meta name="release-date" content="">
   <title>Hyperaudio Lite Editor</title>
   <link rel="apple-touch-icon" href="images/icon-192x192.png">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
@@ -123,10 +123,11 @@ If you are creating an open source application under a license compatible with t
       outline: 0px solid transparent;
     }
 
+    /* a caption row (#773): rendered when it comes into view, its size
+       remembered once seen, a row's worth guessed before that */
     .caption {
-      content-visibility:auto; 
-      contain-intrinsic-size: auto 300px;
-      height:300px;
+      content-visibility: auto;
+      contain-intrinsic-size: auto 72px;
     }
     
   </style>
@@ -146,7 +147,7 @@ If you are creating an open source application under a license compatible with t
        }
      } catch (e) { /* private mode: no hint, no hide */ }
    </script>
-   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.44">
+   <link rel="stylesheet" href="css/hyperaudio-lite-editor.css?v=1.3.45">
    <link rel="stylesheet" href="js/vendor/driver-1.9.0.css">
    <!-- DaisyUI / Tailwind - must be loaded last -->
    <link rel="stylesheet" href="css/tailwind-min.css">
@@ -352,30 +353,35 @@ If you are creating an open source application under a license compatible with t
     </form>
   </template>
 
+  <!-- A caption row (#773): play, In and Out, the two lines in one text box,
+       the reading rate and a menu, on one line where there is room. The
+       classes play, play-start, play-end, start, end and caption-rate are
+       what the read-only gate and the tests key on. js/caption-rows.js
+       gives the row its menu, its keyboard and its following of the media. -->
   <template id="caption-template-holder">
     <div id="caption-template" class="caption">
-      <div class="caption-row caption-row-top">
-        <button class="play btn btn-primary btn-sm" onclick="playClip(this)">play clip <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>
-        <button type="button" class="caption-rate" title=""></button>
+      <button type="button" class="play caption-play btn btn-primary btn-xs btn-square" onclick="playClip(this)" aria-label="Play clip" title="Play clip"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>
+      <div class="caption-times">
+        <button type="button" class="play-start caption-seek btn btn-ghost btn-xs btn-square" onclick="seekTo(this)" aria-label="Go to In" title="Go to In"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="start" value="" oninput="captionChange()" aria-label="In" title="In" spellcheck="false">
+        <span class="caption-arrow" aria-hidden="true">→</span>
+        <button type="button" class="play-end caption-seek btn btn-ghost btn-xs btn-square" onclick="seekTo(this)" aria-label="Go to Out" title="Go to Out"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="end" value="" oninput="captionChange()" aria-label="Out" title="Out" spellcheck="false">
       </div>
-      <div class="caption-row">
-        <button class="play-start btn btn-outline btn-xs" onclick="seekTo(this)" style="margin-right:4px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="start" value="" oninput="captionChange()">(In)
+      <div class="caption-text">
+        <textarea class="lines" rows="2" wrap="off" oninput="captionChange()" aria-label="Caption text"></textarea>
+        <span class="caption-counts" aria-hidden="true"><span class="caption-count"></span><span class="caption-count"></span></span>
       </div>
-      <div class="caption-row">
-        <button class="play-end btn btn-outline btn-xs" onclick="seekTo(this)" style="margin-right:4px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-skip-forward"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" x2="19" y1="5" y2="19"></line></svg></button><input class="end" value="" oninput="captionChange()">(Out)
-      </div>
-      <div class="caption-row">
-        <input class="line1" value="" oninput="captionChange()">
-      </div>
-      <div class="caption-row">
-        <input class="line2" value="" oninput="captionChange()">
-      </div>
-      <div class="caption-row btn-group btn-group-horizontal">
-        <button class="btn btn-outline btn-xs" onclick="addCaption(this)">insert <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-down-to-line"><line x1="12" x2="12" y1="17" y2="3"></line><polyline points="6 11 12 17 18 11"></polyline><path d="M19 21H5"></path></svg></button>
-        <button class="btn btn-outline btn-xs" onclick="mergeCaption(this)">merge <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-down-from-line"><line x1="12" x2="12" y1="21" y2="7"></line><polyline points="6 15 12 21 18 15"></polyline><path d="M19 3H5"></path></svg></button>
-        <button class="btn btn-outline btn-xs" onclick="deleteCaption(this)">delete <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg></button>
-      </div>
-      <div class="divider"></div>
+      <button type="button" class="caption-rate" title=""></button>
+      <details class="caption-menu">
+        <summary class="btn btn-ghost btn-xs btn-square" aria-label="Caption actions" title="Caption actions">⋯</summary>
+        <ul role="menu">
+          <li><button type="button" data-caption-action="in-now">In from playhead</button></li>
+          <li><button type="button" data-caption-action="out-now">Out from playhead</button></li>
+          <li><button type="button" data-caption-action="snap-out">Snap Out to next In</button></li>
+          <li><button type="button" data-caption-action="insert">Insert after</button></li>
+          <li><button type="button" data-caption-action="merge">Merge with next</button></li>
+          <li><button type="button" data-caption-action="delete">Delete</button></li>
+        </ul>
+      </details>
     </div>
   </template>
 
@@ -742,20 +748,6 @@ If you are creating an open source application under a license compatible with t
           </div>
         </div>
         <div class="navbar-end" style="padding-right: 8px;">
-          <!--<label for="captions-modal" class="btn btn-outline gap-2" style="margin-right:4px">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-subtitles"><path d="M7 13h4"></path><path d="M15 13h2"></path><path d="M7 9h2"></path><path d="M13 9h4"></path><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z"></path></svg>
-          </label>-->
-          <input type="checkbox" id="captions-modal" class="modal-toggle" tabindex="-1" aria-hidden="true" />
-          <div class="modal" style="content-visibility: hidden;">
-            <div class="modal-box relative">
-              <label for="captions-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
-              <button id="regenerate-btn" class="btn btn-disabled btn-outline btn-primary">Re-generate Captions from Transcript <svg id="regenerate-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-restart"><path d="M21 6H3"></path><path d="M7 12H3"></path><path d="M7 18H3"></path><path d="M12 18a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L11 14"></path><path d="M11 10v4h4"></path></svg></button>
-              <div id="caption-editor">
-                <center>Preparing captions....</center>
-              </div>
-              <!--<caption-service></caption-service>-->
-            </div>
-          </div>
           <!-- the share glyph, a box with an arrow out of it (#730): the
                download tray it replaced read as "download" -->
           <label id="export-media-btn" for="export-modal" class="btn btn-square btn-primary tooltip" data-tip="Export media" style="margin-right:4px" aria-label="Export media">
@@ -1327,21 +1319,16 @@ If you are creating an open source application under a license compatible with t
       width: 36ch;
     }
 
-    div.caption {
-      padding: 16px;
-    }
-
-    .caption-row {
-      padding: 4px;
-    }
-
+    /* the captions column (#773): the holder's width, less room on the
+       right for the floating Regenerate button the rows scroll under */
     #captions-display {
-      width: 520px;
-      padding-top: 40px;
+      width: 100%;
+      max-width: 72rem;
+      padding: 40px 64px 0 8px;
     }
 
   </style>
-  <script src="js/editor-main.js?v=1.3.44"></script>
+  <script src="js/editor-main.js?v=1.3.45"></script>
   <script src="js/find-replace.js?v=1.3.44"></script>
   <script src="js/transcript-history.js?v=1.3.39"></script>
   <!-- device limits benchmark — inert without ?bench=1 in the URL -->
@@ -1366,7 +1353,7 @@ If you are creating an open source application under a license compatible with t
   <script type="module" src="js/editor-audio-cut.js?v=1.3.41"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
-  <script src="js/hyperaudio-save.js?v=1.3.44"></script>
+  <script src="js/hyperaudio-save.js?v=1.3.45"></script>
   <script src="js/tpme.js?v=1.3.44"></script>
   <script src="js/hyperaudio-library.js?v=1.3.44"></script>
   <script src="js/transcribe-from-project.js?v=1.3.44"></script>
@@ -1374,6 +1361,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/media-posters.js?v=1.3.44"></script>
   <script src="js/media-unplayable.js?v=1.3.44"></script>
   <script src="js/original-media-download.js?v=1.3.44"></script>
+  <script src="js/caption-rows.js?v=1.3.45"></script>
   <!-- transcript document exports: TXT / Markdown (#467) -->
   <script src="js/transcript-doc-export.js?v=1.3.25"></script>
 

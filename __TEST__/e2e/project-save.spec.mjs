@@ -1004,7 +1004,7 @@ test('every cue in the saved VTT reaches the caption editor (#513)', async ({ pa
   await page.click('#caption-editor-btn');
   await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
 
-  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+  const lines = await page.locator('#captions-display .caption textarea.lines').evaluateAll(
     (els) => els.map((e) => e.value.trim()));
   expect(lines).toEqual(['First cue', 'Second cue', 'Third cue']);
 });
@@ -1039,7 +1039,7 @@ for (const action of ['insert', 'merge', 'delete']) {
     // merge needs a second caption below the first to merge INTO
     if (action === 'merge') {
       await page.locator(CAPTION).first()
-        .locator('button', { hasText: 'insert' }).click();
+        .locator('[data-caption-action="insert"]').evaluate((el) => el.click());
       await page.evaluate(() => window.HyperaudioSave.autosaveNow());
       await page.evaluate(() => {
         document.getElementById('project-save-btn').classList.remove('dirty');
@@ -1048,7 +1048,7 @@ for (const action of ['insert', 'merge', 'delete']) {
 
     const countBefore = await page.locator(CAPTION).count();
     await page.locator(CAPTION).first()
-      .locator('button', { hasText: action }).click();
+      .locator(`[data-caption-action="${action}"]`).evaluate((el) => el.click());
 
     // the caption list really changed...
     const countAfter = await page.locator(CAPTION).count();
@@ -1068,7 +1068,7 @@ test('typing in a caption marks the project dirty (#505)', async ({ page }, test
   await enterCaptionMode(page);
   await expect(page.locator('#project-save-btn')).not.toHaveClass(/dirty/);
 
-  await page.locator(CAPTION).first().locator('input.line1').click();
+  await page.locator(CAPTION).first().locator('textarea.lines').click();
   await page.keyboard.type('EDITED');
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
 });
@@ -1080,11 +1080,11 @@ test('a caption deletion survives the save that follows it (#505)', async ({ pag
   await enterCaptionMode(page);
 
   const firstLine = await page.locator(CAPTION).first()
-    .locator('input.line1').inputValue();
+    .locator('textarea.lines').inputValue();
   expect(firstLine.trim()).not.toBe('');
 
   await page.locator(CAPTION).first()
-    .locator('button', { hasText: 'delete' }).click();
+    .locator('[data-caption-action="delete"]').evaluate((el) => el.click());
   await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
 
   await page.keyboard.press('Control+s');
