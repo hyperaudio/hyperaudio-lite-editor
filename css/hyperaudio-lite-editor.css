@@ -1660,17 +1660,21 @@ label[data-a11y-wired]:focus-visible {
 }
 
 /* Read-only indicator (#653): pinned inside the transcript card's bottom-
-   right corner while another tab owns the project; clicking it explains.
+   left corner while another tab owns the project; clicking it explains.
    Fixed like the progress pill, 12px in from the card's edges in each band
-   (the holder's right/bottom + 12), in the corner floats' z band. Solid
+   (the holder's left/bottom + 12), in the corner floats' z band. The
+   card's left edge moves with the sidebar (400 <-> 0), so the badge tracks
+   body.sidebar-collapsed as the ⓘ does (#775 put the selection's length
+   in the right corner). Solid
    white for the same reason the Regenerate float is: text scrolls under
    it. .btn's inline-flex would beat the [hidden] reset, so the hide is
    spelled out. */
 #project-readonly-badge {
   position: fixed;
-  right: 28px;                /* holder right (16px) + 12 */
+  left: 412px;                /* holder left (400px) + 12 */
   bottom: 72px;               /* holder bottom (60px) + 12 */
   z-index: 20;
+  transition: left 0.5s ease;
   gap: 6px;
   min-height: 2rem;
   height: 2rem;
@@ -1682,16 +1686,16 @@ label[data-a11y-wired]:focus-visible {
   background-color: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
+body.sidebar-collapsed #project-readonly-badge { left: 12px; }
 #project-readonly-badge[hidden] { display: none !important; }
-/* at the right edge a centred tooltip would run off-screen (#546's mirror) */
+/* at the left edge a centred tooltip would run off-screen: it opens inward (#546) */
 #project-readonly-badge.tooltip::before {
-  left: auto;
-  right: 0;
+  left: 0;
   transform: none;
 }
 @media screen and (max-width: 948px) {
   #project-readonly-badge {
-    right: 12px;              /* holder spans the width; bottom is the play bar */
+    left: 12px;               /* holder spans the width; bottom is the play bar */
     bottom: 64px;             /* holder bottom (52px) + 12 */
   }
 }
@@ -2168,16 +2172,14 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 
 /* The selected passage's times and length (#775): a pill pinned inside the
-   transcript card's bottom-left corner, the read-only badge's mirror, 12px
-   in from the card's edges. The card's left edge moves with the sidebar
-   (400 <-> 0), so the pill tracks body.sidebar-collapsed as the ⓘ does.
-   Solid white, since text scrolls under it. It takes no clicks. */
+   transcript card's bottom-right corner, the read-only badge's mirror,
+   12px in from the card's edges. Opaque, since text scrolls under it: the
+   primary's tint mixed over white. It takes no clicks. */
 #selection-length {
   position: fixed;
-  left: 412px;                /* holder left (400px) + 12 */
+  right: 28px;                /* holder right (16px) + 12 */
   bottom: 72px;               /* holder bottom (60px) + 12 */
   z-index: 20;
-  transition: left 0.5s ease;
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
@@ -2187,15 +2189,13 @@ html.ha-transcribing #upload-transcribe-btn {
   white-space: nowrap;
   padding: 5px 10px;
   border-radius: 999px;
-  background-color: #ffffff;
+  background-color: color-mix(in oklch, oklch(var(--p)) 10%, #ffffff);
   color: oklch(var(--bc) / 0.85);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   pointer-events: none;
 }
-body.sidebar-collapsed #selection-length { left: 12px; }
 #selection-length[hidden] { display: none; }
 @media screen and (max-width: 948px) {
-  #selection-length { left: 12px; bottom: 64px; }   /* the holder spans the width, the play bar is 52px */
+  #selection-length { right: 12px; bottom: 64px; }   /* the holder spans the width, the play bar is 52px */
 }
 #selection-length .selection-length-span { opacity: 0.7; }
 #selection-length .selection-length-length { font-weight: 600; }

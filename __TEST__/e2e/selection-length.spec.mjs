@@ -45,7 +45,7 @@ test('a selection shows its times and its length, and follows the selection as i
   await expect(chip(page)).toBeHidden();
 });
 
-test('the pill sits in the card\'s bottom-left corner, the read-only badge\'s mirror, outside the transcript', async ({ page }) => {
+test('the pill sits in the card\'s bottom-right corner, the read-only badge\'s mirror, outside the transcript', async ({ page }) => {
   await setup(page);
   await select(page, 3, 6);
   await expect(chip(page)).toBeVisible();
@@ -57,12 +57,9 @@ test('the pill sits in the card\'s bottom-left corner, the read-only badge\'s mi
       insideTranscript: document.getElementById('hypertranscript').contains(document.getElementById('selection-length')),
     };
   });
-  expect(at.pill.left - at.card.left).toBeCloseTo(12, 0);
+  expect(at.card.right - at.pill.right).toBeCloseTo(12, 0);
   expect(at.card.bottom - at.pill.bottom).toBeCloseTo(12, 0);
   expect(at.insideTranscript).toBe(false);
-  // and it follows the card's edge when the sidebar collapses
-  await page.evaluate(() => document.body.classList.add('sidebar-collapsed'));
-  await expect.poll(() => page.evaluate(() => document.getElementById('selection-length').getBoundingClientRect().left)).toBeCloseTo(12, 0);
   // and it is not written into the transcript's content
   expect(await page.evaluate(() => document.getElementById('hypertranscript').innerHTML.includes('selection-length'))).toBe(false);
 });

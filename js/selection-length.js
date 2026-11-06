@@ -5,7 +5,7 @@
  * @license AGPL-3.0-only
  *
  * How long the selected passage runs (#775), shown in the transcript card's
- * bottom-left corner while something is selected in the transcript: the
+ * bottom-right corner while something is selected in the transcript: the
  * selected words' own times, and the length a clip of them would be exported
  * at, with struck words and skipped silences left out, so it is the number
  * the Export dialog's Selection option would show.
