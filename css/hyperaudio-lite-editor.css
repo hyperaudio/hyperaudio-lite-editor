@@ -2324,3 +2324,12 @@ html.ha-transcribing #upload-transcribe-btn {
 @container (max-width: 440px) {
   #captions-display .caption { grid-template-rows: auto auto; }
 }
+
+/* Two captions that overlap in time (#773): the Out of the first and the In
+   of the second are marked, and each says which neighbour it runs into. */
+.caption-times input.caption-time-overlap {
+  color: #b91c1c;
+  font-weight: 700;
+  background: #b91c1c14;
+  border-color: #b91c1c66;
+}

@@ -13,6 +13,7 @@
  *    last row, and the menu closed by a click elsewhere or Escape
  *  - the editor follows the media: the playing cue is marked and kept in
  *    view, and clicking a time seeks there
+ *  - two captions that overlap in time are marked at the times that meet
  *  - the text: Enter moves to the second line and a third line is refused,
  *    and a pasted third line folds onto the second
  *  - the keyboard: Alt+[ and Alt+] set In and Out from the playhead, and
@@ -230,11 +231,43 @@
     p.currentTime = Math.max(0, isEnd ? at - OUT_LEAD : at);
   });
 
-  // rows freshly built, or changed through the one door: mark the one that
-  // is playing
-  const built = () => { current = null; follow(); };
-  document.addEventListener('hyperaudioCaptionRowsBuilt', built);
-  document.addEventListener('hyperaudioCaptionsEdited', follow);
+  /* ---- captions that overlap in time ------------------------------------- */
 
-  window.CaptionRows = Object.freeze({ NUDGE, seconds, timecode, follow });
+  // Two captions on screen at once is a mistake the file will carry into
+  // every player, so the pair is marked: the Out of the first and the In of
+  // the second, each saying which neighbour it runs into. Neighbours in the
+  // list are neighbours in time, which is the order the rows keep.
+  const OVERLAP_CLASS = 'caption-time-overlap';
+  const checkOverlaps = () => {
+    const rows = rowsOf(display());
+    rows.forEach((row) => row.querySelectorAll('.' + OVERLAP_CLASS).forEach((input) => {
+      input.classList.remove(OVERLAP_CLASS);
+      input.title = input.classList.contains('end') ? 'Out' : 'In';
+    }));
+    for (let i = 0; i + 1 < rows.length; i += 1) {
+      const out = rows[i].querySelector('.end');
+      const nextIn = rows[i + 1].querySelector('.start');
+      const a = seconds(out.value);
+      const b = seconds(nextIn.value);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || a <= b + 0.0005) continue;
+      out.classList.add(OVERLAP_CLASS);
+      out.title = 'Out: overlaps the next caption, which begins at ' + nextIn.value;
+      nextIn.classList.add(OVERLAP_CLASS);
+      nextIn.title = 'In: overlaps the previous caption, which ends at ' + out.value;
+    }
+  };
+  // a time being typed is checked as it goes, not only once committed
+  document.addEventListener('input', (event) => {
+    const input = event.target;
+    if (input instanceof HTMLInputElement && (input.classList.contains('start') || input.classList.contains('end'))
+        && rowOf(input) !== null) checkOverlaps();
+  });
+
+  // rows freshly built, or changed through the one door: mark the one that
+  // is playing, and any pair that overlap
+  const built = () => { current = null; follow(); checkOverlaps(); };
+  document.addEventListener('hyperaudioCaptionRowsBuilt', built);
+  document.addEventListener('hyperaudioCaptionsEdited', () => { follow(); checkOverlaps(); });
+
+  window.CaptionRows = Object.freeze({ NUDGE, seconds, timecode, follow, checkOverlaps });
 })();

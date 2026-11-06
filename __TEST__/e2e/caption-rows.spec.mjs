@@ -242,6 +242,30 @@ test('a new caption takes the gap it is inserted into, and the caret goes to its
   await expect(page.locator(`${ROW}:nth-child(2) .end`)).toHaveValue('00:00:03.240');
 });
 
+test('two captions that overlap in time are marked at the times that meet', async ({ page }) => {
+  await openCaptions(page);
+  const out = page.locator(`${ROW}:first-child .end`);
+  const nextIn = page.locator(`${ROW}:nth-child(2) .start`);
+  expect(await page.locator('.caption-time-overlap').count()).toBe(0);
+  // the first runs on past the second's start
+  await nextIn.fill('00:00:05.000');
+  await out.fill('00:00:06.000');
+  await expect(out).toHaveClass(/caption-time-overlap/);
+  await expect(nextIn).toHaveClass(/caption-time-overlap/);
+  expect(await out.getAttribute('title')).toContain('overlaps the next caption');
+  expect(await nextIn.getAttribute('title')).toContain('overlaps the previous caption');
+  expect(await page.locator('.caption-time-overlap').count()).toBe(2);
+  // touching is not overlapping
+  await out.fill('00:00:05.000');
+  expect(await page.locator('.caption-time-overlap').count()).toBe(0);
+  expect(await out.getAttribute('title')).toBe('Out');
+  // a merge or an insert is checked too: the small-gap insert overlaps
+  await out.fill('00:00:04.990');
+  await page.locator(`${ROW}:first-child [data-caption-action="insert"]`).evaluate((el) => el.click());
+  await expect(page.locator(`${ROW}:nth-child(2) .end`)).toHaveClass(/caption-time-overlap/);
+  await expect(page.locator(`${ROW}:nth-child(3) .start`)).toHaveClass(/caption-time-overlap/);
+});
+
 test('insert, merge and delete still work from the menu', async ({ page }) => {
   await openCaptions(page);
   const before = await page.locator(ROW).count();
