@@ -152,7 +152,9 @@
     if (!(area instanceof HTMLTextAreaElement) || !area.classList.contains('lines')) return;
     const row = rowOf(area);
     if (row === null) return;
-    if (foldLines(area)) edited();    // the track was written from the unfolded text a moment ago
+    // the track was written from the unfolded text a moment ago. Not while
+    // a composition is in flight: rewriting the text under it breaks it
+    if (!event.isComposing && foldLines(area)) edited();
     countsOf(row);
   });
 
@@ -170,8 +172,9 @@
       return;
     }
     // Enter in the text: to the second line once, never a third
+    // (not while a composition is in flight: there Enter confirms the text)
     if (target instanceof HTMLTextAreaElement && target.classList.contains('lines') && rowOf(target) !== null) {
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' && !event.isComposing) {
         if (String(target.value).includes('\n')) event.preventDefault();
       }
       return;

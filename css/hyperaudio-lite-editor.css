@@ -2116,7 +2116,7 @@ html.ha-transcribing #upload-transcribe-btn {
 .caption-rate {
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
-  color: oklch(var(--bc) / 0.6);
+  color: oklch(var(--bc) / 0.72);
   white-space: nowrap;
   background: none;
   border: 0;
@@ -2128,7 +2128,7 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 /* Over the limit (#641): colour, and weight so it does not depend on colour. */
 .caption-rate-over {
-  color: oklch(var(--er));
+  color: #b91c1c;   /* a red that reads at this size (4.5:1 on white) */
   font-weight: 700;
 }
 .caption-rate-over:hover {
@@ -2260,9 +2260,9 @@ html.ha-transcribing #upload-transcribe-btn {
   font-size: 0.68rem;
   line-height: 1.4rem;
   font-variant-numeric: tabular-nums;
-  color: oklch(var(--bc) / 0.4);
+  color: oklch(var(--bc) / 0.72);
 }
-.caption-count-over { color: oklch(var(--er)); font-weight: 700; }
+.caption-count-over { color: #b91c1c; font-weight: 700; }
 #captions-display .caption-rate { grid-area: rate; margin-top: 4px; justify-self: end; text-align: right; }
 /* the row menu: a details element, so it opens with no script of its own */
 .caption-menu { grid-area: menu; position: relative; margin-top: 2px; }

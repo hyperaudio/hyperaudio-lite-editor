@@ -5,7 +5,9 @@
 // playing cue is marked and kept in view, a time is set from the playhead or
 // nudged from the keyboard, and the row folds on a narrow screen.
 import { test, expect } from '@playwright/test';
+import { createRequire } from 'node:module';
 
+const AXE_PATH = createRequire(import.meta.url).resolve('axe-core/axe.min.js');
 const ROW = '#captions-display .caption';
 
 const openCaptions = async (page) => {
@@ -220,6 +222,20 @@ test('the text survives a trip to the transcript and back', async ({ page }) => 
   if (await divergence.isVisible()) await page.click('#project-dialog-confirm');
   expect(await page.locator(`${ROW}:first-child textarea.lines`).inputValue()).toBe('kept line\nand its second');
   await expect(page.locator(`${ROW}:first-child .caption-count`).nth(1)).toHaveText('14');
+});
+
+test('the rows pass the accessibility rules the editor holds itself to', async ({ page }) => {
+  await openCaptions(page);
+  await page.locator(`${ROW}:first-child details.caption-menu`).evaluate((el) => { el.open = true; });
+  await page.addScriptTag({ path: AXE_PATH });
+  const violations = await page.evaluate(async () => {
+    const result = await window.axe.run(document.getElementById('captions-display'), {
+      runOnly: { type: 'rule', values: ['label', 'button-name', 'aria-required-children', 'aria-allowed-role',
+        'aria-required-parent', 'form-field-multiple-labels', 'color-contrast', 'aria-hidden-focus'] },
+    });
+    return result.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5) }));
+  });
+  expect(violations).toEqual([]);
 });
 
 test('the dead captions dialog is gone from the page', async ({ page }) => {
