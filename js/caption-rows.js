@@ -14,8 +14,7 @@
  *  - the editor follows the media: the playing cue is marked and kept in
  *    view, and clicking a time seeks there
  *  - the text: Enter moves to the second line and a third line is refused,
- *    a pasted third line folds onto the second, and each line's length shows
- *    at its right edge, red past the limit
+ *    and a pasted third line folds onto the second
  *  - the keyboard: Alt+[ and Alt+] set In and Out from the playhead, and
  *    Alt+Up and Alt+Down nudge a focused time by a tenth of a second
  *
@@ -25,7 +24,6 @@
 (() => {
   'use strict';
 
-  const LINE_LIMIT = 42;        // characters on a line, the broadcast rule of thumb
   const NUDGE = 0.1;            // seconds, Alt+Up and Alt+Down
   const OUT_LEAD = 0.1;         // seeking to an Out lands just before it, as seekTo does
 
@@ -132,20 +130,7 @@
     });
   }, true);
 
-  /* ---- the text: two lines, no more, each measured ---------------------- */
-
-  const countsOf = (row) => {
-    const area = row.querySelector('textarea.lines');
-    const counts = row.querySelectorAll('.caption-count');
-    if (area === null || counts.length < 2) return;
-    const lines = String(area.value).split('\n');
-    for (let i = 0; i < 2; i += 1) {
-      const length = lines[i] === undefined ? 0 : lines[i].length;
-      counts[i].textContent = length === 0 ? '' : String(length);
-      counts[i].classList.toggle('caption-count-over', length > LINE_LIMIT);
-    }
-  };
-  const refresh = () => rowsOf(display()).forEach(countsOf);
+  /* ---- the text: two lines, no more ------------------------------------- */
 
   // a third line, pasted or dropped in, folds onto the second
   const foldLines = (area) => {
@@ -160,12 +145,10 @@
   document.addEventListener('input', (event) => {
     const area = event.target;
     if (!(area instanceof HTMLTextAreaElement) || !area.classList.contains('lines')) return;
-    const row = rowOf(area);
-    if (row === null) return;
+    if (rowOf(area) === null) return;
     // the track was written from the unfolded text a moment ago. Not while
     // a composition is in flight: rewriting the text under it breaks it
     if (!event.isComposing && foldLines(area)) edited();
-    countsOf(row);
   });
 
   document.addEventListener('keydown', (event) => {
@@ -247,11 +230,11 @@
     p.currentTime = Math.max(0, isEnd ? at - OUT_LEAD : at);
   });
 
-  // rows freshly built, or changed through the one door: measure them, and
-  // mark the one that is playing
-  const built = () => { current = null; refresh(); follow(); };
+  // rows freshly built, or changed through the one door: mark the one that
+  // is playing
+  const built = () => { current = null; follow(); };
   document.addEventListener('hyperaudioCaptionRowsBuilt', built);
-  document.addEventListener('hyperaudioCaptionsEdited', () => { refresh(); follow(); });
+  document.addEventListener('hyperaudioCaptionsEdited', follow);
 
-  window.CaptionRows = Object.freeze({ LINE_LIMIT, NUDGE, seconds, timecode, refresh, follow });
+  window.CaptionRows = Object.freeze({ NUDGE, seconds, timecode, follow });
 })();

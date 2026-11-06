@@ -64,8 +64,8 @@ test('in a narrow column the row folds: the text goes under the times', async ({
   const times = await rect(page, `${ROW}:first-child .caption-times`);
   const text = await rect(page, `${ROW}:first-child textarea.lines`);
   expect(text.top).toBeGreaterThanOrEqual(times.bottom - 2);
-  const menu = await rect(page, `${ROW}:first-child .caption-menu`);
-  expect(Math.abs(menu.top - times.top)).toBeLessThan(12);
+  const rate = await rect(page, `${ROW}:first-child .caption-rate`);
+  expect(Math.abs(rate.top - times.top)).toBeLessThan(12);
 });
 
 test('the column is as wide as the transcript with its timecodes, and In sits over Out', async ({ page }) => {
@@ -127,7 +127,7 @@ test('clicking a time seeks there, an Out just before it', async ({ page }) => {
   expect(await clock(page)).toBeCloseTo(end - 0.1, 3);
 });
 
-test('Enter moves to the second line, a third line is refused, and each line is counted', async ({ page }) => {
+test('Enter moves to the second line, and a third line is refused', async ({ page }) => {
   await openCaptions(page);
   const area = page.locator(`${ROW}:first-child textarea.lines`);
   await area.fill('');
@@ -138,9 +138,6 @@ test('Enter moves to the second line, a third line is refused, and each line is 
   await page.keyboard.press('Enter');
   await page.keyboard.type('three');
   expect(await area.inputValue()).toBe('one\ntwothree');
-  const counts = page.locator(`${ROW}:first-child .caption-count`);
-  await expect(counts.nth(0)).toHaveText('3');
-  await expect(counts.nth(1)).toHaveText('8');
   // the track was written from the box: both lines, nothing more
   const vtt = await page.evaluate(() => decodeURIComponent(document.getElementById('hyperplayer-vtt').src.split(',')[1]));
   expect(vtt).toContain('one\ntwothree\n\n');
@@ -154,18 +151,6 @@ test('a pasted third line folds onto the second', async ({ page }) => {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
   expect(await area.inputValue()).toBe('first\nsecond third fourth');
-});
-
-test('the count turns red past 42 characters', async ({ page }) => {
-  await openCaptions(page);
-  const area = page.locator(`${ROW}:first-child textarea.lines`);
-  const first = page.locator(`${ROW}:first-child .caption-count`).first();
-  await area.fill('x'.repeat(42));
-  await expect(first).toHaveText('42');
-  await expect(first).not.toHaveClass(/caption-count-over/);
-  await area.fill('x'.repeat(43));
-  await expect(first).toHaveText('43');
-  await expect(first).toHaveClass(/caption-count-over/);
 });
 
 test('In and Out are set from the playhead with Alt and a bracket', async ({ page }) => {
@@ -279,7 +264,6 @@ test('the text survives a trip to the transcript and back', async ({ page }) => 
   const divergence = page.locator('#project-dialog.modal-open');
   if (await divergence.isVisible()) await page.click('#project-dialog-confirm');
   expect(await page.locator(`${ROW}:first-child textarea.lines`).inputValue()).toBe('kept line\nand its second');
-  await expect(page.locator(`${ROW}:first-child .caption-count`).nth(1)).toHaveText('14');
 });
 
 test('the rows pass the accessibility rules the editor holds itself to', async ({ page }) => {

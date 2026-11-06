@@ -2176,8 +2176,8 @@ html.ha-transcribing #upload-transcribe-btn {
   grid-template-columns: auto auto minmax(0, 1fr) 5rem;
   grid-template-rows: calc(6px + 1.45rem) auto;
   grid-template-areas:
-    "play times text menu"
-    "play times text rate";
+    "play times text rate"
+    "play times text menu";
   align-items: start;
   column-gap: 10px;
   row-gap: 0;
@@ -2241,7 +2241,7 @@ html.ha-transcribing #upload-transcribe-btn {
   box-sizing: border-box;
   resize: none;
   margin: 0;
-  padding: 5px 4ch 5px 9px;
+  padding: 5px 9px;
   font: inherit;
   font-size: 0.95rem;
   line-height: 1.45rem;
@@ -2256,31 +2256,9 @@ html.ha-transcribing #upload-transcribe-btn {
   outline: none;
   border-color: oklch(var(--p) / 0.6);
 }
-/* the strip at the right of the box, on the box's own background: a long
-   line runs on underneath it rather than through the numbers */
-.caption-counts {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  bottom: 1px;
-  padding: 5px 8px 0 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  background: oklch(var(--b1));
-  border-radius: 0 5px 5px 0;
-  pointer-events: none;
-}
-.caption-count {
-  font-size: 0.68rem;
-  line-height: 1.45rem;
-  font-variant-numeric: tabular-nums;
-  color: oklch(var(--bc) / 0.72);
-}
-.caption-count-over { color: #b91c1c; font-weight: 700; }
-#captions-display .caption-rate { grid-area: rate; align-self: start; justify-self: end; margin: 0; padding: 0 4px; line-height: 1.45rem; text-align: right; }
+#captions-display .caption-rate { grid-area: rate; align-self: end; justify-self: end; margin: 0; padding: 0 4px; line-height: 1.45rem; text-align: right; }
 /* the row menu: a details element, so it opens with no script of its own */
-.caption-menu { grid-area: menu; position: relative; align-self: start; justify-self: end; height: 1.5rem; margin-top: 5px; }
+.caption-menu { grid-area: menu; position: relative; align-self: start; justify-self: end; height: 1.5rem; margin-top: 0; }
 /* a row is painted within its own box (content-visibility, index.html), which
    would clip its open menu: while the menu is open the row paints freely */
 #captions-display .caption.caption-menu-open { content-visibility: visible; }
@@ -2351,8 +2329,8 @@ html.ha-transcribing #upload-transcribe-btn {
     grid-template-columns: auto minmax(0, 1fr) 5rem;
     grid-template-rows: calc(6px + 1.45rem) auto auto;
     grid-template-areas:
-      "play times menu"
       "play times rate"
+      "play times menu"
       "text text text";
   }
 }
