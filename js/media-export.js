@@ -2014,7 +2014,12 @@
       }
       sourceClip.disabled = allStruck;
       if (clipRow !== null) clipRow.classList.toggle('export-source-off', allStruck);
-      sourceClip.checked = !allStruck;
+      // a single word is offered but not chosen (#776): a double-click
+      // selects one as often as a choice does, and Entire or Edited, set
+      // above, stays the default
+      const slight = window.TranscriptSelection && typeof window.TranscriptSelection.slight === 'function'
+        && window.TranscriptSelection.slight();
+      sourceClip.checked = !allStruck && !slight;
       if (allStruck && sourceEntire !== null) sourceEntire.checked = true;
     } else if (sourceClip !== null) {
       sourceClip.checked = false;

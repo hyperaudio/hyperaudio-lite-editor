@@ -96,6 +96,45 @@ test('it reads as the Export dialog does', async ({ page }) => {
   await expect(page.locator('#export-clip-summary')).toHaveText(`(${shown}, 0:07)`);
 });
 
+// #776 — a single word is a double-click as often as a choice: nothing is
+// shown for it, and Export offers it without choosing it
+const openExport = async (page) => {
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
+  await page.evaluate(() => {
+    document.activeElement && document.activeElement.blur();
+    const m = document.getElementById('export-modal');
+    m.checked = true;
+    m.dispatchEvent(new Event('change'));
+  });
+  await page.waitForFunction(() => document.getElementById('export-format').options.length > 0, null, { timeout: 60000 });
+};
+const closeExport = (page) => page.evaluate(() => {
+  const m = document.getElementById('export-modal');
+  m.checked = false;
+  m.dispatchEvent(new Event('change'));
+});
+
+test('a single word shows no length, and Export offers it as a clip without choosing it (#776)', async ({ page }) => {
+  await setup(page);
+  await select(page, 5, 5);
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 100)));
+  await expect(chip(page)).toBeHidden();
+  expect(await page.evaluate(() => window.TranscriptSelection.slight())).toBe(true);
+  await openExport(page);
+  await expect(page.locator('#export-source-clip-row')).toBeVisible();
+  expect(await page.evaluate(() => document.getElementById('export-source-clip').checked)).toBe(false);
+  expect(await page.evaluate(() => document.getElementById('export-source-entire').checked)).toBe(true);
+  // still there to choose
+  expect(await page.evaluate(() => document.getElementById('export-source-clip').disabled)).toBe(false);
+  await expect(page.locator('#export-clip-summary')).toHaveText('(0:05–0:06, 0:01)');
+  await closeExport(page);
+  // two words are a choice: measured, and chosen
+  await select(page, 5, 6);
+  await expect(length(page)).toHaveText('0:02');
+  await openExport(page);
+  expect(await page.evaluate(() => document.getElementById('export-source-clip').checked)).toBe(true);
+});
+
 test('an edit in the transcript takes the selection, and the chip, away', async ({ page }) => {
   await setup(page);
   await select(page, 3, 6);

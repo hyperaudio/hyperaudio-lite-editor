@@ -66,6 +66,8 @@
     // the dialog offers none (the padding either side would still count)
     const struck = (w) => (w.style.textDecoration || '').includes('line-through');
     if (length < 0.05 || sel.words().every(struck)) { hide(); return; }
+    // a single word, a double-click as often as a choice, is not measured (#776)
+    if (typeof sel.slight === 'function' && sel.slight()) { hide(); return; }
     const el = pill();
     const span = `${clip.fmtLen(range.from)}–${clip.fmtLen(range.to)}`;
     const len = clip.fmtLen(length);
