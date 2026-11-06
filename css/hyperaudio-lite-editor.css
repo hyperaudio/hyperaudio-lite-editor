@@ -2217,18 +2217,16 @@ html.ha-transcribing #upload-transcribe-btn {
   outline: none;
 }
 .caption-arrow { color: oklch(var(--bc) / 0.5); padding: 0 6px; font-size: 0.875rem; }
-/* the cue buttons show when the times are hovered or being edited */
+/* the cue buttons, always shown, quiet until hovered */
 .caption-seek {
   height: 1.45rem;
   min-height: 0;
   width: 1.25rem;
   padding: 0;
-  opacity: 0;
-  transition: opacity 0.12s;
+  color: oklch(var(--bc) / 0.55);
 }
-.caption-times:hover .caption-seek,
-.caption-times:focus-within .caption-seek,
-.caption-seek:focus-visible { opacity: 1; }
+.caption-seek:hover,
+.caption-seek:focus-visible { color: oklch(var(--bc)); }
 .caption-text { grid-area: text; position: relative; min-width: 0; }
 /* two lines, never wrapped: a long line scrolls under the caret, and its
    length is what the count at the right edge says */
