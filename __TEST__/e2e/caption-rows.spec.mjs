@@ -42,14 +42,17 @@ const nthStart = (page, n) => page.evaluate((i) => {
   return window.CaptionRows.seconds(v);
 }, n);
 
-test('one cue is one row, with the text beside the times', async ({ page }) => {
+test('one cue is one row: the times on one line, the text beneath them', async ({ page }) => {
   await openCaptions(page);
   const row = await rect(page, `${ROW}:first-child`);
-  expect(row.height).toBeLessThan(100);
+  expect(row.height).toBeLessThan(120);
   const times = await rect(page, `${ROW}:first-child .caption-times`);
   const text = await rect(page, `${ROW}:first-child textarea.lines`);
-  expect(Math.abs(text.top - times.top)).toBeLessThan(12);
-  expect(text.left).toBeGreaterThan(times.right);
+  expect(text.top).toBeGreaterThanOrEqual(times.bottom - 1);
+  const rate = await rect(page, `${ROW}:first-child .caption-rate`);
+  expect(Math.abs(rate.top - times.top)).toBeLessThan(8);
+  const menu = await rect(page, `${ROW}:first-child .caption-menu`);
+  expect(menu.top).toBeGreaterThanOrEqual(rate.bottom - 1);
   // the text boxes share one right edge, whatever each row's rate reads
   const rights = await page.$$eval(`${ROW} textarea.lines`, (els) => els.map((e) => Math.round(e.getBoundingClientRect().right)));
   expect(new Set(rights).size).toBe(1);
@@ -58,32 +61,30 @@ test('one cue is one row, with the text beside the times', async ({ page }) => {
   expect(await page.locator(`${ROW}:first-child [data-caption-action]`).count()).toBe(3);
 });
 
-test('in a narrow column the row folds: the text goes under the times', async ({ page }) => {
+test('in a narrow window the row keeps its form, the times still on one line', async ({ page }) => {
   await page.setViewportSize({ width: 520, height: 800 });
   await openCaptions(page);
-  const times = await rect(page, `${ROW}:first-child .caption-times`);
+  const start = await rect(page, `${ROW}:first-child .start`);
+  const end = await rect(page, `${ROW}:first-child .end`);
+  expect(Math.abs(start.top - end.top)).toBeLessThan(1);
   const text = await rect(page, `${ROW}:first-child textarea.lines`);
-  expect(text.top).toBeGreaterThanOrEqual(times.bottom - 2);
-  const rate = await rect(page, `${ROW}:first-child .caption-rate`);
-  expect(Math.abs(rate.top - times.top)).toBeLessThan(12);
+  expect(text.top).toBeGreaterThanOrEqual(start.bottom - 1);
 });
 
-test('the column is as wide as the transcript with its timecodes, and In sits over Out', async ({ page }) => {
+test('the column is as wide as the transcript with its timecodes, and Out sits to the right of In', async ({ page }) => {
   await openCaptions(page);
   const column = await rect(page, '#captions-display');
   expect(column.right - column.left).toBeGreaterThanOrEqual(560);
   expect(column.right - column.left).toBeLessThanOrEqual(620);
   const start = await rect(page, `${ROW}:first-child .start`);
   const end = await rect(page, `${ROW}:first-child .end`);
-  expect(Math.abs(start.left - end.left)).toBeLessThan(1);
-  expect(end.top).toBeGreaterThanOrEqual(start.bottom - 1);
-  // each time level with a line of the text
-  const text = await rect(page, `${ROW}:first-child textarea.lines`);
-  const lineHeight = (text.height - 12) / 2;
-  const line1 = text.top + 6 + lineHeight / 2;
-  const line2 = line1 + lineHeight;
-  expect(Math.abs((start.top + start.bottom) / 2 - line1)).toBeLessThan(3);
-  expect(Math.abs((end.top + end.bottom) / 2 - line2)).toBeLessThan(3);
+  expect(Math.abs(start.top - end.top)).toBeLessThan(1);
+  expect(end.left).toBeGreaterThan(start.right);
+  // the times of every row sit in the same two columns
+  const starts = await page.$$eval(`${ROW} .start`, (els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
+  const ends = await page.$$eval(`${ROW} .end`, (els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
+  expect(new Set(starts).size).toBe(1);
+  expect(new Set(ends).size).toBe(1);
 });
 
 test('the playing cue is marked and kept in view', async ({ page }) => {

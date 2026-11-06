@@ -2162,25 +2162,23 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 
 /* The caption editor's rows (#773): one cue per row, as wide as the
-   transcript with its timecodes showing. Where the column is narrower than
-   560px the row folds, with the text on its own line beneath. */
+   transcript with its timecodes showing. */
 #captions-display {
   container-type: inline-size;   /* the fold below is by the column's width, not the window's */
 }
-/* The row is a grid of two lines: In and Out stacked in one column, each
-   level with a line of the text, the menu on the first line and the rate
-   on the second at the right. The text box spans both. The first line's
-   height is the text box's first line, so everything meets it. */
+/* The row is two lines: play, In → Out and the reading rate on the first,
+   the text box on the second with the menu beside it. The first line's
+   height is fixed, so the times and the rate meet. */
 #captions-display .caption {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) 5rem;
+  grid-template-columns: auto minmax(0, 1fr) 5rem;
   grid-template-rows: calc(6px + 1.45rem) auto;
   grid-template-areas:
-    "play times text rate"
-    "play times text menu";
+    "play times rate"
+    "play text menu";
   align-items: start;
   column-gap: 10px;
-  row-gap: 0;
+  row-gap: 6px;
   padding: 9px 8px 9px 6px;
   border-left: 3px solid transparent;
   border-radius: 6px;
@@ -2192,14 +2190,12 @@ html.ha-transcribing #upload-transcribe-btn {
   border-left-color: oklch(var(--p));
 }
 .caption-play { grid-area: play; align-self: start; margin-top: 6px; }
-/* In over Out, a line each, the cue button before each time */
+/* In, the arrow, Out, the cue button before each time */
 .caption-times {
   grid-area: times;
-  display: grid;
-  grid-template-columns: auto auto;
-  grid-auto-rows: 1.45rem;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: start;   /* in the folded row the column is wide, the times stay left */
   margin-top: 6px;
   white-space: nowrap;
 }
@@ -2220,6 +2216,7 @@ html.ha-transcribing #upload-transcribe-btn {
   background: oklch(var(--b1));
   outline: none;
 }
+.caption-arrow { color: oklch(var(--bc) / 0.5); padding: 0 6px; font-size: 0.875rem; }
 /* the cue buttons show when the times are hovered or being edited */
 .caption-seek {
   height: 1.45rem;
@@ -2258,7 +2255,7 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 #captions-display .caption-rate { grid-area: rate; align-self: end; justify-self: end; margin: 0; padding: 0 4px; line-height: 1.45rem; text-align: right; }
 /* the row menu: a details element, so it opens with no script of its own */
-.caption-menu { grid-area: menu; position: relative; align-self: start; justify-self: end; height: 1.5rem; margin-top: 0; }
+.caption-menu { grid-area: menu; position: relative; align-self: start; justify-self: end; height: 1.5rem; margin-top: 6px; }
 /* a row is painted within its own box (content-visibility, index.html), which
    would clip its open menu: while the menu is open the row paints freely */
 #captions-display .caption.caption-menu-open { content-visibility: visible; }
@@ -2324,13 +2321,8 @@ html.ha-transcribing #upload-transcribe-btn {
   from { background: oklch(var(--p) / 0.18); }
   to { background: transparent; }
 }
-@container (max-width: 560px) {
-  #captions-display .caption {
-    grid-template-columns: auto minmax(0, 1fr) 5rem;
-    grid-template-rows: calc(6px + 1.45rem) auto auto;
-    grid-template-areas:
-      "play times rate"
-      "play times menu"
-      "text text text";
-  }
+/* a narrow column: the times wrap onto two lines, and the first line
+   grows to hold them */
+@container (max-width: 440px) {
+  #captions-display .caption { grid-template-rows: auto auto; }
 }
