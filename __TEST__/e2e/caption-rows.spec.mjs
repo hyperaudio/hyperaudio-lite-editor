@@ -58,14 +58,32 @@ test('one cue is one row, with the text beside the times', async ({ page }) => {
   expect(await page.locator(`${ROW}:first-child [data-caption-action]`).count()).toBe(3);
 });
 
-test('below 700px the row folds: the text goes under the times', async ({ page }) => {
-  await page.setViewportSize({ width: 600, height: 800 });
+test('in a narrow column the row folds: the text goes under the times', async ({ page }) => {
+  await page.setViewportSize({ width: 520, height: 800 });
   await openCaptions(page);
   const times = await rect(page, `${ROW}:first-child .caption-times`);
   const text = await rect(page, `${ROW}:first-child textarea.lines`);
   expect(text.top).toBeGreaterThanOrEqual(times.bottom - 2);
-  const rate = await rect(page, `${ROW}:first-child .caption-rate`);
-  expect(Math.abs(rate.top - times.top)).toBeLessThan(12);
+  const menu = await rect(page, `${ROW}:first-child .caption-menu`);
+  expect(Math.abs(menu.top - times.top)).toBeLessThan(12);
+});
+
+test('the column is as wide as the transcript with its timecodes, and In sits over Out', async ({ page }) => {
+  await openCaptions(page);
+  const column = await rect(page, '#captions-display');
+  expect(column.right - column.left).toBeGreaterThanOrEqual(560);
+  expect(column.right - column.left).toBeLessThanOrEqual(620);
+  const start = await rect(page, `${ROW}:first-child .start`);
+  const end = await rect(page, `${ROW}:first-child .end`);
+  expect(Math.abs(start.left - end.left)).toBeLessThan(1);
+  expect(end.top).toBeGreaterThanOrEqual(start.bottom - 1);
+  // each time level with a line of the text
+  const text = await rect(page, `${ROW}:first-child textarea.lines`);
+  const lineHeight = (text.height - 12) / 2;
+  const line1 = text.top + 6 + lineHeight / 2;
+  const line2 = line1 + lineHeight;
+  expect(Math.abs((start.top + start.bottom) / 2 - line1)).toBeLessThan(3);
+  expect(Math.abs((end.top + end.bottom) / 2 - line2)).toBeLessThan(3);
 });
 
 test('the playing cue is marked and kept in view', async ({ page }) => {
