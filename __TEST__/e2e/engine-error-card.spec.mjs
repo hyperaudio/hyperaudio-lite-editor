@@ -117,7 +117,7 @@ const CLOUD = {
       document.querySelector('#parakeet-hf-media').value = 'https://hf.example.com/items/clip.mp3';
       document.querySelector('parakeet-hf-service').getData();
     },
-    says: 'The HuggingFace token appears to be invalid',
+    says: 'The Hugging Face token appears to be invalid',
   },
 };
 
@@ -174,6 +174,38 @@ test('a cloud refusal arriving after the user has moved to a project becomes a n
   await expect(page.locator('#hypertranscript')).not.toContainText('API key');
   await expect(page.locator('#transcript-ready-notice')).toContainText('“clip.mp3” was not transcribed. The API key appears to be invalid');
   expect(await page.evaluate(() => document.documentElement.classList.contains('ha-transcribing'))).toBe(false);
+});
+
+// The Hugging Face router's codes too (#777): no credit on the account, and a
+// model the provider has withdrawn, which is how the Parakeet engine died
+for (const [status, says] of [[402, 'no credit for Inference Providers'], [410, 'no longer serves this model']]) {
+  test(`nemotron (hf): a ${status} says what that code means (#777)`, async ({ page, context }) => {
+    const cloud = CLOUD['parakeet-hf'];
+    await context.route(cloud.api, (route) => route.fulfill({ status, contentType: 'application/json', body: '{"error":"x"}' }));
+    await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+    await page.evaluate(cloud.start);
+    const card = page.locator('#hypertranscript');
+    await expect(card).toContainText(says, { timeout: 20000 });
+    await expect(card).not.toContainText('unexpected error');
+    await expect(card).not.toContainText('token appears to be invalid');
+    await expect(page.locator('#file-picker .file-item.active')).toHaveCount(0);
+  });
+}
+
+test('nemotron (hf): the request names the model the route still serves (#777)', async ({ page, context }) => {
+  const cloud = CLOUD['parakeet-hf'];
+  let model = null;
+  await context.route(cloud.api, async (route) => {
+    const body = route.request().postDataBuffer();
+    const text = body ? body.toString('latin1') : '';
+    const m = /name="model"\r\n\r\n([^\r\n]+)/.exec(text);
+    model = m ? m[1] : null;
+    await route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"x"}' });
+  });
+  await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+  await page.evaluate(cloud.start);
+  await expect(page.locator('#hypertranscript')).toContainText('token appears to be invalid', { timeout: 20000 });
+  expect(model).toBe('nvidia/nemotron-3.5-asr-streaming-0.6b');
 });
 
 // Deepgram's status codes each mean one thing, and the card says that one

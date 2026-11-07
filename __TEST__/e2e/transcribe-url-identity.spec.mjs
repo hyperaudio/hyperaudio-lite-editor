@@ -81,7 +81,7 @@ test('the engines put the media on the player before they signal busy', async ({
     for (const engine of [
       { name: 'Deepgram', key: '#token', media: '#deepgram-media', button: '#transcribe-btn' },
       { name: 'AssemblyAI', key: '#assemblyai-key', media: '#assemblyai-media', button: '#assemblyai-submit-btn' },
-      { name: 'Parakeet (HF)', key: '#parakeet-hf-key', media: '#parakeet-hf-media', button: '#parakeet-hf-submit-btn' },
+      { name: 'Nemotron (HF)', key: '#parakeet-hf-key', media: '#parakeet-hf-media', button: '#parakeet-hf-submit-btn' },
       { name: 'Parakeet (Local)', key: null, media: '#parakeet-media', button: '#parakeet-form-submit-btn' },
       { name: 'Whisper', key: null, media: '#media', button: '#form-submit-btn' },
     ]) {
