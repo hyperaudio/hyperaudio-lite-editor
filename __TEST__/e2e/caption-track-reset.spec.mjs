@@ -310,7 +310,7 @@ test('the caption editor reflects transcript edits on first visit', async ({ pag
   // first visit to the caption editor must carry the edit
   await page.click('#caption-editor-btn');
   await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
-  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+  const lines = await page.locator('#captions-display .caption textarea.lines').evaluateAll(
     (els) => els.map((e) => e.value).join(' '));
   expect(lines).toContain('EDITED-WORD');
 });
@@ -348,7 +348,7 @@ test('a new transcription turns caption sync back on', async ({ page }) => {
   });
   await page.click('#caption-editor-btn');
   await page.waitForFunction(() => document.querySelectorAll('#captions-display .caption').length > 0);
-  const lines = await page.locator('#captions-display .caption input.line1').evaluateAll(
+  const lines = await page.locator('#captions-display .caption textarea.lines').evaluateAll(
     (els) => els.map((e) => e.value).join(' '));
   expect(lines).toContain('POST-TRANSCRIBE-EDIT');
 });
@@ -379,7 +379,7 @@ test('Regenerate turns caption sync back on until the next caption edit', async 
   expect(await page.evaluate(() => updateCaptionsFromTranscript)).toBe(true);
 
   // and a hand edit flips it right back off
-  await page.locator('#captions-display .caption input.line1').first().click();
+  await page.locator('#captions-display .caption textarea.lines').first().click();
   await page.keyboard.type('X');
   expect(await page.evaluate(() => updateCaptionsFromTranscript)).toBe(false);
 });

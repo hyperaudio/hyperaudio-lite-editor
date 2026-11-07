@@ -38,7 +38,7 @@ const openCaptions = async (page) => {
 };
 
 const rows = (page) => page.evaluate(() => [...document.querySelectorAll('#captions-display .caption')].map((r) => ({
-  line1: r.querySelector('.line1').value.trim(), line2: r.querySelector('.line2').value.trim(),
+  line1: (r.querySelector('.lines').value.split('\n')[0] || '').trim(), line2: (r.querySelector('.lines').value.split('\n')[1] || '').trim(),
   speaker: r.getAttribute('data-speaker'), speaker2: r.getAttribute('data-speaker2'),
 })));
 
@@ -129,7 +129,7 @@ test('both speakers travel with the project, and come back (#666)', async ({ pag
   await load(page, INTERVIEW);
   await openCaptions(page);
   // a hand edit, so the saved captions are authoritative and cannot be regenerated
-  await page.fill('#captions-display .caption:nth-child(2) .line1', 'Edited line');
+  await page.fill('#captions-display .caption:nth-child(2) .lines', 'Edited line');
   const before = await page.evaluate(() => window.captionSpeakerList());
   expect(before[0]).toEqual(['speaker-A', 'speaker-B']);
 
@@ -155,14 +155,14 @@ test('merging two one-line captions of different speakers makes a shared one (#6
   await openCaptions(page);
   expect((await rows(page)).map((r) => r.line1)).toEqual(['Ready?', 'Sure.', 'Fine.']);
 
-  await page.evaluate(() => document.querySelector('#captions-display .caption button[onclick^="mergeCaption"]').click());
+  await page.evaluate(() => document.querySelector('#captions-display .caption [data-caption-action="merge"]').click());
   let after = await rows(page);
   expect(after[0]).toEqual({ line1: '-Ready?', line2: '-Sure.', speaker: 'Ann', speaker2: 'Bob' });
   expect(await page.evaluate(() => window.captionSpeakerList())).toEqual([['Ann', 'Bob'], 'Bob']);
   expect((await cues(page))[0]).toEqual(['-Ready?', '-Sure.']);
 
   // a caption inserted after it is in the second speaker's turn
-  await page.evaluate(() => document.querySelector('#captions-display .caption button[onclick^="addCaption"]').click());
+  await page.evaluate(() => document.querySelector('#captions-display .caption [data-caption-action="insert"]').click());
   after = await rows(page);
   expect(after[1].speaker).toBe('Bob');
 });
@@ -170,7 +170,7 @@ test('merging two one-line captions of different speakers makes a shared one (#6
 test('merging two captions of one speaker is what it always was (#666)', async ({ page }) => {
   await load(page, '@Bob Sure. | +3000 @Bob Fine.');
   await openCaptions(page);
-  await page.evaluate(() => document.querySelector('#captions-display .caption button[onclick^="mergeCaption"]').click());
+  await page.evaluate(() => document.querySelector('#captions-display .caption [data-caption-action="merge"]').click());
   const after = await rows(page);
   expect(after).toHaveLength(1);
   expect(after[0].speaker2).toBe(null);

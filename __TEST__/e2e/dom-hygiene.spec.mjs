@@ -22,16 +22,15 @@ test('no duplicate element ids on load', async ({ page }) => {
   expect(await duplicateIds(page)).toEqual([]);
 });
 
-test('no duplicate element ids in caption mode; regenerate controls distinct (#379)', async ({ page }) => {
+test('no duplicate element ids in caption mode, and the floating Regenerate takes the click (#379)', async ({ page }) => {
   await page.click('#caption-editor-btn');
   await page.waitForSelector('#regenerate-float-btn', { timeout: 30000 });
 
   expect(await duplicateIds(page)).toEqual([]);
 
-  // the floating button and the captions-modal button are separate elements
+  // the floating button is fixed above the rows and takes the click
   const roles = await page.evaluate(() => {
     const float = document.getElementById('regenerate-float-btn');
-    const modal = document.getElementById('regenerate-btn');
     const cs = getComputedStyle(float);
     const bb = float.getBoundingClientRect();
     const topEl = document.elementFromPoint(bb.x + bb.width / 2, bb.y + bb.height / 2);
@@ -40,8 +39,6 @@ test('no duplicate element ids in caption mode; regenerate controls distinct (#3
       floatFixed: cs.position === 'fixed',
       floatZ: cs.zIndex,
       floatClickable: topEl === float || float.contains(topEl),
-      modalIsButton: modal !== null && modal.tagName === 'BUTTON',
-      distinct: float !== modal,
     };
   });
   expect(roles).toEqual({
@@ -49,7 +46,5 @@ test('no duplicate element ids in caption mode; regenerate controls distinct (#3
     floatFixed: true,
     floatZ: '20',
     floatClickable: true,
-    modalIsButton: true,
-    distinct: true,
   });
 });

@@ -617,13 +617,7 @@ dialog::backdrop {
 }
 
 @media screen and (max-width: 480px) {
-  .caption-row input.line1, .caption-row input.line2 {
-    width: 24ch;
-  }
-
-  .caption-row input.start, .caption-row input.end {
-    width: 12ch;
-  }
+  /* the caption rows fold below 700px on their own (#773, end of file) */
 }
 
 /* Minimal tooltip styling — mirrors DaisyUI .tooltip + data-tip so a future
@@ -2126,7 +2120,7 @@ html.ha-transcribing #upload-transcribe-btn {
 .caption-rate {
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
-  color: oklch(var(--bc) / 0.6);
+  color: oklch(var(--bc) / 0.72);
   white-space: nowrap;
   background: none;
   border: 0;
@@ -2138,7 +2132,7 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 /* Over the limit (#641): colour, and weight so it does not depend on colour. */
 .caption-rate-over {
-  color: oklch(var(--er));
+  color: #b91c1c;   /* a red that reads at this size (4.5:1 on white) */
   font-weight: 700;
 }
 .caption-rate-over:hover {
@@ -2199,3 +2193,175 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 #selection-length .selection-length-span { opacity: 0.7; }
 #selection-length .selection-length-length { font-weight: 600; }
+/* The caption editor's rows (#773): one cue per row, as wide as the
+   transcript with its timecodes showing. */
+#captions-display {
+  container-type: inline-size;   /* the fold below is by the column's width, not the window's */
+}
+/* The row is two lines: play, In → Out and the reading rate on the first,
+   the text box on the second with the menu beside it. The first line's
+   height is fixed, so the times and the rate meet. */
+#captions-display .caption {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 5rem;
+  grid-template-rows: calc(6px + 1.45rem) auto;
+  grid-template-areas:
+    "play times rate"
+    "play text menu";
+  align-items: start;
+  column-gap: 10px;
+  row-gap: 6px;
+  padding: 9px 8px 9px 6px;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+}
+#captions-display .caption + .caption { margin-top: 6px; }
+/* the cue that is playing */
+#captions-display .caption.caption-current {
+  background: oklch(var(--p) / 0.07);
+  border-left-color: oklch(var(--p));
+}
+.caption-play { grid-area: play; align-self: start; margin-top: 6px; }
+/* In, the arrow, Out, the cue button before each time */
+.caption-times {
+  grid-area: times;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+.caption-times input {
+  width: 11.5ch;
+  height: 1.45rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+.caption-times input:hover,
+.caption-times input:focus {
+  border-color: oklch(var(--bc) / 0.2);
+  background: oklch(var(--b1));
+  outline: none;
+}
+.caption-arrow { color: oklch(var(--bc) / 0.5); padding: 0 6px; font-size: 0.875rem; }
+/* the cue buttons, always shown, quiet until hovered */
+.caption-seek {
+  height: 1.45rem;
+  min-height: 0;
+  width: 1.25rem;
+  padding: 0;
+  color: oklch(var(--bc) / 0.55);
+}
+.caption-seek:hover,
+.caption-seek:focus-visible { color: oklch(var(--bc)); }
+.caption-text { grid-area: text; position: relative; min-width: 0; }
+/* two lines, never wrapped: a long line scrolls under the caret, and its
+   length is what the count at the right edge says */
+.caption-text textarea.lines {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  margin: 0;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.45rem;
+  white-space: pre;
+  overflow: hidden;
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: 6px;
+  background: oklch(var(--b1));
+  color: inherit;
+}
+.caption-text textarea.lines:focus {
+  outline: none;
+  border-color: oklch(var(--p) / 0.6);
+}
+#captions-display .caption-rate { grid-area: rate; align-self: end; justify-self: end; margin: 0; padding: 0 4px; line-height: 1.45rem; text-align: right; }
+/* the row menu: a details element, so it opens with no script of its own */
+.caption-menu { grid-area: menu; position: relative; align-self: start; justify-self: end; height: 1.5rem; margin-top: 6px; }
+/* a row is painted within its own box (content-visibility, index.html), which
+   would clip its open menu: while the menu is open the row paints freely */
+#captions-display .caption.caption-menu-open { content-visibility: visible; }
+.caption-menu summary { display: flex; align-items: center; justify-content: center; height: 1.5rem; list-style: none; cursor: pointer; }
+.caption-menu summary::-webkit-details-marker { display: none; }
+/* the list, its items and its rule are the Recents menu's (#recents-menu),
+   so the two read as one thing */
+.caption-menu-list {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  margin: 2px 0 0;
+  padding: 4px;
+  border-radius: 0.5rem;
+  background-color: oklch(var(--b1));
+  box-shadow: 0 4px 16px oklch(var(--bc) / 0.15), 0 0 0 1px oklch(var(--bc) / 0.06);
+}
+.caption-menu.caption-menu-up .caption-menu-list { top: auto; bottom: 100%; margin: 0 0 2px; }
+.caption-menu-sep {
+  border: none;
+  border-top: 1px solid oklch(var(--bc) / 0.12);
+  margin: 4px 6px;
+}
+.caption-menu-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 0.375rem;
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  text-align: left;
+  color: oklch(var(--bc) / 0.85);
+  cursor: pointer;
+}
+.caption-menu-list button:hover,
+.caption-menu-list button:focus-visible {
+  border: none;
+  outline: none;
+  background-color: oklch(var(--b2));
+  color: oklch(var(--bc));
+}
+.caption-menu-list button[disabled],
+.caption-menu-list button[disabled]:hover {
+  opacity: 0.45;
+  cursor: default;
+  background-color: transparent;
+  color: oklch(var(--bc) / 0.85);
+}
+/* a caption just inserted: lit for a moment, so the eye finds it */
+#captions-display .caption.caption-new {
+  animation: caption-new-glow 1.2s ease-out;
+}
+@keyframes caption-new-glow {
+  from { background: oklch(var(--p) / 0.18); }
+  to { background: transparent; }
+}
+/* a narrow column: the times wrap onto two lines, and the first line
+   grows to hold them */
+@container (max-width: 440px) {
+  #captions-display .caption { grid-template-rows: auto auto; }
+}
+
+/* Two captions that overlap in time (#773): the Out of the first and the In
+   of the second are marked, and each says which neighbour it runs into. */
+.caption-times input.caption-time-overlap {
+  color: #b91c1c;
+  font-weight: 700;
+  background: #b91c1c14;
+  border-color: #b91c1c66;
+}

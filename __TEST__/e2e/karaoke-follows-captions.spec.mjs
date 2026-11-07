@@ -77,7 +77,7 @@ test('the line breaks are the captions\' own', async ({ page }) => {
 });
 
 test('an edited caption is what the karaoke file carries too', async ({ page }) => {
-  await page.fill('#captions-display .caption:first-child .line1', 'EDITED LINE');
+  await page.fill('#captions-display .caption:first-child .lines', 'EDITED LINE');
   await expect.poll(async () => (await download(page, 'download-vtt')).includes('EDITED LINE')).toBe(true);
   const karaoke = await download(page, 'download-vtt-words');
   expect(karaoke).toContain('<c>EDITED</c>');

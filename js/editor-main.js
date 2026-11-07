@@ -8,6 +8,24 @@
       hyperaudio();
     }
 
+    // A caption's two lines live in one text box (#773): the first line, a
+    // newline, the second. Read and written here only, so the row's markup
+    // is one place to change. The rate, the merge and the VTT writer all go
+    // through these.
+    function captionLines(row) {
+      const area = row === null ? null : row.querySelector('textarea.lines');
+      if (area === null) return ['', ''];
+      const parts = String(area.value).split('\n');
+      return [parts[0] || '', parts.slice(1).join(' ').trim()];
+    }
+    function setCaptionLines(row, line1, line2) {
+      const area = row === null ? null : row.querySelector('textarea.lines');
+      if (area === null) return;
+      const second = String(line2 === undefined || line2 === null ? '' : line2).trim();
+      const first = String(line1 === undefined || line1 === null ? '' : line1);
+      area.value = second === '' ? first : first + '\n' + second;
+    }
+
     /* ---- Reading rate per caption (#639) ------------------------------------
      * Editing captions well means knowing whether a cue can be read in the
      * time it is on screen, and the standards differ by trade: characters per
@@ -59,6 +77,16 @@
         + (m[4] === undefined ? 0 : Number(m[4].padEnd(3, '0')) / 1000);
     }
 
+    // seconds -> "00:01:13.520", the form the rows and the VTT use
+    function captionTimecode(value) {
+      const total = Math.max(0, Math.round(Number(value) * 1000)) / 1000;
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total - h * 3600 - m * 60;
+      const two = (n) => String(n).padStart(2, '0');
+      return `${two(h)}:${two(m)}:${s.toFixed(3).padStart(6, '0')}`;
+    }
+
     function updateCaptionRates() {
       const measure = captionRateMeasure();
       const other = measure === 'cps' ? 'words per minute' : 'characters per second';
@@ -79,10 +107,8 @@
         out.hidden = false;
         const startEl = caption.querySelector('.start');
         const endEl = caption.querySelector('.end');
-        const line1 = caption.querySelector('.line1');
-        const line2 = caption.querySelector('.line2');
         if (startEl === null || endEl === null) return;
-        const text = [line1 === null ? '' : line1.value, line2 === null ? '' : line2.value]
+        const text = captionLines(caption)
           .map((line) => String(line || '').trim()).filter((line) => line !== '').join(' ');
         const seconds = captionTimecodeSeconds(endEl.value) - captionTimecodeSeconds(startEl.value);
         // nothing to say about an empty caption, or about a duration that is
@@ -179,8 +205,7 @@
           index++;
           captionTempl.querySelector('.start').value = cap.start;
           captionTempl.querySelector('.end').value = cap.stop;
-          captionTempl.querySelector('.line1').value = line1;
-          captionTempl.querySelector('.line2').value = line2;
+          setCaptionLines(captionTempl, line1, line2);
           // The speaker this caption was generated from (#536). It rides on
           // the row, not in the text, so it survives every edit without ever
           // showing up in a text box or counting against the reading rate.
@@ -213,7 +238,9 @@
       updateCaptionRates();   // freshly built rows, or the cache restored (#639)
       // a tab that does not own the project may look but not edit (#653)
       if (typeof window.hyperaudioApplyReadOnly === 'function') window.hyperaudioApplyReadOnly();
-    } 
+      // the rows' own behaviour (#773) measures and marks them from here
+      document.dispatchEvent(new CustomEvent('hyperaudioCaptionRowsBuilt'));
+    }
 
     function captureCaptions(holder) {
       // Get the form element
@@ -245,6 +272,11 @@
                       clonedInput.options[optIndex].removeAttribute('selected');
                   }
               });
+          } else if (input.tagName === 'TEXTAREA') {
+              // a text box keeps its text as content, not in an attribute,
+              // so this is what survives the round trip through markup (#773)
+              clonedInput.value = input.value;
+              clonedInput.textContent = input.value;
           } else {
               clonedInput.value = input.value;
               clonedInput.setAttribute('value', input.value);
@@ -346,8 +378,9 @@
 
     function playClip(elem) {
 
-      let startTime = countSeconds(elem.parentElement.parentElement.querySelector('.start').value);
-      let endTime = countSeconds(elem.parentElement.parentElement.querySelector('.end').value);
+      const row = elem.closest('.caption');
+      let startTime = countSeconds(row.querySelector('.start').value);
+      let endTime = countSeconds(row.querySelector('.end').value);
       let duration = endTime - startTime;
 
       document.querySelector('video').currentTime = startTime;
@@ -362,8 +395,10 @@
     }
 
     function seekTo(elem) {
-      let seekTime = countSeconds(elem.nextElementSibling.value);
-      if (elem.className == "play-end") {
+      const toEnd = elem.classList.contains('play-end');
+      const row = elem.closest('.caption');
+      let seekTime = countSeconds(row.querySelector(toEnd ? '.end' : '.start').value);
+      if (toEnd) {
         seekTime -= 0.1;
       }
       document.querySelector('video').currentTime = seekTime;
@@ -609,16 +644,27 @@
       let template = parser.parseFromString(html, "text/html");
 
       let captionTempl = template.querySelector('#caption-template').cloneNode(true);
-      captionTempl.getElementsByClassName('line1')[0].value = "";
-      captionTempl.getElementsByClassName('line2')[0].value = "";
-      captionTempl.getElementsByClassName('start')[0].value = "00:00:00.000";
-      captionTempl.getElementsByClassName('end')[0].value = "00:00:00.000";
+      setCaptionLines(captionTempl, '', '');
+      // The new caption takes the gap it is inserted into (#773): it begins
+      // just after this caption ends and ends just before the next begins,
+      // or runs two seconds when there is no next. A gap too small to hold
+      // it still gives it a moment, which overlaps the next cue and is for
+      // the user to settle.
+      const above = elem.closest('.caption');
+      const GAP = 0.04;
+      const afterAbove = captionTimecodeSeconds(above.querySelector('.end').value);
+      const next = above.nextElementSibling;
+      const beforeNext = next !== null && next.classList.contains('caption')
+        ? captionTimecodeSeconds(next.querySelector('.start').value) : NaN;
+      const start = Number.isFinite(afterAbove) ? afterAbove + GAP : 0;
+      const end = Number.isFinite(beforeNext) ? Math.max(start + 0.2, beforeNext - GAP) : start + 2;
+      captionTempl.getElementsByClassName('start')[0].value = captionTimecode(start);
+      captionTempl.getElementsByClassName('end')[0].value = captionTimecode(end);
       captionTempl.classList.add('caption-new');
       // Inherit the speaker of the row this one is inserted after (#536): a
       // caption added inside someone's turn belongs to them. Merge needs no
       // such rule — the surviving row keeps its own, and a cue can only be one
       // colour — and delete none at all.
-      const above = elem.parentElement.parentNode;
       // after a caption two speakers share, the turn is the second speaker's
       const inherited = above.getAttribute('data-speaker2') || above.getAttribute('data-speaker');
       if (inherited !== null && inherited !== '') captionTempl.setAttribute('data-speaker', inherited);
@@ -626,19 +672,27 @@
       // Remove animation class after animation completes
       setTimeout(() => {
         captionTempl.classList.remove('caption-new');
-      }, 300);
+      }, 1200);
       makeCaptionEditorActive();
+      // the text is what comes next, so the caret goes there
+      const box = captionTempl.querySelector('textarea.lines');
+      if (box !== null) {
+        captionTempl.scrollIntoView({ block: 'nearest' });
+        box.focus();
+      }
     }
 
     function deleteCaption(elem) {
-      let thisCaption = elem.parentNode.parentNode;
+      let thisCaption = elem.closest('.caption');
       thisCaption.parentNode.removeChild(thisCaption);
       makeCaptionEditorActive();
     }
 
     function mergeCaption(elem) {
-      let thisCaption = elem.parentNode.parentNode;
+      let thisCaption = elem.closest('.caption');
       let belowCaption = thisCaption.nextElementSibling;
+      // the last caption has nothing to merge with
+      if (belowCaption === null || !belowCaption.classList.contains('caption')) return;
 
       thisCaption.querySelector('.end').value = belowCaption.querySelector('.end').value;
       // Two one-line captions of different speakers become a caption the two
@@ -647,17 +701,16 @@
       // into the surviving caption's own speaker.
       const mine = thisCaption.getAttribute('data-speaker') || '';
       const theirs = belowCaption.getAttribute('data-speaker') || '';
-      const oneLineEach = thisCaption.querySelector('.line2').value.trim() === ''
-        && belowCaption.querySelector('.line2').value.trim() === '';
+      const [myLine1, myLine2] = captionLines(thisCaption);
+      const [theirLine1, theirLine2] = captionLines(belowCaption);
+      const oneLineEach = myLine2.trim() === '' && theirLine2.trim() === '';
       if (oneLineEach && mine !== '' && theirs !== '' && mine !== theirs
           && !thisCaption.hasAttribute('data-speaker2') && !belowCaption.hasAttribute('data-speaker2')) {
         const hyphenated = (text) => '-' + String(text).trim().replace(/^-/, '');
-        thisCaption.querySelector('.line1').value = hyphenated(thisCaption.querySelector('.line1').value);
-        thisCaption.querySelector('.line2').value = hyphenated(belowCaption.querySelector('.line1').value);
+        setCaptionLines(thisCaption, hyphenated(myLine1), hyphenated(theirLine1));
         thisCaption.setAttribute('data-speaker2', theirs);
       } else {
-        thisCaption.querySelector('.line2').value +=
-          ` ${belowCaption.querySelector('.line1').value.toString()} ${belowCaption.querySelector('.line2').value.toString()}`;
+        setCaptionLines(thisCaption, myLine1, `${myLine2} ${theirLine1} ${theirLine2}`);
       }
 
       belowCaption.parentNode.removeChild(belowCaption);
@@ -680,7 +733,6 @@
     function makeCaptionEditorActive() {
       updateCaptionRates();   // a word added or cut, a time changed, a merge (#639)
       updateCaptionsFromTranscript = false;
-      document.querySelector('#regenerate-btn').classList.remove("btn-disabled");
       generateCaptionsFromCaptionEditor();
       document.dispatchEvent(new CustomEvent('hyperaudioCaptionsEdited'));
     }
@@ -692,18 +744,19 @@
 
       document.querySelectorAll('.caption').forEach((caption, index) => {
         if (caption.querySelector('.start').value.length > 0){
+          const [line1, line2] = captionLines(caption);
           vttCaptions += caption.querySelector('.start').value + " --> " + caption.querySelector('.end').value + "\n";
-          vttCaptions += caption.querySelector('.line1').value + "\n";
-          if (caption.querySelector('.line2').value.length > 0) {
-            vttCaptions += caption.querySelector('.line2').value + "\n";
+          vttCaptions += line1 + "\n";
+          if (line2.length > 0) {
+            vttCaptions += line2 + "\n";
           }
           vttCaptions += "\n";
 
           srtCaptions += (index + 1) + "\n";
           srtCaptions += convertTimecodeToSrt(caption.querySelector('.start').value) + " --> " + convertTimecodeToSrt(caption.querySelector('.end').value) + "\n";
-          srtCaptions += caption.querySelector('.line1').value + "\n";
-          if (caption.querySelector('.line2').value.length > 0) {
-            srtCaptions += caption.querySelector('.line2').value + "\n";
+          srtCaptions += line1 + "\n";
+          if (line2.length > 0) {
+            srtCaptions += line2 + "\n";
           }
           srtCaptions += "\n";
         }

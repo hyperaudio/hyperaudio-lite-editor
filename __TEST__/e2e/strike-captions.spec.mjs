@@ -57,7 +57,7 @@ test('an edited export burns in no struck words', async ({ page }) => {
 test('captions edited by hand are left alone by a strikeout', async ({ page }) => {
   await page.click('#caption-editor-btn');
   await page.waitForSelector('#captions-display .caption');
-  await page.fill('#captions-display .caption:first-child .line1', 'HAND EDITED LINE');
+  await page.fill('#captions-display .caption:first-child .lines', 'HAND EDITED LINE');
   await expect.poll(() => vtt(page)).toContain('HAND EDITED LINE');
   await page.click('#transcript-editor-btn');
   await page.waitForSelector('#hypertranscript [data-m]');

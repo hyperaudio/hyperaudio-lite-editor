@@ -85,7 +85,7 @@ test('opening the caption editor still writes both links itself', async ({ page 
 test('an edited caption is what the downloads carry, not a regenerated one', async ({ page }) => {
   await page.click('#caption-editor-btn');
   await page.waitForSelector('#captions-display .caption');
-  await page.fill('#captions-display .caption:first-child .line1', 'EDITED LINE');
+  await page.fill('#captions-display .caption:first-child .lines', 'EDITED LINE');
   await expect.poll(async () => (await download(page, 'download-vtt')).includes('EDITED LINE')).toBe(true);
   expect(await download(page, 'download-srt')).toContain('EDITED LINE');
 });
