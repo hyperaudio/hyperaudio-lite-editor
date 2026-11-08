@@ -4,64 +4,90 @@
  * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
- * Nemotron (Hugging Face) cloud transcription (#307, #777) — NVIDIA Nemotron
- * 3.5 ASR 0.6B served through Hugging Face's inference router by Together,
- * called directly from the browser with the user's own token (no server; the
- * router endpoint is CORS-open). The engine began as Parakeet TDT 0.6B v3 on
- * the same route; Together withdrew that model from Inference Providers and
- * the router answered 410 for it (#777), so the model is now its successor.
- * The element, the ids and this file keep their names: the remembered token
- * and the lists that name the inputs are keyed on them. Unlike AssemblyAI's async upload→poll, this is a single
- * synchronous multipart POST (like Deepgram):
+ * Hugging Face cloud transcription (#307, #777) — speech models served
+ * through Hugging Face's inference router by DeepInfra, called directly from
+ * the browser with the user's own token (no server; the router endpoint is
+ * CORS-open). The engine began as Parakeet TDT 0.6B v3 on the router's
+ * Together route. Together withdrew that model from Inference Providers and
+ * the router answered 410 for it (#777), and Together cannot be paid with the
+ * account's pre-paid credits at all (the router's 402: "Pay-as-you go is not
+ * enabled for provider together yet"), so the engine moved to DeepInfra,
+ * which takes credits and serves several speech models on one route. The
+ * dialog offers three, each answering a minute of audio in about three
+ * seconds (verified live 2026-11-08):
  *
- *   POST router.huggingface.co/together/v1/audio/transcriptions
- *     model=nvidia/nemotron-3.5-asr-streaming-0.6b, file=<audio>,
+ *   NVIDIA Nemotron 3.5 Transcribe 30B — the most accurate on the test clip,
+ *     $0.12 an hour of audio (2026-11), 40 languages. Echoes the requested
+ *     language code back, "" when none was sent: it does not report what it
+ *     heard. No speakers: DeepInfra's diarize flag does not pass through the
+ *     router's OpenAI-style route (#760).
+ *   Whisper large v3 turbo — $0.012 an hour, detects and reports the
+ *     language as a code, word times within a tenth of a second of the 30B.
+ *   Qwen3-ASR 1.7B — $0.027 an hour, 30 languages. Detects the language on
+ *     its own whatever `language` says, and reports it as a NAME ("english"),
+ *     which the language reader turns into a tag. Offered as auto-detect only.
+ *
+ * The small Nemotron 3.5 ASR 0.6B is not offered: its word starts run 0.22 s
+ * late on an 80 ms grid and it misheard more. It is a streaming model, and
+ * belongs to a live engine when the router has a streaming route.
+ *
+ * The element, the ids and this file keep their Parakeet names: the
+ * remembered token and the lists that name the inputs are keyed on them.
+ * Unlike AssemblyAI's async upload→poll, this is a single synchronous
+ * multipart POST (like Deepgram):
+ *
+ *   POST router.huggingface.co/deepinfra/v1/openai/audio/transcriptions
+ *     model=<DeepInfra's id>, file=<audio>,
  *     response_format=verbose_json, timestamp_granularities[]=word
  *
+ * A model goes by DeepInfra's own id: the router does not map the Hub's id on
+ * this route ("Model not supported by provider deepinfra", a 400). The route
+ * takes ISO 639-1 codes in `language`.
+ *
  * Response: { language, duration, text, words:[{word,start,end}] } with
- * start/end in SECONDS (verified for Parakeet on this route, the same
- * OpenAI-style form for every model Together serves there). Parsed into the
- * same data-m/data-d spans the other engines emit; no speaker labels. Reuses the global
+ * start/end in SECONDS, the same for every model on the route. Parsed into
+ * the same data-m/data-d spans the other engines emit. Reuses the global
  * helpers transcribingSvg / errorSvg and setTranscriptBusy / setTranscriptionInfo.
  */
 
-const PARAKEET_HF_ENDPOINT = "https://router.huggingface.co/together/v1/audio/transcriptions";
-const PARAKEET_HF_MODEL = "nvidia/nemotron-3.5-asr-streaming-0.6b";
+const PARAKEET_HF_ENDPOINT = "https://router.huggingface.co/deepinfra/v1/openai/audio/transcriptions";
 
-// Nemotron 3.5 ASR 0.6B transcribes 32 locales out of the box. One entry per
-// language, ISO 639-1 codes as the route takes them. "auto" omits the field
-// and the model detects the language.
-const PARAKEET_HF_LANGUAGES = [
-  { value: "auto", label: "Auto-detect" },
-  { value: "ar", label: "Arabic" },
-  { value: "bg", label: "Bulgarian" },
-  { value: "zh", label: "Chinese (Mandarin)" },
-  { value: "hr", label: "Croatian" },
-  { value: "cs", label: "Czech" },
-  { value: "da", label: "Danish" },
-  { value: "nl", label: "Dutch" },
-  { value: "en", label: "English" },
-  { value: "et", label: "Estonian" },
-  { value: "fi", label: "Finnish" },
-  { value: "fr", label: "French" },
-  { value: "de", label: "German" },
-  { value: "hi", label: "Hindi" },
-  { value: "hu", label: "Hungarian" },
-  { value: "it", label: "Italian" },
-  { value: "ja", label: "Japanese" },
-  { value: "ko", label: "Korean" },
-  { value: "nb", label: "Norwegian (Bokmål)" },
-  { value: "pl", label: "Polish" },
-  { value: "pt", label: "Portuguese" },
-  { value: "ro", label: "Romanian" },
-  { value: "ru", label: "Russian" },
-  { value: "sk", label: "Slovak" },
-  { value: "es", label: "Spanish" },
-  { value: "sv", label: "Swedish" },
-  { value: "tr", label: "Turkish" },
-  { value: "uk", label: "Ukrainian" },
-  { value: "vi", label: "Vietnamese" },
+// One label per ISO 639-1 code the models between them offer
+const PARAKEET_HF_LANGUAGE_LABELS = {
+  af: "Afrikaans", ar: "Arabic", bn: "Bengali", bg: "Bulgarian", ca: "Catalan", zh: "Chinese (Mandarin)",
+  hr: "Croatian", cs: "Czech", da: "Danish", nl: "Dutch", en: "English", et: "Estonian", fi: "Finnish",
+  fr: "French", gl: "Galician", de: "German", el: "Greek", he: "Hebrew", hi: "Hindi", hu: "Hungarian",
+  is: "Icelandic", id: "Indonesian", it: "Italian", ja: "Japanese", ko: "Korean", lv: "Latvian",
+  lt: "Lithuanian", mk: "Macedonian", ms: "Malay", mt: "Maltese", mr: "Marathi", no: "Norwegian",
+  fa: "Persian", pl: "Polish", pt: "Portuguese", ro: "Romanian", ru: "Russian", sr: "Serbian",
+  sk: "Slovak", sl: "Slovenian", es: "Spanish", sw: "Swahili", sv: "Swedish", tl: "Tagalog",
+  ta: "Tamil", te: "Telugu", th: "Thai", tr: "Turkish", uk: "Ukrainian", ur: "Urdu", vi: "Vietnamese",
+  cy: "Welsh",
+};
+
+// The 40 languages Nemotron 3.5 Transcribe lists for transcription
+const NEMOTRON_LANGUAGES = ["ar", "bn", "bg", "zh", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el",
+  "he", "hi", "hu", "id", "it", "ja", "ko", "lv", "lt", "mt", "mr", "pl", "pt", "ro", "ru", "sk", "sl", "es",
+  "sv", "tl", "ta", "te", "th", "tr", "uk", "vi"];
+// Whisper knows 99. These are the ones with a label above.
+const WHISPER_LANGUAGES = Object.keys(PARAKEET_HF_LANGUAGE_LABELS);
+
+// The models, by DeepInfra's id. `languages` is what the Language select
+// offers after "Auto-detect", in the order of the labels above.
+const PARAKEET_HF_MODELS = [
+  { value: "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B", label: "Nemotron 3.5 Transcribe 30B", languages: NEMOTRON_LANGUAGES },
+  { value: "openai/whisper-large-v3-turbo", label: "Whisper large v3 turbo", languages: WHISPER_LANGUAGES },
+  { value: "Qwen/Qwen3-ASR-1.7B", label: "Qwen3-ASR 1.7B", languages: [] },
 ];
+const PARAKEET_HF_MODEL = PARAKEET_HF_MODELS[0].value;
+
+// The Language select for a model: "auto" omits the field and the model
+// transcribes the language as spoken, then the codes the model lists.
+function parakeetHfLanguagesFor(modelValue) {
+  const model = PARAKEET_HF_MODELS.find((m) => m.value === modelValue) || PARAKEET_HF_MODELS[0];
+  const codes = Object.keys(PARAKEET_HF_LANGUAGE_LABELS).filter((code) => model.languages.indexOf(code) !== -1);
+  return [{ value: "auto", label: "Auto-detect" }].concat(codes.map((code) => ({ value: code, label: PARAKEET_HF_LANGUAGE_LABELS[code] })));
+}
 
 let parakeetHfTranscriptionStart = 0;
 let parakeetHfTranscriptionMeta = {};
@@ -93,6 +119,8 @@ class ParakeetHFService extends HTMLElement {
       '<div class="vertically-centre"><center>Transcribing….</center><br/><img src="' + transcribingSvg + '" width="50" alt="transcribing" style="margin: auto; display: block;"></div>';
 
     const apiKey = document.querySelector('#parakeet-hf-key').value.trim();
+    const modelSel = document.querySelector('#parakeet-hf-model');
+    const model = (modelSel && modelSel.value) || PARAKEET_HF_MODEL;
     const language = document.querySelector('#parakeet-hf-language').value;
     let media = document.querySelector('#parakeet-hf-media').value.trim();
     const file = document.querySelector('#parakeet-hf-file').files[0];
@@ -110,14 +138,15 @@ class ParakeetHFService extends HTMLElement {
     }
 
     parakeetHfTranscriptionStart = Date.now();
+    const modelLabel = (PARAKEET_HF_MODELS.find((m) => m.value === model) || {}).label || model;
     parakeetHfTranscriptionMeta = {
-      service: "Nemotron (Hugging Face, cloud)",
-      model: "Nemotron 3.5 ASR 0.6B",
+      service: "Hugging Face (cloud)",
+      model: modelLabel,
       language: document.querySelector('#parakeet-hf-language').selectedOptions[0]?.textContent || language,
       languageCode: language,
       // what was really asked for (#668)
-      modelId: PARAKEET_HF_MODEL,
-      parameters: Object.assign({ model: PARAKEET_HF_MODEL, response_format: 'verbose_json', timestamp_granularities: ['word'] },
+      modelId: model,
+      parameters: Object.assign({ model, response_format: 'verbose_json', timestamp_granularities: ['word'] },
         language ? { language } : {}),
     };
 
@@ -140,7 +169,7 @@ class ParakeetHFService extends HTMLElement {
       setTranscriptBusy(true);
     }
 
-    runParakeetHF(apiKey, file, media, { language }).catch(displayParakeetHfError);
+    runParakeetHF(apiKey, file, media, { model, language }).catch(displayParakeetHfError);
   }
 
   connectedCallback() {
@@ -155,12 +184,29 @@ class ParakeetHFService extends HTMLElement {
   }
 
   configureOptions() {
+    const modelSel = this.querySelector('#parakeet-hf-model');
+    PARAKEET_HF_MODELS.forEach((m, i) => {
+      const o = document.createElement('option');
+      o.value = m.value;
+      o.textContent = m.label;
+      if (i === 0) o.selected = true;
+      modelSel.appendChild(o);
+    });
+    this.populateLanguages(modelSel.value);
+    // the Language list follows the model, keeping the choice when the new
+    // model has it (the preferences restore the model first, then the language)
+    modelSel.addEventListener('change', () => this.populateLanguages(modelSel.value));
+  }
+
+  populateLanguages(modelValue) {
     const langSel = this.querySelector('#parakeet-hf-language');
-    PARAKEET_HF_LANGUAGES.forEach((l, i) => {
+    const previous = langSel.value;
+    langSel.innerHTML = '';
+    parakeetHfLanguagesFor(modelValue).forEach((l, i) => {
       const o = document.createElement('option');
       o.value = l.value;
       o.textContent = l.label;
-      if (i === 0) o.selected = true;
+      if (i === 0 || l.value === previous) o.selected = true;
       langSel.appendChild(o);
     });
   }
@@ -217,7 +263,7 @@ async function runParakeetHF(apiKey, file, media, opts) {
   }
 
   const form = new FormData();
-  form.append('model', PARAKEET_HF_MODEL);
+  form.append('model', opts.model || PARAKEET_HF_MODEL);
   form.append('file', blob, filename);
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'word');
@@ -241,12 +287,15 @@ async function runParakeetHF(apiKey, file, media, opts) {
 }
 
 // The transcript on the page from the endpoint's word list: the words and
-// the language come from js/converters/parakeet.js (#751).
+// the language come from js/converters/parakeet.js (#751). The language is
+// a code from Whisper and Nemotron and a name ("english") from Qwen, and the
+// track wants a tag, so the editor's language reader settles it when loaded.
 function parakeetHfParseData(json) {
   const converted = window.HyperaudioConverters.parakeet(json);
   const hyperTranscript = jsonToHTML({ words: converted.words, paragraphs: converted.paragraphs });
 
-  const language = converted.language || "";
+  const reader = window.HyperaudioSave && typeof window.HyperaudioSave.languageTag === 'function' ? window.HyperaudioSave.languageTag : null;
+  const language = (reader ? reader(converted.language) : converted.language) || "";
   // finishing while another project is open (#715): its track is not ours
   const background = typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground();
   const track = background ? null : document.querySelector('#hyperplayer-vtt');
@@ -316,7 +365,7 @@ function displayParakeetHfError(error) {
     msg = "Sorry.<br/>Hugging Face inference is unavailable right now — try again shortly.";
   }
   showParakeetHfError(msg);
-  console.error("Nemotron (HF) error:", error);
+  console.error("Hugging Face error:", error);
 }
 
 function displayParakeetHfNoWords() {

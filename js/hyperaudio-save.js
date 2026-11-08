@@ -4787,6 +4787,9 @@
     // the language the engine reported, or the project file carries ('' when
     // unknown) — caption generation picks its abbreviations by it (#662)
     getProjectLanguage: () => languageTag(session.language),
+    // the same reader for an engine's answer: a code in any spelling or a
+    // language name becomes a tag, anything else '' (#777)
+    languageTag,
     // Transcript provenance (#668, js/tpme.js). The project's provenance as
     // recorded, and the part of it TPME owns: { mediaId, reviewLevel,
     // entries } — an identifier, a judgement, and any chain imported with the

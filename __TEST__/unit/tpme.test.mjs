@@ -205,7 +205,9 @@ test('what is not known is left out rather than written empty', () => {
 });
 
 test('language is written as ISO 639-3, for every code the engines offer', () => {
-  const offered = ['en', 'en-US', 'en-GB', 'es', 'es-419', 'fr', 'fr-CA', 'de', 'hi', 'hi-Latn', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'pt-BR', 'ru', 'sv', 'tr', 'uk', 'zh', 'zh-CN', 'da', 'id', 'no', 'ta'];
+  const offered = ['en', 'en-US', 'en-GB', 'es', 'es-419', 'fr', 'fr-CA', 'de', 'hi', 'hi-Latn', 'it', 'ja', 'ko', 'nl', 'pl', 'pt', 'pt-BR', 'ru', 'sv', 'tr', 'uk', 'zh', 'zh-CN', 'da', 'id', 'no', 'ta',
+    // the Hugging Face tab's lists (#777)
+    'af', 'bn', 'bg', 'ca', 'hr', 'cs', 'et', 'fi', 'gl', 'el', 'he', 'hu', 'is', 'lv', 'lt', 'mk', 'ms', 'mt', 'mr', 'fa', 'ro', 'sr', 'sk', 'sl', 'sw', 'tl', 'te', 'th', 'ur', 'vi', 'cy'];
   offered.forEach((tag) => assert.match(tpme.iso639_3(tag), /^[a-z]{3}$/, tag));
   assert.equal(tpme.iso639_3('en-GB'), 'eng');
   assert.equal(tpme.iso639_3('eng'), 'eng');       // already three letters

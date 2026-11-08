@@ -192,10 +192,12 @@ for (const [status, says] of [[402, 'no credit for Inference Providers'], [410, 
   });
 }
 
-test('nemotron (hf): the request names the model the route still serves (#777)', async ({ page, context }) => {
+test('nemotron (hf): the request goes to a provider that takes credits and names the model as it knows it (#777)', async ({ page, context }) => {
   const cloud = CLOUD['parakeet-hf'];
   let model = null;
+  let url = null;
   await context.route(cloud.api, async (route) => {
+    url = route.request().url();
     const body = route.request().postDataBuffer();
     const text = body ? body.toString('latin1') : '';
     const m = /name="model"\r\n\r\n([^\r\n]+)/.exec(text);
@@ -205,7 +207,56 @@ test('nemotron (hf): the request names the model the route still serves (#777)',
   await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
   await page.evaluate(cloud.start);
   await expect(page.locator('#hypertranscript')).toContainText('token appears to be invalid', { timeout: 20000 });
-  expect(model).toBe('nvidia/nemotron-3.5-asr-streaming-0.6b');
+  // DeepInfra's own id: the router does not map the Hub's id on this route
+  expect(model).toBe('nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B');
+  expect(url).toBe('https://router.huggingface.co/deepinfra/v1/openai/audio/transcriptions');
+});
+
+// The tab offers three models on the one route (#777). The chosen one is what
+// goes on the wire, the Language list follows the model, and a remembered
+// model comes back with its language after a reload.
+test('hugging face: the chosen model and language go on the wire, and the choice is remembered', async ({ page, context }) => {
+  const cloud = CLOUD['parakeet-hf'];
+  const posted = [];
+  await context.route(cloud.api, async (route) => {
+    const text = (route.request().postDataBuffer() || Buffer.alloc(0)).toString('latin1');
+    const field = (name) => { const m = new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r\\n]+)`).exec(text); return m ? m[1] : null; };
+    posted.push({ model: field('model'), language: field('language') });
+    await route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"x"}' });
+  });
+  await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+
+  const lists = await page.evaluate(() => {
+    const model = document.querySelector('#parakeet-hf-model');
+    const lang = document.querySelector('#parakeet-hf-language');
+    const codes = () => Array.from(lang.options).map((o) => o.value);
+    const out = { models: Array.from(model.options).map((o) => o.value), nemotron: codes() };
+    model.value = 'Qwen/Qwen3-ASR-1.7B';
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+    out.qwen = codes();
+    model.value = 'openai/whisper-large-v3-turbo';
+    model.dispatchEvent(new Event('change', { bubbles: true }));
+    out.whisper = codes();
+    lang.value = 'cy';
+    lang.dispatchEvent(new Event('change', { bubbles: true }));
+    return out;
+  });
+  expect(lists.models).toEqual(['nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B', 'openai/whisper-large-v3-turbo', 'Qwen/Qwen3-ASR-1.7B']);
+  expect(lists.nemotron.length).toBe(41);
+  expect(lists.nemotron).toContain('ta');
+  expect(lists.nemotron).not.toContain('cy');
+  expect(lists.qwen).toEqual(['auto']); // Qwen detects on its own, whatever it is told
+  expect(lists.whisper).toContain('cy');
+
+  await page.evaluate(cloud.start);
+  await expect(page.locator('#hypertranscript')).toContainText('token appears to be invalid', { timeout: 20000 });
+  expect(posted).toEqual([{ model: 'openai/whisper-large-v3-turbo', language: 'cy' }]);
+
+  // remembered: the model first, then the language it offers (#777)
+  await page.reload();
+  await page.waitForSelector('#parakeet-hf-model option', { state: 'attached' });
+  await expect.poll(() => page.evaluate(() => document.querySelector('#parakeet-hf-model').value)).toBe('openai/whisper-large-v3-turbo');
+  expect(await page.evaluate(() => document.querySelector('#parakeet-hf-language').value)).toBe('cy');
 });
 
 // Deepgram's status codes each mean one thing, and the card says that one

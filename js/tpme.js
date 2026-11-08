@@ -1,7 +1,7 @@
 /**
  * tpme.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
  * Transcript provenance sidecars (#668): how a transcript came to be — which
@@ -271,6 +271,10 @@
     en: 'eng', es: 'spa', fr: 'fra', de: 'deu', it: 'ita', pt: 'por', nl: 'nld', hi: 'hin', ja: 'jpn', ko: 'kor',
     pl: 'pol', ru: 'rus', sv: 'swe', tr: 'tur', uk: 'ukr', zh: 'zho', da: 'dan', id: 'ind', no: 'nor', ta: 'tam',
     fi: 'fin', cs: 'ces', ro: 'ron', hu: 'hun', el: 'ell', ca: 'cat', ar: 'ara', he: 'heb', vi: 'vie', th: 'tha',
+    // the Hugging Face models' lists (#777)
+    af: 'afr', bn: 'ben', bg: 'bul', hr: 'hrv', et: 'est', gl: 'glg', is: 'isl', lv: 'lav', lt: 'lit', mk: 'mkd',
+    ms: 'msa', mt: 'mlt', mr: 'mar', fa: 'fas', sr: 'srp', sk: 'slk', sl: 'slv', sw: 'swa', tl: 'tgl', te: 'tel',
+    ur: 'urd', cy: 'cym',
   });
   function iso639_3(tag) {
     const primary = String(tag || '').toLowerCase().split(/[-_]/)[0];
