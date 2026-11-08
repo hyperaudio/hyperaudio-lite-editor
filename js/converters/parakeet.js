@@ -24,8 +24,34 @@
    * @param {object} json - `{ words, language? }`
    * @returns {{words: Array, paragraphs: Array, language: (string|undefined)}}
    */
+  // Whisper through the Hugging Face route (#777) writes its words the way
+  // its tokenizer does. A word that follows a space carries that space,
+  // " speech", and a piece that continues the word before it does not: "-to",
+  // "-text", "'éditer.", "-in,". Trimmed and joined with spaces those read
+  // "speech -to -text" and "plug -in,". When a list marks its word starts
+  // this way, a piece with no leading space is folded into the word before
+  // it, which then runs to the piece's end. Nemotron, Qwen and the editor's
+  // own worker never write a leading space, and their lists are left alone.
+  const startsWithSpace = (text) => /^\s/.test(text);
+  function joinedPieces(words) {
+    if (!words.some((w) => startsWithSpace(String(w.word)))) return words;
+    const out = [];
+    words.forEach((w) => {
+      const text = String(w.word);
+      if (text.trim() === '') return;
+      const previous = out.length > 0 ? out[out.length - 1] : null;
+      if (previous !== null && !startsWithSpace(text)) {
+        previous.word += text;
+        previous.end = Math.max(previous.end, w.end);
+        return;
+      }
+      out.push({ word: text, start: w.start, end: w.end });
+    });
+    return out;
+  }
+
   function parakeet(json) {
-    const words = (json.words || []).map((w) => ({ text: w.word, start: w.start, end: w.end }));
+    const words = joinedPieces(json.words || []).map((w) => ({ text: w.word === undefined || w.word === null ? '' : String(w.word).trim(), start: w.start, end: w.end }));
     const transcript = shared.transcriptFromWords(words);
     return {
       words: transcript.words,

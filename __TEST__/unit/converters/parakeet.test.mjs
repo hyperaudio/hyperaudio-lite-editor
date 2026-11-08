@@ -39,3 +39,28 @@ test('the worker\'s output: the same words, no language', () => {
   assert.equal(r.language, undefined);
   assert.deepEqual(parakeet({ words: [] }), { words: [], paragraphs: [], language: undefined });
 });
+
+// Whisper on the Hugging Face router writes its words as its tokenizer does:
+// a word after a space carries the space, a piece that continues the word
+// before it does not ("-to", "'éditer."). The pieces are folded into their
+// word, and lists that never write a leading space are left as they are.
+test('whisper\'s answer: a hyphenated word is one word, not "speech -to -text"', () => {
+  const whisper = JSON.parse(readFileSync(new URL('../../fixtures/converters/whisper-hf.json', import.meta.url), 'utf8'));
+  assert.equal(whisper.words.length, 165);
+  const r = parakeet(whisper);
+  assert.equal(r.words.length, 160);
+  assert.equal(r.words[0].text, 'The');
+  const joined = r.words.filter((w) => /-|éditer/.test(w.text)).map((w) => w.text);
+  assert.deepEqual(joined, ['speech-to-text', 'tweakz-les', 'l\'éditer.', 'plug-in,']);
+  assert.ok(!r.words.some((w) => /^[-']/.test(w.text)));
+  const sst = r.words.find((w) => w.text === 'speech-to-text');
+  // the joined word runs from its first piece's start to its last piece's end
+  assert.ok(Math.abs(sst.start - 12.35) < 0.01 && Math.abs(sst.end - 13.03) < 0.01);
+  assert.ok(r.words.every((w) => w.text === w.text.trim() && w.text !== ''));
+  assert.equal(r.language, 'fr');
+  // a list with no leading spaces, like Nemotron's, is not joined
+  const nemotron = JSON.parse(readFileSync(new URL('../../fixtures/converters/nemotron.json', import.meta.url), 'utf8'));
+  assert.equal(parakeet(nemotron).words.length, nemotron.words.length);
+  assert.deepEqual(parakeet({ words: [{ word: ' a', start: 0, end: 0.2 }, { word: '  ', start: 0.2, end: 0.2 }, { word: 'b', start: 0.2, end: 0.4 }, { word: ' c', start: 0.5, end: 0.7 }] }).words,
+    [{ text: 'ab', start: 0, end: 0.4 }, { text: 'c', start: 0.5, end: 0.7 }]);
+});
