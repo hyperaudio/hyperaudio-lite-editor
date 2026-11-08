@@ -1321,6 +1321,12 @@
       const seconds = Math.round(provenance.seconds % 60);
       rows.push(['Time taken', minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`]);
     }
+    // the same arithmetic as the live row, from the audio length and rate
+    // recorded at transcription
+    if (provenance && typeof window.formatEstimatedCost === 'function') {
+      const cost = window.formatEstimatedCost(provenance.audioSeconds, provenance.rateUsdPerMinute);
+      if (cost !== null) rows.push(['Estimated cost', cost]);
+    }
     if (provenance && provenance.transcribedAt) {
       const at = new Date(provenance.transcribedAt);
       if (!Number.isNaN(at.getTime())) rows.push(['Transcribed', at.toLocaleString()]);
@@ -3129,6 +3135,15 @@
             pendingOnScreen = true;
             errorOnScreen = false;
             pendingProvenance = null;
+            // The summary and the topics on screen belong to the project that
+            // has just left it. Only Deepgram writes them, and it does so
+            // after this for its own run, so every other engine's project was
+            // born carrying the previous project's summary and topics, saved
+            // with it and shown in its info panel as if they were its own.
+            ['summary', 'topics'].forEach((id) => {
+              const el = document.getElementById(id);
+              if (el !== null) el.textContent = '';
+            });
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /
             // transcribe entry points grey on this class, so the gate holds
@@ -3276,6 +3291,16 @@
     }
     if (info && info.device) {
       provenance.device = String(info.device);
+    }
+    // What a cloud run was billed for and at what rate, so a reopened project
+    // shows the same estimated cost as the live run did. Audio length as the
+    // service reported it, rate per minute in US dollars as the engine knew
+    // it on the day.
+    if (info && typeof info.audioSeconds === 'number' && Number.isFinite(info.audioSeconds) && info.audioSeconds > 0) {
+      provenance.audioSeconds = Math.round(info.audioSeconds * 1000) / 1000;
+    }
+    if (info && typeof info.rateUsdPerMinute === 'number' && Number.isFinite(info.rateUsdPerMinute) && info.rateUsdPerMinute > 0) {
+      provenance.rateUsdPerMinute = info.rateUsdPerMinute;
     }
     // What was really run (#668), recorded at transcription whatever
     // the settings say: TPME exists to "capture what can be known about

@@ -27,7 +27,22 @@
       const seconds = Math.round(info.seconds % 60);
       rows.push(["Time taken", minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`]);
     }
+    const cost = formatEstimatedCost(info.audioSeconds, info.rateUsdPerMinute);
+    if (cost !== null) rows.push(["Estimated cost", cost]);
     container.innerHTML = rows.map(([label, value]) => `<p><strong>${label}:</strong> ${value}</p>`).join("");
+  }
+
+  // What a cloud run cost (#780), estimated from the audio the service said it
+  // billed and the per-minute rate the engine knows for its model. The
+  // router never reports the real charge, so this is arithmetic, named as
+  // such, and the rate is shown so it can be checked against the bill.
+  // Null when either number is missing, and the row stays away.
+  function formatEstimatedCost(audioSeconds, rateUsdPerMinute) {
+    if (typeof audioSeconds !== "number" || !Number.isFinite(audioSeconds) || audioSeconds <= 0) return null;
+    if (typeof rateUsdPerMinute !== "number" || !Number.isFinite(rateUsdPerMinute) || rateUsdPerMinute <= 0) return null;
+    const cost = (audioSeconds / 60) * rateUsdPerMinute;
+    const shown = cost >= 1 ? cost.toFixed(2) : String(Number(cost.toPrecision(2)));
+    return `$${shown} ($${String(rateUsdPerMinute)} per minute of audio)`;
   }
 
   // While a transcription is in flight the transcript container holds loader

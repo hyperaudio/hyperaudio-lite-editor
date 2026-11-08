@@ -91,6 +91,12 @@ test('buildProjectJson: provenance seconds/device persist when captured (§ 3.5,
   assert.equal(project.provenance.device, 'GPU (WebGPU)');
   // still valid against the project validator
   assert.deepEqual(save.validateProjectJson(project), { ok: true, errors: [] });
+  // and the billed audio length and rate a cloud run records for its estimated cost
+  state.provenance = { ...state.provenance, audioSeconds: 64.125, rateUsdPerMinute: 0.002 };
+  const billed = save.buildProjectJson(state);
+  assert.equal(billed.provenance.audioSeconds, 64.125);
+  assert.equal(billed.provenance.rateUsdPerMinute, 0.002);
+  assert.deepEqual(save.validateProjectJson(billed), { ok: true, errors: [] });
 });
 
 test('validateProjectJson: accepts a conformant project', () => {

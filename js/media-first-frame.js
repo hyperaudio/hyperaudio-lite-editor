@@ -1,7 +1,7 @@
 /**
  * media-first-frame.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
  * First-frame display for video media (#556). A <video> shows its poster —
@@ -362,6 +362,16 @@
         if (applied || token !== loadToken) return;
         const posters = window.MediaPosters;
         const id = currentProjectId();
+        // A transcription's audio: no project owns it yet, and the session's
+        // id is still the PREVIOUS project's, whose entry drew its glyph
+        // here — a film strip when that project was video — over a recording
+        // that is plainly sound. The wave, unseeded, is the honest cover.
+        // Provisional, so the library change at the birth re-seeds it with
+        // the new project's own colour.
+        if (posters && typeof posters.glyphUrl === 'function' && loaderOwnsScreen()) {
+          setPoster(posters.glyphUrl(null), true);
+          return;
+        }
         if (posters && typeof posters.glyphUrl === 'function' && id !== null) {
           const entry = await currentEntry(id);
           if (token !== loadToken) return;   // the library moved on meanwhile
