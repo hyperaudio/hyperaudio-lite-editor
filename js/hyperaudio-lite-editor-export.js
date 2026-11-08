@@ -1,12 +1,24 @@
 /**
  * hyperaudio-lite-editor-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
  * Export/import custom elements: transcript downloads and the Deepgram JSON,
  * SRT and WebVTT import dialogs.
  */
+
+// What goes on the player for a media file chosen in an import dialog. A host
+// that keeps the media itself may name its own URL for the file through
+// window.hyperaudioMediaUrl, answered by the save module only on a scheme the
+// host declared, and the project is then a link to the host's copy rather
+// than a copy in the editor's storage (#781). Otherwise, and in the browser, a blob
+// URL as always.
+function mediaSrcFor(file) {
+  const save = window.HyperaudioSave;
+  const host = save && typeof save.hostMediaUrl === 'function' ? save.hostMediaUrl(file) : null;
+  return host || URL.createObjectURL(file);
+}
 
 class ExportJson extends HTMLElement {
 
@@ -178,7 +190,7 @@ class ImportDeepgramJson extends HTMLElement {
         // a large video reached the player only after the birth, so the
         // project was saved with the media the player held before: the
         // previous project's.
-        player.src = URL.createObjectURL(document.querySelector('[name=deepgram-json-file]').files[0]);
+        player.src = mediaSrcFor(document.querySelector('[name=deepgram-json-file]').files[0]);
       }
 
       parseData(json);
@@ -279,7 +291,7 @@ class ImportSrt extends HTMLElement {
     // own address, and the birth saved the project as a link to index.html.
     const srtMediaUrl = document.querySelector('#srt-media').value.trim();
     if (document.querySelector('#srt-file').value != "") {
-      player.src = URL.createObjectURL(document.querySelector('[name=srt-file]').files[0]);
+      player.src = mediaSrcFor(document.querySelector('[name=srt-file]').files[0]);
     } else if (srtMediaUrl !== "") {
       player.src = srtMediaUrl;
     } else {
@@ -410,7 +422,7 @@ class ImportVtt extends HTMLElement {
     // No media at all: the player is cleared, as for SRT above (#757).
     const vttMediaUrl = document.querySelector('#vtt-media').value.trim();
     if (document.querySelector('#vtt-file').value != "") {
-      player.src = URL.createObjectURL(document.querySelector('[name=vtt-file]').files[0]);
+      player.src = mediaSrcFor(document.querySelector('[name=vtt-file]').files[0]);
     } else if (vttMediaUrl !== "") {
       player.src = vttMediaUrl;
     } else {

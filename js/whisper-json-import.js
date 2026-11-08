@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - Whisper JSON import. @version 1.3.43 — last changed in release 1.3.43 */
+/*! Hyperaudio Lite Editor - Whisper JSON import. @version 1.3.45 — last changed in release 1.3.45 */
 
 // Self-contained, modular import feature (#631). To remove it entirely:
 // delete this file, its <script> tag in index.html, the
@@ -79,7 +79,13 @@
 
       const player = document.querySelector('#hyperplayer');
       if (player !== null) {
-        if (mediaFile.files && mediaFile.files[0]) player.src = URL.createObjectURL(mediaFile.files[0]);
+        // a host that keeps the media itself may name its own URL for the
+        // file, and the project is then a link to it rather than a copy (#781)
+        if (mediaFile.files && mediaFile.files[0]) {
+          const file = mediaFile.files[0];
+          const host = window.HyperaudioSave && typeof window.HyperaudioSave.hostMediaUrl === 'function' ? window.HyperaudioSave.hostMediaUrl(file) : null;
+          player.src = host || URL.createObjectURL(file);
+        }
         else if (mediaUrl.value.trim() !== '') player.src = mediaUrl.value.trim();
         else {
           // no media at all: the player is cleared, so the new project is born

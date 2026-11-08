@@ -77,6 +77,22 @@
   function isLinkUrl(src) {
     return typeof src === 'string' && (/^https?:/i.test(src) || isEmbedderLinkUrl(src));
   }
+  // A host's URL for a File the user chose in an import dialog, or null. The
+  // host keeps the media itself and serves it over a scheme it declared, so a
+  // project imported with local media should be a link to the host's copy,
+  // not a second copy in the editor's storage. The optional, synchronous
+  // hook window.hyperaudioMediaUrl(file) answers, in the arrangement of
+  // hyperaudioMediaInfo and hyperaudioMediaPoster (#744, #781): no hook, a throw,
+  // or anything but a URL on a declared scheme means the blob URL as before.
+  function hostMediaUrl(file) {
+    try {
+      const hook = typeof window !== 'undefined' ? window.hyperaudioMediaUrl : undefined;
+      const url = typeof hook === 'function' && file ? hook(file) : null;
+      return isEmbedderLinkUrl(url) ? url : null;
+    } catch (e) {
+      return null;
+    }
+  }
 
   // Reader security (spec § 10): cap on text entries before/after inflating
   // (anti zip-bomb — an hour of speech is hundreds of KB, 50 MB is generous).
@@ -4815,6 +4831,9 @@
     // the same reader for an engine's answer: a code in any spelling or a
     // language name becomes a tag, anything else '' (#777)
     languageTag,
+    // a host's URL for a chosen media file, or null: the import dialogs ask
+    // before making a blob URL
+    hostMediaUrl,
     // Transcript provenance (#668, js/tpme.js). The project's provenance as
     // recorded, and the part of it TPME owns: { mediaId, reviewLevel,
     // entries } — an identifier, a judgement, and any chain imported with the
