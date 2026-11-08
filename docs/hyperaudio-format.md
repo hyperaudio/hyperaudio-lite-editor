@@ -331,6 +331,8 @@ user; they may be an empty string / empty array.
 | `engineVersion` | string | Optional: the version of what ran the inference, where it can be known — the runtime's for a local engine, the model build a service reported. |
 | `runtime` | string | Optional: for a local engine, the library that ran the model (`transformers.js`, `onnxruntime-web`). |
 | `mediaFile` | string | Optional: the name of the file, or the address, that was transcribed, as it was named at the time. |
+| `audioSeconds` | number | Optional: the length of audio the service said it processed, in seconds, for a cloud engine that bills by the minute. |
+| `rateUsdPerMinute` | number | Optional: the service's published rate per minute of audio in US dollars, as the engine knew it on the day. With `audioSeconds` it gives the estimated cost the info panel shows. Never the real charge, which the services do not report. |
 | `tpme` | object | Optional: transcript provenance in the terms of TPME v1.0 (doi:10.5281/zenodo.21287085) — `mediaId` (string, the recording's identifier in the keeper's collection), `reviewLevel` (string, the keeper's word for how far a person has reviewed the transcript) and `entries` (array of objects: TPME entries that arrived WITH the transcript, kept exactly as they came, unknown elements included). A `provenance` object may consist of `tpme` alone: a transcript from elsewhere has no engine here and still has a history. |
 
 The last six are recorded at transcription whether or not anything will ever

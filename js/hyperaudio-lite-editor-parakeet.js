@@ -74,10 +74,13 @@ const WHISPER_LANGUAGES = Object.keys(PARAKEET_HF_LANGUAGE_LABELS);
 
 // The models, by DeepInfra's id. `languages` is what the Language select
 // offers after "Auto-detect", in the order of the labels above.
+// `usdPerMinute` is DeepInfra's published rate per minute of audio, which
+// Hugging Face bills through without markup (read 2026-11-08). The info
+// panel's estimated cost is the answer's `duration` times this (#780).
 const PARAKEET_HF_MODELS = [
-  { value: "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B", label: "Nemotron 3.5 Transcribe 30B", languages: NEMOTRON_LANGUAGES },
-  { value: "openai/whisper-large-v3-turbo", label: "Whisper large v3 turbo", languages: WHISPER_LANGUAGES },
-  { value: "Qwen/Qwen3-ASR-1.7B", label: "Qwen3-ASR 1.7B", languages: [] },
+  { value: "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B", label: "Nemotron 3.5 Transcribe 30B", languages: NEMOTRON_LANGUAGES, usdPerMinute: 0.002 },
+  { value: "openai/whisper-large-v3-turbo", label: "Whisper large v3 turbo", languages: WHISPER_LANGUAGES, usdPerMinute: 0.0002 },
+  { value: "Qwen/Qwen3-ASR-1.7B", label: "Qwen3-ASR 1.7B", languages: [], usdPerMinute: 0.00045 },
 ];
 const PARAKEET_HF_MODEL = PARAKEET_HF_MODELS[0].value;
 
@@ -304,8 +307,11 @@ function parakeetHfParseData(json) {
     track.srcLang = language;
   }
 
+  // the audio the service billed, as it reported it, and the model's rate
+  const billed = typeof json.duration === 'number' && Number.isFinite(json.duration) && json.duration > 0 ? json.duration : undefined;
+  const rate = (PARAKEET_HF_MODELS.find((m) => m.value === parakeetHfTranscriptionMeta.modelId) || {}).usdPerMinute;
   const info = parakeetHfTranscriptionStart !== 0
-    ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000 } : null;
+    ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000, audioSeconds: billed, rateUsdPerMinute: rate } : null;
   // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
   if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html: hyperTranscript, info })) {
     return;

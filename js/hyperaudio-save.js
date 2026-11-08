@@ -1321,6 +1321,12 @@
       const seconds = Math.round(provenance.seconds % 60);
       rows.push(['Time taken', minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`]);
     }
+    // the same arithmetic as the live row, from the audio length and rate
+    // recorded at transcription
+    if (provenance && typeof window.formatEstimatedCost === 'function') {
+      const cost = window.formatEstimatedCost(provenance.audioSeconds, provenance.rateUsdPerMinute);
+      if (cost !== null) rows.push(['Estimated cost', cost]);
+    }
     if (provenance && provenance.transcribedAt) {
       const at = new Date(provenance.transcribedAt);
       if (!Number.isNaN(at.getTime())) rows.push(['Transcribed', at.toLocaleString()]);
@@ -3276,6 +3282,16 @@
     }
     if (info && info.device) {
       provenance.device = String(info.device);
+    }
+    // What a cloud run was billed for and at what rate, so a reopened project
+    // shows the same estimated cost as the live run did. Audio length as the
+    // service reported it, rate per minute in US dollars as the engine knew
+    // it on the day.
+    if (info && typeof info.audioSeconds === 'number' && Number.isFinite(info.audioSeconds) && info.audioSeconds > 0) {
+      provenance.audioSeconds = Math.round(info.audioSeconds * 1000) / 1000;
+    }
+    if (info && typeof info.rateUsdPerMinute === 'number' && Number.isFinite(info.rateUsdPerMinute) && info.rateUsdPerMinute > 0) {
+      provenance.rateUsdPerMinute = info.rateUsdPerMinute;
     }
     // What was really run (#668), recorded at transcription whatever
     // the settings say: TPME exists to "capture what can be known about
