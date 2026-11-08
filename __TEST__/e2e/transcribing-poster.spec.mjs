@@ -130,3 +130,47 @@ test('after the birth, a black stand-in gives way to the project\'s stored captu
   }), { timeout: 15000 }).toBe(true);
   expect(await posterLuma()).toBeGreaterThan(60);
 });
+
+// A transcription's AUDIO wore the previous project's glyph while the loader
+// owned the screen: settleAudio drew from the session's project, still the one
+// open before, so after a video project the recording showed a film strip. The
+// wave is the honest cover from the first moment, re-seeded at the birth.
+test('audio being transcribed after a video project shows the wave from the start, not the film strip', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.waitForTimeout(1000);
+  await putVideo(page, fixture('video-640x360.mp4'), 'wide.mp4', true);
+  await expect.poll(() => picture(page), { timeout: 10000 }).toMatchObject({ kind: 'stored-capture' });
+  // the video project's glyph is a film strip: what the audio used to get
+  const filmStrip = await page.evaluate(async () => {
+    const lib = window.HyperaudioSave.library;
+    const entry = (await lib.list()).find((e) => String(e.id) === String(lib.currentId()));
+    return window.MediaPosters.glyphIsVideo(entry);
+  });
+  expect(filmStrip).toBe(true);
+
+  // an audio file goes on the player as an engine starts
+  await page.evaluate(() => {
+    const sr = 8000, n = sr, buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+    const w = (o, s) => { for (let i = 0; i < s.length; i += 1) dv.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true); dv.setUint16(32, 2, true);
+    dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+    const file = new File([buf], 'talk.wav', { type: 'audio/wav' });
+    document.getElementById('hyperplayer').src = URL.createObjectURL(file);
+    document.getElementById('hypertranscript').innerHTML = '<div class="vertically-centre"><center class="transcribing-msg">Transcribing…</center></div>';
+    setTranscriptBusy(true);
+  });
+  const shape = () => page.evaluate(() => {
+    const poster = decodeURIComponent(document.getElementById('hyperplayer').getAttribute('poster') || '');
+    if (!poster.startsWith('data:image/svg')) return poster.slice(0, 20);
+    return poster.includes('stroke-linecap="round"') ? 'wave' : (poster.includes('rx="4"') ? 'film' : 'other');
+  });
+  await expect.poll(shape, { timeout: 10000 }).toBe('wave');
+  await page.waitForTimeout(1500);
+  expect(await shape()).toBe('wave');
+  // the player's duplicate for WebKit follows it
+  expect(await page.evaluate(() => { const img = document.getElementById('audio-poster'); return img !== null && !img.hidden; })).toBe(true);
+  await page.evaluate(() => setTranscriptBusy(false));
+});
