@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const { paragraphStarts } = require('../../js/paragraph-rule.js');
 
@@ -28,7 +29,7 @@ function oldRule(words) {
 
 const random = (seed) => () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
 
-test('the shared rule chooses exactly what the Parakeet loop chose, over random transcripts', () => {
+test('the shared rule chooses exactly what the Parakeet loop chose, over random transcripts whose pauses are slight or long', () => {
   const rnd = random(743);
   const texts = ['so', 'and', 'the', 'end.', 'really?', 'yes!', 'e.g', 'well,', 'it'];
   for (let t = 0; t < 3000; t += 1) {
@@ -37,7 +38,9 @@ test('the shared rule chooses exactly what the Parakeet loop chose, over random 
     let at = rnd() * 2;
     const words = [];
     for (let i = 0; i < n; i += 1) {
-      const gap = rnd() < 0.1 ? 3.5 + rnd() : rnd() * 0.3;   // around the 4 s line
+      // either side of the 4 s line, and never in the 1 s to 4 s band the
+      // short-pause clause owns
+      const gap = rnd() < 0.1 ? 4.01 + rnd() : rnd() * 0.3;
       const start = at + gap;
       const end = start + rnd() * 0.5;
       at = end;
@@ -61,6 +64,35 @@ test('a long pause starts a paragraph only after a sentence end', () => {
   assert.deepEqual([...paragraphStarts(notAtSentenceEnd)], []);
   const atSentenceEnd = [w(0, 'done.'), w(10, 'Next')];
   assert.deepEqual([...paragraphStarts(atSentenceEnd)], [1]);
+});
+
+// Engines that time words edge to edge leave one to two second pauses between
+// sections, never four (Nemotron, Whisper and Qwen on the Hugging Face route)
+test('a pause of over a second at a sentence end starts a paragraph once the paragraph has 20 words', () => {
+  const talk = (pauseAt, pause, punct) => {
+    const words = [];
+    let at = 0;
+    for (let i = 0; i < 60; i += 1) {
+      if (i === pauseAt) at += pause;
+      words.push({ start: at, end: at + 0.3, text: i === pauseAt - 1 ? 'end' + punct : 'word' });
+      at += 0.3; // edge to edge: the next word starts as this one ends
+    }
+    return words;
+  };
+  assert.deepEqual([...paragraphStarts(talk(30, 1.2, '.'))], [30]);   // a sentence end, 30 words in
+  assert.deepEqual([...paragraphStarts(talk(15, 1.2, '.'))], []);     // too early: 15 words
+  assert.deepEqual([...paragraphStarts(talk(30, 0.9, '.'))], []);     // not a pause worth a paragraph
+  assert.deepEqual([...paragraphStarts(talk(30, 1.2, ''))], []);      // mid-sentence
+  assert.deepEqual([...paragraphStarts(talk(30, 1.2, '?'))], [30]);
+  assert.deepEqual([...paragraphStarts(talk(20, 1.01, '!'))], [20]);  // the line: 20 words, just over a second
+  assert.deepEqual([...paragraphStarts(talk(19, 1.01, '!'))], []);    // 19 words is short of it
+});
+
+test('a 64 s talk with six section pauses of one to two seconds reads in four paragraphs', () => {
+  const nemotron = JSON.parse(readFileSync(new URL('../fixtures/converters/nemotron.json', import.meta.url), 'utf8'));
+  const words = nemotron.words.map((w) => ({ start: w.start, end: w.end, text: w.word }));
+  assert.deepEqual([...paragraphStarts(words)], [56, 83, 108]);
+  assert.ok(['cloud.', 'timings.', 'sync.'].every((t, i) => words[[56, 83, 108][i] - 1].text === t));
 });
 
 test('a paragraph past 100 words ends at the next sentence end', () => {
