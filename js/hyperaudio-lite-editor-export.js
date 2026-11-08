@@ -210,7 +210,7 @@ class ImportDeepgramJson extends HTMLElement {
         <label for="file-import-deepgram-json-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <div class="flex flex-col gap-4 w-full">
         <h3 class="font-bold text-lg">Import Deepgram JSON Dialog</h3>
-        <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <input id="deepgram-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full media-link" />
         <label class="label-text" for="deepgram-json-file">or use local media file</label>
         <input id="deepgram-json-file" name="deepgram-json-file" type="file" class="file-input w-full max-w-xs" title="" />
         <label class="label-text" for="deepgram-json">select local JSON file</label>
@@ -344,7 +344,7 @@ class ImportSrt extends HTMLElement {
         <label for="file-import-srt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <div class="flex flex-col gap-4 w-full">
         <h3 class="font-bold text-lg">Import SRT Dialog</h3>
-        <input id="srt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <input id="srt-media" type="text" placeholder="Link to media" class="input input-bordered w-full media-link" />
         <label class="label-text" for="srt-file">or use local media file</label>
         <input id="srt-file" name="srt-file" type="file" class="file-input w-full max-w-xs" title="" />
         <label class="label-text" for="srt">select local SRT file</label>
@@ -472,7 +472,7 @@ class ImportVtt extends HTMLElement {
         <label for="file-import-vtt-dialog" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
       <div class="flex flex-col gap-4 w-full">
         <h3 class="font-bold text-lg">Import VTT Dialog</h3>
-        <input id="vtt-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
+        <input id="vtt-media" type="text" placeholder="Link to media" class="input input-bordered w-full media-link" />
         <label class="label-text" for="vtt-file">or use local media file</label>
         <input id="vtt-file" name="vtt-file" type="file" class="file-input w-full max-w-xs" title="" />
         <label class="label-text" for="vtt">select local VTT file</label>

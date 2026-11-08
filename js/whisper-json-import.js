@@ -36,7 +36,7 @@
       + '<h3 class="font-bold text-lg">Import Whisper JSON</h3>'
       + '<p style="margin-top:8px; font-size:0.9rem; opacity:0.75">From the Whisper command line, the OpenAI API, whisper.cpp, WhisperX or a Hugging Face pipeline. Word timings are used where the file has them; otherwise each segment’s words are spread across it.</p>'
       + '<div class="flex flex-col gap-4 w-full" style="margin-top:16px">'
-      + '<input id="whisper-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />'
+      + '<input id="whisper-json-media" type="text" placeholder="Link to media" class="input input-bordered w-full media-link" />'
       + '<label class="label-text" for="whisper-json-file">or use local media file</label>'
       + '<input id="whisper-json-file" name="whisper-json-file" type="file" class="file-input w-full max-w-xs" title="" />'
       + '<label class="label-text" for="whisper-json">select local JSON file</label>'
