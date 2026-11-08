@@ -45,6 +45,19 @@
     return `$${shown} ($${String(rateUsdPerMinute)} per minute of audio)`;
   }
 
+  // A media link field reads as pasted (#782). A single-line field scrolls to
+  // the caret after a paste, so a long address showed only its file name and
+  // looked as if that was all that had been accepted. After a paste into a
+  // field marked media-link the caret goes back to the start, which scrolls
+  // the field there, once the pasted text is in. Typing is left alone.
+  document.addEventListener("paste", (event) => {
+    const field = event.target;
+    if (!(field instanceof HTMLInputElement) || !field.classList.contains("media-link")) return;
+    requestAnimationFrame(() => {
+      try { field.setSelectionRange(0, 0); field.scrollLeft = 0; } catch (e) { /* a field type with no selection */ }
+    });
+  });
+
   // While a transcription is in flight the transcript container holds loader
   // markup, not a transcript – typing into it would be silently destroyed
   // when the result lands. Transcription modules call this around their work.
