@@ -301,3 +301,34 @@ test('hugging face: a finished run shows its estimated cost, and the reopened pr
   const provenance = await page.evaluate(() => window.HyperaudioSave.getProvenance());
   expect(provenance).toMatchObject({ audioSeconds: 64.125, rateUsdPerMinute: 0.002, modelId: 'nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B' });
 });
+
+// Only Deepgram writes the summary and the topics, so a project born from any
+// other engine kept the previous project's, saved them and showed them in its
+// info panel as its own. The loader taking the screen clears them.
+test('hugging face: the new project does not inherit the previous project\'s summary and topics', async ({ page, context }) => {
+  const cloud = CLOUD['parakeet-hf'];
+  const answer = readFileSync(new URL('../fixtures/converters/nemotron.json', import.meta.url), 'utf8');
+  await context.route(cloud.api, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: answer }));
+  await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+  // the open project has a summary and topics of its own, saved
+  const homeId = await page.evaluate(async () => {
+    document.getElementById('summary').textContent = 'A talk about tides.';
+    document.getElementById('topics').textContent = 'Tides, Moon';
+    await window.HyperaudioSave.saveProject();
+    return window.HyperaudioSave.library.currentId();
+  });
+  await page.evaluate(cloud.start);
+  await expect(page.locator('#hypertranscript [data-m]').first()).toBeVisible({ timeout: 20000 });
+  await page.waitForFunction((home) => window.HyperaudioSave.library.currentId() !== null && window.HyperaudioSave.library.currentId() !== home, homeId);
+  expect(await page.evaluate(() => [document.getElementById('summary').textContent, document.getElementById('topics').textContent])).toEqual(['', '']);
+  const bornId = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  await page.waitForTimeout(1500); // the autosave
+  const entries = await page.evaluate(() => window.HyperaudioSave.library.list());
+  const born = entries.find((e) => String(e.id) === String(bornId));
+  expect(born.summary || '').toBe('');
+  expect(born.topics || []).toEqual([]);
+  // and the previous project still has its own
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
+  await expect(page.locator('#summary')).toHaveText('A talk about tides.');
+  await expect(page.locator('#topics')).toHaveText('Tides, Moon');
+});

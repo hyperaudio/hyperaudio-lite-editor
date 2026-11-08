@@ -3135,6 +3135,15 @@
             pendingOnScreen = true;
             errorOnScreen = false;
             pendingProvenance = null;
+            // The summary and the topics on screen belong to the project that
+            // has just left it. Only Deepgram writes them, and it does so
+            // after this for its own run, so every other engine's project was
+            // born carrying the previous project's summary and topics, saved
+            // with it and shown in its info panel as if they were its own.
+            ['summary', 'topics'].forEach((id) => {
+              const el = document.getElementById(id);
+              if (el !== null) el.textContent = '';
+            });
             // ENGINE state, distinct from the transcript's aria-busy VIEW
             // state (which switching away deliberately clears): the NEW /
             // transcribe entry points grey on this class, so the gate holds
