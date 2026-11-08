@@ -24,7 +24,7 @@ Portable :iphone:
 Transcribe right in your browser, or through a cloud service with your own key.
 
 - **Local (in‑browser, no key, private):** Parakeet and Whisper run entirely on your machine — the audio never leaves the browser.
-- **Cloud (bring your own key):** AssemblyAI, Deepgram, and Nemotron via Hugging Face — fast, accurate, with word‑level timing.
+- **Cloud (bring your own key):** AssemblyAI, Deepgram, and Hugging Face (Nemotron, Whisper or Qwen) — fast, accurate, with word‑level timing.
 
 Every engine is a converter and a client, and a new one is the same two files: see [Adding a speech-to-text engine](docs/adding-an-stt-engine.md).
 

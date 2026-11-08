@@ -59,7 +59,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=1.3.44"></script>
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=1.3.44"></script>
   <script src="js/hyperaudio-lite-editor-parakeet.js?v=1.3.45"></script>
-  <script src="js/transcribe-prefs.js?v=1.3.44"></script>
+  <script src="js/transcribe-prefs.js?v=1.3.45"></script>
   <script src="js/settings.js?v=1.3.44"></script>
   <script src="js/experimental-features.js?v=1.3.44"></script>
   <!-- the tour (#718): driver.js, vendored, and the steps -->
@@ -253,6 +253,9 @@ If you are creating an open source application under a license compatible with t
           <input id="parakeet-hf-media" type="text" placeholder="Link to media" class="input input-bordered w-full max-w-xs" />
         </details>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
+
+        <label class="label-text" for="parakeet-hf-model">Model</label>
+        <select id="parakeet-hf-model" name="parakeet-hf-model" class="select select-bordered w-full max-w-xs"></select>
 
         <label class="label-text" for="parakeet-hf-language">Language</label>
         <select id="parakeet-hf-language" name="parakeet-hf-language" class="select select-bordered w-full max-w-xs"></select>
@@ -1183,7 +1186,7 @@ If you are creating an open source application under a license compatible with t
           <div class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <deepgram-service templateSelector="#deepgram-modal-template"></deepgram-service>
           </div>
-          <input type="radio" name="cloud_tabs" class="tab" style="width:150px; white-space:nowrap" aria-label="Nemotron (HF)" />
+          <input type="radio" name="cloud_tabs" class="tab" style="width:150px; white-space:nowrap" aria-label="Hugging Face" />
           <div class="tab-content bg-base-100 border-base-300 rounded-box p-10">
             <parakeet-hf-service templateSelector="#parakeet-hf-modal-template"></parakeet-hf-service>
           </div>
@@ -1351,7 +1354,7 @@ If you are creating an open source application under a license compatible with t
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
   <script src="js/hyperaudio-save.js?v=1.3.45"></script>
-  <script src="js/tpme.js?v=1.3.44"></script>
+  <script src="js/tpme.js?v=1.3.45"></script>
   <script src="js/hyperaudio-library.js?v=1.3.44"></script>
   <script src="js/transcribe-from-project.js?v=1.3.44"></script>
   <script src="js/media-first-frame.js?v=1.3.44"></script>

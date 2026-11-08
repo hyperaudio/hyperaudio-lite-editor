@@ -1,7 +1,7 @@
 # Adding a speech-to-text engine
 
 The editor transcribes with five engines today: Parakeet and Whisper in the
-browser, and AssemblyAI, Deepgram and Nemotron through Hugging Face in the
+browser, and AssemblyAI, Deepgram and Hugging Face (Nemotron, Whisper, Qwen) in the
 cloud. Each one is two files, and a new engine is the same two files.
 
 - **A converter**, `js/converters/<name>.js`. A pure function that turns the
@@ -141,7 +141,7 @@ comes back on the page.
 Three pieces in `index.html`:
 
 1. **A template** for the form, beside the others near the top of the file:
-   `<template id="acme-modal-template">`. Copy the Nemotron (HF) one. The
+   `<template id="acme-modal-template">`. Copy the Hugging Face one. The
    parts are a key field (the `key-field` wrapper gives the show and hide
    eye), a "Remember key on this device" toggle, a `<input type="file">`, a
    `<details class="url-source">` with the URL field, the model and language
