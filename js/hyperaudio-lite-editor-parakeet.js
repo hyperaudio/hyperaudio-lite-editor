@@ -1,33 +1,41 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
- * Parakeet (HuggingFace) cloud transcription (#307) — NVIDIA Parakeet TDT 0.6B
- * v3 served through HuggingFace's inference router, called directly from the
- * browser with the user's own HF token (no server; the router endpoint is
- * CORS-open). Unlike AssemblyAI's async upload→poll, this is a single
+ * Nemotron (Hugging Face) cloud transcription (#307, #777) — NVIDIA Nemotron
+ * 3.5 ASR 0.6B served through Hugging Face's inference router by Together,
+ * called directly from the browser with the user's own token (no server; the
+ * router endpoint is CORS-open). The engine began as Parakeet TDT 0.6B v3 on
+ * the same route; Together withdrew that model from Inference Providers and
+ * the router answered 410 for it (#777), so the model is now its successor.
+ * The element, the ids and this file keep their names: the remembered token
+ * and the lists that name the inputs are keyed on them. Unlike AssemblyAI's async upload→poll, this is a single
  * synchronous multipart POST (like Deepgram):
  *
  *   POST router.huggingface.co/together/v1/audio/transcriptions
- *     model=nvidia/parakeet-tdt-0.6b-v3, file=<audio>,
+ *     model=nvidia/nemotron-3.5-asr-streaming-0.6b, file=<audio>,
  *     response_format=verbose_json, timestamp_granularities[]=word
  *
- * Response (verified): { language, duration, text, words:[{word,start,end}] }
- * with start/end in SECONDS. Parsed into the same data-m/data-d spans the other
- * engines emit; no speaker labels (Parakeet doesn't diarize). Reuses the global
+ * Response: { language, duration, text, words:[{word,start,end}] } with
+ * start/end in SECONDS (verified for Parakeet on this route, the same
+ * OpenAI-style form for every model Together serves there). Parsed into the
+ * same data-m/data-d spans the other engines emit; no speaker labels. Reuses the global
  * helpers transcribingSvg / errorSvg and setTranscriptBusy / setTranscriptionInfo.
  */
 
 const PARAKEET_HF_ENDPOINT = "https://router.huggingface.co/together/v1/audio/transcriptions";
-const PARAKEET_HF_MODEL = "nvidia/parakeet-tdt-0.6b-v3";
+const PARAKEET_HF_MODEL = "nvidia/nemotron-3.5-asr-streaming-0.6b";
 
-// Parakeet TDT 0.6B v3 — 25 European languages. "auto" omits the language field
-// (the endpoint auto-detects, verified).
+// Nemotron 3.5 ASR 0.6B transcribes 32 locales out of the box. One entry per
+// language, ISO 639-1 codes as the route takes them. "auto" omits the field
+// and the model detects the language.
 const PARAKEET_HF_LANGUAGES = [
   { value: "auto", label: "Auto-detect" },
+  { value: "ar", label: "Arabic" },
   { value: "bg", label: "Bulgarian" },
+  { value: "zh", label: "Chinese (Mandarin)" },
   { value: "hr", label: "Croatian" },
   { value: "cs", label: "Czech" },
   { value: "da", label: "Danish" },
@@ -37,21 +45,22 @@ const PARAKEET_HF_LANGUAGES = [
   { value: "fi", label: "Finnish" },
   { value: "fr", label: "French" },
   { value: "de", label: "German" },
-  { value: "el", label: "Greek" },
+  { value: "hi", label: "Hindi" },
   { value: "hu", label: "Hungarian" },
   { value: "it", label: "Italian" },
-  { value: "lv", label: "Latvian" },
-  { value: "lt", label: "Lithuanian" },
-  { value: "mt", label: "Maltese" },
+  { value: "ja", label: "Japanese" },
+  { value: "ko", label: "Korean" },
+  { value: "nb", label: "Norwegian (Bokmål)" },
   { value: "pl", label: "Polish" },
   { value: "pt", label: "Portuguese" },
   { value: "ro", label: "Romanian" },
   { value: "ru", label: "Russian" },
   { value: "sk", label: "Slovak" },
-  { value: "sl", label: "Slovenian" },
   { value: "es", label: "Spanish" },
   { value: "sv", label: "Swedish" },
+  { value: "tr", label: "Turkish" },
   { value: "uk", label: "Ukrainian" },
+  { value: "vi", label: "Vietnamese" },
 ];
 
 let parakeetHfTranscriptionStart = 0;
@@ -92,7 +101,7 @@ class ParakeetHFService extends HTMLElement {
       if (typeof setTranscriptBusy === 'function') {
         setTranscriptBusy(false);
       }
-      showParakeetHfError("Please provide your HuggingFace token and either a media link or a file.");
+      showParakeetHfError("Please provide your Hugging Face token and either a media link or a file.");
       return;
     }
 
@@ -102,8 +111,8 @@ class ParakeetHFService extends HTMLElement {
 
     parakeetHfTranscriptionStart = Date.now();
     parakeetHfTranscriptionMeta = {
-      service: "Parakeet (HuggingFace, cloud)",
-      model: "Parakeet TDT 0.6B v3",
+      service: "Nemotron (Hugging Face, cloud)",
+      model: "Nemotron 3.5 ASR 0.6B",
       language: document.querySelector('#parakeet-hf-language').selectedOptions[0]?.textContent || language,
       languageCode: language,
       // what was really asked for (#668)
@@ -294,16 +303,20 @@ function displayParakeetHfError(error) {
   if (e.indexOf("media-fetch") >= 0) {
     msg = "Sorry.<br/>Couldn't fetch that media URL from the browser (it may block cross-origin requests). Try uploading the file instead.";
   } else if (e.indexOf("401") >= 0 || e.indexOf("403") >= 0) {
-    msg = "Sorry.<br/>The HuggingFace token appears to be invalid.";
+    msg = "Sorry.<br/>The Hugging Face token appears to be invalid.";
   } else if (e.indexOf("402") >= 0) {
-    msg = "Sorry.<br/>Your HuggingFace inference quota is exhausted. Add a paid plan or try another provider.";
+    // the router's own words are "Purchase pre-paid credits to continue using Inference Providers" (#777)
+    msg = "Sorry.<br/>Your Hugging Face account has no credit for Inference Providers.<br/>Add pre-paid credits at huggingface.co/settings/billing.";
+  } else if (e.indexOf("410") >= 0 || e.indexOf("404") >= 0) {
+    // a provider can withdraw a model from Inference Providers without notice (#777)
+    msg = "Sorry.<br/>Hugging Face no longer serves this model.<br/>The provider has withdrawn it.";
   } else if (e.indexOf("400") >= 0 || e.indexOf("422") >= 0) {
     msg = "Sorry.<br/>The request was rejected — the media may be unreadable or the model unavailable.";
   } else if (e.indexOf("503") >= 0 || e.indexOf("500") >= 0) {
-    msg = "Sorry.<br/>HuggingFace inference is unavailable right now — try again shortly.";
+    msg = "Sorry.<br/>Hugging Face inference is unavailable right now — try again shortly.";
   }
   showParakeetHfError(msg);
-  console.error("Parakeet (HF) error:", error);
+  console.error("Nemotron (HF) error:", error);
 }
 
 function displayParakeetHfNoWords() {
