@@ -192,10 +192,12 @@ for (const [status, says] of [[402, 'no credit for Inference Providers'], [410, 
   });
 }
 
-test('nemotron (hf): the request names the model the route still serves (#777)', async ({ page, context }) => {
+test('nemotron (hf): the request goes to a provider that takes credits and names the model as it knows it (#777)', async ({ page, context }) => {
   const cloud = CLOUD['parakeet-hf'];
   let model = null;
+  let url = null;
   await context.route(cloud.api, async (route) => {
+    url = route.request().url();
     const body = route.request().postDataBuffer();
     const text = body ? body.toString('latin1') : '';
     const m = /name="model"\r\n\r\n([^\r\n]+)/.exec(text);
@@ -205,7 +207,9 @@ test('nemotron (hf): the request names the model the route still serves (#777)',
   await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
   await page.evaluate(cloud.start);
   await expect(page.locator('#hypertranscript')).toContainText('token appears to be invalid', { timeout: 20000 });
-  expect(model).toBe('nvidia/nemotron-3.5-asr-streaming-0.6b');
+  // DeepInfra's own id: the router does not map the Hub's id on this route
+  expect(model).toBe('nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B');
+  expect(url).toBe('https://router.huggingface.co/deepinfra/v1/openai/audio/transcriptions');
 });
 
 // Deepgram's status codes each mean one thing, and the card says that one

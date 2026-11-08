@@ -5,35 +5,47 @@
  * @license AGPL-3.0-only
  *
  * Nemotron (Hugging Face) cloud transcription (#307, #777) — NVIDIA Nemotron
- * 3.5 ASR 0.6B served through Hugging Face's inference router by Together,
- * called directly from the browser with the user's own token (no server; the
- * router endpoint is CORS-open). The engine began as Parakeet TDT 0.6B v3 on
- * the same route; Together withdrew that model from Inference Providers and
- * the router answered 410 for it (#777), so the model is now its successor.
- * The element, the ids and this file keep their names: the remembered token
- * and the lists that name the inputs are keyed on them. Unlike AssemblyAI's async upload→poll, this is a single
+ * 3.5 Transcribe 30B served through Hugging Face's inference router by
+ * DeepInfra, called directly from the browser with the user's own token (no
+ * server; the router endpoint is CORS-open). The engine began as Parakeet TDT
+ * 0.6B v3 on the router's Together route. Together withdrew that model from
+ * Inference Providers and the router answered 410 for it (#777), and Together
+ * cannot be paid with the account's pre-paid credits at all (the router's
+ * 402: "Pay-as-you go is not enabled for provider together yet"), so the
+ * engine moved to DeepInfra, which serves both Nemotron sizes and takes
+ * credits. The 30B costs ten times the 0.6B ($0.12 against $0.012 an hour of
+ * audio in 2026-11) and answered in the same three seconds with fewer
+ * mishearings, so it is the one. The element, the ids and this file keep
+ * their names: the remembered token and the lists that name the inputs are
+ * keyed on them. Unlike AssemblyAI's async upload→poll, this is a single
  * synchronous multipart POST (like Deepgram):
  *
- *   POST router.huggingface.co/together/v1/audio/transcriptions
- *     model=nvidia/nemotron-3.5-asr-streaming-0.6b, file=<audio>,
+ *   POST router.huggingface.co/deepinfra/v1/openai/audio/transcriptions
+ *     model=nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B, file=<audio>,
  *     response_format=verbose_json, timestamp_granularities[]=word
  *
+ * The model goes by DeepInfra's own id: the router does not map the Hub's id
+ * on this route ("Model not supported by provider deepinfra", a 400). The
+ * route takes ISO 639-1 codes in `language` and echoes the code back, "" when
+ * none was sent. No speaker labels: DeepInfra's diarize flag does not pass
+ * through the router's OpenAI-style route (#760).
+ *
  * Response: { language, duration, text, words:[{word,start,end}] } with
- * start/end in SECONDS (verified for Parakeet on this route, the same
- * OpenAI-style form for every model Together serves there). Parsed into the
- * same data-m/data-d spans the other engines emit; no speaker labels. Reuses the global
- * helpers transcribingSvg / errorSvg and setTranscriptBusy / setTranscriptionInfo.
+ * start/end in SECONDS (verified live 2026-11-08). Parsed into the same
+ * data-m/data-d spans the other engines emit. Reuses the global helpers
+ * transcribingSvg / errorSvg and setTranscriptBusy / setTranscriptionInfo.
  */
 
-const PARAKEET_HF_ENDPOINT = "https://router.huggingface.co/together/v1/audio/transcriptions";
-const PARAKEET_HF_MODEL = "nvidia/nemotron-3.5-asr-streaming-0.6b";
+const PARAKEET_HF_ENDPOINT = "https://router.huggingface.co/deepinfra/v1/openai/audio/transcriptions";
+const PARAKEET_HF_MODEL = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B";
 
-// Nemotron 3.5 ASR 0.6B transcribes 32 locales out of the box. One entry per
-// language, ISO 639-1 codes as the route takes them. "auto" omits the field
-// and the model detects the language.
+// The 40 languages Nemotron 3.5 Transcribe lists for transcription. One entry
+// per language, ISO 639-1 codes as the route takes them. "auto" omits the
+// field and the model transcribes the language as spoken.
 const PARAKEET_HF_LANGUAGES = [
   { value: "auto", label: "Auto-detect" },
   { value: "ar", label: "Arabic" },
+  { value: "bn", label: "Bengali" },
   { value: "bg", label: "Bulgarian" },
   { value: "zh", label: "Chinese (Mandarin)" },
   { value: "hr", label: "Croatian" },
@@ -45,19 +57,30 @@ const PARAKEET_HF_LANGUAGES = [
   { value: "fi", label: "Finnish" },
   { value: "fr", label: "French" },
   { value: "de", label: "German" },
+  { value: "el", label: "Greek" },
+  { value: "he", label: "Hebrew" },
   { value: "hi", label: "Hindi" },
   { value: "hu", label: "Hungarian" },
+  { value: "id", label: "Indonesian" },
   { value: "it", label: "Italian" },
   { value: "ja", label: "Japanese" },
   { value: "ko", label: "Korean" },
-  { value: "nb", label: "Norwegian (Bokmål)" },
+  { value: "lv", label: "Latvian" },
+  { value: "lt", label: "Lithuanian" },
+  { value: "mt", label: "Maltese" },
+  { value: "mr", label: "Marathi" },
   { value: "pl", label: "Polish" },
   { value: "pt", label: "Portuguese" },
   { value: "ro", label: "Romanian" },
   { value: "ru", label: "Russian" },
   { value: "sk", label: "Slovak" },
+  { value: "sl", label: "Slovenian" },
   { value: "es", label: "Spanish" },
   { value: "sv", label: "Swedish" },
+  { value: "tl", label: "Tagalog" },
+  { value: "ta", label: "Tamil" },
+  { value: "te", label: "Telugu" },
+  { value: "th", label: "Thai" },
   { value: "tr", label: "Turkish" },
   { value: "uk", label: "Ukrainian" },
   { value: "vi", label: "Vietnamese" },
@@ -112,7 +135,7 @@ class ParakeetHFService extends HTMLElement {
     parakeetHfTranscriptionStart = Date.now();
     parakeetHfTranscriptionMeta = {
       service: "Nemotron (Hugging Face, cloud)",
-      model: "Nemotron 3.5 ASR 0.6B",
+      model: "Nemotron 3.5 Transcribe 30B",
       language: document.querySelector('#parakeet-hf-language').selectedOptions[0]?.textContent || language,
       languageCode: language,
       // what was really asked for (#668)

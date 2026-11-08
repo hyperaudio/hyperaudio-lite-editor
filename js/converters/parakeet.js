@@ -1,7 +1,7 @@
 /**
  * converters/parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.45 — last changed in release 1.3.45
  * @license AGPL-3.0-only
  *
  * Parakeet's output (#751), from the Hugging Face inference endpoint
@@ -30,8 +30,10 @@
     return {
       words: transcript.words,
       paragraphs: transcript.paragraphs,
-      // the endpoint names the language, the worker does not
-      language: typeof json.language === 'string' && json.language !== '' ? json.language : undefined,
+      // the endpoint names the language, the worker does not. Nemotron on the
+      // Hugging Face router echoes the request: "" or the literal "auto" when
+      // none was asked for (#777), and neither names a language
+      language: typeof json.language === 'string' && json.language !== '' && json.language !== 'auto' ? json.language : undefined,
     };
   }
 

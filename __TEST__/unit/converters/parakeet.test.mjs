@@ -20,6 +20,19 @@ test('the endpoint\'s words, no speakers, a paragraph after the long pause, and 
   assert.equal(r.language, 'en');
 });
 
+// Nemotron on the Hugging Face router (#777): the same word list, and the
+// language field echoes the request rather than naming what was heard
+test('nemotron\'s answer: its words, and "" or "auto" is no language', () => {
+  const nemotron = JSON.parse(readFileSync(new URL('../../fixtures/converters/nemotron.json', import.meta.url), 'utf8'));
+  const r = parakeet(nemotron);
+  assert.equal(r.words.length, 162);
+  assert.equal(r.words[0].text, 'The');
+  assert.ok(r.words[0].start < r.words[0].end && r.words[161].end < 63);
+  assert.equal(r.language, undefined);
+  assert.equal(parakeet({ ...nemotron, language: 'auto' }).language, undefined);
+  assert.equal(parakeet({ ...nemotron, language: 'fr' }).language, 'fr');
+});
+
 test('the worker\'s output: the same words, no language', () => {
   const r = parakeet({ words: fixture().words });
   assert.equal(r.words.length, 19);
