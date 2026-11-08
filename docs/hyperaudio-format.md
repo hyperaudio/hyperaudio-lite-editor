@@ -616,6 +616,17 @@ reconciliation offer they didn't earn. Embedder-scheme links are expected in
 already prefers, so shared files stay openable everywhere. In a plain browser
 no scheme is declared and nothing changes.
 
+An embedder that keeps the media itself MAY also answer for a *file the user
+chooses* in an import dialog (Deepgram JSON, SRT, VTT, Whisper JSON) through
+the optional hook `window.hyperaudioMediaUrl(file)`, which returns a URL or
+`null`. The editor asks it before it makes a blob URL for the file, and uses
+the answer only when it is a URL in a declared scheme, so the imported
+project is a `kind: "link"` to the embedder's copy rather than a second copy
+in the editor's storage. The hook is synchronous. With no hook, a throw, or
+any other answer, the file goes on the player as a blob URL as before. The
+same arrangement as `window.hyperaudioMediaInfo` and
+`window.hyperaudioMediaPoster`.
+
 ### 7.2.2 `kind: "none"` (since 1.2)
 
 - A project with **no media at all** — the normal state of a text-only import
