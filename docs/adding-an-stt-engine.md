@@ -216,6 +216,15 @@ getData() {
 }
 ```
 
+A cloud client sends the sound, not the picture (#788). Before the upload it
+passes its file, or the blob it fetched for a link, through
+`window.HyperaudioCloudAudio.audioForUpload(blob, filename)` and sends what
+comes back, `upload.blob` under `upload.filename`. A file with a video track
+comes back as 16 kHz mono Opus named after it, about 20 MB an hour, with the
+conversion's progress written on the loader meanwhile. An audio file comes
+back as it is. Guard the call on the global, as the clients do, so the
+module can be lifted out.
+
 Then, when the result arrives:
 
 ```js
@@ -404,6 +413,7 @@ Expose a function on `window` only when a host calls it. `parseData`
 - [ ] `js/hyperaudio-lite-editor-<name>.js`: template, tab radio with `aria-label`, custom element
 - [ ] the contract in order: caption mode off, media on the player, `showTranscriptNotice` with `.transcribing-msg`, `setTranscriptBusy(true)`, then background check, `hyperaudioKeepTranscription`, `innerHTML`, `setTranscriptionInfo`, `setTranscriptBusy(false)`, `hyperaudioInit`, `hyperaudioGenerateCaptionsFromTranscript`
 - [ ] errors through `showTranscriptNotice`, always `setTranscriptBusy(false)`
+- [ ] cloud engine: the upload goes through `window.HyperaudioCloudAudio.audioForUpload`, so a video goes up as its sound (#788)
 - [ ] `info` with `service`, `model`, `language`, `languageCode`, `seconds`, `modelId`, `parameters`, no credentials
 - [ ] input ids added in `editor-core.js`, `hyperaudio-save.js` (`wireCapture`), `transcribe-prefs.js` and `transcribe-from-project.js`, and `data-transcribe-submit` on the submit button
 - [ ] local engine: worker path with `?v=`, device choice and report, progress into `.transcribing-msg`, idle retirement, `HyperaudioModelStores`, the SW test's worker list

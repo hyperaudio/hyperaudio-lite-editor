@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-deepgram.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  */
 
@@ -297,7 +297,7 @@ function fetchDataLocal(token, file, language, model) {
 
   reader.addEventListener('load', () => {
 
-    file.arrayBuffer().then((arrayBuffer) => {
+    file.arrayBuffer().then(async (arrayBuffer) => {
       blob = new Blob([new Uint8Array(arrayBuffer)], {type: file.type });
 
       let player = document.querySelector("#hyperplayer");
@@ -305,14 +305,18 @@ function fetchDataLocal(token, file, language, model) {
 
       let url = getApiUrl(language, model);
 
+      // a video goes up as its sound only (#788, js/cloud-audio.js)
+      const upload = window.HyperaudioCloudAudio
+        ? await window.HyperaudioCloudAudio.audioForUpload(blob, file.name) : { blob };
+
       if (token !== "") {
         fetch(url, {
           method: 'POST',
           headers: {
             'Authorization': 'Token ' + apiKey,
-            'Content-Type': file.type
+            'Content-Type': upload.blob.type || file.type
           },
-          body: blob
+          body: upload.blob
         })
         .then(response => {
           if (!response.ok) {

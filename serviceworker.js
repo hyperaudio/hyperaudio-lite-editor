@@ -36,7 +36,7 @@ const PRECACHE = [
   // styles
   'css/hyperaudio-lite-editor.css', 'css/hyperaudio-lite-player.css', 'css/tailwind-min.css',
   // the editor's own scripts, and the two transcription workers
-  'js/a11y.js', 'js/audio-source.js', 'js/caption-abbreviations.js',
+  'js/a11y.js', 'js/audio-source.js', 'js/caption-abbreviations.js', 'js/cloud-audio.js',
   'js/caption-speaker-colours.js', 'js/caption.js', 'js/editor-audio-cut.js',
   'js/editor-core.js', 'js/editor-file-menu.js', 'js/editor-main.js',
   'js/editor-service-worker.js', 'js/editor-svg.js', 'js/experimental-features.js', 'js/find-replace.js', 'js/hls-source.js',
