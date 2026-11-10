@@ -1,7 +1,7 @@
 # Adding a speech-to-text engine
 
 The editor transcribes with five engines today: Parakeet and Whisper in the
-browser, and AssemblyAI, Deepgram and Hugging Face (Nemotron, Whisper, Qwen) in the
+browser, and AssemblyAI, Deepgram and Hugging Face or DeepInfra (Nemotron, Whisper, Qwen) in the
 cloud. Each one is two files, and a new engine is the same two files.
 
 - **A converter**, `js/converters/<name>.js`. A pure function that turns the

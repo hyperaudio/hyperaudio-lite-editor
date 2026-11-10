@@ -50,7 +50,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/converters/transcript-words.js?v=1.3.45"></script>
   <script src="js/converters/deepgram.js?v=1.3.44"></script>
   <script src="js/converters/assemblyai.js?v=1.3.44"></script>
-  <script src="js/converters/parakeet.js?v=1.3.45"></script>
+  <script src="js/converters/parakeet.js?v=1.3.46"></script>
   <script src="js/converters/whisper.js?v=1.3.44"></script>
   <script src="js/converters/whisper-json.js?v=1.3.44"></script>
   <script src="js/converters/captions.js?v=1.3.44"></script>
@@ -58,7 +58,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hls-source.js?v=1.3.44"></script>
   <script src="js/hyperaudio-lite-editor-deepgram.js?v=1.3.44"></script>
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=1.3.44"></script>
-  <script src="js/hyperaudio-lite-editor-parakeet.js?v=1.3.45"></script>
+  <script src="js/hyperaudio-lite-editor-parakeet.js?v=1.3.46"></script>
   <script src="js/transcribe-prefs.js?v=1.3.46"></script>
   <script src="js/settings.js?v=1.3.44"></script>
   <script src="js/experimental-features.js?v=1.3.44"></script>
@@ -235,7 +235,7 @@ If you are creating an open source application under a license compatible with t
     <form id="parakeet-hf-form" name="parakeet-hf-form">
       <div class="flex flex-col gap-4 w-full">
         <div class="key-field">
-          <input id="parakeet-hf-key" type="password" placeholder="Hugging Face token" class="input input-bordered w-full" />
+          <input id="parakeet-hf-key" type="password" placeholder="Hugging Face token or DeepInfra API key" class="input input-bordered w-full" />
           <button type="button" class="key-eye" aria-label="Show key" tabindex="-1">
             <svg class="eye-open" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
             <svg class="eye-closed" style="display:none" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
@@ -245,7 +245,7 @@ If you are creating an open source application under a license compatible with t
           <input id="parakeet-hf-remember-key" type="checkbox" class="toggle toggle-primary" checked />
           <span class="label-text" style="font-size:0.85rem; opacity:0.85">Remember key on this device</span>
         </label>
-        <span class="label-text" style="font-size:0.8rem; opacity:0.7">Create a token at huggingface.co/settings/tokens with "Make calls to Inference Providers", and add credit under billing</span>
+        <span class="label-text" style="font-size:0.8rem; opacity:0.7">Create a token at huggingface.co/settings/tokens with "Make calls to Inference Providers", and add credit under billing. Or use a DeepInfra API key from deepinfra.com/dash/api_keys, which can also label speakers with Nemotron.</span>
         <hr class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-50 dark:border-neutral-200" />
         <input id="parakeet-hf-file" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
         <details class="url-source">
@@ -259,6 +259,11 @@ If you are creating an open source application under a license compatible with t
 
         <label class="label-text" for="parakeet-hf-language">Language</label>
         <select id="parakeet-hf-language" name="parakeet-hf-language" class="select select-bordered w-full max-w-xs"></select>
+
+        <label id="parakeet-hf-speakers-row" style="display:none; gap:8px; align-items:center; cursor:pointer">
+          <input id="parakeet-hf-speakers" type="checkbox" class="toggle toggle-primary" />
+          <span class="label-text" style="font-size:0.85rem; opacity:0.85">Label speakers</span>
+        </label>
       </div>
       <div class="modal-action">
         <label id="parakeet-hf-submit-btn" for="transcribe-modal" data-transcribe-submit class="btn btn-primary btn-disabled" aria-disabled="true">TRANSCRIBE</label>

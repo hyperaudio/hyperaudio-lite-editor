@@ -64,3 +64,29 @@ test('whisper\'s answer: a hyphenated word is one word, not "speech -to -text"',
   assert.deepEqual(parakeet({ words: [{ word: ' a', start: 0, end: 0.2 }, { word: '  ', start: 0.2, end: 0.2 }, { word: 'b', start: 0.2, end: 0.4 }, { word: ' c', start: 0.5, end: 0.7 }] }).words,
     [{ text: 'ab', start: 0, end: 0.4 }, { text: 'c', start: 0.5, end: 0.7 }]);
 });
+
+// DeepInfra's own route for Nemotron labels words speaker_0, speaker_1… when
+// diarize is asked for (#760). The fixture is the route's real answer for a
+// 41 s clip of two voices taking six turns. The labels become the editor's
+// speaker-N, a paragraph starts at every change of speaker, and the label is
+// written once per run of one speaker. The route echoes the language asked
+// for, "" here, which is no language.
+test('speakers from DeepInfra\'s route: labels at every change of speaker, none repeated', () => {
+  const answer = JSON.parse(readFileSync(new URL('../../fixtures/converters/nemotron-speakers.json', import.meta.url), 'utf8'));
+  const r = parakeet(answer);
+  assert.equal(r.words.length, 115);
+  const changes = r.words.map((w, i) => (i === 0 || w.speaker !== r.words[i - 1].speaker ? i : -1)).filter((i) => i >= 0);
+  assert.deepEqual(changes, [0, 22, 47, 64, 79, 94]);
+  assert.deepEqual(changes.map((i) => r.words[i].speaker), ['speaker-0', 'speaker-1', 'speaker-0', 'speaker-1', 'speaker-0', 'speaker-1']);
+  const starts = r.paragraphs.map((p) => r.words.findIndex((w) => w.start === p.start));
+  changes.forEach((i) => assert.ok(starts.includes(i), `no paragraph at word ${i} (${starts})`));
+  // the label goes on the first paragraph of each speaker's run, not every paragraph
+  const labelled = r.paragraphs.filter((p) => p.speaker !== undefined).map((p) => p.speaker);
+  assert.deepEqual(labelled, ['speaker-0', 'speaker-1', 'speaker-0', 'speaker-1', 'speaker-0', 'speaker-1']);
+  assert.equal(r.language, undefined);
+  // a list without speakers has none, as before
+  assert.ok(parakeet(fixture()).words.every((w) => w.speaker === undefined));
+  // a joined word keeps its first piece's speaker, and other label spellings are read too
+  const joined = parakeet({ words: [{ word: ' speech', start: 0, end: 0.2, speaker: 'speaker_3' }, { word: '-to', start: 0.2, end: 0.3, speaker: 'speaker_3' }, { word: ' go', start: 0.5, end: 0.7, speaker: 'SPEAKER_00' }] });
+  assert.deepEqual(joined.words.map((w) => [w.text, w.speaker]), [['speech-to', 'speaker-3'], ['go', 'speaker-00']]);
+});

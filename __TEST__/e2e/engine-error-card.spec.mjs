@@ -114,7 +114,7 @@ const CLOUD = {
   'parakeet-hf': {
     api: 'https://router.huggingface.co/**', media: 'https://hf.example.com/items/clip.mp3',
     start: () => {
-      document.querySelector('#parakeet-hf-key').value = 'not-a-token';
+      document.querySelector('#parakeet-hf-key').value = 'hf_not-a-token';
       document.querySelector('#parakeet-hf-media').value = 'https://hf.example.com/items/clip.mp3';
       document.querySelector('parakeet-hf-service').getData();
     },
@@ -331,4 +331,94 @@ test('hugging face: the new project does not inherit the previous project\'s sum
   await page.evaluate((id) => window.HyperaudioSave.library.open(id), homeId);
   await expect(page.locator('#summary')).toHaveText('A talk about tides.');
   await expect(page.locator('#topics')).toHaveText('Tides, Moon');
+});
+
+// The one key field also takes a DeepInfra API key (#760). A Hugging Face
+// token begins hf_, so any other key goes to DeepInfra itself: the same body
+// to its OpenAI-compatible route, or, with "Label speakers" on and Nemotron
+// chosen, to its own route for the model, which puts a speaker on every word.
+// The fixture is that route's real answer for a 41 s clip of two voices
+// taking six turns.
+const DEEPINFRA_START = ({ model, speakers }) => {
+  const key = document.querySelector('#parakeet-hf-key');
+  key.value = 'di-secret-key';
+  key.dispatchEvent(new Event('input', { bubbles: true }));
+  const modelSel = document.querySelector('#parakeet-hf-model');
+  modelSel.value = model;
+  modelSel.dispatchEvent(new Event('change', { bubbles: true }));
+  const toggle = document.querySelector('#parakeet-hf-speakers');
+  toggle.checked = speakers;
+  toggle.dispatchEvent(new Event('change', { bubbles: true }));
+  document.querySelector('#parakeet-hf-media').value = 'https://hf.example.com/items/clip.mp3';
+  document.querySelector('parakeet-hf-service').getData();
+};
+
+test('deepinfra key: nemotron with speakers goes to DeepInfra\'s own route, and the transcript has speaker paragraphs', async ({ page, context }) => {
+  const cloud = CLOUD['parakeet-hf'];
+  const answer = readFileSync(new URL('../fixtures/converters/nemotron-speakers.json', import.meta.url), 'utf8');
+  const posted = [];
+  await context.route('https://api.deepinfra.com/**', async (route) => {
+    const text = (route.request().postDataBuffer() || Buffer.alloc(0)).toString('latin1');
+    const field = (name) => { const m = new RegExp(`name="${name}"(?:; filename="[^"]*")?\\r\\n(?:[^\\r\\n]*\\r\\n)?\\r\\n([^\\r\\n]*)`).exec(text); return m ? m[1] : null; };
+    posted.push({ url: route.request().url(), auth: route.request().headers().authorization, hasAudio: /name="audio"; filename=/.test(text), hasFile: /name="file"; filename=/.test(text), chunk_level: field('chunk_level'), diarize: field('diarize'), model: field('model') });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: answer });
+  });
+  await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+
+  // the toggle is offered for a DeepInfra key with Nemotron, and only then
+  const offered = await page.evaluate(() => {
+    const row = document.querySelector('#parakeet-hf-speakers-row');
+    const key = document.querySelector('#parakeet-hf-key');
+    const modelSel = document.querySelector('#parakeet-hf-model');
+    const set = (k, m) => { key.value = k; key.dispatchEvent(new Event('input', { bubbles: true })); modelSel.value = m; modelSel.dispatchEvent(new Event('change', { bubbles: true })); return getComputedStyle(row).display; };
+    return {
+      hfNemotron: set('hf_abc', 'nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B'),
+      diWhisper: set('di-secret-key', 'openai/whisper-large-v3-turbo'),
+      diNemotron: set('di-secret-key', 'nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B'),
+      empty: set('', 'nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B'),
+    };
+  });
+  expect(offered).toEqual({ hfNemotron: 'none', diWhisper: 'none', diNemotron: 'flex', empty: 'none' });
+
+  await page.evaluate(DEEPINFRA_START, { model: 'nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B', speakers: true });
+  await expect(page.locator('#hypertranscript [data-m]').first()).toBeVisible({ timeout: 20000 });
+  expect(posted).toEqual([{
+    url: 'https://api.deepinfra.com/v1/inference/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B',
+    auth: 'Bearer di-secret-key', hasAudio: true, hasFile: false, chunk_level: 'word', diarize: 'true', model: null,
+  }]);
+  // a label where each speaker starts, once per run of one speaker, and a paragraph at every change
+  const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#hypertranscript .speaker')).map((s) => s.textContent.trim()));
+  expect(labels).toEqual(['[speaker-0]', '[speaker-1]', '[speaker-0]', '[speaker-1]', '[speaker-0]', '[speaker-1]']);
+  const firstWords = await page.evaluate(() => Array.from(document.querySelectorAll('#hypertranscript p')).map((p) => p.querySelector('[data-m]:not(.speaker)').textContent.trim()));
+  ["Good", "Thanks", "So", "Exactly,", "That", "It"].forEach((word) => expect(firstWords).toContain(word));   // each turn opens a paragraph
+  const info = page.locator('#transcription-info');
+  await expect(info).toContainText('Service: DeepInfra (cloud)');
+  // 41.4 s at $0.002 a minute (the route also reports duration, and input_length_ms is the fallback)
+  await expect(info).toContainText('Estimated cost: $0.0014 ($0.002 per minute of audio)');
+  await page.waitForFunction(() => window.HyperaudioSave.library.currentId() !== null);
+  const provenance = await page.evaluate(() => window.HyperaudioSave.getProvenance());
+  expect(provenance).toMatchObject({ engine: 'deepinfra (cloud)', audioSeconds: 41.398, modelId: 'nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B' });
+  expect(provenance.parameters).toMatchObject({ chunk_level: 'word', diarize: true });
+
+  // the toggle is remembered with the key
+  await page.reload();
+  await page.waitForSelector('#parakeet-hf-model option', { state: 'attached' });
+  await expect.poll(() => page.evaluate(() => [document.querySelector('#parakeet-hf-speakers').checked, getComputedStyle(document.querySelector('#parakeet-hf-speakers-row')).display])).toEqual([true, 'flex']);
+});
+
+test('deepinfra key: whisper goes to DeepInfra\'s OpenAI route, and a refusal names the key', async ({ page, context }) => {
+  const cloud = CLOUD['parakeet-hf'];
+  const posted = [];
+  await context.route('https://api.deepinfra.com/**', async (route) => {
+    const text = (route.request().postDataBuffer() || Buffer.alloc(0)).toString('latin1');
+    posted.push({ url: route.request().url(), model: (/name="model"\r\n\r\n([^\r\n]+)/.exec(text) || [])[1], diarize: /name="diarize"/.test(text) });
+    await route.fulfill({ status: 401, contentType: 'application/json', body: '{"detail":"invalid api key"}' });
+  });
+  let routerCalls = 0;
+  await context.route(cloud.api, (route) => { routerCalls += 1; return route.fulfill({ status: 500, body: '' }); });
+  await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+  await page.evaluate(DEEPINFRA_START, { model: 'openai/whisper-large-v3-turbo', speakers: true });
+  await expect(page.locator('#hypertranscript')).toContainText('The DeepInfra API key appears to be invalid', { timeout: 20000 });
+  expect(posted).toEqual([{ url: 'https://api.deepinfra.com/v1/openai/audio/transcriptions', model: 'openai/whisper-large-v3-turbo', diarize: false }]);
+  expect(routerCalls).toBe(0);
 });

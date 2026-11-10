@@ -1,7 +1,7 @@
 /**
  * converters/parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  *
  * Parakeet's output (#751), from the Hugging Face inference endpoint
@@ -45,14 +45,33 @@
         previous.end = Math.max(previous.end, w.end);
         return;
       }
-      out.push({ word: text, start: w.start, end: w.end });
+      // a joined word keeps its first piece's speaker
+      out.push({ word: text, start: w.start, end: w.end, speaker: w.speaker });
     });
     return out;
   }
 
+  // DeepInfra's own route labels words speaker_0, speaker_1… when asked to
+  // (#760). The editor's label is "speaker-0", in step with the Deepgram and
+  // AssemblyAI converters, so the markup reads the same whichever engine
+  // heard the speakers. A list with no speaker on any word has none.
+  const hasSpeaker = (w) => w.speaker !== undefined && w.speaker !== null && w.speaker !== '';
+  function speakerLabel(speaker) {
+    const m = /^speaker[_-]?(.+)$/i.exec(String(speaker).trim());
+    return 'speaker-' + (m ? m[1] : String(speaker).trim());
+  }
+
   function parakeet(json) {
-    const words = joinedPieces(json.words || []).map((w) => ({ text: w.word === undefined || w.word === null ? '' : String(w.word).trim(), start: w.start, end: w.end }));
-    const transcript = shared.transcriptFromWords(words);
+    const pieces = joinedPieces(json.words || []);
+    const diarized = pieces.some(hasSpeaker);
+    const words = pieces.map((w) => {
+      const word = { text: w.word === undefined || w.word === null ? '' : String(w.word).trim(), start: w.start, end: w.end };
+      if (diarized && hasSpeaker(w)) word.speaker = speakerLabel(w.speaker);
+      return word;
+    });
+    // a speaker label at the first word and at every change of speaker, as
+    // the other diarizing converters do; without speakers the option is moot
+    const transcript = shared.transcriptFromWords(words, { labelOnChange: true });
     return {
       words: transcript.words,
       paragraphs: transcript.paragraphs,
