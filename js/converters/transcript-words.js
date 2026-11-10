@@ -1,7 +1,7 @@
 /**
  * converters/transcript-words.js
  * (C) The Hyperaudio Project
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  *
  * The converters (#751). Each file in this folder turns one source's own
@@ -166,7 +166,51 @@
     return render({ words: transcript.words, paragraphs: transcript.paragraphs });
   }
 
-  const api = { paragraphsFrom, transcriptFromWords, transcriptToHtml, withDurations };
+  // Timing a transcript cannot have had (#786). Nemotron's word times come from an
+  // alignment of its finished text onto the audio, and on a long recording
+  // that alignment has slipped: a passage of speech stamped into a few
+  // seconds, at ten words a second and more, beside a stretch of speech with
+  // no words at all (an 18-minute debate, three such stretches, in different
+  // places on each run). The text is right and the times are not, and
+  // nothing here can put them right. Nobody speaks twelve words in a second
+  // and a half: the fastest healthy transcript among the fixtures runs at
+  // five words a second over twelve words. So any SQUEEZED_WORDS consecutive
+  // words inside SQUEEZED_WORDS / SQUEEZED_RATE seconds mark a stretch whose
+  // timing cannot be trusted. Runs within SQUEEZED_MERGE_SECONDS of each
+  // other are one stretch, and a stretch of fewer than SQUEEZED_MIN_WORDS
+  // words is left alone: two people talking over each other put a dozen
+  // words into two seconds, and that is the recording, not the engine.
+  // Calibrated on English and French transcripts: an engine that writes a
+  // language one character to a word, as Whisper does Chinese and Japanese,
+  // could cross the rate in a fast passage and earn a row it did not
+  // deserve, which costs a line in Project info and changes no word.
+  // Returns the stretches in time order, [{ start, end, words }] in seconds
+  // and words, and an empty array when the timing is plausible throughout.
+  const SQUEEZED_WORDS = 12;
+  const SQUEEZED_RATE = 8;          // words a second
+  const SQUEEZED_MERGE_SECONDS = 3;
+  const SQUEEZED_MIN_WORDS = 20;
+  function squeezedRanges(words) {
+    const list = (Array.isArray(words) ? words : []).filter(timed).slice().sort((a, b) => a.start - b.start);
+    const runs = [];
+    for (let i = 0; i + SQUEEZED_WORDS <= list.length; i += 1) {
+      const from = list[i].start;
+      const to = list[i + SQUEEZED_WORDS - 1].end;
+      if (to - from >= SQUEEZED_WORDS / SQUEEZED_RATE) continue;
+      const last = runs.length > 0 ? runs[runs.length - 1] : null;
+      if (last !== null && from <= last.end + SQUEEZED_MERGE_SECONDS) {
+        last.end = Math.max(last.end, to);
+        last.last = i + SQUEEZED_WORDS - 1;
+      } else {
+        runs.push({ start: from, end: to, first: i, last: i + SQUEEZED_WORDS - 1 });
+      }
+    }
+    return runs
+      .map((run) => ({ start: Math.round(run.start * 100) / 100, end: Math.round(run.end * 100) / 100, words: run.last - run.first + 1 }))
+      .filter((run) => run.words >= SQUEEZED_MIN_WORDS);
+  }
+
+  const api = { paragraphsFrom, squeezedRanges, transcriptFromWords, transcriptToHtml, withDurations };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) {
     root.HyperaudioConverters = root.HyperaudioConverters || {};

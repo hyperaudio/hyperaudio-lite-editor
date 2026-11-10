@@ -422,3 +422,36 @@ test('deepinfra key: whisper goes to DeepInfra\'s OpenAI route, and a refusal na
   expect(posted).toEqual([{ url: 'https://api.deepinfra.com/v1/openai/audio/transcriptions', model: 'openai/whisper-large-v3-turbo', diarize: false }]);
   expect(routerCalls).toBe(0);
 });
+
+// Nemotron on a long recording stamps a passage into a few seconds (an
+// 18-minute debate, three such stretches, in different places on each run).
+// The words are kept, Project info names the stretch in its Timing row, and
+// the reopened project shows the same row from its provenance.
+test('hugging face: a passage timed faster than ordinary speech is named in Project info, and the reopened project keeps it', async ({ page, context }) => {
+  const cloud = CLOUD['parakeet-hf'];
+  const nemotron = JSON.parse(readFileSync(new URL('../fixtures/converters/nemotron.json', import.meta.url), 'utf8'));
+  // forty of its words stamped into two seconds from 30 s
+  nemotron.words = nemotron.words.map((w, i) => (i >= 40 && i < 80 ? { ...w, start: 30 + (i - 40) * 0.05, end: 30 + (i - 40) * 0.05 + 0.04 } : w));
+  await context.route(cloud.api, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(nemotron) }));
+  await page.route(cloud.media, (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: ladderWav(1) }));
+  const warnings = [];
+  page.on('console', (message) => { if (message.type() === 'warning') warnings.push(message.text()); });
+  await page.evaluate(cloud.start);
+  await expect(page.locator('#hypertranscript [data-m]').first()).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('#hypertranscript [data-m]')).toHaveCount(nemotron.words.length);   // nothing dropped
+  const row = /Timing: Unreliable around 0:(29|30)–0:3\d \(the words there are timed too close together to have been spoken\)/;
+  const info = page.locator('#transcription-info');
+  await expect(info).toContainText(row);
+  expect(warnings.some((text) => text.startsWith('Transcript timing is unreliable:'))).toBe(true);
+
+  await page.waitForFunction(() => window.HyperaudioSave.library.currentId() !== null);
+  const id = await page.evaluate(() => window.HyperaudioSave.library.currentId());
+  await page.waitForTimeout(1500); // the autosave
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate((id) => window.HyperaudioSave.library.open(id), id);
+  await expect(info).toContainText(row, { timeout: 15000 });
+  const provenance = await page.evaluate(() => window.HyperaudioSave.getProvenance());
+  expect(provenance.unreliableTiming).toHaveLength(1);
+  expect(provenance.unreliableTiming[0].words).toBeGreaterThanOrEqual(40);
+});

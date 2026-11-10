@@ -81,3 +81,25 @@ test('words with durations pass through unchanged', () => {
   const words = [w(0, 0.3, 'a'), w(0.3, 0.6, 'b'), { start: 0.6, end: 0.9, text: 'c', speaker: 'A', space: false }];
   assert.deepEqual(shared.withDurations(words), words);
 });
+
+// Nemotron on a long recording has stamped a passage into a few seconds
+// (an 18-minute debate, three such stretches): the stretch is named, and
+// left as it came. Twelve words inside a second and a half is the mark,
+// a dozen words shared by two people talking at once is not the engine's
+// doing and stays unnamed, and the list's order does not matter.
+test('squeezedRanges: a passage timed faster than ordinary speech is named, a plausible one is not', () => {
+  const steady = (n, from, step) => Array.from({ length: n }, (_, i) => w(from + i * step, from + i * step + step * 0.8, 'w' + i));
+  assert.deepEqual(shared.squeezedRanges(steady(80, 0, 0.2)), []);          // five words a second: fast, and spoken
+  const words = steady(60, 0, 0.3).concat(steady(30, 20, 0.05), steady(50, 25, 0.3));
+  const ranges = shared.squeezedRanges(words);
+  assert.deepEqual(ranges, [{ start: 20, end: 21.49, words: 30 }]);
+  assert.deepEqual(shared.squeezedRanges(words.slice().reverse()), ranges);
+  // a dozen words in a second: two people at once, left alone
+  assert.deepEqual(shared.squeezedRanges(steady(60, 0, 0.3).concat(steady(12, 20, 0.1), steady(50, 25, 0.3))), []);
+  // two squeezed runs within three seconds are one stretch
+  const two = steady(30, 0, 0.3).concat(steady(14, 10, 0.05), steady(14, 12.5, 0.05), steady(30, 20, 0.3));
+  assert.deepEqual(shared.squeezedRanges(two), [{ start: 10, end: 13.19, words: 28 }]);
+  assert.deepEqual(shared.squeezedRanges([]), []);
+  assert.deepEqual(shared.squeezedRanges([{ text: 'untimed' }]), []);
+  assert.deepEqual(shared.squeezedRanges(undefined), []);
+});

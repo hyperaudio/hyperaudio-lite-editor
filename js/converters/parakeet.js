@@ -7,7 +7,8 @@
  * Parakeet's output (#751), from the Hugging Face inference endpoint
  * (verbose_json with word timestamps) and from the editor's own worker alike:
  * `{ words: [{ word, start, end }] }` with times in seconds, as the editor's
- * canonical transcript. Parakeet does not diarize, so there are no speakers.
+ * canonical transcript, with speakers when DeepInfra's route labelled them
+ * (#760) and the stretches whose timing cannot be right, when there are any.
  * The clients (js/hyperaudio-lite-editor-parakeet.js for the endpoint,
  * js/hyperaudio-lite-editor-parakeet-local.js for the worker) send the audio
  * and put the result on the page. Nothing here touches the page.
@@ -72,7 +73,7 @@
     // a speaker label at the first word and at every change of speaker, as
     // the other diarizing converters do; without speakers the option is moot
     const transcript = shared.transcriptFromWords(words, { labelOnChange: true });
-    return {
+    const result = {
       words: transcript.words,
       paragraphs: transcript.paragraphs,
       // the endpoint names the language, the worker does not. Nemotron on the
@@ -80,6 +81,14 @@
       // none was asked for (#777), and neither names a language
       language: typeof json.language === 'string' && json.language !== '' && json.language !== 'auto' ? json.language : undefined,
     };
+    // Where the times cannot be right (#786): Nemotron on a long recording stamps a
+    // passage into a few seconds (squeezedRanges, in transcript-words.js).
+    // The words stay as they came, since nothing here knows where they
+    // belong, and the stretches go with the result for the client to name.
+    // Only when there are any, so a plausible transcript reads as before.
+    const unreliable = shared.squeezedRanges(transcript.words);
+    if (unreliable.length > 0) result.unreliableTiming = unreliable;
+    return result;
   }
 
   if (typeof module !== 'undefined' && module.exports) module.exports = { parakeet };

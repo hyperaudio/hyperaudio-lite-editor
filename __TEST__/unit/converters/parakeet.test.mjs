@@ -90,3 +90,19 @@ test('speakers from DeepInfra\'s route: labels at every change of speaker, none 
   const joined = parakeet({ words: [{ word: ' speech', start: 0, end: 0.2, speaker: 'speaker_3' }, { word: '-to', start: 0.2, end: 0.3, speaker: 'speaker_3' }, { word: ' go', start: 0.5, end: 0.7, speaker: 'SPEAKER_00' }] });
   assert.deepEqual(joined.words.map((w) => [w.text, w.speaker]), [['speech-to', 'speaker-3'], ['go', 'speaker-00']]);
 });
+
+// Nemotron on a long recording stamps a passage into a few seconds. The
+// converter names the stretch and keeps the words, and a plausible answer
+// carries no such field, so its result reads exactly as before.
+test('a passage timed faster than ordinary speech is named in unreliableTiming, and a plausible answer has none', () => {
+  const nemotron = JSON.parse(readFileSync(new URL('../../fixtures/converters/nemotron.json', import.meta.url), 'utf8'));
+  assert.equal('unreliableTiming' in parakeet(nemotron), false);
+  // forty of its words stamped into two seconds from 30 s
+  const squeezed = { words: nemotron.words.map((w, i) => (i >= 40 && i < 80 ? { ...w, start: 30 + (i - 40) * 0.05, end: 30 + (i - 40) * 0.05 + 0.04 } : w)) };
+  const result = parakeet(squeezed);
+  assert.equal(result.unreliableTiming.length, 1);
+  const [range] = result.unreliableTiming;
+  assert.ok(range.start <= 30 && range.end >= 31.99, `${range.start}–${range.end}`);
+  assert.ok(range.words >= 40, String(range.words));
+  assert.equal(result.words.length, parakeet(nemotron).words.length);   // nothing dropped
+});

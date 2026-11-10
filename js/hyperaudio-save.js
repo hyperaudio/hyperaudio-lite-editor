@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.46 — last changed in release 1.3.46
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -1342,6 +1342,11 @@
     if (provenance && typeof window.formatEstimatedCost === 'function') {
       const cost = window.formatEstimatedCost(provenance.audioSeconds, provenance.rateUsdPerMinute);
       if (cost !== null) rows.push(['Estimated cost', cost]);
+    }
+    // the stretches whose timing the engine got wrong, as the live row named them
+    if (provenance && typeof window.formatUnreliableTiming === 'function') {
+      const timing = window.formatUnreliableTiming(provenance.unreliableTiming);
+      if (timing !== null) rows.push(['Timing', timing]);
     }
     if (provenance && provenance.transcribedAt) {
       const at = new Date(provenance.transcribedAt);
@@ -3317,6 +3322,16 @@
     }
     if (info && typeof info.rateUsdPerMinute === 'number' && Number.isFinite(info.rateUsdPerMinute) && info.rateUsdPerMinute > 0) {
       provenance.rateUsdPerMinute = info.rateUsdPerMinute;
+    }
+    // Where the engine's word times cannot be right (squeezedRanges in
+    // js/converters/transcript-words.js), so a reopened project shows the
+    // same Timing row. Numbers only: start and end in seconds, the word count.
+    if (info && Array.isArray(info.unreliableTiming)) {
+      const sound = (n) => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+      const stretches = info.unreliableTiming
+        .filter((r) => r && sound(r.start) && sound(r.end) && r.end >= r.start)
+        .map((r) => (sound(r.words) ? { start: r.start, end: r.end, words: r.words } : { start: r.start, end: r.end }));
+      if (stretches.length > 0) provenance.unreliableTiming = stretches;
     }
     // What was really run (#668), recorded at transcription whatever
     // the settings say: TPME exists to "capture what can be known about
