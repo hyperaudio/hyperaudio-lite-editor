@@ -1,13 +1,15 @@
 /**
  * hyperaudio-lite-editor-parakeet.js
  * (C) The Hyperaudio Project
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  *
- * Hugging Face cloud transcription (#307, #777) — speech models served
+ * Hugging Face cloud transcription (#307, #777, #760) — speech models served
  * through Hugging Face's inference router by DeepInfra, called directly from
  * the browser with the user's own token (no server; the router endpoint is
- * CORS-open). The engine began as Parakeet TDT 0.6B v3 on the router's
+ * CORS-open). The one key field also takes a DeepInfra API key (#760): a
+ * Hugging Face token always begins "hf_", so any other key goes straight to
+ * DeepInfra, which is who answers either way. The engine began as Parakeet TDT 0.6B v3 on the router's
  * Together route. Together withdrew that model from Inference Providers and
  * the router answered 410 for it (#777), and Together cannot be paid with the
  * account's pre-paid credits at all (the router's 402: "Pay-as-you go is not
@@ -19,8 +21,11 @@
  *   NVIDIA Nemotron 3.5 Transcribe 30B — the most accurate on the test clip,
  *     $0.12 an hour of audio (2026-11), 40 languages. Echoes the requested
  *     language code back, "" when none was sent: it does not report what it
- *     heard. No speakers: DeepInfra's diarize flag does not pass through the
- *     router's OpenAI-style route (#760).
+ *     heard. Speakers come only with a DeepInfra key: DeepInfra's diarize
+ *     flag does not pass through the router's OpenAI-style route, so with
+ *     "Label speakers" on the request goes to DeepInfra's own inference
+ *     route for the model, which puts speaker_0, speaker_1… on every word
+ *     (#760).
  *   Whisper large v3 turbo — $0.012 an hour, detects and reports the
  *     language as a code, word times within a tenth of a second of the 30B.
  *   Qwen3-ASR 1.7B — $0.027 an hour, 30 languages. Detects the language on
@@ -48,9 +53,29 @@
  * start/end in SECONDS, the same for every model on the route. Parsed into
  * the same data-m/data-d spans the other engines emit. Reuses the global
  * helpers transcribingSvg / errorSvg and setTranscriptBusy / setTranscriptionInfo.
+ *
+ * With a DeepInfra key the same body goes to DeepInfra's OpenAI-compatible
+ * route, api.deepinfra.com/v1/openai/audio/transcriptions, and the answer is
+ * the same. With speakers asked for, Nemotron is called on DeepInfra's own
+ * route instead:
+ *
+ *   POST api.deepinfra.com/v1/inference/<DeepInfra's id>
+ *     audio=<audio>, chunk_level=word, diarize=true, language?
+ *
+ * which answers { text, language, input_length_ms, duration, segments,
+ * words:[{word,start,end,speaker}] }. Its `duration` has been seen null, so
+ * the billed length is read from input_length_ms when it is. Both DeepInfra
+ * routes answer CORS preflight for a browser origin (checked 2026-11-10).
  */
 
 const PARAKEET_HF_ENDPOINT = "https://router.huggingface.co/deepinfra/v1/openai/audio/transcriptions";
+const DEEPINFRA_OPENAI_ENDPOINT = "https://api.deepinfra.com/v1/openai/audio/transcriptions";
+const DEEPINFRA_INFERENCE_BASE = "https://api.deepinfra.com/v1/inference/";
+// every Hugging Face access token begins hf_; anything else is DeepInfra's own
+// key (those begin sk-di-, seen 2026-11-10, but the hf_ test is the one relied on)
+const parakeetHfKeyIsHuggingFace = (key) => /^hf_/.test(String(key || "").trim());
+// the model whose DeepInfra route labels speakers
+const PARAKEET_HF_SPEAKER_MODEL = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B";
 
 // One label per ISO 639-1 code the models between them offer
 const PARAKEET_HF_LANGUAGE_LABELS = {
@@ -132,7 +157,7 @@ class ParakeetHFService extends HTMLElement {
       if (typeof setTranscriptBusy === 'function') {
         setTranscriptBusy(false);
       }
-      showParakeetHfError("Please provide your Hugging Face token and either a media link or a file.");
+      showParakeetHfError("Please provide your Hugging Face token or DeepInfra API key, and either a media link or a file.");
       return;
     }
 
@@ -140,17 +165,24 @@ class ParakeetHFService extends HTMLElement {
       media = "https://" + media;
     }
 
+    // speakers: a DeepInfra key, the model whose DeepInfra route labels them,
+    // and the toggle on (#760)
+    const huggingFace = parakeetHfKeyIsHuggingFace(apiKey);
+    const speakersToggle = document.querySelector('#parakeet-hf-speakers');
+    const speakers = !huggingFace && model === PARAKEET_HF_SPEAKER_MODEL && speakersToggle !== null && speakersToggle.checked;
+
     parakeetHfTranscriptionStart = Date.now();
     const modelLabel = (PARAKEET_HF_MODELS.find((m) => m.value === model) || {}).label || model;
     parakeetHfTranscriptionMeta = {
-      service: "Hugging Face (cloud)",
+      service: huggingFace ? "Hugging Face (cloud)" : "DeepInfra (cloud)",
       model: modelLabel,
       language: document.querySelector('#parakeet-hf-language').selectedOptions[0]?.textContent || language,
       languageCode: language,
       // what was really asked for (#668)
       modelId: model,
-      parameters: Object.assign({ model, response_format: 'verbose_json', timestamp_granularities: ['word'] },
-        language ? { language } : {}),
+      parameters: Object.assign({ model },
+        speakers ? { chunk_level: 'word', diarize: true } : { response_format: 'verbose_json', timestamp_granularities: ['word'] },
+        language && language !== 'auto' ? { language } : {}),
     };
 
     const player = document.querySelector("#hyperplayer");
@@ -172,7 +204,7 @@ class ParakeetHFService extends HTMLElement {
       setTranscriptBusy(true);
     }
 
-    runParakeetHF(apiKey, file, media, { model, language }).catch(displayParakeetHfError);
+    runParakeetHF(apiKey, file, media, { model, language, speakers }).catch(displayParakeetHfError);
   }
 
   connectedCallback() {
@@ -198,7 +230,21 @@ class ParakeetHFService extends HTMLElement {
     this.populateLanguages(modelSel.value);
     // the Language list follows the model, keeping the choice when the new
     // model has it (the preferences restore the model first, then the language)
-    modelSel.addEventListener('change', () => this.populateLanguages(modelSel.value));
+    modelSel.addEventListener('change', () => { this.populateLanguages(modelSel.value); this.showSpeakersToggle(); });
+    this.querySelector('#parakeet-hf-key').addEventListener('input', () => this.showSpeakersToggle());
+    this.showSpeakersToggle();
+  }
+
+  // "Label speakers" is offered only where it can be honoured: a DeepInfra
+  // key and the Nemotron model (#760). The toggle keeps its state while
+  // hidden, so a remembered choice comes back when the key is typed again.
+  showSpeakersToggle() {
+    const row = this.querySelector('#parakeet-hf-speakers-row');
+    if (row === null) return;
+    const key = this.querySelector('#parakeet-hf-key').value.trim();
+    const model = this.querySelector('#parakeet-hf-model').value;
+    const offered = key !== '' && !parakeetHfKeyIsHuggingFace(key) && model === PARAKEET_HF_SPEAKER_MODEL;
+    row.style.display = offered ? 'flex' : 'none';
   }
 
   populateLanguages(modelValue) {
@@ -265,16 +311,28 @@ async function runParakeetHF(apiKey, file, media, opts) {
     filename = media.split('/').pop() || 'audio';
   }
 
+  const model = opts.model || PARAKEET_HF_MODEL;
   const form = new FormData();
-  form.append('model', opts.model || PARAKEET_HF_MODEL);
-  form.append('file', blob, filename);
-  form.append('response_format', 'verbose_json');
-  form.append('timestamp_granularities[]', 'word');
+  let endpoint;
+  if (opts.speakers === true) {
+    // DeepInfra's own route for the model: the file is `audio`, the words
+    // come with chunk_level=word, and diarize puts a speaker on each (#760)
+    endpoint = DEEPINFRA_INFERENCE_BASE + model;
+    form.append('audio', blob, filename);
+    form.append('chunk_level', 'word');
+    form.append('diarize', 'true');
+  } else {
+    endpoint = parakeetHfKeyIsHuggingFace(apiKey) ? PARAKEET_HF_ENDPOINT : DEEPINFRA_OPENAI_ENDPOINT;
+    form.append('model', model);
+    form.append('file', blob, filename);
+    form.append('response_format', 'verbose_json');
+    form.append('timestamp_granularities[]', 'word');
+  }
   if (opts.language && opts.language !== 'auto') {
     form.append('language', opts.language);
   }
 
-  const resp = await fetch(PARAKEET_HF_ENDPOINT, {
+  const resp = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + apiKey },
     body: form,
@@ -307,8 +365,12 @@ function parakeetHfParseData(json) {
     track.srcLang = language;
   }
 
-  // the audio the service billed, as it reported it, and the model's rate
-  const billed = typeof json.duration === 'number' && Number.isFinite(json.duration) && json.duration > 0 ? json.duration : undefined;
+  // the audio the service billed, as it reported it, and the model's rate.
+  // DeepInfra's own route has answered with duration null and the length in
+  // input_length_ms (#760), so that is read when duration is not there.
+  const seconds = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined);
+  const billed = seconds(json.duration) !== undefined ? seconds(json.duration)
+    : seconds(json.input_length_ms) !== undefined ? Math.round(json.input_length_ms) / 1000 : undefined;
   const rate = (PARAKEET_HF_MODELS.find((m) => m.value === parakeetHfTranscriptionMeta.modelId) || {}).usdPerMinute;
   const info = parakeetHfTranscriptionStart !== 0
     ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000, audioSeconds: billed, rateUsdPerMinute: rate } : null;
@@ -354,24 +416,29 @@ function displayParakeetHfError(error) {
     setTranscriptBusy(false);
   }
   const e = "" + (error && error.message ? error.message : error);
+  // the card names whoever was asked: the router with a Hugging Face token,
+  // DeepInfra itself with its key (#760)
+  const deepInfra = parakeetHfTranscriptionMeta.service === "DeepInfra (cloud)";
   let msg = "Sorry.<br/>An unexpected error has occurred.";
   if (e.indexOf("media-fetch") >= 0) {
     msg = "Sorry.<br/>Couldn't fetch that media URL from the browser (it may block cross-origin requests). Try uploading the file instead.";
   } else if (e.indexOf("401") >= 0 || e.indexOf("403") >= 0) {
-    msg = "Sorry.<br/>The Hugging Face token appears to be invalid.";
+    msg = deepInfra ? "Sorry.<br/>The DeepInfra API key appears to be invalid." : "Sorry.<br/>The Hugging Face token appears to be invalid.";
   } else if (e.indexOf("402") >= 0) {
     // the router's own words are "Purchase pre-paid credits to continue using Inference Providers" (#777)
-    msg = "Sorry.<br/>Your Hugging Face account has no credit for Inference Providers.<br/>Add pre-paid credits at huggingface.co/settings/billing.";
+    msg = deepInfra
+      ? "Sorry.<br/>Your DeepInfra account has no balance.<br/>Add a card or pre-pay at deepinfra.com/dash/billing."
+      : "Sorry.<br/>Your Hugging Face account has no credit for Inference Providers.<br/>Add pre-paid credits at huggingface.co/settings/billing.";
   } else if (e.indexOf("410") >= 0 || e.indexOf("404") >= 0) {
     // a provider can withdraw a model from Inference Providers without notice (#777)
-    msg = "Sorry.<br/>Hugging Face no longer serves this model.<br/>The provider has withdrawn it.";
+    msg = deepInfra ? "Sorry.<br/>DeepInfra no longer serves this model." : "Sorry.<br/>Hugging Face no longer serves this model.<br/>The provider has withdrawn it.";
   } else if (e.indexOf("400") >= 0 || e.indexOf("422") >= 0) {
     msg = "Sorry.<br/>The request was rejected — the media may be unreadable or the model unavailable.";
   } else if (e.indexOf("503") >= 0 || e.indexOf("500") >= 0) {
-    msg = "Sorry.<br/>Hugging Face inference is unavailable right now — try again shortly.";
+    msg = deepInfra ? "Sorry.<br/>DeepInfra is unavailable right now — try again shortly." : "Sorry.<br/>Hugging Face inference is unavailable right now — try again shortly.";
   }
   showParakeetHfError(msg);
-  console.error("Hugging Face error:", error);
+  console.error(deepInfra ? "DeepInfra error:" : "Hugging Face error:", error);
 }
 
 function displayParakeetHfNoWords() {
