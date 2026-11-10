@@ -285,6 +285,7 @@ describe (#668). Fields:
 | `parameters` | provenance only | exactly what was asked for, as plain data |
 | `audioSeconds` | Estimated cost, with the rate | the audio length the service reported, cloud engines billed by the minute |
 | `rateUsdPerMinute` | Estimated cost, with the length | the service's published rate, kept in a table in the engine with the date it was read |
+| `unreliableTiming` | Timing | the converter's `unreliableTiming`, when it has one: stretches whose word times cannot be right, `[{ start, end, words }]` |
 
 `parameters` is what was really sent: the model, the language or detection
 flag, diarization on or off. **Never a key or a token.** Build `info` when the

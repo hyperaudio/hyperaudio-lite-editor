@@ -372,8 +372,15 @@ function parakeetHfParseData(json) {
   const billed = seconds(json.duration) !== undefined ? seconds(json.duration)
     : seconds(json.input_length_ms) !== undefined ? Math.round(json.input_length_ms) / 1000 : undefined;
   const rate = (PARAKEET_HF_MODELS.find((m) => m.value === parakeetHfTranscriptionMeta.modelId) || {}).usdPerMinute;
+  // stretches whose word times cannot be right (Nemotron on a long
+  // recording, see squeezedRanges in js/converters/transcript-words.js):
+  // named in the console now, in Project info, and kept with the project
+  const unreliable = Array.isArray(converted.unreliableTiming) ? { unreliableTiming: converted.unreliableTiming } : {};
+  if (unreliable.unreliableTiming) {
+    console.warn('Transcript timing is unreliable: ' + unreliable.unreliableTiming.map((r) => `${r.start}–${r.end} s (${r.words} words)`).join(', ') + '. The words there are timed too close together to have been spoken.');
+  }
   const info = parakeetHfTranscriptionStart !== 0
-    ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000, audioSeconds: billed, rateUsdPerMinute: rate } : null;
+    ? { ...parakeetHfTranscriptionMeta, seconds: (Date.now() - parakeetHfTranscriptionStart) / 1000, audioSeconds: billed, rateUsdPerMinute: rate, ...unreliable } : null;
   // finished while another project is open: it goes to Recents, and the screen stays where it is (#715)
   if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html: hyperTranscript, info })) {
     return;

@@ -29,7 +29,31 @@
     }
     const cost = formatEstimatedCost(info.audioSeconds, info.rateUsdPerMinute);
     if (cost !== null) rows.push(["Estimated cost", cost]);
+    const timing = formatUnreliableTiming(info.unreliableTiming);
+    if (timing !== null) rows.push(["Timing", timing]);
     container.innerHTML = rows.map(([label, value]) => `<p><strong>${label}:</strong> ${value}</p>`).join("");
+  }
+
+  // Where a transcript's word times cannot be right (squeezedRanges in
+  // js/converters/transcript-words.js): the stretches as clock ranges, for
+  // the Timing row of Project info. Null when there are none, and when the
+  // value is not a list of such stretches, since a reopened project's
+  // provenance is file data. Built from numbers only, never from text in it.
+  function formatUnreliableTiming(ranges) {
+    if (!Array.isArray(ranges)) return null;
+    const sound = (n) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+    const stretches = ranges.filter((r) => r && sound(r.start) && sound(r.end) && r.end >= r.start);
+    if (stretches.length === 0) return null;
+    const clock = (seconds) => {
+      const whole = Math.floor(seconds);
+      const h = Math.floor(whole / 3600);
+      const m = Math.floor((whole % 3600) / 60);
+      const s = whole % 60;
+      return (h > 0 ? `${h}:${String(m).padStart(2, "0")}` : String(m)) + ":" + String(s).padStart(2, "0");
+    };
+    const spans = stretches.map((r) => `${clock(r.start)}–${clock(r.end)}`);
+    const list = spans.length === 1 ? spans[0] : spans.slice(0, -1).join(", ") + " and " + spans[spans.length - 1];
+    return `Unreliable around ${list} (the words there are timed too close together to have been spoken)`;
   }
 
   // What a cloud run cost (#780), estimated from the audio the service said it
