@@ -150,7 +150,16 @@ test('every engine reports what it really ran, and the local ones name their wor
   assert.match(read('hyperaudio-lite-editor-whisper.js'), new RegExp(`engineVersion: '${whisperRuntime.replace(/[.+]/g, '\\$&')}'`));
   const ortRuntime = /onnxruntime-web@([0-9.]+)/.exec(read('parakeet.worker.js'))[1];
   assert.match(read('hyperaudio-lite-editor-parakeet-local.js'), new RegExp(`engineVersion: "${ortRuntime.replace(/\./g, '\\.')}"`));
-  assert.match(read('parakeet.worker.js'), /istupakov\/parakeet-tdt-0\.6b-v3-onnx/);
+  // the local Parakeet client's model table names the exports the worker
+  // downloads (#785): every modelId it can record is a repository the
+  // worker's MODEL_SETS fetches from, and both models are there
+  const parakeetWorker = read('parakeet.worker.js');
+  const parakeetClient = read('hyperaudio-lite-editor-parakeet-local.js');
+  const clientModelIds = [...parakeetClient.matchAll(/modelId: "([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(clientModelIds, ['istupakov/parakeet-tdt-0.6b-v3-onnx', 'Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx']);
+  clientModelIds.forEach((id) => assert.ok(parakeetWorker.includes(`${id}/resolve/main/`), `${id} is not a worker model`));
+  const clientValues = [...parakeetClient.matchAll(/\{ value: "([^"]+)"/g)].map((m) => m[1]);
+  clientValues.forEach((id) => assert.ok(parakeetWorker.includes(`"${id}": {`), `${id} is not in the worker's MODEL_SETS`));
 });
 
 test('a checksum that is left out says why, in the entry itself', async () => {

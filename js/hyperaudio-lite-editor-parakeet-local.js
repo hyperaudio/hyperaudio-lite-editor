@@ -1,17 +1,36 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  */
+
+// The models this engine offers (#785), in the order the Model select lists
+// them. `value` is the id the worker knows (MODEL_SETS in parakeet.worker.js),
+// `modelId` the export it downloads, recorded in the project's provenance
+// (#668), and `repo` the start of every URL in that export, which is how a
+// cache entry is told to belong to this model. Ultra (moondream/parakeet-ultra)
+// is a further-trained v3 with the same architecture and tokenizer, and the
+// two stay side by side.
+const PARAKEET_MODELS = [
+  { value: "parakeet-tdt-0.6b-v3", label: "Parakeet TDT 0.6B v3", modelId: "istupakov/parakeet-tdt-0.6b-v3-onnx",
+    storeLabel: "Parakeet TDT 0.6B v3 · multilingual", repos: ["istupakov/parakeet-tdt-0.6b-v3-onnx", "ako101/parakeet-tdt-0.6b-v3-sherpa-onnx-fp16"] },
+  { value: "parakeet-tdt-0.6b-v3-ultra", label: "Parakeet TDT 0.6B Ultra", modelId: "Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx",
+    storeLabel: "Parakeet TDT 0.6B Ultra · multilingual", repos: ["Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx"] },
+];
 
 // Where this engine keeps its downloaded models (#615), so Settings can size
 // and remove them without knowing any engine. Must match CACHE_NAME in
 // parakeet.worker.js, which owns the entries (and their length sidecars).
+// Each cached file is labelled by the model whose repository served it, so
+// Settings lists v3 and Ultra on their own and removes one without the other.
 (window.HyperaudioModelStores = window.HyperaudioModelStores || []).push({
   engine: 'Parakeet',
   cacheName: 'parakeet-models-v1',
-  label: () => 'Parakeet TDT 0.6B v3 · multilingual',   // the one model this engine ships
+  label: (url) => {
+    const owner = PARAKEET_MODELS.find((m) => m.repos.some((repo) => String(url).indexOf('https://huggingface.co/' + repo + '/') === 0));
+    return owner ? owner.storeLabel : PARAKEET_MODELS[0].storeLabel;
+  },
 });
 
 class ParakeetLocalService extends HTMLElement {
@@ -67,13 +86,28 @@ function loadParakeetClient(modal, workerBaseUrl) {
   const mediaUrlInput = document.getElementById("parakeet-media");
   const formSubmitBtn = document.getElementById("parakeet-form-submit-btn");
   const deviceLabel = document.getElementById("parakeet-device");
+  const modelSelect = document.getElementById("parakeet-model");
   const videoPlayer = document.getElementById("hyperplayer");
+
+  // the Model select (#785), filled here so the template carries no model
+  // names; transcribe-prefs.js remembers the choice across sessions
+  if (modelSelect !== null) {
+    modelSelect.innerHTML = "";
+    PARAKEET_MODELS.forEach((m) => {
+      const option = document.createElement("option");
+      option.value = m.value;
+      option.textContent = m.label;
+      modelSelect.appendChild(option);
+    });
+    modelSelect.value = PARAKEET_MODELS[0].value;
+  }
+  const chosenModel = () => PARAKEET_MODELS.find((m) => modelSelect !== null && m.value === modelSelect.value) || PARAKEET_MODELS[0];
 
   if (workerBaseUrl === undefined || workerBaseUrl === null) {
     workerBaseUrl = "./";
   }
 
-  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.44";
+  const parakeetWorkerPath = workerBaseUrl + "js/parakeet.worker.js?v=1.3.46";
 
   // On Chrome (Chromium) Parakeet runs fp16 on the GPU (WebGPU) – fast, and the
   // default. Firefox's WebGPU underperforms here and Safari's can exhaust memory
@@ -387,13 +421,14 @@ function loadParakeetClient(modal, workerBaseUrl) {
     // a file takes precedence; otherwise transcribe from the URL (HLS or plain)
     const useUrl = (file === undefined || file === null) && mediaUrl !== "";
 
+    const model = chosenModel();
     pendingInfo = {
       service: "Parakeet (local, in your browser)",
-      model: "Parakeet TDT 0.6B v3 (multilingual)",
+      model: `${model.label} (multilingual)`,
       language: "Auto-detect",
       // what was really run (#668): the ONNX export the worker downloads, and
       // the runtime it runs under; a unit test holds these to the worker's
-      modelId: "istupakov/parakeet-tdt-0.6b-v3-onnx",
+      modelId: model.modelId,
       parameters: {},
       runtime: "onnxruntime-web",
       engineVersion: "1.26.0",
@@ -459,7 +494,7 @@ function loadParakeetClient(modal, workerBaseUrl) {
       if (override !== null) blankResetSeconds = Number(override) || 0;
     } catch (e) { /* no storage */ }
     if (blankResetSeconds !== BLANK_RESET_SECONDS) console.log(`Parakeet: decoder reset after ${blankResetSeconds}s of blanks following a sentence end (overridden; default ${BLANK_RESET_SECONDS}s)`);
-    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu, blankResetSeconds }, [audio.buffer]);
+    webWorker.postMessage({ type: "INFERENCE_REQUEST", audio, forceGpu, blankResetSeconds, model: model.value }, [audio.buffer]);
   }
 }
 

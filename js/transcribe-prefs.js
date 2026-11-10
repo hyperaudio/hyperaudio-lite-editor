@@ -1,7 +1,7 @@
 /**
  * transcribe-prefs.js
  * (C) The Hyperaudio Project
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  *
  * Remembers the Transcribe modal's choices across sessions (#390): the
@@ -20,7 +20,7 @@
 
   // Text/selse inputs persisted by value. Models are restored before languages
   // (Deepgram repopulates its language list from the chosen model).
-  const MODEL_IDS = ['language-model', 'assemblyai-model', 'model-name-input', 'parakeet-hf-model'];
+  const MODEL_IDS = ['language-model', 'assemblyai-model', 'model-name-input', 'parakeet-hf-model', 'parakeet-model'];
   const VALUE_IDS = ['token', 'assemblyai-key', 'parakeet-hf-key', 'language', 'assemblyai-language', 'parakeet-hf-language'];
   const CHECK_IDS = ['deepgram-remember-key', 'assemblyai-remember-key', 'parakeet-hf-remember-key'];
   // A key is only persisted while its "remember" toggle is on (opt-out).

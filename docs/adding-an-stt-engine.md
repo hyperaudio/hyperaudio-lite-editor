@@ -304,7 +304,7 @@ between. `js/hyperaudio-lite-editor-parakeet-local.js` with
 `js/parakeet.worker.js` and the Whisper pair are the models. What they add:
 
 - **The worker's path carries the cache-bust** in the client,
-  `workerBaseUrl + "js/acme.worker.js?v=1.3.44"`, bumped like a script tag.
+  `workerBaseUrl + "js/acme.worker.js?v=1.3.46"`, bumped like a script tag.
 - **Device choice** lives in the worker. A usable GPU is one that answers
   `requestAdapter()` (and, for an fp16 model, exposes `shader-f16`), and the
   WASM path is the fallback. Firefox prefers WASM because its WebGPU is far
@@ -323,7 +323,15 @@ between. `js/hyperaudio-lite-editor-parakeet-local.js` with
 - **The model store** registers on `window.HyperaudioModelStores` with the
   Cache API name the runtime stores under and a `label(url)` that names each
   model, so Settings ▸ Downloaded models can size and remove them without
-  knowing the engine (#615).
+  knowing the engine (#615). An engine with several models answers from the
+  URL, as the local Parakeet does for v3 and Ultra (#785), so a user can
+  keep one and remove the other.
+- **A Model select** when the engine offers more than one. The local Parakeet
+  keeps its models in one table in the client (id, label, the export recorded
+  as `modelId`, the repositories its files come from) and the worker keeps
+  the matching table of file URLs by id. The request carries the id, the
+  worker rebuilds its sessions when it changes, and `transcribe-prefs.js`
+  remembers the select by its element id.
 - **The service worker's unit test** has a hand-kept list of worker files.
   Add the new worker there as well as to the precache list, or offline use
   breaks while the test passes.
