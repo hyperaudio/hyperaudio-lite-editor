@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-assemblyai.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  *
  * AssemblyAI (Cloud) transcription — called directly from the browser with the
@@ -198,11 +198,14 @@ async function runAssemblyAI(apiKey, file, media, opts) {
   let audioUrl = media;
 
   if (file !== undefined) {
+    // a video goes up as its sound only (#788, js/cloud-audio.js)
+    const upload = window.HyperaudioCloudAudio
+      ? await window.HyperaudioCloudAudio.audioForUpload(file, file.name) : { blob: file };
     setAssemblyAIStatus("Uploading…");
     const up = await fetch(`${ASSEMBLYAI_BASE}/upload`, {
       method: 'POST',
       headers: { 'Authorization': apiKey },
-      body: file,
+      body: upload.blob,
     });
     if (!up.ok) throw new Error(up.status);
     audioUrl = (await up.json()).upload_url;

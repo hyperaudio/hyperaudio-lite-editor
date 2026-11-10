@@ -310,6 +310,12 @@ async function runParakeetHF(apiKey, file, media, opts) {
     blob = await mediaResp.blob();
     filename = media.split('/').pop() || 'audio';
   }
+  // a video goes up as its sound only (#788, js/cloud-audio.js)
+  if (window.HyperaudioCloudAudio) {
+    const upload = await window.HyperaudioCloudAudio.audioForUpload(blob, filename);
+    blob = upload.blob;
+    filename = upload.filename;
+  }
 
   const model = opts.model || PARAKEET_HF_MODEL;
   const form = new FormData();
