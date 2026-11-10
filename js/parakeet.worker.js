@@ -1,7 +1,7 @@
 /**
  * parakeet.worker.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.46 — last changed in release 1.3.46
  * @license AGPL-3.0-only
  */
 
@@ -40,12 +40,33 @@ const FRAME_SEC = 0.08;      // 8x subsampling * 10ms hop
 const MIN_SPEECH_S = 10;     // audio at least this long is assumed to contain speech
 
 const HF = "https://huggingface.co";
-const MODELS = {
-  mel: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/nemo128.onnx`,
-  decoder: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/decoder_joint-model.int8.onnx`,
-  vocab: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt`,
-  encoderInt8: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.int8.onnx`,
-  encoderFp16: `${HF}/ako101/parakeet-tdt-0.6b-v3-sherpa-onnx-fp16/resolve/main/encoder.fp16.onnx`,
+// The models this worker can run, by id (#785). Each is a set of five files:
+// the mel front end, the vocabulary, the int8 decoder, and an encoder for
+// each device. The sets share an architecture, a tokenizer and every tensor
+// name, so one decode loop serves them all. The client names the id in its
+// request and keeps the matching labels (js/hyperaudio-lite-editor-parakeet-local.js).
+//
+// Ultra (moondream/parakeet-ultra) is a further-trained v3. Its mel and
+// vocabulary files are byte for byte v3's, but the set takes its own copies
+// from its own repository, so that Settings ▸ Downloaded models, which groups
+// cache entries by URL, lists each model whole and removes one without
+// touching the other.
+const DEFAULT_MODEL = "parakeet-tdt-0.6b-v3";
+const MODEL_SETS = {
+  "parakeet-tdt-0.6b-v3": {
+    mel: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/nemo128.onnx`,
+    decoder: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/decoder_joint-model.int8.onnx`,
+    vocab: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/vocab.txt`,
+    encoderInt8: `${HF}/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/main/encoder-model.int8.onnx`,
+    encoderFp16: `${HF}/ako101/parakeet-tdt-0.6b-v3-sherpa-onnx-fp16/resolve/main/encoder.fp16.onnx`,
+  },
+  "parakeet-tdt-0.6b-v3-ultra": {
+    mel: `${HF}/Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx/resolve/main/nemo128.onnx`,
+    decoder: `${HF}/Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx/resolve/main/int8/decoder_joint-model.int8.onnx`,
+    vocab: `${HF}/Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx/resolve/main/vocab.txt`,
+    encoderInt8: `${HF}/Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx/resolve/main/int8/encoder-model.int8.onnx`,
+    encoderFp16: `${HF}/Olicorne/parakeet-tdt-0.6b-v3-ultra-onnx/resolve/main/fp16/encoder-model.fp16.onnx`,
+  },
 };
 const CACHE_NAME = "parakeet-models-v1";
 // Sidecar cache key carrying the byte count the download actually delivered
@@ -66,7 +87,7 @@ async function evictCached(url) {
   }
 }
 
-let sessions = null;        // { mel, encoder, decoder, vocab, device }
+let sessions = null;        // { mel, encoder, decoder, vocab, device, modelId }
 let sessionsForceGpu = null; // the forceGpu flag the current sessions were built with
 
 // The sessions hold the (GPU) model memory — ~1.2 GB for the fp16 encoder —
@@ -100,13 +121,19 @@ self.addEventListener("message", async (event) => {
   }
   clearTimeout(idleTimer);
   const forceGpu = event.data.forceGpu === true;
+  // a request without a model id is v3, as every request was before #785;
+  // an id this worker does not know is an error, not a silent default
+  const modelId = event.data.model === undefined || event.data.model === null ? DEFAULT_MODEL : String(event.data.model);
   try {
-    // Rebuild if the GPU opt-in changed since the sessions were created, so the
-    // user can toggle GPU/CPU without reloading the page.
-    if (sessions === null || sessionsForceGpu !== forceGpu) {
+    if (!Object.prototype.hasOwnProperty.call(MODEL_SETS, modelId)) {
+      throw new Error(`Unknown Parakeet model "${modelId}"`);
+    }
+    // Rebuild if the model or the GPU opt-in changed since the sessions were
+    // created, so the user can switch either without reloading the page.
+    if (sessions === null || sessionsForceGpu !== forceGpu || sessions.modelId !== modelId) {
       if (sessions !== null) await releaseSessions(sessions);
       sessions = null;
-      sessions = await loadSessions(forceGpu);
+      sessions = await loadSessions(forceGpu, modelId);
       sessionsForceGpu = forceGpu;
     }
     const output = await transcribe(sessions, event.data.audio, Number(event.data.blankResetSeconds) || 0);
@@ -311,7 +338,8 @@ function makeDownloadProgress(kind) {
   };
 }
 
-async function loadSessions(forceGpu) {
+async function loadSessions(forceGpu, modelId) {
+  const MODELS = MODEL_SETS[modelId];
   const ua = self.navigator?.userAgent || "";
   const isFirefox = /firefox/i.test(ua);
   // Safari (desktop or iOS), excluding the other engines that also say "Safari".
@@ -374,9 +402,9 @@ async function loadSessions(forceGpu) {
     device = "wasm"; dtype = "int8";
   }
 
-  console.log(`Parakeet ready on ${device} (${dtype})`);
-  self.postMessage({ type: "device", device, dtype });
-  return { mel, encoder, decoder, vocab, device };
+  console.log(`Parakeet ready on ${device} (${dtype}, ${modelId})`);
+  self.postMessage({ type: "device", device, dtype, model: modelId });
+  return { mel, encoder, decoder, vocab, device, modelId };
 }
 
 // Session creation that heals a poisoned cache (#477): if create throws on
