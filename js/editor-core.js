@@ -1059,6 +1059,43 @@
                 startsWithSpeaker = true;
               }
 
+              // The span is a label already and the text starts with it
+              // (#792): a word retyped after a speaker label. Deleting the
+              // word took the label's trailing space with it and left the
+              // caret at the label's end, so the typed word went INTO the
+              // label span. Splitting it out below kept the parent's class
+              // and timing, so the word became a second label: bold, untimed,
+              // hidden with Speakers off. Instead the label stays where it
+              // is, with its space back, and the typed text moves into the
+              // next word span: in the reported case the emptied original,
+              // still holding its timing. A span that holds a word already
+              // takes it too, and the split pass divides them.
+              const labelSpan = walker.currentNode.parentNode;
+              if (startsWithSpeaker === true && labelSpan.classList.contains('speaker')) {
+                const typed = walker.currentNode.textContent.replace(regex, '').trim();
+                walker.currentNode.textContent = found[0].trim() + ' ';
+                if (typed === '') { continue; }
+                let next = labelSpan.nextElementSibling;
+                if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) {
+                  next = document.createElement('span');
+                  next.setAttribute('data-m', labelSpan.getAttribute('data-m'));
+                  next.setAttribute('data-d', '0');
+                  labelSpan.after(next);
+                }
+                next.textContent = typed + ' ' + next.textContent.trimStart();
+                speakerChanged = true;
+                if (isTranscriptFocused === true) {
+                  // typing carries on after the moved text
+                  const range = document.createRange();
+                  range.setStart(next.firstChild, typed.length);
+                  range.collapse(true);
+                  const sel = window.getSelection();
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                }
+                continue;
+              }
+
               walker.currentNode.textContent = walker.currentNode.textContent.replace(regex, '');
 
               let span = document.createElement("span");
