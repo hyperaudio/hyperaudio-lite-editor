@@ -572,6 +572,33 @@
     skipListenersAttached = true;
   }
 
+  // A skip's seek is asynchronous (#795): setting currentTime starts it, and
+  // the element keeps playing the OLD position until it lands. From a local
+  // server that is ~18 ms, but from a custom URL scheme in a WKWebView it
+  // measured 96–196 ms, and speech starts ~50 ms into a struck word's span,
+  // so the word's first syllable was heard. Silence the player for the seek
+  // and give the user's own mute state back on seeked (or after 1.5 s, in
+  // case seeked never fires). The flag on the element tells the playbar
+  // (reflectVolume, editor-main.js) not to flash its mute icon meanwhile.
+  let skipMute = null;
+  function skipTo(player, seconds) {
+    if (skipMute === null) {
+      const was = player.muted;
+      const done = () => {
+        if (skipMute === null) return;
+        clearTimeout(skipMute.timer);
+        skipMute = null;
+        player.muted = was;
+        delete player.dataset.skipMute;
+      };
+      skipMute = { timer: setTimeout(done, 1500) };
+      player.dataset.skipMute = '1';
+      player.muted = true;
+      player.addEventListener('seeked', done, { once: true });
+    }
+    player.currentTime = seconds;
+  }
+
   // Use >= on the lower bound so we jump the instant currentTime reaches the
   // struck region — without this the first word can sneak through between
   // RAF ticks.
@@ -585,7 +612,7 @@
     // kept sections, so the silence before the first one — the longest gap in
     // many recordings — played in full even with skipping on.
     if (t + 0.01 < first.start) {
-      myPlayer.currentTime = first.start + 0.05;
+      skipTo(myPlayer, first.start + 0.05);
       kickPlayhead();
       return;
     }
@@ -594,7 +621,7 @@
       const stop = audioDataArray[i].stop;
       const nextStart = audioDataArray[i + 1].start;
       if (t >= stop && t < nextStart) {
-        myPlayer.currentTime = nextStart + 0.05;
+        skipTo(myPlayer, nextStart + 0.05);
         // The library only listens for play/pause natively, not seeked, so
         // it has no idea we just jumped. Kick its polling chain so the
         // highlight re-locks onto the post-skip word instead of waiting for
@@ -610,7 +637,7 @@
     const duration = myPlayer.duration;
     if (Number.isFinite(last.stop) && Number.isFinite(duration)
         && t >= last.stop && duration > last.stop + 0.01) {
-      myPlayer.currentTime = duration;
+      skipTo(myPlayer, duration);
       kickPlayhead();
     }
   }
