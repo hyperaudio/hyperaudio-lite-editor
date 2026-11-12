@@ -21,29 +21,24 @@ test('the tour runs once on first use, after the intro project is on screen', as
   await notAutomation(page);
   await open(page);
   await expect(popover(page)).toBeVisible();
-  await expect(popover(page)).toContainText('Start with a recording');
-  expect(await seen(page)).toBe(true); // shown is seen
-  // the first card explains the NEW button with nothing open; the second
-  // opens the Transcribe dialog and points at it; the third closes it and
-  // points at the transcript, which is real content by now
-  const transcribeOpen = () => page.evaluate(() => document.getElementById('transcribe-modal').checked);
-  expect(await transcribeOpen()).toBe(false);
-  expect(await page.evaluate(() => document.querySelector('.driver-active-element').id)).toBe('new-transcription-btn');
-  await page.locator('.driver-popover-next-btn').click();
-  await expect(popover(page)).toContainText('Transcribe');
-  expect(await transcribeOpen()).toBe(true);
-  expect(await page.evaluate(() => document.querySelector('.driver-active-element').closest('.modal') !== null)).toBe(true);
-  await page.locator('.driver-popover-next-btn').click();
   await expect(popover(page)).toContainText('The transcript');
-  expect(await transcribeOpen()).toBe(false);
+  expect(await seen(page)).toBe(true); // shown is seen
+  // the first card is on the transcript, which is real content by now, and
+  // the second on the cut-words button (#796): the editing first, and no
+  // dialog opened for either
+  const anyDialog = () => page.evaluate(() => document.querySelector('.modal-toggle:checked') !== null);
+  expect(await anyDialog()).toBe(false);
   expect(await page.evaluate(() => document.querySelector('.driver-active-element').id)).toBe('hypertranscript');
+  await page.locator('.driver-popover-next-btn').click();
+  await expect(popover(page)).toContainText('Cut words');
+  expect(await page.evaluate(() => document.querySelector('.driver-active-element').id)).toBe('strikethrough');
+  expect(await anyDialog()).toBe(false);
   await page.locator('.driver-popover-prev-btn').click();
-  await expect(popover(page)).toContainText('Transcribe');
-  expect(await transcribeOpen()).toBe(true);
-  // closed part-way, it does not come back, and what it opened is closed with it
+  await expect(popover(page)).toContainText('The transcript');
+  // closed part-way, it does not come back
   await page.locator('.driver-popover-close-btn').click();
   await expect(popover(page)).toHaveCount(0);
-  expect(await transcribeOpen()).toBe(false);
+  expect(await anyDialog()).toBe(false);
   await page.reload();
   await page.waitForSelector('#hypertranscript [data-m]');
   await page.waitForTimeout(2500);
@@ -60,52 +55,42 @@ test('it does not run by itself under automation, and can be taken again from Se
   await page.locator('#settings-tour').click();
   expect(await page.evaluate(() => document.getElementById('settings-modal').checked)).toBe(false);
   await expect(popover(page)).toBeVisible();
-  // every step, through to Done; the Export and Settings steps open what
-  // they describe, and the Settings card sits on the Take the tour row
+  // every step, through to Done: eight cards in the order people meet things
+  // (#796), each on its button, none opening a dialog, a menu or the
+  // captions view on the viewer's behalf
   const titles = [];
-  const opened = {};
+  const targets = {};
   for (;;) {
     const title = await popover(page).locator('.driver-popover-title').textContent();
     titles.push(title);
-    // the export dialog lists its formats after probing the encoders, as on a click
-    if (title === 'The export dialog') {
-      await expect.poll(() => page.evaluate(() => document.querySelectorAll('#export-format option').length)).toBeGreaterThan(0);
-    }
-    opened[title] = await page.evaluate(() => ({
-      exportModal: document.getElementById('export-modal').checked,
-      settings: document.getElementById('settings-modal').checked,
-      gaps: document.getElementById('remove-gaps-modal').checked,
+    const state = await page.evaluate(() => ({
+      dialog: document.querySelector('.modal-toggle:checked') !== null,
       rowMenu: document.getElementById('recents-menu') !== null,
       captionsView: document.getElementById('caption-editor-btn').getAttribute('aria-pressed') === 'true',
       target: document.querySelector('.driver-active-element').id,
     }));
+    expect(state, title).toMatchObject({ dialog: false, rowMenu: false, captionsView: false });
+    targets[title] = state.target;
     const next = page.locator('.driver-popover-next-btn');
     if ((await next.textContent()).trim() === 'Done') { await next.click(); break; }
     await next.click();
   }
   await expect(popover(page)).toHaveCount(0);
-  // the button first, with nothing open, then what it opens
-  expect(opened['Skip the gaps']).toMatchObject({ gaps: false, target: 'remove-gaps-btn' });
-  expect(opened['The gaps dialog']).toMatchObject({ gaps: true });
-  expect(opened['Transcript and captions']).toMatchObject({ captionsView: false, gaps: false });
-  expect(opened['The captions view']).toMatchObject({ captionsView: true, target: 'captions-display' });
-  expect(opened.Recents).toMatchObject({ rowMenu: false, captionsView: false });
-  expect(opened['A project\'s actions']).toMatchObject({ rowMenu: true, target: 'recents-menu' });
-  expect(opened['Export media']).toMatchObject({ rowMenu: false });
-  expect(opened['Export media']).toMatchObject({ exportModal: false, target: 'export-media-btn' });
-  expect(opened['The export dialog']).toMatchObject({ exportModal: true });
-  expect(opened.Settings).toMatchObject({ settings: false, target: 'settings-btn' });
-  expect(opened['Taking the tour again']).toMatchObject({ settings: true });
-  expect(opened.Recents).toMatchObject({ exportModal: false, settings: false });
-  expect(await page.evaluate(() => document.getElementById('recents-menu') === null)).toBe(true);
-  // back on the transcript, as a clean project
+  expect(titles).toEqual(['The transcript', 'Cut words', 'Skip the gaps', 'Transcript and captions', 'Export media', 'Transcribe', 'Recents', 'Settings']);
+  expect(targets).toEqual({
+    'The transcript': 'hypertranscript',
+    'Cut words': 'strikethrough',
+    'Skip the gaps': 'remove-gaps-btn',
+    'Transcript and captions': 'view-switch',
+    'Export media': 'export-media-btn',
+    Transcribe: 'new-transcription-btn',
+    Recents: 'recents-card',
+    Settings: 'settings-btn',
+  });
+  // back on the transcript, as a clean project, with nothing left open
   await expect(page.locator('#hypertranscript [data-m]').first()).toBeVisible();
   expect(await page.evaluate(() => window.HyperaudioSave.isDirty())).toBe(false);
-  // while it runs, dialogs cut rather than fade; afterwards they fade again
-  expect(await page.evaluate(() => document.body.classList.contains('hyperaudio-touring'))).toBe(false);
   expect(await page.evaluate(() => document.querySelector('.modal-toggle:checked') === null)).toBe(true);
-  expect(titles).toEqual(['Start with a recording', 'Transcribe', 'The transcript', 'Cut words', 'Skip the gaps', 'The gaps dialog', 'Transcript and captions', 'The captions view',
-    'Recents', 'A project\'s actions', 'Export media', 'The export dialog', 'Settings', 'Taking the tour again']);
   expect(await seen(page)).toBe(true);
 });
 

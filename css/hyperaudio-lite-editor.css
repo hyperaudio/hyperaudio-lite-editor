@@ -1811,11 +1811,6 @@ body.sidebar-collapsed #project-readonly-badge { left: 12px; }
   border-color: transparent;
 }
 
-/* While the tour runs, dialogs appear without their fade or pop, so the
-   cut-out around one is never drawn over a half-shown dialog. */
-body.hyperaudio-touring .modal { transition: none; }
-body.hyperaudio-touring .modal-box { animation: none; transition: none; } /* the box scales up as it opens: not now */
-
 /* A transcript that finished while another project was open (#715): the same
    pill in the same corner, and it stays until closed or until its project is
    opened. */
