@@ -104,6 +104,7 @@
   // project's transcript. Painting through here marks the card
   // contenteditable="false" and tags it, which the capture path reads.
   function showTranscriptNotice(html) {
+    leaveCaptionsView();
     const transcript = document.getElementById("hypertranscript");
     if (transcript === null) {
       return;
@@ -113,6 +114,7 @@
   }
 
   function setTranscriptBusy(busy) {
+    if (busy === true) leaveCaptionsView();
     const transcript = document.getElementById("hypertranscript");
     if (transcript === null) {
       return;
@@ -429,6 +431,11 @@
 
   captionViewBtn.addEventListener('click', () => {
     if (captionMode === true) return;
+    // a transcript on its way has nothing to caption (#787): the loader is
+    // in #hypertranscript, which this view would take off the page, and the
+    // engine writes its result there when it finishes
+    const busyTranscript = document.getElementById('hypertranscript');
+    if (busyTranscript !== null && busyTranscript.getAttribute('aria-busy') === 'true') return;
     let holder = document.querySelector('.transcript-holder');
     transcriptCache = holder.cloneNode(true);
     captionMode = true;
@@ -473,6 +480,18 @@
     }
     reflectViewSwitch();
   });
+
+  // Engines paint their loader and their result into #hypertranscript, which
+  // the captions view takes off the page (#787). Every engine used to click
+  // the transcript button first, and one that followed the written contract
+  // without the click got no loader and threw on completion. The leaving is
+  // done here now, for showTranscriptNotice and setTranscriptBusy(true), and
+  // the project library calls it before it reads the loader.
+  function leaveCaptionsView() {
+    if (captionMode !== true) return;
+    const back = document.getElementById('transcript-editor-btn');
+    if (back !== null) back.click();
+  }
 
 
   /* ----------------------------------------------------------- */
