@@ -77,7 +77,9 @@ test('deleting a whole word gets the hint once, and "Don\'t tell me again" keeps
   await page.keyboard.press('Backspace');
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page).locator('#project-dialog-title')).toContainText('Deleted from the text, not the media');
-  await expect(dialog(page).locator('#project-dialog-message')).toContainText(/strike them out \((⌘⇧X|Ctrl\+Shift\+X)\)/);
+  // the sentence carries the toolbar button's own icon, and the shortcut for the platform
+  await expect(dialog(page).locator('#project-dialog-message')).toContainText(/strike them out by selecting them and using the\s+button or (⌘⇧X|Ctrl\+Shift\+X)\./);
+  await expect(dialog(page).locator('#project-dialog-message svg.lucide-strikethrough')).toHaveCount(1);
   // the deletion itself went ahead: the hint explains, it does not block
   // ("Lite" comes round again later, in "Hyperaudio Lite Library")
   await expect.poll(() => page.evaluate(() => document.querySelector('#hypertranscript').textContent.replace(/\s+/g, ' ').trim().slice(0, 40))).not.toContain('Lite');
@@ -105,6 +107,24 @@ test('deleting a whole word gets the hint once, and "Don\'t tell me again" keeps
   await page.keyboard.press('Backspace');
   await page.waitForTimeout(300);
   await expect(dialog(page)).not.toBeVisible();
+});
+
+test('a word deleted from the caret with ⌥⌫ gets the hint too (#794)', async ({ page }) => {
+  // caret at the end of "Lite", nothing selected
+  await page.evaluate(() => {
+    const span = document.querySelectorAll('#hypertranscript [data-m]:not(.speaker)')[2];
+    const text = span.firstChild;
+    const r = document.createRange();
+    r.setStart(text, text.data.trimEnd().length);
+    r.collapse(true);
+    const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    document.getElementById('hypertranscript').focus();
+  });
+  const mac = await page.evaluate(() => /Mac/.test(navigator.platform));
+  await page.keyboard.press(mac ? 'Alt+Backspace' : 'Control+Backspace');
+  await expect(dialog(page)).toBeVisible();
+  await expect(dialog(page).locator('#project-dialog-title')).toContainText('Deleted from the text, not the media');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#hypertranscript').textContent.replace(/\s+/g, ' ').trim().slice(0, 40))).not.toContain('Lite');
 });
 
 test('a one-character deletion gets no hint (#794)', async ({ page }) => {

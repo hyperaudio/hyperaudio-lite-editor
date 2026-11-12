@@ -91,8 +91,8 @@
   document.addEventListener('selectionchange', updateStrikethroughState);
   updateStrikethroughState();
 
-  // The hint at the moment of the mistake (#794): a keyboard deletion whose
-  // selection covers one or more whole timed words. Deleting still corrects
+  // The hint at the moment of the mistake (#794): a keyboard deletion that
+  // removes one or more whole timed words. Deleting still corrects
   // the text as it did; the dialog opens over it, once per visit, until
   // "Don't tell me again" (the key is in settings.js's dismissal list, so
   // Reset brings it back). Cuts are left alone: they mean to move the text.
@@ -104,15 +104,13 @@
     if (!DELETION.test(e.inputType || '')) return;
     if (localStorage.getItem(HINT_KEY) === 'true') return;
     if (!window.HyperaudioSave || typeof window.HyperaudioSave.dialog !== 'function') return;
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-    if (wholeTimedWords(selection.getRangeAt(0), e.target) === 0) return;
+    if (wholeTimedWords(deletionRange(e), e.target) === 0) return;
     hintShown = true;
     // after the deletion has happened: the dialog takes focus, and taking it
     // inside beforeinput would be taking it from the edit
     setTimeout(() => {
       window.HyperaudioSave.dialog(
-        `Deleting corrects the text. To cut words from the audio and video, select them and strike them out (${STRIKE_SHORTCUT}).`,
+        hintMessage(),
         {
           title: 'Deleted from the text, not the media',
           confirmLabel: 'OK',
@@ -125,9 +123,58 @@
     }, 0);
   });
 
+  // The hint's sentence, with the toolbar button's own icon in it, so the
+  // picture in the dialog is the button to look for. Built as nodes: the
+  // dialog takes no markup. Without the button on the page, words alone.
+  function hintMessage() {
+    const svg = document.querySelector('#strikethrough svg');
+    const first = document.createElement('p');
+    first.textContent = 'Deleting corrects the text.';
+    const second = document.createElement('p');
+    second.style.marginTop = '12px';
+    second.append('To cut words from the audio and video, strike them out by selecting them and ');
+    if (svg !== null) {
+      // the icon in a small bordered box, so it reads as the button it is
+      const button = document.createElement('span');
+      button.setAttribute('aria-hidden', 'true');
+      button.style.cssText = 'display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;'
+        + ' border:1px solid currentColor; border-radius:6px; opacity:0.85; vertical-align:-3px; margin:0 3px';
+      const icon = svg.cloneNode(true);
+      icon.setAttribute('width', '16');
+      icon.setAttribute('height', '16');
+      button.append(icon);
+      second.append('using the ', button, ` button or ${STRIKE_SHORTCUT}.`);
+    } else {
+      second.append(`using the strike-out button or ${STRIKE_SHORTCUT}.`);
+    }
+    const message = document.createDocumentFragment();
+    message.append(first, second);
+    return message;
+  }
+
+  // What the deletion is about to remove. The browser says so in the event's
+  // target ranges, which is how a word deleted from a collapsed caret with
+  // ⌥⌫ (deleteWordBackward) counts: the selection is empty at that moment.
+  // A browser without them falls back to the selection.
+  function deletionRange(e) {
+    const targets = typeof e.getTargetRanges === 'function' ? e.getTargetRanges() : [];
+    if (targets.length > 0) {
+      try {
+        const range = document.createRange();
+        range.setStart(targets[0].startContainer, targets[0].startOffset);
+        range.setEnd(targets[0].endContainer, targets[0].endOffset);
+        return range;
+      } catch (err) { /* a range the document no longer holds: the selection then */ }
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    return selection.getRangeAt(0);
+  }
+
   // How many timed words the range covers whole (their letters, not the
   // space after them), speaker labels aside.
   function wholeTimedWords(range, transcript) {
+    if (range === null || range.collapsed) return 0;
     let count = 0;
     transcript.querySelectorAll('span[data-m]').forEach((span) => {
       if (span.classList.contains('speaker') || !(parseInt(span.getAttribute('data-d'), 10) > 0)) return;
