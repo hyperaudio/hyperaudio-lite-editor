@@ -720,6 +720,13 @@ If you are creating an open source application under a license compatible with t
                 </div>
                 <input type="radio" name="settings-tab" id="settings-tab-playback" class="tab" aria-label="Playback" />
                 <div class="tab-content settings-panel bg-base-100 border-base-300 rounded-box" id="settings-panel-playback">
+                  <label class="settings-row settings-row-toggle" for="setting-click-moves-playhead">
+                    <span class="settings-text">
+                      Click a word to move the playhead there
+                      <span class="settings-hint">While the media is paused, and it never starts playing. A double-click still plays from a word when the setting below is on.</span>
+                    </span>
+                    <input type="checkbox" id="setting-click-moves-playhead" class="toggle toggle-primary" />
+                  </label>
                   <label class="settings-row settings-row-toggle" for="setting-play-on-dblclick">
                     <span class="settings-text">
                       Double-click a word to play from it

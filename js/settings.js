@@ -35,6 +35,7 @@
 (function () {
   const KEY = 'hyperaudioSettings';
   const DEFAULTS = Object.freeze({
+    clickMovesPlayhead: true,   // a click on a word moves the playhead there while paused (#797)
     playOnDoubleClick: false,   // a double-click moves the playhead; does it also play? (#441, #541)
     // Which reading rate the caption editor shows (#639): 'cps', 'wpm' or
     // 'none'. Characters per second is the streaming convention and the
@@ -352,6 +353,12 @@
         set('experimentalFeatures', experimental.checked);
         if (window.HyperaudioExperimental) window.HyperaudioExperimental.apply();
       });
+    }
+
+    const clickSeek = byId('setting-click-moves-playhead');
+    if (clickSeek !== null) {
+      clickSeek.checked = get('clickMovesPlayhead') === true;
+      clickSeek.addEventListener('change', () => set('clickMovesPlayhead', clickSeek.checked));
     }
 
     const toggle = byId('setting-play-on-dblclick');
