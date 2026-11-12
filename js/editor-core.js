@@ -493,6 +493,34 @@
     if (back !== null) back.click();
   }
 
+  // Click a word to move the playhead there (#797), while the media is paused.
+  // A setting, on by default: people arrive expecting it from other transcript
+  // editors. The pause-and-fix habit (pause, click a word a few seconds back,
+  // fix it, play) is the reason it can be turned off, since play then resumes
+  // from the fixed word. While the media plays a click only places the caret,
+  // so editing behind the playhead is untouched. It never starts playback:
+  // that stays with the double-click setting. A drag that ends on a word is a
+  // selection, not a click, and the second click of a double-click is the
+  // library's.
+  document.addEventListener('click', (e) => {
+    if (e.detail > 1 || !(e.target instanceof Element)) return;
+    const word = e.target.closest('#hypertranscript span[data-m]:not(.speaker)');
+    if (word === null) return;
+    if (!window.HyperaudioSettings || window.HyperaudioSettings.get('clickMovesPlayhead') !== true) return;
+    const player = document.getElementById('hyperplayer');
+    if (player === null || player.paused !== true) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
+    const secs = parseInt(word.getAttribute('data-m'), 10) / 1000;
+    if (isNaN(secs)) return;
+    player.currentTime = secs;
+    const inst = window.hyperaudioInstance;
+    if (inst && typeof inst.clearActiveClasses === 'function') inst.clearActiveClasses();
+    if (inst && typeof inst.updateTranscriptVisualState === 'function') inst.updateTranscriptVisualState(secs);
+    word.classList.add('active');
+    if (word.parentNode) word.parentNode.classList.add('active');
+  });
+
 
   /* ----------------------------------------------------------- */
 

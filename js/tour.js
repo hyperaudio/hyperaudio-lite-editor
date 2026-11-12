@@ -39,7 +39,7 @@
     {
       targets: ['#hypertranscript'],
       title: 'The transcript',
-      text: '<p>Double-click any word to move the playhead there.</p>'
+      text: '<p>Click any word to move the playhead there.</p>'
         + '<p>Type straight into the transcript to correct it.</p>'
         + '<p>Press Return for a new paragraph.</p>'
         + '<p>Add speaker names between [square brackets].</p>',
