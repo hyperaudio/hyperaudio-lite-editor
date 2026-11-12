@@ -669,22 +669,42 @@
   // and give the user's own mute state back on seeked (or after 1.5 s, in
   // case seeked never fires). The flag on the element tells the playbar
   // (reflectVolume, editor-main.js) not to flash its mute icon meanwhile.
+  //
+  // That still left the first syllable audible in Safari, because WebKit's
+  // media element reports currentTime BEHIND the sound it is producing: a
+  // tone-ladder file tapped through an AnalyserNode changed tone 0.27 s
+  // before currentTime reached the change, consistently, where Chromium was
+  // within 0.02 s. (It is also why the word highlight trails the voice a
+  // little in Safari.) So when currentTime says the cut is 0.26 s away the
+  // ear is already at it, and the ear test on a real recording picked
+  // exactly that figure. In WebKit the mute therefore goes on that much
+  // before the cut and the seek stays at the cut: no kept audio is skipped
+  // and, since the sound really is at the cut by then, nothing of the word
+  // before it is lost. Chromium needs no lead and gets none.
+  const SKIP_LEAD = /AppleWebKit/.test(navigator.userAgent)
+    && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS|Android/.test(navigator.userAgent) ? 0.26 : 0;
   let skipMute = null;
+  function muteForSkip(player) {
+    if (skipMute !== null) return;
+    const was = player.muted;
+    const done = () => {
+      if (skipMute === null) return;
+      clearTimeout(skipMute.timer);
+      skipMute = null;
+      player.muted = was;
+      delete player.dataset.skipMute;
+    };
+    skipMute = { timer: setTimeout(done, 1500), done };
+    player.dataset.skipMute = '1';
+    player.muted = true;
+    player.addEventListener('seeked', done, { once: true });
+  }
   function skipTo(player, seconds) {
-    if (skipMute === null) {
-      const was = player.muted;
-      const done = () => {
-        if (skipMute === null) return;
-        clearTimeout(skipMute.timer);
-        skipMute = null;
-        player.muted = was;
-        delete player.dataset.skipMute;
-      };
-      skipMute = { timer: setTimeout(done, 1500) };
-      player.dataset.skipMute = '1';
-      player.muted = true;
-      player.addEventListener('seeked', done, { once: true });
-    }
+    muteForSkip(player);
+    // the unmute waits for THIS seek: when the mute went on during the lead
+    // and the user then seeked into the cut, the listener is on that seek
+    player.removeEventListener('seeked', skipMute.done);
+    player.addEventListener('seeked', skipMute.done, { once: true });
     player.currentTime = seconds;
   }
 
@@ -706,6 +726,7 @@
       return;
     }
 
+    const lead = SKIP_LEAD;
     for (let i = 0; i < audioDataArray.length - 1; i++) {
       const stop = audioDataArray[i].stop;
       const nextStart = audioDataArray[i + 1].start;
@@ -718,6 +739,11 @@
         kickPlayhead();
         return;
       }
+      // within the lead of the cut: mute now, seek when it starts
+      if (t >= stop - lead && t < stop) {
+        muteForSkip(myPlayer);
+        return;
+      }
     }
 
     // The TRAILING gap (#577): past the last kept section there is nothing to
@@ -725,9 +751,13 @@
     // known duration, and only when the tail was actually cut.
     const duration = myPlayer.duration;
     if (Number.isFinite(last.stop) && Number.isFinite(duration)
-        && t >= last.stop && duration > last.stop + 0.01) {
-      skipTo(myPlayer, duration);
-      kickPlayhead();
+        && duration > last.stop + 0.01) {
+      if (t >= last.stop) {
+        skipTo(myPlayer, duration);
+        kickPlayhead();
+      } else if (t >= last.stop - lead) {
+        muteForSkip(myPlayer);
+      }
     }
   }
 
