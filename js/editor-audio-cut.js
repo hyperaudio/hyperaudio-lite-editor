@@ -22,8 +22,21 @@
 
   const strikethroughBtn = document.querySelector('#strikethrough');
 
-  strikethroughBtn.addEventListener('click', () => {
-    if (strikethroughBtn.classList.contains('btn-disabled')) return;
+  // Strikeout is how media is cut, and users did not find it (#794): the
+  // button said "Strikethrough", which reads as text formatting, there was
+  // no shortcut, and nothing answered when someone deleted a word expecting
+  // the audio to go with it. So the button says what it does, ⌘⇧X (Ctrl+
+  // Shift+X elsewhere, the Google Docs convention) strikes and un-strikes
+  // the selection, and the first whole-word deletion gets a hint.
+  const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '');
+  const STRIKE_SHORTCUT = IS_MAC ? '⌘⇧X' : 'Ctrl+Shift+X';
+  const TIP_ENABLED = `Cut from audio and video (strike out, ${STRIKE_SHORTCUT})`;
+  const TIP_DISABLED = 'Select words to cut from audio and video';   // #679
+  strikethroughBtn.setAttribute('aria-label', 'Cut the selected words from the audio and video (strike out)');
+
+  // The button and the shortcut share this path, so captions, history and
+  // playback skipping follow either.
+  function strikeSelection() {
     const applyStrike = () => {
       applyStrikeThroughToSelection();
       rebuildAudioDataArray();
@@ -39,24 +52,100 @@
     } else {
       applyStrike();
     }
+  }
+
+  strikethroughBtn.addEventListener('click', () => {
+    if (strikethroughBtn.classList.contains('btn-disabled')) return;
+    strikeSelection();
   });
+
+  // ⌘⇧X / Ctrl+Shift+X, in the capture phase like ⌘S, and only for a
+  // selection in the transcript: an input or the caption editor keeps the key.
+  document.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return;
+    if (typeof e.key !== 'string' || e.key.toLowerCase() !== 'x') return;
+    if (!selectionInTranscript()) return;
+    e.preventDefault();
+    strikeSelection();
+  }, true);
+
+  function selectionInTranscript() {
+    const transcript = document.getElementById('hypertranscript');
+    const selection = window.getSelection();
+    if (!transcript || !selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+    return selection.getRangeAt(0).intersectsNode(transcript);
+  }
 
   // #274: grey out the strikethrough button unless text is selected in the
   // transcript. The selection survives clicking the button (which is what the
   // click handler above relies on), so disabling via selectionchange can't
-  // race a legitimate click.
+  // race a legitimate click. The tooltip says why while it is grey (#679):
+  // the stylesheet gives the greyed button its pointer events back for that,
+  // and the click guard above does the disabling.
   function updateStrikethroughState() {
-    const transcript = document.getElementById('hypertranscript');
-    const selection = window.getSelection();
-    let enabled = false;
-    if (transcript && selection && selection.rangeCount > 0 && !selection.isCollapsed) {
-      enabled = selection.getRangeAt(0).intersectsNode(transcript);
-    }
+    const enabled = selectionInTranscript();
     strikethroughBtn.classList.toggle('btn-disabled', !enabled);
     strikethroughBtn.setAttribute('aria-disabled', String(!enabled));
+    strikethroughBtn.setAttribute('data-tip', enabled ? TIP_ENABLED : TIP_DISABLED);
   }
   document.addEventListener('selectionchange', updateStrikethroughState);
   updateStrikethroughState();
+
+  // The hint at the moment of the mistake (#794): a keyboard deletion whose
+  // selection covers one or more whole timed words. Deleting still corrects
+  // the text as it did; the dialog opens over it, once per visit, until
+  // "Don't tell me again" (the key is in settings.js's dismissal list, so
+  // Reset brings it back). Cuts are left alone: they mean to move the text.
+  const DELETION = /^delete(Content|Word|SoftLine|HardLine|EntireSoftLine)/;
+  const HINT_KEY = 'noStrikeHint';
+  let hintShown = false;
+  document.addEventListener('beforeinput', (e) => {
+    if (hintShown || !e.target || e.target.id !== 'hypertranscript') return;
+    if (!DELETION.test(e.inputType || '')) return;
+    if (localStorage.getItem(HINT_KEY) === 'true') return;
+    if (!window.HyperaudioSave || typeof window.HyperaudioSave.dialog !== 'function') return;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+    if (wholeTimedWords(selection.getRangeAt(0), e.target) === 0) return;
+    hintShown = true;
+    // after the deletion has happened: the dialog takes focus, and taking it
+    // inside beforeinput would be taking it from the edit
+    setTimeout(() => {
+      window.HyperaudioSave.dialog(
+        `Deleting corrects the text. To cut words from the audio and video, select them and strike them out (${STRIKE_SHORTCUT}).`,
+        {
+          title: 'Deleted from the text, not the media',
+          confirmLabel: 'OK',
+          cancelLabel: "Don't tell me again",
+          dismissResult: true,
+        }
+      ).then((result) => {
+        if (result === false) localStorage.setItem(HINT_KEY, 'true');
+      });
+    }, 0);
+  });
+
+  // How many timed words the range covers whole (their letters, not the
+  // space after them), speaker labels aside.
+  function wholeTimedWords(range, transcript) {
+    let count = 0;
+    transcript.querySelectorAll('span[data-m]').forEach((span) => {
+      if (span.classList.contains('speaker') || !(parseInt(span.getAttribute('data-d'), 10) > 0)) return;
+      if (!range.intersectsNode(span)) return;
+      const text = span.firstChild;
+      if (!text || text.nodeType !== Node.TEXT_NODE) return;
+      const letters = text.data.trimEnd().length;
+      if (letters === 0) return;
+      const word = document.createRange();
+      word.setStart(text, 0);
+      word.setEnd(text, letters);
+      try {
+        if (range.compareBoundaryPoints(Range.START_TO_START, word) <= 0
+            && range.compareBoundaryPoints(Range.END_TO_END, word) >= 0) count += 1;
+      } catch (err) { /* different roots: not this span */ }
+    });
+    return count;
+  }
 
   function applyGapSettings() {
     const enabledEl = document.querySelector('#remove-gaps-enabled');

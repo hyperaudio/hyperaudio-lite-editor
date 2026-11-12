@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.47 — last changed in release 1.3.47
  * @license AGPL-3.0-only
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -140,6 +140,7 @@
   // once, forever.
   const DISMISSAL_KEYS = Object.freeze([
     'noCaptionAlert',           // the captions-diverged warning (editor-core, #506)
+    'noStrikeHint',             // the deleted-not-cut hint (editor-audio-cut, #794)
   ]);
 
   // Every localStorage key the app writes, for Reset. Listed rather than

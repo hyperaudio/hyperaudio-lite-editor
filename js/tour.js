@@ -1,7 +1,7 @@
 /**
  * tour.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.47 — last changed in release 1.3.47
  * @license AGPL-3.0-only
  *
  * A tour of the editor (#718): a few cards, each pointing at one part of the
@@ -87,7 +87,7 @@
     },
     {
       targets: ['#strikethrough'],
-      title: 'Strikethrough',
+      title: 'Cut words',
       text: 'Select words and strike them out to cut them. Playback and exports skip struck words.',
     },
     {
