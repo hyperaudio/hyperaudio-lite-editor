@@ -160,7 +160,7 @@ If you are creating an open source application under a license compatible with t
    <!-- templates -->
 
    <template id="deepgram-modal-template">
-    <form id="deepgram-form" name="deepgram-form" autocomplete="off">
+    <form id="deepgram-form" name="deepgram-form" autocomplete="off" novalidate>
       <div class="flex flex-col gap-4 w-full">
         <div class="key-field">
           <input id="token" type="password" autocomplete="off" placeholder="Deepgram token" class="input input-bordered w-full" />
@@ -199,7 +199,7 @@ If you are creating an open source application under a license compatible with t
   </template>
 
   <template id="assemblyai-modal-template">
-    <form id="assemblyai-form" name="assemblyai-form" autocomplete="off">
+    <form id="assemblyai-form" name="assemblyai-form" autocomplete="off" novalidate>
       <div class="flex flex-col gap-4 w-full">
         <div class="key-field">
           <input id="assemblyai-key" type="password" autocomplete="off" placeholder="AssemblyAI API key" class="input input-bordered w-full" />
@@ -233,7 +233,7 @@ If you are creating an open source application under a license compatible with t
   </template>
 
   <template id="parakeet-hf-modal-template">
-    <form id="parakeet-hf-form" name="parakeet-hf-form" autocomplete="off">
+    <form id="parakeet-hf-form" name="parakeet-hf-form" autocomplete="off" novalidate>
       <div class="flex flex-col gap-4 w-full">
         <div class="key-field">
           <input id="parakeet-hf-key" type="password" autocomplete="off" placeholder="Hugging Face token or DeepInfra API key" class="input input-bordered w-full" />
@@ -273,7 +273,7 @@ If you are creating an open source application under a license compatible with t
   </template>
 
   <template id="whisper-client-template">
-    <form autocomplete="off">
+    <form autocomplete="off" novalidate>
       <div class="mb-3">
         <input id="file-input" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
         <details class="url-source" style="margin-top:1rem">
@@ -340,7 +340,7 @@ If you are creating an open source application under a license compatible with t
   </template>
 
   <template id="parakeet-local-template">
-    <form autocomplete="off">
+    <form autocomplete="off" novalidate>
       <div class="mb-3">
         <input id="parakeet-file-input" name="file" type="file" class="file-input w-full max-w-xs" aria-label="Media file to transcribe" title="" />
         <details class="url-source" style="margin-top:1rem">
@@ -1313,7 +1313,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/transcript-lifecycle.js?v=1.2.0"></script>
   <script src="js/transcript-gateway.js?v=1.3.39"></script>
   <script src="js/transcript-maintenance.js?v=1.3.39"></script>
-  <script src="js/editor-core.js?v=1.3.47"></script>
+  <script src="js/editor-core.js?v=1.3.48"></script>
 
 
   <import-deepgram-json></import-deepgram-json>
