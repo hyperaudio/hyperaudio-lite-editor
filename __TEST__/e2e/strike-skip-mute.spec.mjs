@@ -5,7 +5,7 @@
 // 50 ms into a struck word's span. The skip now mutes the player for the
 // seek and gives the user's own mute state back on seeked, without the
 // playbar's mute icon flashing on every skip.
-import { test, expect } from '@playwright/test';
+import { test, expect, webkit, chromium } from '@playwright/test';
 import { ladderWav, transcriptHtml } from './helpers.mjs';
 
 // words at 1 s intervals from 2 s; the test strikes the third (4–5 s)
@@ -14,7 +14,7 @@ const WORDS = [[2000, 1000, 0], [3000, 1000, 0], [4000, 1000, 0], [5000, 1000, 0
 const load = async (page) => {
   const wav = ladderWav(10);
   await page.route('**/__ladder.wav', (route) => route.fulfill({ body: wav, contentType: 'audio/wav' }));
-  await page.goto('/index.html');
+  await page.goto('http://localhost:4173/index.html');
   await page.waitForFunction(() => typeof window.getPlayableSections === 'function');
   await page.evaluate(async () => {
     const blob = await (await fetch('/__ladder.wav')).blob();
@@ -72,6 +72,46 @@ test('the skip mutes the player for its seek and unmutes it after (#795)', async
   expect(log.icons.every((d) => d === 'none')).toBe(true);
   expect(log.after.icon).toBe('none');
 });
+
+// WebKit's media element reports currentTime about 0.27 s behind the sound
+// it is producing, so there the mute goes on 0.26 s ahead of the cut while
+// the seek stays at the cut. Chromium reports true time and gets no lead.
+const parkBeforeCut = (page, at) => page.evaluate((t) => {
+  const p = document.getElementById('hyperplayer');
+  const seeks = [];
+  p.addEventListener('seeking', () => seeks.push(p.currentTime));
+  p.currentTime = t;
+  return new Promise((resolve) => p.addEventListener('seeked', () => {
+    seeks.length = 0;
+    p.dispatchEvent(new Event('timeupdate'));
+    resolve({ t: p.currentTime, muted: p.muted, flag: p.dataset.skipMute || null, seeks,
+      icon: document.getElementById('playbar-mute-icon').style.display });
+  }, { once: true }));
+}, at);
+
+for (const [name, engine, leads] of [['WebKit', webkit, true], ['Chromium', chromium, false]]) {
+  test(`${name}: ${leads ? 'muted 0.26 s before the cut, seek still at the cut' : 'no lead, muted only at the cut'} (#795)`, async () => {
+    const browser = await engine.launch();
+    try {
+      const page = await (await browser.newContext()).newPage();
+      await load(page);
+      const early = await parkBeforeCut(page, 3.85);
+      expect(early.t).toBeLessThan(4);
+      expect(early.seeks).toEqual([]);          // not yet seeking, in either engine
+      expect(early.icon).toBe('none');
+      expect(early.muted).toBe(leads);
+      expect(early.flag).toBe(leads ? '1' : null);
+
+      // at the cut the skip seeks as before, and the user's state comes back
+      const log = await skipFrom(page, 4.2);
+      expect(log.after.t).toBeGreaterThan(4.9);
+      expect(log.after.muted).toBe(false);
+      expect(log.after.flag).toBeNull();
+    } finally {
+      await browser.close();
+    }
+  });
+}
 
 test('a user who was muted stays muted through a skip (#795)', async ({ page }) => {
   await load(page);
