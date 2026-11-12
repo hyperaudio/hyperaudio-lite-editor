@@ -104,7 +104,7 @@ test('it does not run by itself under automation, and can be taken again from Se
   // while it runs, dialogs cut rather than fade; afterwards they fade again
   expect(await page.evaluate(() => document.body.classList.contains('hyperaudio-touring'))).toBe(false);
   expect(await page.evaluate(() => document.querySelector('.modal-toggle:checked') === null)).toBe(true);
-  expect(titles).toEqual(['Start with a recording', 'Transcribe', 'The transcript', 'Strikethrough', 'Skip the gaps', 'The gaps dialog', 'Transcript and captions', 'The captions view',
+  expect(titles).toEqual(['Start with a recording', 'Transcribe', 'The transcript', 'Cut words', 'Skip the gaps', 'The gaps dialog', 'Transcript and captions', 'The captions view',
     'Recents', 'A project\'s actions', 'Export media', 'The export dialog', 'Settings', 'Taking the tour again']);
   expect(await seen(page)).toBe(true);
 });

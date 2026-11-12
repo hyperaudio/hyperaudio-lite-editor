@@ -756,6 +756,14 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-info-btn { display: non
    with the transcript element's top edge (88 at >1120, ~290 at <=948); this
    is that same edge, arrived at through two more offsets. */
 
+/* The greyed strikeout button keeps its pointer events (#679, #794), so its
+   tooltip can say why it is grey. daisyUI's btn-disabled turns them off, which
+   also silenced the tooltip. The click is refused in editor-audio-cut.js. */
+#strikethrough.btn-disabled {
+  pointer-events: auto;
+  cursor: default;
+}
+
 /* Undo/redo (#400): the history module injects ↶/↷ beside the strikethrough
    button, but the top bar has no room to give — especially on mobile. So:
    fine-pointer devices hide them entirely (⌘Z owns undo there; the rule at
