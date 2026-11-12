@@ -197,8 +197,9 @@ guarded in the clients, as the note after the second sample says.
 
 ```js
 getData() {
-  // 1. leave caption mode, so the loader and the result land in the transcript
-  document.querySelector('#transcript-editor-btn')?.click();
+  // 1. the captions view needs no step of yours: showTranscriptNotice and
+  //    setTranscriptBusy(true) leave it, and it stays locked while the
+  //    transcript is busy, so the loader and the result land in the transcript
 
   // 2. the media on the player FIRST: the library captures what is being
   //    transcribed at the busy signal, from the player
@@ -411,7 +412,7 @@ Expose a function on `window` only when a host calls it. `parseData`
 - [ ] `js/converters/<name>.js`: pure, registers on `window.HyperaudioConverters`, `module.exports` in node, `labelOnChange` if it diarizes
 - [ ] fixture in `__TEST__/fixtures/converters/`, test in `__TEST__/unit/converters/`, `npm run test:unit` green
 - [ ] `js/hyperaudio-lite-editor-<name>.js`: template, tab radio with `aria-label`, custom element
-- [ ] the contract in order: caption mode off, media on the player, `showTranscriptNotice` with `.transcribing-msg`, `setTranscriptBusy(true)`, then background check, `hyperaudioKeepTranscription`, `innerHTML`, `setTranscriptionInfo`, `setTranscriptBusy(false)`, `hyperaudioInit`, `hyperaudioGenerateCaptionsFromTranscript`
+- [ ] the contract in order: media on the player, `showTranscriptNotice` with `.transcribing-msg`, `setTranscriptBusy(true)`, then background check, `hyperaudioKeepTranscription`, `innerHTML`, `setTranscriptionInfo`, `setTranscriptBusy(false)`, `hyperaudioInit`, `hyperaudioGenerateCaptionsFromTranscript`
 - [ ] errors through `showTranscriptNotice`, always `setTranscriptBusy(false)`
 - [ ] cloud engine: the upload goes through `window.HyperaudioCloudAudio.audioForUpload`, so a video goes up as its sound (#788)
 - [ ] `info` with `service`, `model`, `language`, `languageCode`, `seconds`, `modelId`, `parameters`, no credentials

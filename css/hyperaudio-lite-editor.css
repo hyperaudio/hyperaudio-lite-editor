@@ -1237,6 +1237,15 @@ label[data-a11y-wired]:focus-visible {
 #view-switch .btn[aria-pressed="true"] {
   color: oklch(var(--bc));
 }
+/* nothing to caption while a transcript is on its way (#787): the captions
+   segment greys and its handler declines the click. Read off the page's own
+   state, since the busy attribute is also cleared outside setTranscriptBusy
+   when the user switches away. */
+body:has(#hypertranscript[aria-busy="true"]) #caption-editor-btn,
+body:has(#hypertranscript[aria-busy="true"]) #caption-editor-btn:hover {
+  color: oklch(var(--bc) / 0.2);
+  cursor: default;
+}
 
 /* Soften the navbar's outline buttons to sit in the same family as the view
    switch: quiet base-300 borders and a tint hover, instead of daisyUI's

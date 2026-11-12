@@ -3127,6 +3127,10 @@
     if (typeof originalSetBusy === 'function') {
       window.setTranscriptBusy = function (busy) {
         try {
+          // The loader is read from #hypertranscript below, which the captions
+          // view takes off the page: leave it first (#787), as the original
+          // does for engines that call it directly.
+          if (busy === true && typeof window.leaveCaptionsView === 'function') window.leaveCaptionsView();
           const t = document.getElementById('hypertranscript');
           if (busy === true && t !== null) {
             // Carry the transcription's own IDENTITY, not just its loader:
