@@ -47,6 +47,8 @@ test('identity and restore are distinct monotonic lifecycle signals', async ({ p
 });
 
 test('hyperaudioInit commits one public identity signal through the save lifecycle', async ({ page }) => {
+  // relative to the generation on boot: the intro seed signals identity too (#793)
+  const before = await page.evaluate(() => window.transcriptLifecycle.generation());
   const detail = await page.evaluate(() => new Promise((resolve) => {
     document.addEventListener('hyperaudioDocumentIdentityChanged', (event) => {
       resolve(event.detail);
@@ -55,13 +57,14 @@ test('hyperaudioInit commits one public identity signal through the save lifecyc
   }));
 
   expect(detail).toMatchObject({
-    generation: 1,
+    generation: before + 1,
     origin: 'transcription-or-import',
   });
-  expect(await page.evaluate(() => window.transcriptLifecycle.generation())).toBe(1);
+  expect(await page.evaluate(() => window.transcriptLifecycle.generation())).toBe(before + 1);
 });
 
 test('restore invalidates find references without changing identity', async ({ page }) => {
+  const before = await page.evaluate(() => window.transcriptLifecycle.generation());
   await page.evaluate(() => {
     const searchBox = document.getElementById('search-box');
     searchBox.value = 'captions';
@@ -79,7 +82,7 @@ test('restore invalidates find references without changing identity', async ({ p
 
   await expect(page.locator('#find-match-count')).toHaveText('0 / 0');
   await expect(page.locator('#hypertranscript mark.search-mark')).toHaveCount(0);
-  expect(await page.evaluate(() => window.transcriptLifecycle.generation())).toBe(0);
+  expect(await page.evaluate(() => window.transcriptLifecycle.generation())).toBe(before);
 });
 
 test('identity remains unconditional while restore rejects loader markup', async ({ page }) => {
@@ -101,8 +104,8 @@ test('identity remains unconditional while restore rejects loader markup', async
   });
 
   expect(result).toEqual({
-    before: 0,
-    after: 1,
+    before: result.before,
+    after: result.before + 1,
     identityAccepted: true,
     restoreAccepted: false,
   });
