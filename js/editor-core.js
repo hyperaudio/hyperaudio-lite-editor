@@ -104,6 +104,7 @@
   // project's transcript. Painting through here marks the card
   // contenteditable="false" and tags it, which the capture path reads.
   function showTranscriptNotice(html) {
+    leaveCaptionsView();
     const transcript = document.getElementById("hypertranscript");
     if (transcript === null) {
       return;
@@ -113,6 +114,7 @@
   }
 
   function setTranscriptBusy(busy) {
+    if (busy === true) leaveCaptionsView();
     const transcript = document.getElementById("hypertranscript");
     if (transcript === null) {
       return;
@@ -429,6 +431,11 @@
 
   captionViewBtn.addEventListener('click', () => {
     if (captionMode === true) return;
+    // a transcript on its way has nothing to caption (#787): the loader is
+    // in #hypertranscript, which this view would take off the page, and the
+    // engine writes its result there when it finishes
+    const busyTranscript = document.getElementById('hypertranscript');
+    if (busyTranscript !== null && busyTranscript.getAttribute('aria-busy') === 'true') return;
     let holder = document.querySelector('.transcript-holder');
     transcriptCache = holder.cloneNode(true);
     captionMode = true;
@@ -472,6 +479,46 @@
       window.transcriptReconciliation.schedule('sanitise-settle');
     }
     reflectViewSwitch();
+  });
+
+  // Engines paint their loader and their result into #hypertranscript, which
+  // the captions view takes off the page (#787). Every engine used to click
+  // the transcript button first, and one that followed the written contract
+  // without the click got no loader and threw on completion. The leaving is
+  // done here now, for showTranscriptNotice and setTranscriptBusy(true), and
+  // the project library calls it before it reads the loader.
+  function leaveCaptionsView() {
+    if (captionMode !== true) return;
+    const back = document.getElementById('transcript-editor-btn');
+    if (back !== null) back.click();
+  }
+
+  // Click a word to move the playhead there (#797), while the media is paused.
+  // A setting, on by default: people arrive expecting it from other transcript
+  // editors. The pause-and-fix habit (pause, click a word a few seconds back,
+  // fix it, play) is the reason it can be turned off, since play then resumes
+  // from the fixed word. While the media plays a click only places the caret,
+  // so editing behind the playhead is untouched. It never starts playback:
+  // that stays with the double-click setting. A drag that ends on a word is a
+  // selection, not a click, and the second click of a double-click is the
+  // library's.
+  document.addEventListener('click', (e) => {
+    if (e.detail > 1 || !(e.target instanceof Element)) return;
+    const word = e.target.closest('#hypertranscript span[data-m]:not(.speaker)');
+    if (word === null) return;
+    if (!window.HyperaudioSettings || window.HyperaudioSettings.get('clickMovesPlayhead') !== true) return;
+    const player = document.getElementById('hyperplayer');
+    if (player === null || player.paused !== true) return;
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) return;
+    const secs = parseInt(word.getAttribute('data-m'), 10) / 1000;
+    if (isNaN(secs)) return;
+    player.currentTime = secs;
+    const inst = window.hyperaudioInstance;
+    if (inst && typeof inst.clearActiveClasses === 'function') inst.clearActiveClasses();
+    if (inst && typeof inst.updateTranscriptVisualState === 'function') inst.updateTranscriptVisualState(secs);
+    word.classList.add('active');
+    if (word.parentNode) word.parentNode.classList.add('active');
   });
 
 
@@ -1057,6 +1104,43 @@
               let startsWithSpeaker = false;
               if (walker.currentNode.textContent.trim().startsWith('[') === true){
                 startsWithSpeaker = true;
+              }
+
+              // The span is a label already and the text starts with it
+              // (#792): a word retyped after a speaker label. Deleting the
+              // word took the label's trailing space with it and left the
+              // caret at the label's end, so the typed word went INTO the
+              // label span. Splitting it out below kept the parent's class
+              // and timing, so the word became a second label: bold, untimed,
+              // hidden with Speakers off. Instead the label stays where it
+              // is, with its space back, and the typed text moves into the
+              // next word span: in the reported case the emptied original,
+              // still holding its timing. A span that holds a word already
+              // takes it too, and the split pass divides them.
+              const labelSpan = walker.currentNode.parentNode;
+              if (startsWithSpeaker === true && labelSpan.classList.contains('speaker')) {
+                const typed = walker.currentNode.textContent.replace(regex, '').trim();
+                walker.currentNode.textContent = found[0].trim() + ' ';
+                if (typed === '') { continue; }
+                let next = labelSpan.nextElementSibling;
+                if (!next || !next.hasAttribute('data-m') || next.classList.contains('speaker')) {
+                  next = document.createElement('span');
+                  next.setAttribute('data-m', labelSpan.getAttribute('data-m'));
+                  next.setAttribute('data-d', '0');
+                  labelSpan.after(next);
+                }
+                next.textContent = typed + ' ' + next.textContent.trimStart();
+                speakerChanged = true;
+                if (isTranscriptFocused === true) {
+                  // typing carries on after the moved text
+                  const range = document.createRange();
+                  range.setStart(next.firstChild, typed.length);
+                  range.collapse(true);
+                  const sel = window.getSelection();
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                }
+                continue;
               }
 
               walker.currentNode.textContent = walker.currentNode.textContent.replace(regex, '');

@@ -571,6 +571,9 @@
       video.addEventListener('emptied', reflectPlayState);
 
       const reflectVolume = () => {
+        // muted for the length of a strike skip's seek (#795, editor-audio-cut.js):
+        // not the user's doing, so the icon stays as it was
+        if (video.dataset.skipMute === '1') return;
         const silent = video.muted || video.volume === 0;
         volumeIcon.style.display = silent ? 'none' : '';
         muteIcon.style.display = silent ? '' : 'none';

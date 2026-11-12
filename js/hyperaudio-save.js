@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.46 — last changed in release 1.3.46
+ * @version 1.3.47 — last changed in release 1.3.47
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -2164,12 +2164,19 @@
     const msg = el.querySelector('#project-dialog-message');
     msg.style.marginTop = opts.title ? '0' : '22px';
     msg.textContent = '';
-    String(message).split('\n\n').forEach((para, i) => {
-      const pEl = document.createElement('p');
-      pEl.textContent = para;
-      if (i > 0) pEl.style.marginTop = '12px';
-      msg.appendChild(pEl);
-    });
+    // Text, in paragraphs, or a node the caller built (#794: the strike-out
+    // hint puts the toolbar button's own icon in its sentence). A node, not
+    // markup, so no caller can put a string straight into the page.
+    if (message instanceof Node) {
+      msg.appendChild(message);
+    } else {
+      String(message).split('\n\n').forEach((para, i) => {
+        const pEl = document.createElement('p');
+        pEl.textContent = para;
+        if (i > 0) pEl.style.marginTop = '12px';
+        msg.appendChild(pEl);
+      });
+    }
     const confirmBtn = el.querySelector('#project-dialog-confirm');
     const cancelBtn = el.querySelector('#project-dialog-cancel');
     const extraBtn = el.querySelector('#project-dialog-extra');
@@ -3120,6 +3127,10 @@
     if (typeof originalSetBusy === 'function') {
       window.setTranscriptBusy = function (busy) {
         try {
+          // The loader is read from #hypertranscript below, which the captions
+          // view takes off the page: leave it first (#787), as the original
+          // does for engines that call it directly.
+          if (busy === true && typeof window.leaveCaptionsView === 'function') window.leaveCaptionsView();
           const t = document.getElementById('hypertranscript');
           if (busy === true && t !== null) {
             // Carry the transcription's own IDENTITY, not just its loader:
@@ -4098,6 +4109,11 @@
       await acquireProjectLock(session.projectId);
       await writeOriginOnce(getEditorTranscriptJson());
       await commitInitialState(session.projectId);
+      // Announce the document, as the open and import paths do (#793). Undo
+      // history took its baseline from the markup while the page was still
+      // parsing, and a host that swaps in its own intro before the seed runs
+      // would otherwise undo back to the markup's, over the host's media.
+      signalDocumentIdentity('intro-seed');
       updateSaveIndicator();
       return true;
     } catch (e) {

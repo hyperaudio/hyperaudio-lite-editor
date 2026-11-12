@@ -22,8 +22,21 @@
 
   const strikethroughBtn = document.querySelector('#strikethrough');
 
-  strikethroughBtn.addEventListener('click', () => {
-    if (strikethroughBtn.classList.contains('btn-disabled')) return;
+  // Strikeout is how media is cut, and users did not find it (#794): the
+  // button said "Strikethrough", which reads as text formatting, there was
+  // no shortcut, and nothing answered when someone deleted a word expecting
+  // the audio to go with it. So the button says what it does, ⌘⇧X (Ctrl+
+  // Shift+X elsewhere, the Google Docs convention) strikes and un-strikes
+  // the selection, and the first whole-word deletion gets a hint.
+  const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '');
+  const STRIKE_SHORTCUT = IS_MAC ? '⌘⇧X' : 'Ctrl+Shift+X';
+  const TIP_ENABLED = `Cut from audio and video (strike out, ${STRIKE_SHORTCUT})`;
+  const TIP_DISABLED = 'Select words to cut from audio and video';   // #679
+  strikethroughBtn.setAttribute('aria-label', 'Cut the selected words from the audio and video (strike out)');
+
+  // The button and the shortcut share this path, so captions, history and
+  // playback skipping follow either.
+  function strikeSelection() {
     const applyStrike = () => {
       applyStrikeThroughToSelection();
       rebuildAudioDataArray();
@@ -39,24 +52,147 @@
     } else {
       applyStrike();
     }
+  }
+
+  strikethroughBtn.addEventListener('click', () => {
+    if (strikethroughBtn.classList.contains('btn-disabled')) return;
+    strikeSelection();
   });
+
+  // ⌘⇧X / Ctrl+Shift+X, in the capture phase like ⌘S, and only for a
+  // selection in the transcript: an input or the caption editor keeps the key.
+  document.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return;
+    if (typeof e.key !== 'string' || e.key.toLowerCase() !== 'x') return;
+    if (!selectionInTranscript()) return;
+    e.preventDefault();
+    strikeSelection();
+  }, true);
+
+  function selectionInTranscript() {
+    const transcript = document.getElementById('hypertranscript');
+    const selection = window.getSelection();
+    if (!transcript || !selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+    return selection.getRangeAt(0).intersectsNode(transcript);
+  }
 
   // #274: grey out the strikethrough button unless text is selected in the
   // transcript. The selection survives clicking the button (which is what the
   // click handler above relies on), so disabling via selectionchange can't
-  // race a legitimate click.
+  // race a legitimate click. The tooltip says why while it is grey (#679):
+  // the stylesheet gives the greyed button its pointer events back for that,
+  // and the click guard above does the disabling.
   function updateStrikethroughState() {
-    const transcript = document.getElementById('hypertranscript');
-    const selection = window.getSelection();
-    let enabled = false;
-    if (transcript && selection && selection.rangeCount > 0 && !selection.isCollapsed) {
-      enabled = selection.getRangeAt(0).intersectsNode(transcript);
-    }
+    const enabled = selectionInTranscript();
     strikethroughBtn.classList.toggle('btn-disabled', !enabled);
     strikethroughBtn.setAttribute('aria-disabled', String(!enabled));
+    strikethroughBtn.setAttribute('data-tip', enabled ? TIP_ENABLED : TIP_DISABLED);
   }
   document.addEventListener('selectionchange', updateStrikethroughState);
   updateStrikethroughState();
+
+  // The hint at the moment of the mistake (#794): a keyboard deletion that
+  // removes one or more whole timed words. Deleting still corrects
+  // the text as it did; the dialog opens over it, once per visit, until
+  // "Don't tell me again" (the key is in settings.js's dismissal list, so
+  // Reset brings it back). Cuts are left alone: they mean to move the text.
+  const DELETION = /^delete(Content|Word|SoftLine|HardLine|EntireSoftLine)/;
+  const HINT_KEY = 'noStrikeHint';
+  let hintShown = false;
+  document.addEventListener('beforeinput', (e) => {
+    if (hintShown || !e.target || e.target.id !== 'hypertranscript') return;
+    if (!DELETION.test(e.inputType || '')) return;
+    if (localStorage.getItem(HINT_KEY) === 'true') return;
+    if (!window.HyperaudioSave || typeof window.HyperaudioSave.dialog !== 'function') return;
+    if (wholeTimedWords(deletionRange(e), e.target) === 0) return;
+    hintShown = true;
+    // after the deletion has happened: the dialog takes focus, and taking it
+    // inside beforeinput would be taking it from the edit
+    setTimeout(() => {
+      window.HyperaudioSave.dialog(
+        hintMessage(),
+        {
+          title: 'Deleted from the text, not the media',
+          confirmLabel: 'OK',
+          cancelLabel: "Don't tell me again",
+          dismissResult: true,
+        }
+      ).then((result) => {
+        if (result === false) localStorage.setItem(HINT_KEY, 'true');
+      });
+    }, 0);
+  });
+
+  // The hint's sentence, with the toolbar button's own icon in it, so the
+  // picture in the dialog is the button to look for. Built as nodes: the
+  // dialog takes no markup. Without the button on the page, words alone.
+  function hintMessage() {
+    const svg = document.querySelector('#strikethrough svg');
+    const first = document.createElement('p');
+    first.textContent = 'Deleting corrects the text.';
+    const second = document.createElement('p');
+    second.style.marginTop = '12px';
+    second.append('To cut words from the audio and video, strike them out by selecting them and ');
+    if (svg !== null) {
+      // the icon in a small bordered box, so it reads as the button it is
+      const button = document.createElement('span');
+      button.setAttribute('aria-hidden', 'true');
+      button.style.cssText = 'display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;'
+        + ' border:1px solid currentColor; border-radius:6px; opacity:0.85; vertical-align:-3px; margin:0 3px';
+      const icon = svg.cloneNode(true);
+      icon.setAttribute('width', '16');
+      icon.setAttribute('height', '16');
+      button.append(icon);
+      second.append('using the ', button, ` button or ${STRIKE_SHORTCUT}.`);
+    } else {
+      second.append(`using the strike-out button or ${STRIKE_SHORTCUT}.`);
+    }
+    const message = document.createDocumentFragment();
+    message.append(first, second);
+    return message;
+  }
+
+  // What the deletion is about to remove. The browser says so in the event's
+  // target ranges, which is how a word deleted from a collapsed caret with
+  // ⌥⌫ (deleteWordBackward) counts: the selection is empty at that moment.
+  // A browser without them falls back to the selection.
+  function deletionRange(e) {
+    const targets = typeof e.getTargetRanges === 'function' ? e.getTargetRanges() : [];
+    if (targets.length > 0) {
+      try {
+        const range = document.createRange();
+        range.setStart(targets[0].startContainer, targets[0].startOffset);
+        range.setEnd(targets[0].endContainer, targets[0].endOffset);
+        return range;
+      } catch (err) { /* a range the document no longer holds: the selection then */ }
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    return selection.getRangeAt(0);
+  }
+
+  // How many timed words the range covers whole (their letters, not the
+  // space after them), speaker labels aside.
+  function wholeTimedWords(range, transcript) {
+    if (range === null || range.collapsed) return 0;
+    let count = 0;
+    transcript.querySelectorAll('span[data-m]').forEach((span) => {
+      if (span.classList.contains('speaker') || !(parseInt(span.getAttribute('data-d'), 10) > 0)) return;
+      if (!range.intersectsNode(span)) return;
+      const text = span.firstChild;
+      if (!text || text.nodeType !== Node.TEXT_NODE) return;
+      const letters = text.data.trimEnd().length;
+      if (letters === 0) return;
+      const word = document.createRange();
+      word.setStart(text, 0);
+      word.setEnd(text, letters);
+      try {
+        if (range.compareBoundaryPoints(Range.START_TO_START, word) <= 0
+            && range.compareBoundaryPoints(Range.END_TO_END, word) >= 0) count += 1;
+      } catch (err) { /* different roots: not this span */ }
+    });
+    return count;
+  }
 
   function applyGapSettings() {
     const enabledEl = document.querySelector('#remove-gaps-enabled');
@@ -572,6 +708,53 @@
     skipListenersAttached = true;
   }
 
+  // A skip's seek is asynchronous (#795): setting currentTime starts it, and
+  // the element keeps playing the OLD position until it lands. From a local
+  // server that is ~18 ms, but from a custom URL scheme in a WKWebView it
+  // measured 96–196 ms, and speech starts ~50 ms into a struck word's span,
+  // so the word's first syllable was heard. Silence the player for the seek
+  // and give the user's own mute state back on seeked (or after 1.5 s, in
+  // case seeked never fires). The flag on the element tells the playbar
+  // (reflectVolume, editor-main.js) not to flash its mute icon meanwhile.
+  //
+  // That still left the first syllable audible in Safari, because WebKit's
+  // media element reports currentTime BEHIND the sound it is producing: a
+  // tone-ladder file tapped through an AnalyserNode changed tone 0.27 s
+  // before currentTime reached the change, consistently, where Chromium was
+  // within 0.02 s. (It is also why the word highlight trails the voice a
+  // little in Safari.) So when currentTime says the cut is 0.26 s away the
+  // ear is already at it, and the ear test on a real recording picked
+  // exactly that figure. In WebKit the mute therefore goes on that much
+  // before the cut and the seek stays at the cut: no kept audio is skipped
+  // and, since the sound really is at the cut by then, nothing of the word
+  // before it is lost. Chromium needs no lead and gets none.
+  const SKIP_LEAD = /AppleWebKit/.test(navigator.userAgent)
+    && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS|Android/.test(navigator.userAgent) ? 0.26 : 0;
+  let skipMute = null;
+  function muteForSkip(player) {
+    if (skipMute !== null) return;
+    const was = player.muted;
+    const done = () => {
+      if (skipMute === null) return;
+      clearTimeout(skipMute.timer);
+      skipMute = null;
+      player.muted = was;
+      delete player.dataset.skipMute;
+    };
+    skipMute = { timer: setTimeout(done, 1500), done };
+    player.dataset.skipMute = '1';
+    player.muted = true;
+    player.addEventListener('seeked', done, { once: true });
+  }
+  function skipTo(player, seconds) {
+    muteForSkip(player);
+    // the unmute waits for THIS seek: when the mute went on during the lead
+    // and the user then seeked into the cut, the listener is on that seek
+    player.removeEventListener('seeked', skipMute.done);
+    player.addEventListener('seeked', skipMute.done, { once: true });
+    player.currentTime = seconds;
+  }
+
   // Use >= on the lower bound so we jump the instant currentTime reaches the
   // struck region — without this the first word can sneak through between
   // RAF ticks.
@@ -585,21 +768,27 @@
     // kept sections, so the silence before the first one — the longest gap in
     // many recordings — played in full even with skipping on.
     if (t + 0.01 < first.start) {
-      myPlayer.currentTime = first.start + 0.05;
+      skipTo(myPlayer, first.start + 0.05);
       kickPlayhead();
       return;
     }
 
+    const lead = SKIP_LEAD;
     for (let i = 0; i < audioDataArray.length - 1; i++) {
       const stop = audioDataArray[i].stop;
       const nextStart = audioDataArray[i + 1].start;
       if (t >= stop && t < nextStart) {
-        myPlayer.currentTime = nextStart + 0.05;
+        skipTo(myPlayer, nextStart + 0.05);
         // The library only listens for play/pause natively, not seeked, so
         // it has no idea we just jumped. Kick its polling chain so the
         // highlight re-locks onto the post-skip word instead of waiting for
         // its stale setTimeout to fire seconds later.
         kickPlayhead();
+        return;
+      }
+      // within the lead of the cut: mute now, seek when it starts
+      if (t >= stop - lead && t < stop) {
+        muteForSkip(myPlayer);
         return;
       }
     }
@@ -609,9 +798,13 @@
     // known duration, and only when the tail was actually cut.
     const duration = myPlayer.duration;
     if (Number.isFinite(last.stop) && Number.isFinite(duration)
-        && t >= last.stop && duration > last.stop + 0.01) {
-      myPlayer.currentTime = duration;
-      kickPlayhead();
+        && duration > last.stop + 0.01) {
+      if (t >= last.stop) {
+        skipTo(myPlayer, duration);
+        kickPlayhead();
+      } else if (t >= last.stop - lead) {
+        muteForSkip(myPlayer);
+      }
     }
   }
 

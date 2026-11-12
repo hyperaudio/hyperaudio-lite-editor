@@ -3,7 +3,7 @@
 // editing it autosaved nowhere and isDirty() answered false. The point of the
 // change is that it now behaves like anything else in Recents.
 import { test, expect } from '@playwright/test';
-import { withoutIntroProject } from './helpers.mjs';
+import { withoutIntroProject, transcriptHtml } from './helpers.mjs';
 
 const rows = (page) => page.evaluate(async () =>
   (await window.HyperaudioSave.library.list()).map((e) => e.name));
@@ -67,4 +67,33 @@ test('a host shipping no intro title gets no intro project (#602)', async ({ pag
 
   expect(await rows(page)).toEqual([]);
   expect(await page.evaluate(() => window.HyperaudioSave.library.currentId())).toBe(null);
+});
+
+test('a host that swaps in its own intro undoes back to that intro, not the markup\'s (#793)', async ({ page }) => {
+  // The host replaces the transcript at DOMContentLoaded: after the page's
+  // scripts took their first undo baseline from the markup, before the seed.
+  await page.addInitScript((html) => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const t = document.getElementById('hypertranscript');
+      if (t !== null) t.innerHTML = html;
+    });
+  }, transcriptHtml([[0, 500, 0, 'HOSTINTRO'], [600, 500, 0, 'own'], [1200, 500, 0, 'words']]));
+  await page.goto('/index.html');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await expect.poll(() => rows(page)).toEqual(['How to use the Editor']);
+
+  // one edit, then undo: the host's intro comes back, never the markup's
+  await page.evaluate(() => {
+    const span = document.querySelector('#hypertranscript span[data-m]');
+    span.textContent = 'EDITED ';
+    span.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect.poll(() => page.evaluate(() => window.transcriptHistory.canUndo())).toBe(true);
+  await page.evaluate(() => window.transcriptHistory.undo());
+  const text = await page.evaluate(() => document.getElementById('hypertranscript').textContent);
+  expect(text).toContain('HOSTINTRO');
+  expect(text).not.toContain('Hyperaudio');
+  // and the means: the seed announced the document, as the open and import paths do
+  expect(await page.evaluate(() => window.transcriptLifecycle.auditLog()
+    .some((e) => e.type === 'identity' && e.detail.origin === 'intro-seed'))).toBe(true);
 });

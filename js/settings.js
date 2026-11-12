@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.47 — last changed in release 1.3.47
  * @license AGPL-3.0-only
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -35,6 +35,7 @@
 (function () {
   const KEY = 'hyperaudioSettings';
   const DEFAULTS = Object.freeze({
+    clickMovesPlayhead: true,   // a click on a word moves the playhead there while paused (#797)
     playOnDoubleClick: false,   // a double-click moves the playhead; does it also play? (#441, #541)
     // Which reading rate the caption editor shows (#639): 'cps', 'wpm' or
     // 'none'. Characters per second is the streaming convention and the
@@ -140,6 +141,7 @@
   // once, forever.
   const DISMISSAL_KEYS = Object.freeze([
     'noCaptionAlert',           // the captions-diverged warning (editor-core, #506)
+    'noStrikeHint',             // the deleted-not-cut hint (editor-audio-cut, #794)
   ]);
 
   // Every localStorage key the app writes, for Reset. Listed rather than
@@ -351,6 +353,12 @@
         set('experimentalFeatures', experimental.checked);
         if (window.HyperaudioExperimental) window.HyperaudioExperimental.apply();
       });
+    }
+
+    const clickSeek = byId('setting-click-moves-playhead');
+    if (clickSeek !== null) {
+      clickSeek.checked = get('clickMovesPlayhead') === true;
+      clickSeek.addEventListener('change', () => set('clickMovesPlayhead', clickSeek.checked));
     }
 
     const toggle = byId('setting-play-on-dblclick');

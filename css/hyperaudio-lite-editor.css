@@ -756,6 +756,14 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-info-btn { display: non
    with the transcript element's top edge (88 at >1120, ~290 at <=948); this
    is that same edge, arrived at through two more offsets. */
 
+/* The greyed strikeout button keeps its pointer events (#679, #794), so its
+   tooltip can say why it is grey. daisyUI's btn-disabled turns them off, which
+   also silenced the tooltip. The click is refused in editor-audio-cut.js. */
+#strikethrough.btn-disabled {
+  pointer-events: auto;
+  cursor: default;
+}
+
 /* Undo/redo (#400): the history module injects ↶/↷ beside the strikethrough
    button, but the top bar has no room to give — especially on mobile. So:
    fine-pointer devices hide them entirely (⌘Z owns undo there; the rule at
@@ -1228,6 +1236,15 @@ label[data-a11y-wired]:focus-visible {
 }
 #view-switch .btn[aria-pressed="true"] {
   color: oklch(var(--bc));
+}
+/* nothing to caption while a transcript is on its way (#787): the captions
+   segment greys and its handler declines the click. Read off the page's own
+   state, since the busy attribute is also cleared outside setTranscriptBusy
+   when the user switches away. */
+body:has(#hypertranscript[aria-busy="true"]) #caption-editor-btn,
+body:has(#hypertranscript[aria-busy="true"]) #caption-editor-btn:hover {
+  color: oklch(var(--bc) / 0.2);
+  cursor: default;
 }
 
 /* Soften the navbar's outline buttons to sit in the same family as the view
@@ -1802,11 +1819,6 @@ body.sidebar-collapsed #project-readonly-badge { left: 12px; }
   color: oklch(var(--pc, 0.98 0 0));
   border-color: transparent;
 }
-
-/* While the tour runs, dialogs appear without their fade or pop, so the
-   cut-out around one is never drawn over a half-shown dialog. */
-body.hyperaudio-touring .modal { transition: none; }
-body.hyperaudio-touring .modal-box { animation: none; transition: none; } /* the box scales up as it opens: not now */
 
 /* A transcript that finished while another project was open (#715): the same
    pill in the same corner, and it stays until closed or until its project is
