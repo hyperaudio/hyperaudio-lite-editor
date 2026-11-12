@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.46 — last changed in release 1.3.46
+ * @version 1.3.47 — last changed in release 1.3.47
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -4098,6 +4098,11 @@
       await acquireProjectLock(session.projectId);
       await writeOriginOnce(getEditorTranscriptJson());
       await commitInitialState(session.projectId);
+      // Announce the document, as the open and import paths do (#793). Undo
+      // history took its baseline from the markup while the page was still
+      // parsing, and a host that swaps in its own intro before the seed runs
+      // would otherwise undo back to the markup's, over the host's media.
+      signalDocumentIdentity('intro-seed');
       updateSaveIndicator();
       return true;
     } catch (e) {
