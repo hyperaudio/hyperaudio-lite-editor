@@ -2164,12 +2164,19 @@
     const msg = el.querySelector('#project-dialog-message');
     msg.style.marginTop = opts.title ? '0' : '22px';
     msg.textContent = '';
-    String(message).split('\n\n').forEach((para, i) => {
-      const pEl = document.createElement('p');
-      pEl.textContent = para;
-      if (i > 0) pEl.style.marginTop = '12px';
-      msg.appendChild(pEl);
-    });
+    // Text, in paragraphs, or a node the caller built (#794: the strike-out
+    // hint puts the toolbar button's own icon in its sentence). A node, not
+    // markup, so no caller can put a string straight into the page.
+    if (message instanceof Node) {
+      msg.appendChild(message);
+    } else {
+      String(message).split('\n\n').forEach((para, i) => {
+        const pEl = document.createElement('p');
+        pEl.textContent = para;
+        if (i > 0) pEl.style.marginTop = '12px';
+        msg.appendChild(pEl);
+      });
+    }
     const confirmBtn = el.querySelector('#project-dialog-confirm');
     const cancelBtn = el.querySelector('#project-dialog-cancel');
     const extraBtn = el.querySelector('#project-dialog-extra');
