@@ -189,6 +189,19 @@ test('a host sets its own lead on window.hyperaudioSkipLead (#800)', async ({ pa
   expect(again.skips[0].from).toBeGreaterThanOrEqual(3.99);
 });
 
+// pause, click the last word before a cut (#797), press play: the playhead
+// sits inside the lead band when play begins, and an early seek would lose
+// the rest of that word and jump. It waits for the cut and mutes instead.
+// Only a playhead that PLAYED into the band gets the early seek.
+test('play from inside the lead band waits for the cut (#800)', async ({ page }) => {
+  await load(page);
+  await page.evaluate(() => { window.hyperaudioSkipLead = 0.5; });
+  const log = await playFrom(page, 3.6);
+  expect(log.skips.length, JSON.stringify(log.skips)).toBe(1);
+  expect(log.skips[0].from).toBeGreaterThanOrEqual(3.99);
+  expect(log.skips[0].flag).toBe('1');
+});
+
 test('the lead never jumps a word while paused (#800)', async ({ page }) => {
   await load(page);
   await page.evaluate(() => { window.hyperaudioSkipLead = 0.5; });

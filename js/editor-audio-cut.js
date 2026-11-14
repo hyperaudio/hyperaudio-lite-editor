@@ -704,6 +704,11 @@
     // paused, or where RAF hasn't ticked yet at the boundary.
     myPlayer.addEventListener("seeked", () => checkStrikeThrus(myPlayer));
     myPlayer.addEventListener("timeupdate", () => checkStrikeThrus(myPlayer));
+    // a seek that is not the skip's own disarms the early seek (#800)
+    myPlayer.addEventListener("seeking", () => {
+      if (ownSeekTarget === null || Math.abs(myPlayer.currentTime - ownSeekTarget) > 0.001) approachArmed = -1;
+      ownSeekTarget = null;
+    });
 
     skipListenersAttached = true;
   }
@@ -744,6 +749,14 @@
     && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS|Android/.test(navigator.userAgent) ? 0.27 : 0;
   const LAND_BEFORE = 0.03;
   const LAND_EPS = 0.005; // a seek that lands a hair early is still landed
+  // The early seek is for a playhead that PLAYED into the lead band. One that
+  // arrived there by a seek, or sat there when play began (pause, click the
+  // last word before a cut, play, #797), would lose the rest of that word and
+  // visibly jump, so it waits for the cut and mutes instead. A check that
+  // finds the playhead in a kept section ahead of its band arms that
+  // section; a seek that is not the skip's own disarms.
+  let approachArmed = -1;
+  let ownSeekTarget = null;
   function skipLead() {
     const host = window.hyperaudioSkipLead;
     return typeof host === 'number' && host >= 0 && host <= 1 ? host : WEBKIT_LEAD;
@@ -780,6 +793,8 @@
       player.removeEventListener('seeked', skipMute.done);
       player.addEventListener('seeked', skipMute.done, { once: true });
     }
+    ownSeekTarget = seconds;
+    approachArmed = -1;
     player.currentTime = seconds;
     // The library only listens for play/pause natively, not seeked, so it
     // has no idea we just jumped. Kick its polling chain so the highlight
@@ -796,10 +811,12 @@
     const t = myPlayer.currentTime;
     const first = audioDataArray[0];
     const last = audioDataArray[audioDataArray.length - 1];
-    const lead = myPlayer.paused ? 0 : skipLead();
-    // a kept section shorter than two leads would lose its words to an early
-    // seek: it waits for the cut and mutes instead
-    const anticipates = (section) => lead > 0 && section.stop - section.start > lead * 2;
+    const lead = skipLead();
+    // the early seek: while playing, from a section the playhead played
+    // into the band of, and not from a kept section shorter than two leads,
+    // which would lose its words to it. Anything else waits for the cut.
+    const anticipates = (section, i) => lead > 0 && !myPlayer.paused && approachArmed === i
+      && section.stop - section.start > lead * 2;
 
     // The LEADING gap (#577). The loop below only examines the bands BETWEEN
     // kept sections, so the silence before the first one — the longest gap in
@@ -821,22 +838,28 @@
         return;
       }
       // within the lead of the cut: seek now, so the sound jumps at the cut
-      if (t >= section.stop - lead && anticipates(section)) {
-        skipTo(myPlayer, landing, false);
+      if (t >= section.stop - lead) {
+        if (anticipates(section, i)) skipTo(myPlayer, landing, false);
         return;
       }
+      // in the section ahead of its band: playing on from here arms the seek
+      approachArmed = i;
+      return;
     }
 
     // The TRAILING gap (#577): past the last kept section there is nothing to
     // play, so let the media end rather than run out its dead air. Only with a
     // known duration, and only when the tail was actually cut.
     const duration = myPlayer.duration;
+    const lastIndex = audioDataArray.length - 1;
     if (Number.isFinite(last.stop) && Number.isFinite(duration)
         && duration > last.stop + 0.01) {
       if (t >= last.stop) {
         skipTo(myPlayer, duration, true);
-      } else if (t >= last.stop - lead && anticipates(last)) {
-        skipTo(myPlayer, duration, false);
+      } else if (t >= last.stop - lead) {
+        if (anticipates(last, lastIndex)) skipTo(myPlayer, duration, false);
+      } else {
+        approachArmed = lastIndex;
       }
     }
   }
