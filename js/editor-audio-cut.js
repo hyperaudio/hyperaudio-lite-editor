@@ -710,26 +710,50 @@
 
   // A skip's seek is asynchronous (#795): setting currentTime starts it, and
   // the element keeps playing the OLD position until it lands. From a local
-  // server that is ~18 ms, but from a custom URL scheme in a WKWebView it
-  // measured 96–196 ms, and speech starts ~50 ms into a struck word's span,
-  // so the word's first syllable was heard. Silence the player for the seek
-  // and give the user's own mute state back on seeked (or after 1.5 s, in
-  // case seeked never fires). The flag on the element tells the playbar
-  // (reflectVolume, editor-main.js) not to flash its mute icon meanwhile.
+  // server that is ~18 ms, from a custom URL scheme in a WKWebView 80–200 ms.
+  // WebKit's media element also reports currentTime BEHIND the sound it is
+  // producing: a tone ladder (a new pitch every second) tapped through an
+  // AnalyserNode changed pitch before currentTime reached the change, by
+  // ~0.11 s in Safari 26 and in a WKWebView alike (headless WebKit, which
+  // 1.3.47 was tuned on, reads ~0.27 s and is not what users hear), where
+  // Chromium reads true time. (It is also why the word highlight trails the
+  // voice a little in Safari.) So when currentTime says a cut is a lead away
+  // the ear is already at it, and the seek still has to land.
   //
-  // That still left the first syllable audible in Safari, because WebKit's
-  // media element reports currentTime BEHIND the sound it is producing: a
-  // tone-ladder file tapped through an AnalyserNode changed tone 0.27 s
-  // before currentTime reached the change, consistently, where Chromium was
-  // within 0.02 s. (It is also why the word highlight trails the voice a
-  // little in Safari.) So when currentTime says the cut is 0.26 s away the
-  // ear is already at it, and the ear test on a real recording picked
-  // exactly that figure. In WebKit the mute therefore goes on that much
-  // before the cut and the seek stays at the cut: no kept audio is skipped
-  // and, since the sound really is at the cut by then, nothing of the word
-  // before it is lost. Chromium needs no lead and gets none.
-  const SKIP_LEAD = /AppleWebKit/.test(navigator.userAgent)
-    && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS|Android/.test(navigator.userAgent) ? 0.26 : 0;
+  // Two measures, by where the playhead is when the skip fires (#795, #800).
+  // APPROACHING a cut, the skip seeks as soon as currentTime comes within the
+  // lead of it, so the sound jumps at the cut itself: the lead covers the lag
+  // plus the seek, and by ear 0.27 s was right in a WKWebView, where muting
+  // 0.26 s ahead and seeking at the cut still let the first syllable through
+  // and the unmute on seeked clipped the next word. Chromium needs no lead
+  // and gets none. Both figures change with the host (how far currentTime
+  // trails, how long a seek takes), so a host sets its own in seconds on
+  // window.hyperaudioSkipLead, beside hyperaudioLinkSchemes. The lead is for
+  // playback only: a seek by the user while paused never jumps a word.
+  // Already INSIDE a cut (a click or drag into it, or no lead) the skip mutes
+  // the player for the seek and gives the user's own mute state back on
+  // seeked, or after 1.5 s in case seeked never fires. The flag on the
+  // element tells the playbar (reflectVolume, editor-main.js) not to flash
+  // its mute icon meanwhile.
+  //
+  // A skip lands 30 ms BEFORE the next kept word, not 50 ms after it: start
+  // times sit on an engine's frame grid and the sound often begins ahead of
+  // them (#801), so a landing inside the word clipped it. Every band a skip
+  // covers ends at its landing point, so a landing never skips again.
+  const WEBKIT_LEAD = /AppleWebKit/.test(navigator.userAgent)
+    && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS|Android/.test(navigator.userAgent) ? 0.27 : 0;
+  const LAND_BEFORE = 0.03;
+  const LAND_EPS = 0.005; // a seek that lands a hair early is still landed
+  function skipLead() {
+    const host = window.hyperaudioSkipLead;
+    return typeof host === 'number' && host >= 0 && host <= 1 ? host : WEBKIT_LEAD;
+  }
+  // where a skip over the cut [cutStart, start) lands: a margin before the
+  // kept start, or on the start itself when the cut is too short to hold it
+  function landingBefore(start, cutStart) {
+    const landing = start - LAND_BEFORE;
+    return landing > cutStart + LAND_BEFORE ? landing : start;
+  }
   let skipMute = null;
   function muteForSkip(player) {
     if (skipMute !== null) return;
@@ -746,13 +770,22 @@
     player.muted = true;
     player.addEventListener('seeked', done, { once: true });
   }
-  function skipTo(player, seconds) {
-    muteForSkip(player);
-    // the unmute waits for THIS seek: when the mute went on during the lead
-    // and the user then seeked into the cut, the listener is on that seek
-    player.removeEventListener('seeked', skipMute.done);
-    player.addEventListener('seeked', skipMute.done, { once: true });
+  // `inside`: the playhead is already in the cut, so the struck sound plays
+  // until the seek lands unless the player is muted for it
+  function skipTo(player, seconds, inside) {
+    if (inside) {
+      muteForSkip(player);
+      // the unmute waits for THIS seek: a mute from an earlier skip whose
+      // seek has not landed must not come off on that one
+      player.removeEventListener('seeked', skipMute.done);
+      player.addEventListener('seeked', skipMute.done, { once: true });
+    }
     player.currentTime = seconds;
+    // The library only listens for play/pause natively, not seeked, so it
+    // has no idea we just jumped. Kick its polling chain so the highlight
+    // re-locks onto the post-skip word instead of waiting for its stale
+    // setTimeout to fire seconds later.
+    kickPlayhead();
   }
 
   // Use >= on the lower bound so we jump the instant currentTime reaches the
@@ -763,32 +796,33 @@
     const t = myPlayer.currentTime;
     const first = audioDataArray[0];
     const last = audioDataArray[audioDataArray.length - 1];
+    const lead = myPlayer.paused ? 0 : skipLead();
+    // a kept section shorter than two leads would lose its words to an early
+    // seek: it waits for the cut and mutes instead
+    const anticipates = (section) => lead > 0 && section.stop - section.start > lead * 2;
 
     // The LEADING gap (#577). The loop below only examines the bands BETWEEN
     // kept sections, so the silence before the first one — the longest gap in
     // many recordings — played in full even with skipping on.
-    if (t + 0.01 < first.start) {
-      skipTo(myPlayer, first.start + 0.05);
-      kickPlayhead();
-      return;
-    }
-
-    const lead = SKIP_LEAD;
-    for (let i = 0; i < audioDataArray.length - 1; i++) {
-      const stop = audioDataArray[i].stop;
-      const nextStart = audioDataArray[i + 1].start;
-      if (t >= stop && t < nextStart) {
-        skipTo(myPlayer, nextStart + 0.05);
-        // The library only listens for play/pause natively, not seeked, so
-        // it has no idea we just jumped. Kick its polling chain so the
-        // highlight re-locks onto the post-skip word instead of waiting for
-        // its stale setTimeout to fire seconds later.
-        kickPlayhead();
+    if (first.start > 0) {
+      const landing = landingBefore(first.start, 0);
+      if (t < landing - LAND_EPS) {
+        skipTo(myPlayer, landing, true);
         return;
       }
-      // within the lead of the cut: mute now, seek when it starts
-      if (t >= stop - lead && t < stop) {
-        muteForSkip(myPlayer);
+    }
+
+    for (let i = 0; i < audioDataArray.length - 1; i++) {
+      const section = audioDataArray[i];
+      const landing = landingBefore(audioDataArray[i + 1].start, section.stop);
+      if (t >= landing - LAND_EPS) continue;
+      if (t >= section.stop) {
+        skipTo(myPlayer, landing, true);
+        return;
+      }
+      // within the lead of the cut: seek now, so the sound jumps at the cut
+      if (t >= section.stop - lead && anticipates(section)) {
+        skipTo(myPlayer, landing, false);
         return;
       }
     }
@@ -800,10 +834,9 @@
     if (Number.isFinite(last.stop) && Number.isFinite(duration)
         && duration > last.stop + 0.01) {
       if (t >= last.stop) {
-        skipTo(myPlayer, duration);
-        kickPlayhead();
-      } else if (t >= last.stop - lead) {
-        muteForSkip(myPlayer);
+        skipTo(myPlayer, duration, true);
+      } else if (t >= last.stop - lead && anticipates(last)) {
+        skipTo(myPlayer, duration, false);
       }
     }
   }
