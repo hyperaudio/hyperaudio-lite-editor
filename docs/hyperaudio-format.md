@@ -617,6 +617,15 @@ reconciliation offer they didn't earn. Embedder-scheme links are expected in
 already prefers, so shared files stay openable everywhere. In a plain browser
 no scheme is declared and nothing changes.
 
+**Embedder-declared skip lead.** When playback skips a struck stretch, the
+editor seeks a little before the cut, because a media element reports its
+time behind the sound it is producing and a seek takes time to land. How far
+behind, and how long, depend on the host: WebKit trails where Chromium does
+not, and media served over a custom scheme seeks more slowly than media over
+http. The editor's default is 0.27 s in WebKit and none elsewhere. An embedder
+MAY set its own, in seconds, on `window.hyperaudioSkipLead` (0 to 1), measured
+as the sum of its playback lag and its typical seek time.
+
 An embedder that keeps the media itself MAY also answer for a *file the user
 chooses* in an import dialog (Deepgram JSON, SRT, VTT, Whisper JSON) through
 the optional hook `window.hyperaudioMediaUrl(file)`, which returns a URL or
