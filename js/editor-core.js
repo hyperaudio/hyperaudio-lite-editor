@@ -521,6 +521,20 @@
     if (word.parentNode) word.parentNode.classList.add('active');
   });
 
+  // A double-click that plays from a word selects nothing (#804). With the
+  // double-click-to-play setting on, the gesture means "play from here", and
+  // the word it used to select as well brought up the selection bar and hid
+  // the word under the selection colour. The current word's underline now
+  // marks it instead. With the setting off, a double-click selects its word
+  // as before. The second press's default is what makes the selection, so
+  // only that is cancelled: the double-click itself still reaches the player.
+  document.addEventListener('mousedown', (e) => {
+    if (e.detail !== 2 || e.button !== 0 || !(e.target instanceof Element)) return;
+    if (e.target.closest('#hypertranscript span[data-m]:not(.speaker)') === null) return;
+    if (!window.HyperaudioSettings || window.HyperaudioSettings.get('playOnDoubleClick') !== true) return;
+    e.preventDefault();
+  }, true);
+
   // Enter in a transcribe form (#802). The tabs start through labels, not
   // submit buttons, so a form whose only text field is the URL field (Whisper,
   // Parakeet) submits natively on Enter and reloads the page, dialog and

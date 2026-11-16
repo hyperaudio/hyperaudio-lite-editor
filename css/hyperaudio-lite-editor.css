@@ -859,6 +859,21 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
   color: #666;
 }
 
+/* The current word, underlined in the primary colour (#804): the word the
+   player is on while playing, and where play resumes once paused, after a
+   click (#797), a seek or a skip. Drawn as a background line rather than
+   text-decoration, because a struck word's line-through is an inline style
+   that would override an underline, and a background line also sits
+   lower than a spelling checker's squiggle. Saves and downloads strip the
+   class, so it never reaches a file. */
+.hyperaudio-transcript [data-m].active:not(.speaker) {
+  background-image: linear-gradient(oklch(var(--p)), oklch(var(--p)));
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
+  background-position: 0 100%;
+  padding-bottom: 1px;
+}
+
 /* Search: highlight only the matched substring. searchPhrase wraps the match in
    <mark class="search-mark"> and also tags the whole word .search-match. Upstream
    paints .search-mark pink at (0,2,0), so this must outrank it — hence the
