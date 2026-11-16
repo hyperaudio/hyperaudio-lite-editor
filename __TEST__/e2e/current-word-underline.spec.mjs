@@ -67,3 +67,23 @@ test('the current word is underlined in the primary colour, and the line never r
   const saved = await page.evaluate(() => serializeTranscriptHtml(document.getElementById('hypertranscript')));
   expect(saved).not.toContain('active');
 });
+
+test('a setting on the Playback tab turns the underline off, and back on (#804)', async ({ page }) => {
+  await setup(page, false);
+  await word(page, 4).click();
+  await expect(word(page, 4)).toHaveClass(/\bactive\b/);
+  const underlined = () => word(page, 4).evaluate((el) => getComputedStyle(el).backgroundImage.includes('linear-gradient'));
+  expect(await underlined()).toBe(true);
+  await page.click('#settings-btn');
+  await page.click('#settings-tab-playback');
+  const toggle = page.locator('#setting-underline-current-word');
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  expect(await underlined()).toBe(false);
+  expect(await page.evaluate(() => window.HyperaudioSettings.get('underlineCurrentWord'))).toBe(false);
+  // off survives a reload, with no frame of underline
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  expect(await page.evaluate(() => document.documentElement.classList.contains('ha-no-word-underline'))).toBe(true);
+  await page.evaluate(() => window.HyperaudioSettings.set('underlineCurrentWord', true));
+});

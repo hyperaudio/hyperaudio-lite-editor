@@ -148,7 +148,9 @@
     // never behind an open dialog: its own controls can fire the events that
     // bring the bar back
     const dialogOpen = document.querySelector('.modal-toggle:checked') !== null;
-    if (!sel || pointerDown || dismissed || dialogOpen || range === null) { hide(); return; }
+    // a setting on the Application tab turns the bar off (#803)
+    const off = window.HyperaudioSettings && window.HyperaudioSettings.get('selectionBar') === false;
+    if (off || !sel || pointerDown || dismissed || dialogOpen || range === null) { hide(); return; }
     const words = sel.words();
     if (words.length === 0) { hide(); return; }
     const allStruck = words.every(struck);
