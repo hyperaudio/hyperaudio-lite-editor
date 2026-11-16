@@ -865,8 +865,9 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
    text-decoration, because a struck word's line-through is an inline style
    that would override an underline, and a background line also sits
    lower than a spelling checker's squiggle. Saves and downloads strip the
-   class, so it never reaches a file. */
-.hyperaudio-transcript [data-m].active:not(.speaker) {
+   class, so it never reaches a file. A setting on the Playback tab turns
+   it off (html.ha-no-word-underline, js/settings.js). */
+html:not(.ha-no-word-underline) .hyperaudio-transcript [data-m].active:not(.speaker) {
   background-image: linear-gradient(oklch(var(--p)), oklch(var(--p)));
   background-repeat: no-repeat;
   background-size: 100% 2px;

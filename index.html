@@ -61,7 +61,7 @@ If you are creating an open source application under a license compatible with t
   <script src="js/hyperaudio-lite-editor-assemblyai.js?v=1.3.46"></script>
   <script src="js/hyperaudio-lite-editor-parakeet.js?v=1.3.46"></script>
   <script src="js/transcribe-prefs.js?v=1.3.46"></script>
-  <script src="js/settings.js?v=1.3.47"></script>
+  <script src="js/settings.js?v=1.3.48"></script>
   <script src="js/experimental-features.js?v=1.3.44"></script>
   <!-- the tour (#718): driver.js, vendored, and the steps -->
   <script src="js/vendor/driver-1.9.0.js"></script>
@@ -651,6 +651,13 @@ If you are creating an open source application under a license compatible with t
                     </span>
                     <button type="button" id="settings-forget-keys" class="btn btn-sm btn-outline">Forget</button>
                   </div>
+                  <label class="settings-row settings-row-toggle" for="setting-selection-bar">
+                    <span class="settings-text">
+                      Show a floating menu for selected words
+                      <span class="settings-hint">Strike out and Export, just above the words you select.</span>
+                    </span>
+                    <input type="checkbox" id="setting-selection-bar" class="toggle toggle-primary" />
+                  </label>
                   <!-- shown only while something in the page is marked
                        data-experimental (js/experimental-features.js) -->
                   <label class="settings-row settings-row-toggle" for="setting-experimental" id="setting-experimental-row">
@@ -733,6 +740,13 @@ If you are creating an open source application under a license compatible with t
                       <span class="settings-hint">Off: a double-click only moves the playhead there.</span>
                     </span>
                     <input type="checkbox" id="setting-play-on-dblclick" class="toggle toggle-primary" />
+                  </label>
+                  <label class="settings-row settings-row-toggle" for="setting-underline-current-word">
+                    <span class="settings-text">
+                      Underline the current word
+                      <span class="settings-hint">The word the media is on, and where play resumes once paused.</span>
+                    </span>
+                    <input type="checkbox" id="setting-underline-current-word" class="toggle toggle-primary" />
                   </label>
                 </div>
               </div>

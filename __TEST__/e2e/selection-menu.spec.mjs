@@ -205,3 +205,16 @@ test('without the script no bar shows and nothing else minds', async ({ page }) 
   await page.click('#strikethrough');
   expect(await isStruck(page, 4)).toBe(true);
 });
+
+test('a setting on the Application tab turns the bar off (#803)', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => window.HyperaudioSettings.set('selectionBar', false));
+  await select(page, 3, 6);
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 100)));
+  await expect(bar(page)).toBeHidden();
+  // the pill is not part of the bar, and still shows
+  await expect(page.locator('#selection-length')).toBeVisible();
+  await page.evaluate(() => window.HyperaudioSettings.set('selectionBar', true));
+  await select(page, 3, 7);
+  await expect(bar(page)).toBeVisible();
+});
