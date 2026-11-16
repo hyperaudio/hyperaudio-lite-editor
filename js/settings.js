@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.47 — last changed in release 1.3.47
+ * @version 1.3.48 — last changed in release 1.3.48
  * @license AGPL-3.0-only
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -37,6 +37,8 @@
   const DEFAULTS = Object.freeze({
     clickMovesPlayhead: true,   // a click on a word moves the playhead there while paused (#797)
     playOnDoubleClick: false,   // a double-click moves the playhead; does it also play? (#441, #541)
+    underlineCurrentWord: true, // a line under the word the player is on (#804)
+    selectionBar: true,         // Strike out and Export beside a transcript selection (#803)
     // Which reading rate the caption editor shows (#639): 'cps', 'wpm' or
     // 'none'. Characters per second is the streaming convention and the
     // stricter of the two, so it is the default; words per minute is what
@@ -254,6 +256,11 @@
     try { localStorage.setItem(KEY, JSON.stringify(all)); } catch (e) { /* private mode */ }
   }
 
+  // The current word's underline (#804) hangs off a class on the root, set
+  // here in the head so a page that has it off never shows it for a frame.
+  const reflectUnderline = () => document.documentElement.classList.toggle('ha-no-word-underline', get('underlineCurrentWord') === false);
+  reflectUnderline();
+
   const byId = (id) => document.getElementById(id);
 
   const dismissedCount = () => DISMISSAL_KEYS.filter((k) => {
@@ -359,6 +366,19 @@
     if (clickSeek !== null) {
       clickSeek.checked = get('clickMovesPlayhead') === true;
       clickSeek.addEventListener('change', () => set('clickMovesPlayhead', clickSeek.checked));
+    }
+
+    const underline = byId('setting-underline-current-word');
+    if (underline !== null) {
+      underline.checked = get('underlineCurrentWord') !== false;
+      underline.addEventListener('change', () => { set('underlineCurrentWord', underline.checked); reflectUnderline(); });
+    }
+
+    // the selection bar (js/selection-menu.js) reads this at every showing
+    const selectionBar = byId('setting-selection-bar');
+    if (selectionBar !== null) {
+      selectionBar.checked = get('selectionBar') !== false;
+      selectionBar.addEventListener('change', () => set('selectionBar', selectionBar.checked));
     }
 
     const toggle = byId('setting-play-on-dblclick');

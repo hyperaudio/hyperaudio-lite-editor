@@ -859,6 +859,22 @@ html:has(#hypertranscript[aria-busy="true"]) #transcript-redo { display: none; }
   color: #666;
 }
 
+/* The current word, underlined in the primary colour (#804): the word the
+   player is on while playing, and where play resumes once paused, after a
+   click (#797), a seek or a skip. Drawn as a background line rather than
+   text-decoration, because a struck word's line-through is an inline style
+   that would override an underline, and a background line also sits
+   lower than a spelling checker's squiggle. Saves and downloads strip the
+   class, so it never reaches a file. A setting on the Playback tab turns
+   it off (html.ha-no-word-underline, js/settings.js). */
+html:not(.ha-no-word-underline) .hyperaudio-transcript [data-m].active:not(.speaker) {
+  background-image: linear-gradient(oklch(var(--p)), oklch(var(--p)));
+  background-repeat: no-repeat;
+  background-size: 100% 2px;
+  background-position: 0 100%;
+  padding-bottom: 1px;
+}
+
 /* Search: highlight only the matched substring. searchPhrase wraps the match in
    <mark class="search-mark"> and also tags the whole word .search-match. Upstream
    paints .search-mark pink at (0,2,0), so this must outrank it — hence the
@@ -2205,6 +2221,47 @@ html.ha-transcribing #upload-transcribe-btn {
 }
 #selection-length .selection-length-span { opacity: 0.7; }
 #selection-length .selection-length-length { font-weight: 600; }
+/* The bar beside a transcript selection (#803): Strike out and Export.
+   Fixed, placed by js/selection-menu.js above the selection, centred, or
+   below it on touch and when there is no room above. In the corner pill's
+   tint, so the two read as one, with an edge and a shadow to stand apart
+   from the text it sits over. The passage's length stays in the pill. */
+#selection-menu {
+  position: fixed;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: 10px;
+  background-color: color-mix(in oklch, oklch(var(--p)) 10%, #ffffff);
+  color: oklch(var(--bc) / 0.85);
+  border: 1px solid color-mix(in oklch, oklch(var(--p)) 30%, #ffffff);
+  box-shadow: 0 4px 16px oklch(var(--bc) / 0.16);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#selection-menu[hidden] { display: none; }
+#selection-menu button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+#selection-menu button:hover { background-color: color-mix(in oklch, oklch(var(--p)) 20%, #ffffff); }
+#selection-menu button:focus-visible { outline: 2px solid oklch(var(--p)); outline-offset: 1px; }
+#selection-menu button[hidden] { display: none; }
+#selection-menu button svg { width: 16px; height: 16px; flex: 0 0 auto; }
 /* The caption editor's rows (#773): one cue per row, as wide as the
    transcript with its timecodes showing. */
 #captions-display {

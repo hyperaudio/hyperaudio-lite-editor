@@ -1,7 +1,7 @@
-// #775 — how long the selected passage runs, shown just under the selection
-// while something is selected: the selected words' times, and the length a
-// clip of them would be exported at, struck words and skipped silences left
-// out. The same reading as the Export dialog's Selection option.
+// #775 — how long the selected passage runs, shown in the transcript card's
+// corner while something is selected: the selected words' times, and how
+// long they play for, struck words and skipped silences left out. To a tenth
+// of a second, and for a single word too.
 import { test, expect } from '@playwright/test';
 import { transcriptHtml } from './helpers.mjs';
 
@@ -36,11 +36,11 @@ test('a selection shows its times and its length, and follows the selection as i
   await setup(page);
   await select(page, 3, 6);                   // w3..w6: 3s to 7s
   await expect(chip(page)).toBeVisible();
-  await expect(span(page)).toHaveText('0:03–0:07');
-  await expect(length(page)).toHaveText('0:04');
+  await expect(span(page)).toHaveText('0:03.0–0:07.0');
+  await expect(length(page)).toHaveText('0:04.0');
   await select(page, 3, 9);                   // widened: 3s to 10s
-  await expect(length(page)).toHaveText('0:07');
-  await expect(span(page)).toHaveText('0:03–0:10');
+  await expect(length(page)).toHaveText('0:07.0');
+  await expect(span(page)).toHaveText('0:03.0–0:10.0');
   await clear(page);
   await expect(chip(page)).toBeHidden();
 });
@@ -69,8 +69,8 @@ test('the length leaves out struck words, as the exported clip does', async ({ p
   const words = WORDS.map(([m, d]) => [m, d, m === 4000 || m === 5000 ? 1 : 0]);
   await setup(page, words);
   await select(page, 3, 6);
-  await expect(span(page)).toHaveText('0:03–0:07');
-  await expect(length(page)).toHaveText('0:02');
+  await expect(span(page)).toHaveText('0:03.0–0:07.0');
+  await expect(length(page)).toHaveText('0:02.0');
 });
 
 test('a selection of struck words only shows nothing', async ({ page }) => {
@@ -80,11 +80,11 @@ test('a selection of struck words only shows nothing', async ({ page }) => {
   await expect(chip(page)).toBeHidden();
 });
 
-test('it reads as the Export dialog does', async ({ page }) => {
+test('it measures the words themselves, where the Export dialog adds its padding and rounds to seconds', async ({ page }) => {
   await setup(page);
   await select(page, 2, 8);
-  await expect(length(page)).toHaveText('0:07');
-  const shown = await span(page).textContent();
+  await expect(span(page)).toHaveText('0:02.0–0:09.0');
+  await expect(length(page)).toHaveText('0:07.0');
   await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
   await page.evaluate(() => {
     document.activeElement && document.activeElement.blur();
@@ -93,11 +93,20 @@ test('it reads as the Export dialog does', async ({ page }) => {
     m.dispatchEvent(new Event('change'));
   });
   await page.waitForFunction(() => document.getElementById('export-format').options.length > 0, null, { timeout: 60000 });
-  await expect(page.locator('#export-clip-summary')).toHaveText(`(${shown}, 0:07)`);
+  await expect(page.locator('#export-clip-summary')).toHaveText('(0:02–0:09, 0:07)');
 });
 
-// #776 — a single word is a double-click as often as a choice: nothing is
-// shown for it, and Export offers it without choosing it
+test('a short word reads to a tenth of a second', async ({ page }) => {
+  // the sixth word runs 5.000 to 5.340
+  const words = WORDS.map(([m, d]) => [m, m === 5000 ? 340 : d, 0]);
+  await setup(page, words);
+  await select(page, 5, 5);
+  await expect(span(page)).toHaveText('0:05.0–0:05.3');
+  await expect(length(page)).toHaveText('0:00.3');
+});
+
+// #776 — a single word is a double-click as often as a choice: Export offers
+// it without choosing it. The pill measures it, to check a word's timing.
 const openExport = async (page) => {
   await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
   await page.evaluate(() => {
@@ -114,11 +123,11 @@ const closeExport = (page) => page.evaluate(() => {
   m.dispatchEvent(new Event('change'));
 });
 
-test('a single word shows no length, and Export offers it as a clip without choosing it (#776)', async ({ page }) => {
+test('a single word shows its length, and Export offers it as a clip without choosing it (#776)', async ({ page }) => {
   await setup(page);
   await select(page, 5, 5);
-  await page.evaluate(() => new Promise((r) => setTimeout(r, 100)));
-  await expect(chip(page)).toBeHidden();
+  await expect(span(page)).toHaveText('0:05.0–0:06.0');
+  await expect(length(page)).toHaveText('0:01.0');
   expect(await page.evaluate(() => window.TranscriptSelection.slight())).toBe(true);
   await openExport(page);
   await expect(page.locator('#export-source-clip-row')).toBeVisible();
@@ -130,7 +139,7 @@ test('a single word shows no length, and Export offers it as a clip without choo
   await closeExport(page);
   // two words are a choice: measured, and chosen
   await select(page, 5, 6);
-  await expect(length(page)).toHaveText('0:02');
+  await expect(length(page)).toHaveText('0:02.0');
   await openExport(page);
   expect(await page.evaluate(() => document.getElementById('export-source-clip').checked)).toBe(true);
 });
