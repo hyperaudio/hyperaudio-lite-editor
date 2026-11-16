@@ -1,14 +1,16 @@
 /**
  * selection-length.js
  * (C) The Hyperaudio Project
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.48 — last changed in release 1.3.48
  * @license AGPL-3.0-only
  *
  * How long the selected passage runs (#775), shown in the transcript card's
  * bottom-right corner while something is selected in the transcript: the
- * selected words' own times, and the length a clip of them would be exported
- * at, with struck words and skipped silences left out, so it is the number
- * the Export dialog's Selection option would show.
+ * selected words' own times, and how long they play for, with struck words
+ * and skipped silences left out. To a tenth of a second, and for a single
+ * word too, so it can be used to check a word's timing. The Export dialog's
+ * Selection option shows whole seconds and adds a tenth of a second of
+ * padding at each end, so the two can differ by that much.
  *
  * The pill is the read-only badge's mirror, and like it sits beside the
  * transcript rather than inside it, so it never becomes part of the content.
@@ -21,6 +23,16 @@
 
   const ID = 'selection-length';
   const player = () => document.getElementById('hyperplayer');
+
+  // m:ss.t, or h:mm:ss.t
+  const tenths = (secs) => {
+    const t = Math.max(0, Math.round(secs * 10));
+    const s = Math.floor(t / 10);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = `${String(s % 60).padStart(2, '0')}.${t % 10}`;
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+  };
 
   // the pill, made when first needed
   const pill = () => {
@@ -61,19 +73,18 @@
     const duration = p !== null && Number.isFinite(p.duration) ? p.duration : Infinity;
     const range = clip.selectedClip(duration);
     if (range === null) { hide(); return; }
-    const length = clip.keptDuration(clip.clipSections(duration, range));
+    // the words' own stretch, without the export's padding
+    const length = clip.keptDuration(clip.clipSections(duration, { start: range.from, end: range.to }));
     // every word struck out, or nothing to speak of: no clip to measure, as
     // the dialog offers none (the padding either side would still count)
     const struck = (w) => (w.style.textDecoration || '').includes('line-through');
     if (length < 0.05 || sel.words().every(struck)) { hide(); return; }
-    // a single word, a double-click as often as a choice, is not measured (#776)
-    if (typeof sel.slight === 'function' && sel.slight()) { hide(); return; }
     const el = pill();
-    const span = `${clip.fmtLen(range.from)}–${clip.fmtLen(range.to)}`;
-    const len = clip.fmtLen(length);
+    const span = `${tenths(range.from)}–${tenths(range.to)}`;
+    const len = tenths(length);
     el.querySelector('.selection-length-span').textContent = span;
     el.querySelector('.selection-length-length').textContent = len;
-    el.title = `Selected ${span}, ${len} as a clip`;
+    el.title = `Selected ${span}, playing for ${len}`;
     if (el.hidden) el.hidden = false;
   };
 
