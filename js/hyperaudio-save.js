@@ -3,7 +3,7 @@
  * .hyperaudio PROJECT SAVE — format, container, OPFS working copy, UI
  * ============================================================================
  *
- * @version 1.3.47 — last changed in release 1.3.47
+ * @version 1.3.50 — last changed in release 1.3.50
  *
  * Implements the .hyperaudio format v1.2 (normative spec:
  * docs/hyperaudio-format.md — originated in issue #403). 1.1 added media.kind
@@ -4448,6 +4448,25 @@
           }
         });
       });
+
+    // A file left in a dialog's input from an earlier run fires no change,
+    // so the session still held the open project's File when the next run
+    // started, and the new project took that project's name and media while
+    // the engine sent the file in the input (#809). The input is read again
+    // when a transcribe button is pressed: capture phase, so before the
+    // engine's own click handler gives the busy signal. A file in the input
+    // wins at submit in every engine, so this follows what is being sent.
+    document.addEventListener('click', (e) => {
+      if (!(e.target instanceof Element)) return;
+      const submit = e.target.closest(SUBMIT_LABELS);
+      if (submit === null || submit.classList.contains('btn-disabled')) return;
+      const form = submit.closest('form');
+      const input = form !== null ? form.querySelector('input[type="file"]') : null;
+      if (input === null || !input.files || input.files.length !== 1) return;
+      if (session.mediaFile === input.files[0]) return;
+      session.mediaFile = input.files[0];
+      session.mediaFileFromUrl = null;
+    }, true);
 
     // Reconciliation trigger for link projects (§ 7.3): the URL doesn't need
     // CORS to play, so reachability can only be judged by the player itself.
