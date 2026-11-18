@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.51 — last changed in release 1.3.51
  * @license AGPL-3.0-only
  */
 
@@ -83,6 +83,23 @@ function loadWhisperClient(modal, workerBaseUrl) {
   const modelNameSelectionInput = document.getElementById("model-name-input");
   const languageSelectionInput = document.getElementById("whisper-language");
   const videoPlayer = document.getElementById("hyperplayer");
+
+  // The language menu groups Whisper's languages by its published FLEURS
+  // error rates (#811). A language from the Experimental group shows a note
+  // under the menu. The remembered language is restored without a change
+  // event (transcribe-prefs.js), so the note is also checked when the
+  // Transcribe dialog opens.
+  const languageNote = document.getElementById("whisper-language-note");
+  const showLanguageNote = () => {
+    if (languageSelectionInput === null || languageNote === null) return;
+    const chosen = languageSelectionInput.selectedOptions[0];
+    languageNote.hidden = !(chosen && chosen.closest("optgroup[data-low-accuracy]"));
+  };
+  if (languageSelectionInput !== null) languageSelectionInput.addEventListener("change", showLanguageNote);
+  document.addEventListener("change", (e) => {
+    if (e.target && e.target.id === "transcribe-modal" && e.target.checked) showLanguageNote();
+  });
+  showLanguageNote();
 
 
   if (workerBaseUrl === undefined || workerBaseUrl === null) {
