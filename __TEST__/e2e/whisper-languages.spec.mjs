@@ -1,6 +1,6 @@
 // #811 — the local Whisper tab lists all 99 of Whisper's languages, grouped
-// by its published FLEURS error rates into Good and Experimental, and a note
-// shows under the menu when an Experimental language is chosen, including
+// by its published FLEURS error rates into Good and Lower accuracy, and a note
+// shows under the menu when a Lower accuracy language is chosen, including
 // one remembered from an earlier visit.
 import { test, expect } from '@playwright/test';
 
@@ -32,7 +32,7 @@ test('every Whisper language is listed once, English and Auto-detect first, then
   });
   expect(menu.top).toEqual(['en', '']);
   expect(menu.selected).toBe('en');
-  expect(menu.groups.map((g) => [g.label, g.experimental])).toEqual([['Good', false], ['Experimental – expect heavy correction', true]]);
+  expect(menu.groups.map((g) => [g.label, g.experimental])).toEqual([['Good', false], ['Lower accuracy – expect heavy correction', true]]);
   const all = menu.groups.flatMap((g) => g.values);
   expect(all.length + 1).toBe(99);
   expect(new Set(all).size).toBe(all.length);
@@ -43,11 +43,11 @@ test('every Whisper language is listed once, English and Auto-detect first, then
   ['te', 'ta', 'bn', 'mr', 'kn', 'ml', 'ur', 'gu', 'pa'].forEach((c) => expect(all).toContain(c));
   expect(group('fr')).toBe('Good');
   expect(group('ta')).toBe('Good');
-  expect(group('te')).toMatch(/^Experimental/);
-  expect(group('he')).toMatch(/^Experimental/);
+  expect(group('te')).toMatch(/^Lower accuracy/);
+  expect(group('he')).toMatch(/^Lower accuracy/);
 });
 
-test('an Experimental language shows the note, a Good one does not (#811)', async ({ page }) => {
+test('a Lower accuracy language shows the note, a Good one does not (#811)', async ({ page }) => {
   await openWhisperTab(page);
   const note = page.locator('#whisper-language-note');
   await expect(note).toBeHidden();
@@ -60,7 +60,7 @@ test('an Experimental language shows the note, a Good one does not (#811)', asyn
   await expect(note).toBeHidden();
 });
 
-test('a remembered Experimental language shows the note when the dialog opens (#811)', async ({ page }) => {
+test('a remembered Lower accuracy language shows the note when the dialog opens (#811)', async ({ page }) => {
   // the remembered choice comes back without a change event, as transcribe-prefs.js restores it
   await page.evaluate(() => { document.getElementById('whisper-language').value = 'gu'; });
   await openWhisperTab(page);
