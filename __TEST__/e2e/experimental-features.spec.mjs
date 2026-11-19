@@ -1,8 +1,9 @@
-// Settings ▸ Experimental features (js/experimental-features.js). Nothing in
-// the shipped page is experimental today, so the switch's row is hidden and
+// Settings ▸ Experimental features (js/experimental-features.js). The More
+// languages tab is experimental (#815), so the switch's row is shown, and
 // the larger Whisper models are always offered (#462 let them out). The
 // mechanism is tested with a stand-in: an experimental option added to the
-// Whisper menu before the module runs.
+// Whisper menu before the module runs. The tab has its own spec,
+// more-languages.spec.mjs.
 import { test, expect } from '@playwright/test';
 
 const models = (page) => page.evaluate(() => [...document.querySelectorAll('#model-name-input option')].map((o) => o.value));
@@ -21,9 +22,20 @@ const withStandIn = (page) => page.addInitScript(() => {
   });
 });
 
-test('with nothing experimental, the switch is hidden and Small and Turbo are always offered', async ({ page }) => {
+test('the switch is offered while something is experimental, and Small and Turbo are always offered', async ({ page }) => {
   await ready(page);
   expect(await models(page)).toEqual(['tiny', 'base', 'small', 'turbo']);
+  expect(await rowShown(page)).toBe(true);
+});
+
+test('with nothing marked experimental, the switch is hidden', async ({ page }) => {
+  // the page with its experimental markings taken off before the module runs
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('[data-experimental]').forEach((el) => el.removeAttribute('data-experimental'));
+    });
+  });
+  await ready(page);
   expect(await rowShown(page)).toBe(false);
 });
 
