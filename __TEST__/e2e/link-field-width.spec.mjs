@@ -32,7 +32,7 @@ test('the transcribe dialogs\' link fields take the dialog\'s width', async ({ p
   expect(field.width).toBeGreaterThanOrEqual(field.parentWidth - 2);
   // every link field in the page carries the same mark, so the paste rule reaches them all
   const marked = await page.evaluate(() => Array.from(document.querySelectorAll('input.media-link')).map((el) => el.id).sort());
-  expect(marked).toEqual(['assemblyai-media', 'deepgram-json-media', 'deepgram-media', 'media', 'parakeet-hf-media', 'parakeet-media', 'srt-media', 'vtt-media', 'whisper-json-media']);
+  expect(marked).toEqual(['assemblyai-media', 'deepgram-json-media', 'deepgram-media', 'media', 'more-languages-media', 'parakeet-hf-media', 'parakeet-media', 'srt-media', 'vtt-media', 'whisper-json-media']);
   expect(await page.evaluate(() => Array.from(document.querySelectorAll('input.media-link')).every((el) => getComputedStyle(el).maxWidth === 'none'))).toBe(true);
 });
 

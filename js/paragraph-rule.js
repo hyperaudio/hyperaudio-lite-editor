@@ -1,7 +1,7 @@
 /**
  * paragraph-rule.js
  * (C) The Hyperaudio Project
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.52 — last changed in release 1.3.52
  * @license AGPL-3.0-only
  *
  * Where a transcript's paragraphs start (#743). One rule for every engine and
@@ -19,6 +19,12 @@
  * when the next begins and a speaker's pause between sections comes out as
  * one to two seconds, never four. Without it a 64 s talk with six clear
  * section breaks was one paragraph until the 100-word line.
+ *
+ * A transcript with no sentence end anywhere in it (an engine that writes no
+ * punctuation, such as Swecha Gonthuka for Telugu, #815) breaks on the same
+ * pauses and the same 100-word line without waiting for one, or it would be
+ * a single paragraph however long it ran. One sentence end anywhere puts the
+ * whole transcript back under the rule above.
  *
  * words: [{ start, end, text, speaker? }], times in seconds, in order.
  * Returns a Set of the indices of the words a new paragraph starts AT (the
@@ -47,6 +53,7 @@
   function paragraphStarts(words) {
     const starts = new Set();
     const list = Array.isArray(words) ? words : [];
+    const unpunctuated = !list.some((word) => endsSentence(word.text));
     let previousEnd = 0;
     let wordsInParagraph = 0;
     for (let i = 0; i < list.length; i += 1) {
@@ -59,7 +66,7 @@
         } else if (((previousEnd !== 0 && (word.start - previousEnd) > SIGNIFICANT_GAP_SECONDS)
             || (previousEnd !== 0 && (word.start - previousEnd) > SHORT_GAP_SECONDS && wordsInParagraph > WORDS_BEFORE_SHORT_GAP_COUNTS)
             || wordsInParagraph > MAX_WORDS_IN_PARAGRAPH)
-            && endsSentence(list[i - 1].text)) {
+            && (unpunctuated || endsSentence(list[i - 1].text))) {
           starts.add(i);
           wordsInParagraph = 0; // as the Parakeet loop reset it: the word just placed is not counted
         }

@@ -1,7 +1,7 @@
 /**
  * transcribe-from-project.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.52 — last changed in release 1.3.52
  * @license AGPL-3.0-only
  *
  * Retranscribe, from a Recents row (#677): opens the project, then the
@@ -32,8 +32,8 @@
 (function () {
   'use strict';
 
-  const FILE_INPUTS = ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file'];
-  const URL_INPUTS = ['#media', '#parakeet-media', '#deepgram-media', '#assemblyai-media', '#parakeet-hf-media'];
+  const FILE_INPUTS = ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file', '#more-languages-file'];
+  const URL_INPUTS = ['#media', '#parakeet-media', '#deepgram-media', '#assemblyai-media', '#parakeet-hf-media', '#more-languages-media'];
 
   function fileInputs(file) {
     FILE_INPUTS.forEach((selector) => {

@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 1.3.44 */
+/*! Hyperaudio Lite Editor - paragraph-level timecodes. @version 1.3.52 */
 
 // Self-contained, modular display feature. To remove it entirely: delete this
 // file, its <script> tag in index.html, and the #show-timecodes checkbox.
@@ -261,6 +261,14 @@
         enabled = checkbox.checked;
         reposition();
       });
+    }
+
+    // Hiding or showing speaker labels (editor-core.js) only changes their
+    // style, which nothing below notices, yet a paragraph can gain or lose a
+    // line, so the timecodes under it would stay where they were (#817).
+    const speakers = document.getElementById('show-speakers');
+    if (speakers) {
+      speakers.addEventListener('change', trigger);
     }
 
     const holder = holderEl();

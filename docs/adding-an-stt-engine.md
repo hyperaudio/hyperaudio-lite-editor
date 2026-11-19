@@ -1,8 +1,9 @@
 # Adding a speech-to-text engine
 
-The editor transcribes with five engines today: Parakeet and Whisper in the
-browser, and AssemblyAI, Deepgram and Hugging Face or DeepInfra (Nemotron, Whisper, Qwen) in the
-cloud. Each one is two files, and a new engine is the same two files.
+The editor transcribes with six engines today: Parakeet, Whisper and More
+languages (experimental, Swecha Gonthuka for Telugu) in the browser, and
+AssemblyAI, Deepgram and Hugging Face or DeepInfra (Nemotron, Whisper, Qwen) in
+the cloud. Each one is two files, and a new engine is the same two files.
 
 - **A converter**, `js/converters/<name>.js`. A pure function that turns the
   engine's own output into the editor's transcript. No DOM, no network, so it
@@ -343,6 +344,14 @@ between. `js/hyperaudio-lite-editor-parakeet-local.js` with
   the matching table of file URLs by id. The request carries the id, the
   worker rebuilds its sessions when it changes, and `transcribe-prefs.js`
   remembers the select by its element id.
+- **A model for one more language.** The More languages tab
+  (`js/hyperaudio-lite-editor-more-languages.js`, `js/more-languages.worker.js`
+  and `js/converters/wav2vec2.js`, #815) runs wav2vec2 models with a CTC head,
+  each made for one language. A new one of that kind is an entry in
+  `MORE_LANGUAGES_MODELS` in the client and in `MODELS` in the worker, with
+  its files pinned to a commit. Check the model's licence: a model's weights
+  come with their own terms, which reach anyone who runs it. Swecha Gonthuka's
+  are AGPL-3.0.
 - **The service worker's unit test** has a hand-kept list of worker files.
   Add the new worker there as well as to the precache list, or offline use
   breaks while the test passes.

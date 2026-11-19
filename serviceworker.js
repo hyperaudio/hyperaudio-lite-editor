@@ -20,7 +20,7 @@
  */
 'use strict';
 
-const VERSION = '1.3.51';
+const VERSION = '1.3.52';
 const PREFIX = 'hyperaudio-editor-';
 const CACHE = PREFIX + VERSION;
 // the old worker's cache. Finding it means this visitor was pinned.
@@ -35,7 +35,7 @@ const PRECACHE = [
   './', 'manifest.json',
   // styles
   'css/hyperaudio-lite-editor.css', 'css/hyperaudio-lite-player.css', 'css/tailwind-min.css',
-  // the editor's own scripts, and the two transcription workers
+  // the editor's own scripts, and the three transcription workers
   'js/a11y.js', 'js/audio-source.js', 'js/caption-abbreviations.js', 'js/cloud-audio.js',
   'js/caption-speaker-colours.js', 'js/caption.js', 'js/editor-audio-cut.js',
   'js/editor-core.js', 'js/editor-file-menu.js', 'js/editor-main.js',
@@ -43,15 +43,15 @@ const PRECACHE = [
   'js/html-json-converter.js', 'js/hyperaudio-library.js', 'js/transcribe-from-project.js',
   'js/converters/transcript-words.js', 'js/converters/deepgram.js',
   'js/converters/assemblyai.js', 'js/converters/parakeet.js', 'js/converters/whisper.js',
-  'js/converters/whisper-json.js', 'js/converters/captions.js',
+  'js/converters/whisper-json.js', 'js/converters/captions.js', 'js/converters/wav2vec2.js',
   'js/hyperaudio-lite-editor-assemblyai.js', 'js/hyperaudio-lite-editor-deepgram.js',
   'js/hyperaudio-lite-editor-export.js', 'js/hyperaudio-lite-editor-parakeet-local.js',
-  'js/hyperaudio-lite-editor-parakeet.js', 'js/hyperaudio-lite-editor-whisper.js',
+  'js/hyperaudio-lite-editor-parakeet.js', 'js/hyperaudio-lite-editor-whisper.js', 'js/hyperaudio-lite-editor-more-languages.js',
   'js/hyperaudio-lite-extension.js', 'js/hyperaudio-lite.js',
   'js/hyperaudio-push-notification.js', 'js/hyperaudio-save.js', 'js/ionosphere-reader.js',
   'js/language-guess.js', 'js/media-export.js', 'js/media-first-frame.js',
   'js/media-posters.js', 'js/media-unplayable.js', 'js/original-media-download.js', 'js/caption-rows.js',
-  'js/paragraph-timecodes.js', 'js/parakeet.worker.js',
+  'js/paragraph-timecodes.js', 'js/parakeet.worker.js', 'js/more-languages.worker.js',
   'js/paragraph-rule.js', 'js/responsive.js', 'js/search-match.js', 'js/settings.js', 'js/stream-stretch.js', 'js/tour.js', 'js/tpme.js', 'js/transcribe-prefs.js', 'js/transcription-progress.js',
   'js/transcript-bench.js', 'js/transcript-doc-export.js', 'js/transcript-gateway.js',
   'js/transcript-history.js', 'js/transcript-lifecycle.js', 'js/transcript-maintenance.js',
@@ -107,7 +107,8 @@ self.addEventListener('activate', (event) => {
   const activated = (async () => {
     const names = await caches.keys();
     const wasPinned = names.some((name) => LEGACY_CACHES.includes(name));
-    // ours only: the model caches (transformers-cache, parakeet-models-v1)
+    // ours only: the model caches (transformers-cache, parakeet-models-v1,
+    // more-languages-models-v1)
     // belong to the engines, and OPFS is nothing to do with any of this
     await Promise.all(names
       .filter((name) => LEGACY_CACHES.includes(name) || (name.startsWith(PREFIX) && name !== CACHE))

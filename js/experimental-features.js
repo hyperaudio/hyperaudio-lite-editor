@@ -1,7 +1,7 @@
 /**
  * experimental-features.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.52 — last changed in release 1.3.52
  * @license AGPL-3.0-only
  *
  * Settings ▸ Application ▸ Experimental features. Anything in the page marked
@@ -11,7 +11,10 @@
  *
  * An <option> that is selected when it is taken out hands its select back to
  * the select's default (the option marked selected in the markup), with a
- * change event so whoever remembers the choice records the fallback.
+ * change event so whoever remembers the choice records the fallback. A tab's
+ * radio that is checked when it is taken out does the same for its group: the
+ * radio marked checked in the markup takes over (#815), so the dialog never
+ * shows a group with no tab open.
  *
  * The switch's own row in Settings is hidden while nothing in the page is
  * marked, so there is never a switch that does nothing; a setting already on
@@ -53,7 +56,16 @@
       if (!el.isConnected) return;
       const select = el.tagName === 'OPTION' ? el.closest('select') : null;
       const wasSelected = select !== null && el.selected;
+      const radioGroup = el.tagName === 'INPUT' && el.type === 'radio' && el.checked ? el.name : null;
       el.remove();
+      if (radioGroup !== null) {
+        const radios = [...document.querySelectorAll('input[type="radio"]')].filter((r) => r.name === radioGroup);
+        const fallback = radios.find((r) => r.defaultChecked) || radios[0];
+        if (fallback) {
+          fallback.checked = true;
+          fallback.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
       if (wasSelected) {
         const fallback = [...select.options].find((o) => o.defaultSelected) || select.options[0];
         if (fallback) select.value = fallback.value;
