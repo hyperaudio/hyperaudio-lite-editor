@@ -118,7 +118,7 @@ test('remembered API keys are forgotten in one press, fields and toggles include
 test('downloaded models are listed by name and removed one at a time, leaving projects alone', async ({ page }) => {
   // the engines declare their caches and name their models; settings knows none by name
   const declared = await page.evaluate(() => window.HyperaudioModelStores.map((s) => s.engine + ':' + s.cacheName + ':' + typeof s.label).sort());
-  expect(declared).toEqual(['Parakeet:parakeet-models-v1:function', 'Whisper:transformers-cache:function']);
+  expect(declared).toEqual(['More languages:more-languages-models-v1:function', 'Parakeet:parakeet-models-v1:function', 'Whisper:transformers-cache:function']);
 
   await openSettings(page);
   await expect(page.locator('#settings-models-hint')).toHaveText('None downloaded.');
