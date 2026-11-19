@@ -90,7 +90,7 @@
   // transcribing the same file twice) was a silent no-op (#525). Clearing on
   // click makes every pick fire. Wired centrally for the engines' file
   // inputs; the same trick the project-open input has always used.
-  ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file']
+  ['#file-input', '#parakeet-file-input', '#deepgram-file', '#assemblyai-file', '#parakeet-hf-file', '#more-languages-file']
     .forEach((selector) => {
       const el = document.querySelector(selector);
       if (el !== null) el.addEventListener('click', () => { el.value = ''; });

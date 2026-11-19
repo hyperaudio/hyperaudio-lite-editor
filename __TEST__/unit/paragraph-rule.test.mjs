@@ -48,6 +48,8 @@ test('the shared rule chooses exactly what the Parakeet loop chose, over random 
       if (speakers && rnd() < 0.97) w.speaker = rnd() < 0.05 ? 'B' : 'A';
       words.push(w);
     }
+    // a transcript with no sentence end at all has its own clause (#815), tested below
+    if (!words.some((x) => /[.?!]$/.test(x.text))) continue;
     assert.deepEqual([...paragraphStarts(words)], [...oldRule(words)], `case ${t}`);
   }
 });
@@ -60,7 +62,8 @@ test('a change of speaker starts a paragraph, even mid-sentence', () => {
 });
 
 test('a long pause starts a paragraph only after a sentence end', () => {
-  const notAtSentenceEnd = [w(0, 'and'), w(10, 'then')];
+  // a sentence end elsewhere: one with none at all has its own clause (#815)
+  const notAtSentenceEnd = [w(0, 'Yes.'), w(0.4, 'and'), w(10, 'then')];
   assert.deepEqual([...paragraphStarts(notAtSentenceEnd)], []);
   const atSentenceEnd = [w(0, 'done.'), w(10, 'Next')];
   assert.deepEqual([...paragraphStarts(atSentenceEnd)], [1]);
@@ -74,7 +77,9 @@ test('a pause of over a second at a sentence end starts a paragraph once the par
     let at = 0;
     for (let i = 0; i < 60; i += 1) {
       if (i === pauseAt) at += pause;
-      words.push({ start: at, end: at + 0.3, text: i === pauseAt - 1 ? 'end' + punct : 'word' });
+      // the last word ends a sentence, so even the mid-sentence case is a
+      // punctuated transcript (one with none at all has its own clause, #815)
+      words.push({ start: at, end: at + 0.3, text: i === pauseAt - 1 ? 'end' + punct : i === 59 ? 'over.' : 'word' });
       at += 0.3; // edge to edge: the next word starts as this one ends
     }
     return words;
@@ -105,4 +110,20 @@ test('no speakers never reads as a change of speaker, and nothing breaks at the 
   const words = [w(0, 'one.'), w(0.4, 'two.', null), w(0.8, 'three.', ''), w(1.2, 'four.')];
   assert.deepEqual([...paragraphStarts(words)], []);
   assert.deepEqual([...paragraphStarts([])], []);
+});
+
+test('a transcript with no sentence end anywhere breaks on pauses alone (#815)', () => {
+  const words = [w(0, 'one'), w(0.4, 'two'), w(5, 'three'), w(5.4, 'four')];
+  assert.deepEqual([...paragraphStarts(words)], [2]);
+  // and on the 100-word line
+  const long = Array.from({ length: 150 }, (_, i) => w(i * 0.4, 'word'));
+  assert.deepEqual([...paragraphStarts(long)], [100]);
+  // the short-pause clause too, once a paragraph has 20 words
+  const talk = Array.from({ length: 30 }, (_, i) => w(i * 0.4 + (i >= 25 ? 1.5 : 0), 'word'));
+  assert.deepEqual([...paragraphStarts(talk)], [25]);
+});
+
+test('one sentence end anywhere keeps the whole transcript under the punctuated rule (#815)', () => {
+  const words = [w(0, 'one'), w(0.4, 'two'), w(5, 'three'), w(5.4, 'four.')];
+  assert.deepEqual([...paragraphStarts(words)], []);
 });

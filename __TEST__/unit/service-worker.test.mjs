@@ -33,7 +33,7 @@ test('the import map\'s libraries, the workers and the manifest\'s icons are pre
   const imports = Object.values(JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exec(html)[1]).imports)
     .map((u) => u.replace(/^\.\//, ''));
   const icons = JSON.parse(fs.readFileSync(new URL('manifest.json', ROOT), 'utf8')).icons.map((i) => i.src);
-  const workers = ['js/whisper.worker.js', 'js/parakeet.worker.js'];
+  const workers = ['js/whisper.worker.js', 'js/parakeet.worker.js', 'js/more-languages.worker.js'];
   const missing = [...imports, ...icons, ...workers, './', 'manifest.json'].filter((u) => !precache.includes(u));
   assert.deepEqual(missing, []);
 });
