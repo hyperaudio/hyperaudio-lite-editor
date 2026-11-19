@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.51 — last changed in release 1.3.51
+ * @version 1.3.52 — last changed in release 1.3.52
  * @license AGPL-3.0-only
  */
 
@@ -85,7 +85,7 @@ function loadWhisperClient(modal, workerBaseUrl) {
   const videoPlayer = document.getElementById("hyperplayer");
 
   // The language menu groups Whisper's languages by its published FLEURS
-  // error rates (#811). A language from the Experimental group shows a note
+  // error rates (#811). A language from the Lower accuracy group shows a note
   // under the menu. The remembered language is restored without a change
   // event (transcribe-prefs.js), so the note is also checked when the
   // Transcribe dialog opens.
