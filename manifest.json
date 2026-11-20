@@ -1,8 +1,8 @@
 {
   "name":"Hyperaudio Lite Editor",
   "short_name":"HLE",
-  "start_url":"/hyperaudio-lite-editor/index.html",
-  "scope":"/hyperaudio-lite-editor/",
+  "start_url":"index.html",
+  "scope":"./",
   "display":"standalone",
   "background_color":"#6100DF",
   "theme_color":"#6100DF",
