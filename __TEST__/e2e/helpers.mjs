@@ -145,3 +145,16 @@ export async function exportFormats(page) {
     return formats;
   });
 }
+
+// Double-click to play is on by default (#827), and then a double-click on a
+// word selects nothing. A spec that selects a word by double-clicking turns
+// it off before the page loads, keeping any other settings, as a user who
+// prefers double-click to select would have it.
+export async function doubleClickSelects(page) {
+  await page.addInitScript(() => {
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem('hyperaudioSettings')) || {}; } catch (e) { stored = {}; }
+    localStorage.setItem('hyperaudioSettings',
+      JSON.stringify({ ...stored, playOnDoubleClick: false, playOnDoubleClickRevised: true }));
+  });
+}

@@ -6,6 +6,7 @@
 // duration: bold, untimed, hidden with Speakers off. The leftover now moves
 // into the next word span, the emptied original, which still has its timing.
 import { test, expect, webkit, chromium } from '@playwright/test';
+import { doubleClickSelects } from './helpers.mjs';
 
 // the first label of the intro transcript and the word span after it
 const around = (page) => page.evaluate(() => {
@@ -76,6 +77,7 @@ test('WebKit: the first word after a label, deleted and retyped, is a word (#792
   }
   try {
     const page = await (await browser.newContext()).newPage();
+    await doubleClickSelects(page);   // the word is selected by a double-click (#827)
     await page.goto('http://localhost:4173/index.html');
     await page.waitForSelector('#hypertranscript .speaker');
     const before = await around(page);

@@ -1,7 +1,7 @@
 /**
  * settings.js
  * (C) The Hyperaudio Project
- * @version 1.3.48 — last changed in release 1.3.48
+ * @version 1.3.53 — last changed in release 1.3.53
  * @license AGPL-3.0-only
  *
  * The settings modal (#615): the user's choices, as opposed to the project's.
@@ -36,7 +36,10 @@
   const KEY = 'hyperaudioSettings';
   const DEFAULTS = Object.freeze({
     clickMovesPlayhead: true,   // a click on a word moves the playhead there while paused (#797)
-    playOnDoubleClick: false,   // a double-click moves the playhead; does it also play? (#441, #541)
+    playOnDoubleClick: true,    // a double-click moves the playhead; does it also play? (#441, #541, #827)
+    // Marks settings saved since double-click to play became the default
+    // (#827), so the one-time update below leaves them alone.
+    playOnDoubleClickRevised: true,
     underlineCurrentWord: true, // a line under the word the player is on (#804)
     selectionBar: true,         // Strike out and Export beside a transcript selection (#803)
     // Which reading rate the caption editor shows (#639): 'cps', 'wpm' or
@@ -238,6 +241,22 @@
       try { await caches.delete(store.cacheName); } catch (e) { /* already gone */ }
     }
   }
+
+  // Double-click to play from a word was off by default until #827. Every
+  // setting is saved the first time any one is changed, so settings saved
+  // before then nearly always hold that old default without anyone having
+  // chosen it. They are turned on once. Settings saved since carry the mark
+  // from DEFAULTS, so this never runs for them, and a user who turns
+  // double-click off afterwards keeps it off.
+  (function playOnDoubleClickForEveryone() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(KEY));
+      if (stored === null || typeof stored !== 'object' || stored.playOnDoubleClickRevised === true) return;
+      stored.playOnDoubleClick = true;
+      stored.playOnDoubleClickRevised = true;
+      localStorage.setItem(KEY, JSON.stringify(stored));
+    } catch (e) { /* private mode, or settings that do not parse: the defaults apply */ }
+  })();
 
   function readAll() {
     try {

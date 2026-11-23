@@ -46,35 +46,72 @@ test('the gear sits with the icon buttons and opens the modal from the keyboard'
   await expect(page.locator('#settings-storage')).toHaveText(/Using .+ of the .+ this browser allows/);
 });
 
-test('double-click to play is off by default, takes effect live, and survives a reload', async ({ page }) => {
+test('double-click to play is on by default (#827), can be turned off live, and stays off after a reload', async ({ page }) => {
   const stubPlay = () => page.evaluate(() => {
     window.__played = 0;
     document.getElementById('hyperplayer').play = () => { window.__played += 1; return Promise.resolve(); };
   });
   const word = '#hypertranscript span[data-m]:nth-of-type(3)';
 
-  expect(await page.evaluate(() => window.hyperaudioInstance.playOnClick)).toBe(false);
+  expect(await page.evaluate(() => window.hyperaudioInstance.playOnClick)).toBe(true);
   await stubPlay();
   await page.dblclick(word);
-  expect(await page.evaluate(() => window.__played)).toBe(0);   // moved the playhead, did not play
+  expect(await page.evaluate(() => window.__played)).toBeGreaterThan(0);
 
   await openSettings(page, 'playback');
+  expect(await page.evaluate(() => document.getElementById('setting-play-on-dblclick').checked)).toBe(true);
   await page.click('label[for="setting-play-on-dblclick"]');
   expect(await page.evaluate(() => ({
     live: window.hyperaudioInstance.playOnClick,
     stored: JSON.parse(localStorage.getItem('hyperaudioSettings')).playOnDoubleClick,
-  }))).toEqual({ live: true, stored: true });
+  }))).toEqual({ live: false, stored: false });
   await page.evaluate(() => { document.getElementById('settings-modal').checked = false; });
+  await stubPlay();
   await page.dblclick(word);
-  expect(await page.evaluate(() => window.__played)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__played)).toBe(0);   // moved the playhead, did not play
 
-  // the instance is rebuilt on every transcript load; the stored value must win
+  // the instance is rebuilt on every transcript load; the stored value must
+  // win, and the one-time update must not turn it back on
   await page.reload();
   await page.waitForSelector('#hypertranscript [data-m]');
   expect(await page.evaluate(() => ({
     live: window.hyperaudioInstance.playOnClick,
     toggle: document.getElementById('setting-play-on-dblclick').checked,
-  }))).toEqual({ live: true, toggle: true });
+  }))).toEqual({ live: false, toggle: false });
+});
+
+test('settings saved before #827 with double-click off get it turned on once, and the rest are kept', async ({ page }) => {
+  // as a user who changed some other setting before #827 has it: the old
+  // default saved alongside, and no mark
+  await page.evaluate(() => localStorage.setItem('hyperaudioSettings',
+    JSON.stringify({ clickMovesPlayhead: false, playOnDoubleClick: false, captionRate: 'wpm' })));
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  expect(await page.evaluate(() => ({
+    live: window.hyperaudioInstance.playOnClick,
+    stored: JSON.parse(localStorage.getItem('hyperaudioSettings')),
+  }))).toEqual({
+    live: true,
+    stored: { clickMovesPlayhead: false, playOnDoubleClick: true, playOnDoubleClickRevised: true, captionRate: 'wpm' },
+  });
+
+  // turned off afterwards, it stays off: the update has run
+  await page.evaluate(() => window.HyperaudioSettings.set('playOnDoubleClick', false));
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  expect(await page.evaluate(() => window.HyperaudioSettings.get('playOnDoubleClick'))).toBe(false);
+});
+
+test('settings first saved after #827 carry the mark, so turning double-click off is never undone', async ({ page }) => {
+  // nothing stored yet, so the default applies; the first change saves the mark with it
+  await page.evaluate(() => localStorage.removeItem('hyperaudioSettings'));
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(() => window.HyperaudioSettings.set('playOnDoubleClick', false));
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hyperaudioSettings')).playOnDoubleClickRevised)).toBe(true);
+  await page.reload();
+  await page.waitForSelector('#hypertranscript [data-m]');
+  expect(await page.evaluate(() => window.HyperaudioSettings.get('playOnDoubleClick'))).toBe(false);
 });
 
 test('a dismissed warning can be brought back', async ({ page }) => {
@@ -186,7 +223,7 @@ test('reset asks first, keeps everything on cancel, and brings the intro back on
     const lib = window.HyperaudioSave.library;
     await lib.remove(lib.currentId());
     localStorage.setItem('noCaptionAlert', 'true');
-    window.HyperaudioSettings.set('playOnDoubleClick', true);
+    window.HyperaudioSettings.set('playOnDoubleClick', false);
   });
   await expect.poll(() => rows(page)).toEqual([]);
 
@@ -209,7 +246,7 @@ test('reset asks first, keeps everything on cancel, and brings the intro back on
     dismissed: localStorage.getItem('noCaptionAlert'),
     settings: localStorage.getItem('hyperaudioSettings'),
     playOnClick: window.hyperaudioInstance.playOnClick,
-  }))).toEqual({ dismissed: null, settings: null, playOnClick: false });
+  }))).toEqual({ dismissed: null, settings: null, playOnClick: true });   // back to the default (#827)
 });
 
 test('the settings split into tabs, Application first and selected (#615)', async ({ page }) => {
