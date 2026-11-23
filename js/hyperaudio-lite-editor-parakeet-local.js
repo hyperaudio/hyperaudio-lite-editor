@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-parakeet-local.js
  * (C) The Hyperaudio Project
- * @version 1.3.46 — last changed in release 1.3.46
+ * @version 1.3.53 — last changed in release 1.3.53
  * @license AGPL-3.0-only
  */
 
@@ -264,7 +264,10 @@ function loadParakeetClient(modal, workerBaseUrl) {
             }
             // the player is another project's when this finishes off screen (#715)
             if (!(typeof window.hyperaudioTranscriptionInBackground === 'function' && window.hyperaudioTranscriptionInBackground())) {
-              videoPlayer.currentTime = 0;
+              // back to the start, only when it has left it: a move to where it already
+              // is still counts as a seek, and after a seek a video shows its current
+              // frame, often black, instead of its poster (#828)
+              if (videoPlayer.currentTime !== 0) videoPlayer.currentTime = 0;
             }
             parakeetParseData(data.output);
           });
