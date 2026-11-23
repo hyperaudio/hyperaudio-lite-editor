@@ -1012,6 +1012,32 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
   overflow-y: auto;
   border-radius: 0 0 0.5rem 0.5rem;
 }
+/* Where the editor comes from (#44): a faint GitHub mark at the far right of
+   the play bar. The mark is faint, not the link, so its tooltip stays fully
+   legible. */
+#github-link svg {
+  opacity: 0.35;
+  transition: opacity 0.15s ease;
+}
+#github-link:hover svg,
+#github-link:focus-visible svg { opacity: 0.8; }
+/* the shared tooltip opens below, for the toolbar; at the bottom right of the
+   screen it opens above, lined up with the mark's right edge */
+#github-link.tooltip::before {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: auto;
+  right: -4px;
+  transform: none;
+}
+#github-link.tooltip::after {
+  top: auto;
+  bottom: calc(100% - 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: transparent;
+  border-top-color: oklch(0.27 0.02 264);
+}
 
 /* The caption editor's floating Regenerate button is injected as
    fixed top-20 right-8 with no z-index, so positioned content (the caption
