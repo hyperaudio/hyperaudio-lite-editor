@@ -1,7 +1,7 @@
 /**
  * tour.js
  * (C) The Hyperaudio Project
- * @version 1.3.47 — last changed in release 1.3.47
+ * @version 1.3.53 — last changed in release 1.3.53
  * @license AGPL-3.0-only
  *
  * A tour of the editor (#718): eight cards, each pointing at one part of the
@@ -39,7 +39,7 @@
     {
       targets: ['#hypertranscript'],
       title: 'The transcript',
-      text: '<p>Click any word to move the playhead there.</p>'
+      text: '<p>Click any word to move the playhead there, or double-click it to play from there.</p>'
         + '<p>Type straight into the transcript to correct it.</p>'
         + '<p>Press Return for a new paragraph.</p>'
         + '<p>Add speaker names between [square brackets].</p>',

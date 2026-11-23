@@ -4,12 +4,13 @@
 // selection, with Escape, with an edit, or when a dialog opens. The
 // passage's length stays in the corner pill (selection-length.spec.mjs).
 import { test, expect } from '@playwright/test';
-import { transcriptHtml } from './helpers.mjs';
+import { transcriptHtml, doubleClickSelects } from './helpers.mjs';
 
 // one word a second, twelve seconds
 const WORDS = Array.from({ length: 12 }, (_, i) => [i * 1000, 1000, 0]);
 
 const setup = async (page, words = WORDS) => {
+  await doubleClickSelects(page);   // the bar's double-click cases select a word that way (#827)
   await page.goto('/index.html');
   await page.waitForSelector('#hypertranscript [data-m]');
   await page.evaluate((html) => { document.getElementById('hypertranscript').innerHTML = html; }, transcriptHtml(words));
