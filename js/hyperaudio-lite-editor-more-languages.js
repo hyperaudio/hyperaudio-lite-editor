@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-more-languages.js
  * (C) The Hyperaudio Project
- * @version 1.3.52 — last changed in release 1.3.52
+ * @version 1.3.53 — last changed in release 1.3.53
  * @license AGPL-3.0-only
  *
  * The More languages tab (#815): speech-to-text models made for one language
@@ -285,7 +285,11 @@ function loadMoreLanguagesClient(modal, workerBaseUrl) {
     if (!background) {
       const track = document.querySelector('#hyperplayer-vtt');
       if (track) { track.label = language; track.srcLang = language; }
-      document.querySelector("#hyperplayer").currentTime = 0;
+      const player = document.querySelector("#hyperplayer");
+      // back to the start, only when it has left it: a move to where it already
+      // is still counts as a seek, and after a seek a video shows its current
+      // frame, often black, instead of its poster (#828)
+      if (player.currentTime !== 0) player.currentTime = 0;
     }
     if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html, info })) return;
 

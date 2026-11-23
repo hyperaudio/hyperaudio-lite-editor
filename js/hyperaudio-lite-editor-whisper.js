@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-whisper.js
  * (C) The Hyperaudio Project
- * @version 1.3.52 — last changed in release 1.3.52
+ * @version 1.3.53 — last changed in release 1.3.53
  * @license AGPL-3.0-only
  */
 
@@ -381,7 +381,10 @@ function loadWhisperClient(modal, workerBaseUrl) {
     if (typeof window.hyperaudioKeepTranscription === 'function' && window.hyperaudioKeepTranscription({ html })) {
       return;
     }
-    videoPlayer.currentTime = 0;
+    // back to the start, only when it has left it: a move to where it already
+    // is still counts as a seek, and after a seek a video shows its current
+    // frame, often black, instead of its poster (#828)
+    if (videoPlayer.currentTime !== 0) videoPlayer.currentTime = 0;
     const resultsContainer = document.getElementById("hypertranscript");
     resultsContainer.innerHTML = html;
 
