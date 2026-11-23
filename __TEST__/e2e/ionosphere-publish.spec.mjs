@@ -78,7 +78,7 @@ test('publishes the record set to the resolved PDS under the real did, talk last
   const link = page.locator('#ionosphere-view-link');
   await expect(link).toHaveAttribute('target', '_blank');
   const talkUriShown = (await page.locator('#ionosphere-publish-status').textContent()).match(/at:\/\/\S+\/tv\.ionosphere\.talk\/[a-z2-7]{13}/)[0];
-  expect(await link.getAttribute('href')).toBe('viewer/?talk=' + encodeURIComponent(talkUriShown));
+  expect(await link.getAttribute('href')).toBe('viewer/index.html?talk=' + encodeURIComponent(talkUriShown));
 
   expect(calls.session).toEqual([{ identifier: 'mark.example.com', password: 'abcd-efgh-ijkl-mnop' }]);
   expect(calls.writes).toHaveLength(1);
@@ -212,7 +212,7 @@ test('the talk just published is offered for unpublish, and remembered per proje
   await openPublish(page);
   await expect(page.locator('#ionosphere-talk-uri')).toHaveValue(uri);
   await expect(page.locator('#ionosphere-publish-status')).toHaveText('Last published from this project. View it');
-  expect(await page.locator('#ionosphere-view-link').getAttribute('href')).toBe('viewer/?talk=' + encodeURIComponent(uri));
+  expect(await page.locator('#ionosphere-view-link').getAttribute('href')).toBe('viewer/index.html?talk=' + encodeURIComponent(uri));
   expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('hyperaudioIonospherePublish')).talks))).toHaveLength(1);
 });
 

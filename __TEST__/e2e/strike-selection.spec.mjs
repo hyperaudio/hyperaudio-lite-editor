@@ -13,6 +13,7 @@
 // Launches WebKit itself: the suite's default project is Chromium, where this
 // does not reproduce at all.
 import { test, expect, webkit, chromium } from '@playwright/test';
+import { doubleClickSelects } from './helpers.mjs';
 
 const MARKUP = '<article><section><p>'
   + '<span data-m="0" data-d="400">alpha </span>'
@@ -78,6 +79,7 @@ for (const [engineName, engine] of [['WebKit', webkit], ['Chromium', chromium]])
     }
     try {
       const page = await (await browser.newContext()).newPage();
+      await doubleClickSelects(page);   // one of the ways in is a double-click on the word (#827)
       await page.goto('http://localhost:4173/index.html');
       await page.waitForSelector('#hypertranscript [data-m]');
 

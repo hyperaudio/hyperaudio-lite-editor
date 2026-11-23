@@ -1,5 +1,5 @@
 /*! (C) The Hyperaudio Project. AGPL 3.0 @license: https://www.gnu.org/licenses/agpl-3.0.en.html */
-/*! Hyperaudio Lite Editor - ionosphere (AT Protocol) transcript export. @version 1.3.16 — last changed in release 1.3.16 */
+/*! Hyperaudio Lite Editor - ionosphere (AT Protocol) transcript export. @version 1.3.53 — last changed in release 1.3.53 */
 
 // Self-contained, modular export feature. To remove it entirely: delete this
 // file and ionosphere-reader.js, their <script> tags in index.html, and the
@@ -441,8 +441,10 @@
   customElements.define('import-ionosphere', ImportIonosphere);
 
   // The static viewer (#624) is a sibling of the editor, so a relative link
-  // reaches it wherever the editor is served from.
-  const viewerUrl = (talkUri) => 'viewer/?talk=' + encodeURIComponent(talkUri);
+  // reaches it wherever the editor is served from. The link names the file,
+  // not the folder: a host serving files from a storage bucket does not open
+  // a folder's index.html, as GitHub Pages does (#826).
+  const viewerUrl = (talkUri) => 'viewer/index.html?talk=' + encodeURIComponent(talkUri);
 
   // A status line with a "View it" link after the text — the viewer opens in
   // a new tab, leaving the editor where it is.
