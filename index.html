@@ -586,8 +586,8 @@ If you are creating an open source application under a license compatible with t
                  an unbuilt class silently collapses the menu. Wide enough that the
                  longest indented submenu item stays on one line. -->
             <ul id="file-dropdown" tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box" style="width:20rem">
-              <li><a id="upload-transcribe-btn">Upload & Transcribe</a></li>
-              <li><a id="upload-align-btn">Add Transcript</a></li>
+              <li><a id="upload-transcribe-btn">Transcribe…</a></li>
+              <li><a id="upload-align-btn">Corrected text…</a></li>
               <hr
               class="my-2 h-0 border border-t-0 border-solid border-neutral-700 opacity-25 dark:border-neutral-200" />
               <!-- Long output/input lists live in inline-expanding submenus (DaisyUI
@@ -595,8 +595,8 @@ If you are creating an open source application under a license compatible with t
                    all wiring (download links, modal toggles, custom elements) still
                    works. Mirrors the Glider native File menu (#428). -->
               <!-- Import is its own top-level category (#470): inputs sit
-                   above outputs, mirroring Upload & Transcribe / Add
-                   Transcript leading the menu. The former "Export / Import"
+                   above outputs, mirroring Transcribe… / Corrected
+                   text… leading the menu. The former "Export / Import"
                    submenu split in two; ids/targets of the items unchanged so
                    all wiring still works. Project items (.hyperaudio) and the
                    transcript document exports are injected at the top of
@@ -1358,19 +1358,27 @@ If you are creating an open source application under a license compatible with t
   <div class="modal">
     <div class="modal-box">
       <label for="align-modal" class="btn btn-sm btn-circle absolute right-2 top-2" aria-label="Close">✕</label>
-      <h3 class="font-bold text-lg"  style="margin-bottom:16px">Align</h3>
-      
+      <!-- Corrected text (#845, js/corrected-text.js): the ids are the old
+           Align dialog's, kept for anything outside the page that opens it -->
+      <h3 class="font-bold text-lg" style="margin-bottom:8px">Corrected text</h3>
+      <p class="text-sm" style="margin-bottom:16px">For <strong id="align-project-name">this project</strong>. Each word keeps the time of the word it replaces.</p>
+
       <div class="flex flex-col gap-4 w-full">
-        <textarea 
-          id="align-text-input" 
-          name="align-text-input" 
-          placeholder="Paste the transcript text you want to align with the media here..." 
-          class="textarea textarea-bordered w-full h-48" 
+        <textarea
+          id="align-text-input"
+          name="align-text-input"
+          aria-label="Corrected text"
+          placeholder="Paste the corrected text here, or choose a file below"
+          class="textarea textarea-bordered w-full h-48"
           rows="8"></textarea>
+        <label class="form-control w-full">
+          <span class="label-text" style="margin-bottom:4px">Or a file: plain text, SRT or WebVTT</span>
+          <input id="align-file-input" type="file" accept=".txt,.srt,.vtt,text/plain,text/vtt,application/x-subrip" class="file-input w-full" />
+        </label>
       </div>
-      
+
       <div class="modal-action">
-        <button id="align-text-btn" class="btn btn-primary">ALIGN</button>
+        <button id="align-text-btn" class="btn btn-primary">Replace text</button>
       </div>
 
     </div>
@@ -1510,13 +1518,14 @@ If you are creating an open source application under a license compatible with t
 
   <!-- service worker script for PWA -->
   <script src="js/editor-service-worker.js?v=1.3.44"></script>
-  <script type="module" src="js/editor-audio-cut.js?v=1.3.48"></script>
+  <script type="module" src="js/editor-audio-cut.js?v=1.3.55"></script>
 
   <!-- .hyperaudio project save/open + OPFS autosave (spec: docs/format/) -->
   <script src="js/hyperaudio-save.js?v=1.3.52"></script>
   <script src="js/tpme.js?v=1.3.45"></script>
-  <script src="js/hyperaudio-library.js?v=1.3.44"></script>
+  <script src="js/hyperaudio-library.js?v=1.3.55"></script>
   <script src="js/transcribe-from-project.js?v=1.3.52"></script>
+  <script src="js/corrected-text.js?v=1.3.55"></script>
   <script src="js/media-first-frame.js?v=1.3.45"></script>
   <script src="js/media-posters.js?v=1.3.44"></script>
   <script src="js/media-unplayable.js?v=1.3.44"></script>
