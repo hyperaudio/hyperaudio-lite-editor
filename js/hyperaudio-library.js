@@ -3,7 +3,7 @@
  * PROJECT LIBRARY PANEL (#456) — the side panel over the OPFS library
  * ============================================================================
  *
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.55 — last changed in release 1.3.55
  *
  * The management UX of the former Recents (#434/#435/#440), resurrected from
  * its pre-#451 history and rewired: rows list the library index that
@@ -37,6 +37,8 @@
   const STAR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
   // a microphone (lucide "mic"), for Retranscribe (#677)
   const TRANSCRIBE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>';
+  // lines of text with a check (lucide "list-checks"), for Corrected text (#845)
+  const CORRECTED_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>';
   const DELETE_SVG ='<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
   const INFO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg>';
 
@@ -259,6 +261,9 @@
       `<button type="button" role="menuitem" class="recents-menu-rename">${RENAME_SVG}Rename</button>` +
       `<button type="button" role="menuitem" class="recents-menu-duplicate">${DUPLICATE_SVG}Duplicate</button>` +
       `<button type="button" role="menuitem" class="recents-menu-transcribe"${againHint !== '' ? ` disabled aria-disabled="true" title="${escapeMarkup(againHint)}"` : ''}>${TRANSCRIBE_SVG}Retranscribe</button>` +
+      // Corrected text (#845): disabled only while an engine runs; the dialog
+      // it opens says what will change before anything does
+      `<button type="button" role="menuitem" class="recents-menu-corrected"${transcribing ? ' disabled aria-disabled="true" title="A transcription is already running"' : ''}>${CORRECTED_SVG}Corrected text…</button>` +
       '<hr class="recents-menu-sep" aria-hidden="true" />' +
       `<button type="button" role="menuitem" class="recents-menu-delete">${DELETE_SVG}Delete</button>`;
     document.body.appendChild(menu);
@@ -309,6 +314,16 @@
       }
       if (reason !== null && dialog !== null) {
         await dialog(reason, { title: 'Retranscribe', cancelButton: false, confirmLabel: 'OK' });
+      }
+    });
+    menu.querySelector('.recents-menu-corrected').addEventListener('click', async () => {
+      closeMenu();
+      let reason = 'Corrected text is not available on this page.';
+      if (typeof window.hyperaudioCorrectedText === 'function') {
+        try { reason = await window.hyperaudioCorrectedText(entry.id); } catch (e) { reason = 'The project could not be opened.'; }
+      }
+      if (reason !== null && window.HyperaudioSave && typeof window.HyperaudioSave.dialog === 'function') {
+        await window.HyperaudioSave.dialog(reason, { title: 'Corrected text', cancelButton: false, confirmLabel: 'OK' });
       }
     });
     // two-step delete lives inside the menu: first click arms ("Delete?"),
