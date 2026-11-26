@@ -445,11 +445,9 @@ dialog::backdrop {
     overflow-x: auto;
     overflow-y: hidden;
   }
-  /* Keep the floating Regenerate button below the pinned player (its top-20
-     utility class would sit it on the video); tracks the collapse var. */
+  /* the Regenerate button follows the pinned player as it collapses, like
+     the transcript's corner buttons */
   #regenerate-float-btn {
-    top: calc(var(--nav-h) + var(--player-h) + 8px);
-    right: 8px;
     transition: top 0.25s ease;
   }
 
@@ -1039,10 +1037,12 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
   border-top-color: oklch(0.27 0.02 264);
 }
 
-/* The caption editor's floating Regenerate button is injected as
-   fixed top-20 right-8 with no z-index, so positioned content (the caption
-   rows / transcript holder) painted over it. Lift it above content, below
-   the drawer (45) and navbar (60).
+/* The caption editor's floating Regenerate button sits in the pane's
+   top-right corner where the copy button sits in transcript mode, at the
+   same 2rem size (#862). At its old full size it covered the first
+   caption's reading rate in a narrow window. It stays outlined in the
+   primary colour, so it still stands out. Above content, below the drawer
+   (45) and navbar (60).
 
    Solid, not the outline button's transparent fill: it floats over the
    caption rows, which scroll underneath it, and text showing through a
@@ -1050,8 +1050,20 @@ body.find-replace-open .hyperaudio-transcript { padding-top: 108px; }
    Hover keeps DaisyUI's filled-primary inversion, so the affordance is
    unchanged. */
 #regenerate-float-btn {
+  position: fixed;
+  top: calc(var(--card-top) + var(--text-inset));   /* rides the text's top edge, as copy does (#580) */
+  right: 28px;
   z-index: 20;
   background-color: #ffffff;
+}
+@media screen and (max-width: 948px) {
+  #regenerate-float-btn { right: 12px; }   /* copy's inset on this band */
+}
+/* The playing caption is brought into view as the media plays. Seeking back
+   brings it in at the top, so it stops below the Regenerate button rather
+   than under it (#862): the button's offset, its 2rem and a gap. */
+.transcript-holder:has(#captions-display) {
+  scroll-padding-top: calc(var(--text-inset) + 2rem + 8px);
 }
 /* It sits at the right edge, so a centred tooltip would run off-screen —
    the mirror of the left-edge rule the player controls use (#546). */
