@@ -245,10 +245,11 @@
     let text;
     let sub;
 
-    // Simple function to convert HH:MM:SS.MMM to seconds
-    // Assume valid, returns 0 on error
+    // Simple function to convert HH:MM:SS.MMM to seconds, the hours
+    // optional as WebVTT allows (#861). Assume valid, returns 0 on error
     const toSeconds = function (t_in) {
-      const t = t_in.split(':');
+      const t = t_in.trim().split(':');
+      if (t.length === 2) t.unshift('0');
       try {
         let s = t[2].split('.');
         // Just in case a , is decimal separator

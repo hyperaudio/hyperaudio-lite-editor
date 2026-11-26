@@ -86,3 +86,9 @@ test('the captions an import keeps lose the inline timestamps and <c> tags, and 
   const coloured = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<c.yellow>Ann</c> speaks\n';
   assert.equal(withoutInlineTimes(coloured), coloured);
 });
+
+// #861 — WebVTT's hours are optional
+test('cue times without hours are read, alone or mixed with times that have them (#861)', () => {
+  const html = vtt('WEBVTT\n\n00:01.000 --> 00:03.000\none two\n\n00:05.500 --> 01:00:06.000\nthree\n');
+  assert.deepEqual(spans(html).map((w) => [w.html, w.ms]), [['one', 1000], ['two', 2000], ['three', 5500]]);
+});

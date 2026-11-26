@@ -304,9 +304,12 @@
       const lines = String(vtt || '').replace(/\r\n?/g, '\n').split('\n');
       let cue = null;
       let blockIsCue = false;
+      // a time without hours, which WebVTT allows, is shown with them like
+      // every other caption's (#861)
+      const withHours = (t) => (/^\d{2}:\d{2}[.,]\d{3}$/.test(t) ? '00:' + t : t);
       const timing = (line) => {
         const at = line.indexOf(' --> ');
-        return at === -1 ? null : [line.slice(0, at).trim(), line.slice(at + 5).trim().split(/\s+/)[0]];
+        return at === -1 ? null : [withHours(line.slice(0, at).trim()), withHours(line.slice(at + 5).trim().split(/\s+/)[0])];
       };
       lines.forEach((line) => {
         if (line.trim() === '') {                     // a blank line ends whatever block this was

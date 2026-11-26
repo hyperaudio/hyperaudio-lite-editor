@@ -78,3 +78,11 @@ test('our own coloured export re-imports with only its cues (#672)', async ({ pa
   expect(after.map((r) => r.start)).toEqual(before.map((r) => r.start));
   expect(JSON.stringify(after)).not.toContain('STYLE');
 });
+
+test('a cue time without hours is shown with them, like every other caption (#861)', async ({ page }) => {
+  const cues = await page.evaluate(() => window.parseVttCuesForEditor('WEBVTT\n\n00:01.000 --> 00:03.000 line:90%\nshort\n\n00:04.000 --> 01:00:06.500\nlong\n'));
+  expect(cues).toEqual([
+    { start: '00:00:01.000', stop: '00:00:03.000', text: 'short\n' },
+    { start: '00:00:04.000', stop: '01:00:06.500', text: 'long\n' },
+  ]);
+});
