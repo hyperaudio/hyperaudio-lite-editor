@@ -20,6 +20,35 @@ function mediaSrcFor(file) {
   return host || URL.createObjectURL(file);
 }
 
+// A caption file chosen in an import dialog is checked before anything
+// happens: the media box and the caption box are easy to swap, and a video
+// read as captions filled the transcript with thousands of garbage words.
+// Only the start of the file is read, so a large video costs nothing.
+async function captionFileProblem(file, kind) {
+  const name = kind === 'vtt' ? 'WebVTT' : 'SRT';
+  if (!file) return 'Choose a ' + name + ' file to import.';
+  const head = (await file.slice(0, 512).text()).replace(/^\uFEFF/, '').trimStart();
+  const ok = kind === 'vtt'
+    ? /^WEBVTT(?:[ \t\r\n]|$)/.test(head)
+    : /^\d+[ \t]*\r?\n[ \t]*\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}[ \t]*-->/.test(head);
+  if (ok) return null;
+  const media = /^(audio|video)\//.test(file.type || '');
+  return '“' + file.name + '” isn’t ' + (kind === 'vtt' ? 'a WebVTT' : 'an SRT') + ' file, so nothing was imported.'
+    + (media ? ' It looks like a media file: choose it in the media box instead.' : '');
+}
+
+async function refuseImport(message) {
+  const save = window.HyperaudioSave;
+  if (save && typeof save.dialog === 'function') {
+    await save.dialog(message, { title: 'Import', warning: true, cancelButton: false, confirmLabel: 'OK' });
+  }
+}
+
+// The captions as a data: address, which is what the project saves its
+// captions from. A blob: address played, but the file's captions were never
+// saved, and came back rebuilt from the transcript.
+const captionDataUrl = (vtt) => 'data:text/vtt,' + encodeURIComponent(vtt);
+
 class ExportJson extends HTMLElement {
 
   constructor() {
@@ -277,7 +306,9 @@ class ImportSrt extends HTMLElement {
     document.querySelector('#srt-file').value = "";
   }
 
-  confirmSrt() {
+  async confirmSrt() {
+    const problem = await captionFileProblem(document.querySelector('[name=srt]').files[0], 'srt');
+    if (problem !== null) { await refuseImport(problem); return; }
     let player = document.querySelector("#hyperplayer");
     // The media goes on the player NOW, before the caption file is read and
     // the new project is created from it. It used to be read into memory
@@ -308,10 +339,7 @@ class ImportSrt extends HTMLElement {
       hypertranscript.innerHTML = srtToHtml(srtData);
 
       const vttData = convertSrtToWebVtt(srtData);
-      // Create a Blob object with the WebVTT data
-      const blob = new Blob([vttData], { type: "text/vtt" });
-      // Generate a URL for the Blob
-      const vttUrl = URL.createObjectURL(blob);
+      const vttUrl = captionDataUrl(vttData);
       // Through the caption door (#356/#287): assigning .src on the reused track
       // leaves the previous document's cue pixels painted on the paused video.
       applyCaptionTrack(vttUrl, { mode: 'showing' });
@@ -345,10 +373,14 @@ class ImportSrt extends HTMLElement {
       <div class="flex flex-col gap-4 w-full">
         <h3 class="font-bold text-lg">Import SRT Dialog</h3>
         <input id="srt-media" type="url" autocomplete="url" placeholder="Link to media" class="input input-bordered w-full media-link" />
-        <label class="label-text" for="srt-file">or use local media file</label>
-        <input id="srt-file" name="srt-file" type="file" class="file-input w-full max-w-xs" title="" />
-        <label class="label-text" for="srt">select local SRT file</label>
-        <input id="srt" name="srt" type="file" class="file-input w-full max-w-xs" title="" />
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label class="label-text" for="srt-file">or use local media file</label>
+          <input id="srt-file" name="srt-file" type="file" accept="audio/*,video/*" class="file-input w-full max-w-xs" title="" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label class="label-text" for="srt">select local SRT file</label>
+          <input id="srt" name="srt" type="file" accept=".srt,application/x-subrip" class="file-input w-full max-w-xs" title="" />
+        </div>
       </div>
       <div class="modal-action">
         <label for="file-import-srt-dialog" class="btn btn-ghost">Cancel</label>
@@ -410,7 +442,9 @@ class ImportVtt extends HTMLElement {
     document.querySelector('#vtt-file').value = "";
   }
 
-  confirmVtt() {
+  async confirmVtt() {
+    const problem = await captionFileProblem(document.querySelector('[name=vtt]').files[0], 'vtt');
+    if (problem !== null) { await refuseImport(problem); return; }
     let player = document.querySelector("#hyperplayer");
     // The media goes on the player NOW, before the caption file is read and
     // the new project is created from it. It used to be read into memory
@@ -445,9 +479,7 @@ class ImportVtt extends HTMLElement {
       const vttData = converters && typeof converters.withoutInlineTimes === 'function'
         ? converters.withoutInlineTimes(fileData) : fileData;
 
-      const blob = new Blob([vttData], { type: "text/vtt" });
-      // Generate a URL for the Blob
-      const vttUrl = URL.createObjectURL(blob);
+      const vttUrl = captionDataUrl(vttData);
       // Through the caption door (#356/#287) — see the SRT import above.
       applyCaptionTrack(vttUrl, { mode: 'showing' });
 
@@ -480,10 +512,14 @@ class ImportVtt extends HTMLElement {
       <div class="flex flex-col gap-4 w-full">
         <h3 class="font-bold text-lg">Import VTT Dialog</h3>
         <input id="vtt-media" type="url" autocomplete="url" placeholder="Link to media" class="input input-bordered w-full media-link" />
-        <label class="label-text" for="vtt-file">or use local media file</label>
-        <input id="vtt-file" name="vtt-file" type="file" class="file-input w-full max-w-xs" title="" />
-        <label class="label-text" for="vtt">select local VTT file</label>
-        <input id="vtt" name="vtt" type="file" class="file-input w-full max-w-xs" title="" />
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label class="label-text" for="vtt-file">or use local media file</label>
+          <input id="vtt-file" name="vtt-file" type="file" accept="audio/*,video/*" class="file-input w-full max-w-xs" title="" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label class="label-text" for="vtt">select local VTT file</label>
+          <input id="vtt" name="vtt" type="file" accept=".vtt,text/vtt" class="file-input w-full max-w-xs" title="" />
+        </div>
       </div>
       <div class="modal-action">
         <label for="file-import-vtt-dialog" class="btn btn-ghost">Cancel</label>
