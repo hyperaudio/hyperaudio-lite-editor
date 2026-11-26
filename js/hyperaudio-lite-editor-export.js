@@ -1,7 +1,7 @@
 /**
  * hyperaudio-lite-editor-export.js
  * (C) The Hyperaudio Project
- * @version 1.3.48 — last changed in release 1.3.48
+ * @version 1.3.55 — last changed in release 1.3.55
  * @license AGPL-3.0-only
  *
  * Export/import custom elements: transcript downloads and the Deepgram JSON,
@@ -433,10 +433,17 @@ class ImportVtt extends HTMLElement {
     const file = document.querySelector('[name=vtt]').files[0];
     const reader = new FileReader();
     reader.addEventListener('load', (event) => {
-      const vttData = event.target.result;
+      const fileData = event.target.result;
 
       let hypertranscript = document.getElementById('hypertranscript');
-      hypertranscript.innerHTML = vttToHtml(vttData);
+      hypertranscript.innerHTML = vttToHtml(fileData);
+
+      // The words keep any inline timestamps as their times, and the
+      // captions are kept without them, so the Captions view, the caption
+      // downloads and the saved project show plain text (#842)
+      const converters = window.HyperaudioConverters;
+      const vttData = converters && typeof converters.withoutInlineTimes === 'function'
+        ? converters.withoutInlineTimes(fileData) : fileData;
 
       const blob = new Blob([vttData], { type: "text/vtt" });
       // Generate a URL for the Blob
