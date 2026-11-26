@@ -1,7 +1,7 @@
 /**
  * converters/captions.js
  * (C) The Hyperaudio Project
- * @version 1.3.44 — last changed in release 1.3.44
+ * @version 1.3.55 — last changed in release 1.3.55
  * @license AGPL-3.0-only
  *
  * A caption file, SRT or WebVTT, as transcript markup (#751). The file's
@@ -11,6 +11,11 @@
  * (js/hyperaudio-lite-editor-export.js) read the file and put the result on
  * the page, and keep `srtToHtml` and `vttToHtml` as the globals a native
  * host calls. Nothing here touches the page.
+ *
+ * A WebVTT cue may time its own words with inline timestamps, as in
+ * `one <00:00:02.000>two`, and the editor's word-level download writes them
+ * with each word in a <c> tag (#842). Those words take their times from the
+ * file, and the timestamps and <c> tags are not kept as text.
  *
  * Unlike the engine converters this one renders its own markup rather than
  * going through jsonToHTML: a cue's text may carry <b>, <i>, <u>, <s> and
@@ -61,6 +66,75 @@
       const stime = Math.round((start + si * stimeStep) * 1000);
       captionWords.push({ ms: stime, html: swords[si], cueEnd: end, lastInCue: si === sl - 1 });
     }
+  }
+
+  // WebVTT's inline timestamps, hours optional, and its <c> class spans
+  // (<c>, <c.name>, </c>), which the editor's word-level download puts
+  // round each word (#842)
+  const INLINE_TIME = /<((?:\d{2,}:)?\d{2}:\d{2}\.\d{3})>/g;
+  const CLASS_TAG = /<\/?c(?:\.[^\s>]*)?>/gi;
+  const MARK = '\u0001';   // stands in for a timestamp while the text is escaped
+
+  const inlineSeconds = (t) => {
+    const parts = t.split(':').map(Number);
+    return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+  };
+
+  // A WebVTT file with its inline timestamps and <c> tags taken out, the
+  // rest as it was: the captions an import keeps (#842). A file with no
+  // inline timestamps comes back untouched, its <c.name> colours included
+  function withoutInlineTimes(data) {
+    const text = String(data);
+    INLINE_TIME.lastIndex = 0;
+    if (!INLINE_TIME.test(text)) return text;
+    return text.replace(INLINE_TIME, '').replace(CLASS_TAG, '');
+  }
+
+  // One cue's text whose words are timed inline (#842). A timestamp starts
+  // the first word after it, words before the first one start with the cue,
+  // and words that share the stretch between two timestamps share its time.
+  // A timestamp outside the cue is held to it, and one that would start a
+  // word before the word ahead of it is ignored.
+  function timedCueWords(raw, start, end, captionWords) {
+    const times = [];
+    const marked = raw.replace(CLASS_TAG, '').replace(INLINE_TIME, (m, t) => {
+      times.push(inlineSeconds(t));
+      return ' ' + MARK + (times.length - 1) + MARK + ' ';
+    });
+    // groups of words, each with the time its first word starts
+    const groups = [{ at: start, words: [] }];
+    cueText(marked).split(/\s+/).forEach((token) => {
+      if (token === '') return;
+      const time = new RegExp('^' + MARK + '(\\d+)' + MARK + '$').exec(token);
+      if (time !== null) {
+        const at = Math.min(Math.max(times[Number(time[1])], start), end);
+        if (at >= groups[groups.length - 1].at) groups.push({ at, words: [] });
+        return;
+      }
+      groups[groups.length - 1].words.push(token);
+    });
+    // a token that is only a tag, such as the <b> before a timed word,
+    // joins the word after it, or the one before it at the cue's end
+    const plain = (html) => html.replace(/<[^>]*>/g, '');
+    let carried = '';
+    groups.forEach((group) => {
+      group.words = group.words.reduce((kept, word) => {
+        if (plain(carried + word) === '') { carried += word; return kept; }
+        kept.push(carried + word);
+        carried = '';
+        return kept;
+      }, []);
+    });
+    const timed = [];
+    groups.forEach((group, g) => {
+      const until = g + 1 < groups.length ? groups[g + 1].at : end;
+      const step = group.words.length > 0 ? (until - group.at) / group.words.length : 0;
+      group.words.forEach((word, w) => timed.push({ ms: Math.round((group.at + w * step) * 1000), html: word }));
+    });
+    if (carried !== '' && timed.length > 0) timed[timed.length - 1].html += carried;
+    timed.forEach((word, w) => {
+      captionWords.push({ ms: word.ms, html: word.html, cueEnd: end, lastInCue: w === timed.length - 1 });
+    });
   }
 
   // Cue text as it may appear: SSA-style tags stripped, HTML escaped, and the
@@ -245,17 +319,23 @@
           i++;
         }
 
-        // Join the text lines, then the tags
-        sub.text = cueText(text.join(' '));
-
-        cueWords(sub.text, sub.start, sub.end, captionWords);
+        // Words timed inline take the file's times (#842). Otherwise join
+        // the text lines, then the tags, and share the cue's time out
+        const joined = text.join(' ');
+        INLINE_TIME.lastIndex = 0;
+        if (INLINE_TIME.test(joined)) {
+          timedCueWords(joined, sub.start, sub.end, captionWords);
+        } else {
+          sub.text = cueText(joined);
+          cueWords(sub.text, sub.start, sub.end, captionWords);
+        }
       }
     }
 
     return captionWordsToHtml(captionWords);
   }
 
-  const api = { srt, vtt, captionWordsToHtml };
+  const api = { srt, vtt, captionWordsToHtml, withoutInlineTimes };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) {
     root.HyperaudioConverters = root.HyperaudioConverters || {};
