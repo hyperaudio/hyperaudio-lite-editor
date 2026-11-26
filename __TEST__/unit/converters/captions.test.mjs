@@ -50,3 +50,45 @@ test('the word list itself: a cue\'s words end where the next starts, the last a
   ]);
   assert.deepEqual(paragraphs(html), ['One two.', 'Three.']);
 });
+
+// #842 — a WebVTT cue that times its own words with inline timestamps
+const { withoutInlineTimes } = require('../../../js/converters/captions.js');
+const timed = (cue) => spans(vtt('WEBVTT\n\n' + cue)).map((w) => [w.html, w.ms]);
+
+test('inline timestamps time the words that follow them, and are not kept as text (#842)', () => {
+  assert.deepEqual(timed('00:00:01.000 --> 00:00:04.000\none <00:00:02.000>two <00:00:03.500>three\n'),
+    [['one', 1000], ['two', 2000], ['three', 3500]]);
+});
+
+test('the editor\'s own word-level form, over two lines, with its <c> tags and an escaped word (#842)', () => {
+  assert.deepEqual(timed('00:00:01.200 --> 00:00:03.000\n<00:00:01.200><c>So</c> <00:00:01.550><c>if</c>\n'
+    + '<00:00:02.000><c>&lt;inaudible&gt;</c> <00:00:02.500><c>you</c>\n'),
+    [['So', 1200], ['if', 1550], ['&lt;inaudible&gt;', 2000], ['you', 2500]]);
+});
+
+test('a timestamp without hours or spaces round it, words sharing a stretch, and a styling tag round a timed word (#842)', () => {
+  assert.deepEqual(timed('00:00:01.000 --> 00:00:04.000\none<00:02.000><c> two three</c> <b><00:03.000>four</b>\n'),
+    [['one', 1000], ['two', 2000], ['three', 2500], ['<b>four</b>', 3000]]);
+});
+
+test('a timestamp out of order is ignored, and one past the cue is held to its end (#842)', () => {
+  assert.deepEqual(timed('00:00:01.000 --> 00:00:04.000\none <00:00:03.000>two <00:00:02.000>three <00:00:09.000>four\n'),
+    [['one', 1000], ['two', 3000], ['three', 3500], ['four', 4000]]);
+});
+
+test('the captions an import keeps lose the inline timestamps and <c> tags, and nothing else (#842)', () => {
+  const file = 'WEBVTT\nKind: captions\n\nNOTE made by hand\n\n1\n00:00:01.200 --> 00:00:03.000 align:start\n'
+    + '<00:00:01.200><c>So</c> <00:00:01.550><c.yellow>if</c>\n';
+  assert.equal(withoutInlineTimes(file),
+    'WEBVTT\nKind: captions\n\nNOTE made by hand\n\n1\n00:00:01.200 --> 00:00:03.000 align:start\nSo if\n');
+  // a file without them comes out as it went in, its class spans included
+  assert.equal(withoutInlineTimes(read('sample.vtt')), read('sample.vtt'));
+  const coloured = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<c.yellow>Ann</c> speaks\n';
+  assert.equal(withoutInlineTimes(coloured), coloured);
+});
+
+// #861 — WebVTT's hours are optional
+test('cue times without hours are read, alone or mixed with times that have them (#861)', () => {
+  const html = vtt('WEBVTT\n\n00:01.000 --> 00:03.000\none two\n\n00:05.500 --> 01:00:06.000\nthree\n');
+  assert.deepEqual(spans(html).map((w) => [w.html, w.ms]), [['one', 1000], ['two', 2000], ['three', 5500]]);
+});

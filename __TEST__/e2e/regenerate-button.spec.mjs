@@ -57,3 +57,85 @@ test('it still asks before throwing caption edits away', async ({ page }) => {
   await expect.poll(() => page.evaluate(() =>
     document.querySelectorAll('#captions-display .caption').length)).toBeGreaterThan(0);
 });
+
+// #862: in a narrow window the button covered the playing caption's reading
+// rate and menu. It is smaller now, and a caption brought into view at the
+// top, as a seek back does, stops below it
+test('in a narrow window, a caption scrolled back into view stops below the button', async ({ page }) => {
+  await page.setViewportSize({ width: 540, height: 800 });
+  // the button slides to its narrow-window place: wait until it has settled
+  const place = () => page.evaluate(() => document.getElementById('regenerate-float-btn').getBoundingClientRect().top);
+  let last = -1;
+  await expect.poll(async () => { const now = await place(); const settled = now === last; last = now; return settled; },
+    { intervals: [100, 100, 100, 200, 300] }).toBe(true);
+  await page.evaluate(() => {
+    const p = document.getElementById('hyperplayer');
+    let at = 0;
+    Object.defineProperty(p, 'currentTime', { configurable: true, get: () => at, set: (x) => { at = x; } });
+  });
+  // the list scrolled down, then the media back to the second caption
+  await page.evaluate(() => {
+    const holder = document.querySelector('#captions-display').closest('.transcript-holder');
+    holder.scrollTop = holder.scrollHeight;
+  });
+  const start = await page.evaluate(() => window.CaptionRows.seconds(
+    document.querySelectorAll('#captions-display .caption')[1].querySelector('.start').value));
+  await page.evaluate((t) => {
+    const p = document.getElementById('hyperplayer');
+    p.currentTime = t + 0.1;
+    p.dispatchEvent(new Event('timeupdate'));
+  }, start);
+  await expect(page.locator('#captions-display .caption').nth(1)).toHaveClass(/caption-current/);
+
+  const covered = await page.evaluate(() => {
+    const b = document.getElementById('regenerate-float-btn').getBoundingClientRect();
+    const row = document.querySelector('#captions-display .caption-current');
+    return [...row.querySelectorAll('.caption-rate, .caption-menu, .start, .end')].filter((e) => {
+      const q = e.getBoundingClientRect();
+      return q.width > 0 && q.left < b.right && q.right > b.left && q.top < b.bottom && q.bottom > b.top;
+    }).map((e) => e.className);
+  });
+  expect(covered).toEqual([]);
+  // and nothing else sits on the button
+  expect(await page.evaluate(() => {
+    const btn = document.getElementById('regenerate-float-btn');
+    const r = btn.getBoundingClientRect();
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return btn === at || btn.contains(at);
+  })).toBe(true);
+});
+
+// #862: after a caption import, at the top of the list, the first caption
+// starts below the button
+test('after a caption import, nothing in the first caption sits under the button', async ({ page }, testInfo) => {
+  const fs = await import('node:fs');
+  const file = testInfo.outputPath('short.vtt');
+  fs.writeFileSync(file, 'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nOne two three.\n\n00:00:04.000 --> 00:00:06.500\nFour five six.\n');
+  await page.setViewportSize({ width: 540, height: 800 });
+  // back to the transcript to import, as someone would, then to the captions
+  await page.click('#transcript-editor-btn');
+  await page.waitForSelector('#hypertranscript [data-m]');
+  await page.evaluate(() => { document.getElementById('file-import-vtt-dialog').checked = true; });
+  await page.setInputFiles('#vtt', file);
+  await page.click('#file-import-vtt');
+  await page.waitForFunction(() => document.getElementById('hypertranscript').textContent.includes('Four'));
+  await page.click('#caption-editor-btn');
+  const divergence = page.locator('#project-dialog.modal-open');
+  if (await divergence.isVisible()) await page.click('#project-dialog-confirm');
+  await expect(page.locator('#captions-display .caption')).toHaveCount(2);
+  // the button slides to its narrow-window place: wait until it has settled
+  const place = () => page.evaluate(() => document.getElementById('regenerate-float-btn').getBoundingClientRect().top);
+  let last = -1;
+  await expect.poll(async () => { const now = await place(); const settled = now === last; last = now; return settled; },
+    { intervals: [100, 100, 100, 200, 300] }).toBe(true);
+
+  const covered = await page.evaluate(() => {
+    const b = document.getElementById('regenerate-float-btn').getBoundingClientRect();
+    const row = document.querySelector('#captions-display .caption');
+    return [...row.querySelectorAll('.caption-rate, .caption-menu, .start, .end')].filter((e) => {
+      const q = e.getBoundingClientRect();
+      return q.width > 0 && q.left < b.right && q.right > b.left && q.top < b.bottom && q.bottom > b.top;
+    }).map((e) => e.className);
+  });
+  expect(covered).toEqual([]);
+});
