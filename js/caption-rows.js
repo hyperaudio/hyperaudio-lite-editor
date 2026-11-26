@@ -1,7 +1,7 @@
 /**
  * caption-rows.js
  * (C) The Hyperaudio Project
- * @version 1.3.45 — last changed in release 1.3.45
+ * @version 1.3.55 — last changed in release 1.3.55
  * @license AGPL-3.0-only
  *
  * What a caption row does beyond being typed into (#773). The rows are built
@@ -16,8 +16,9 @@
  *  - two captions that overlap in time are marked at the times that meet
  *  - the text: Enter moves to the second line and a third line is refused,
  *    and a pasted third line folds onto the second
- *  - the keyboard: Alt+[ and Alt+] set In and Out from the playhead, and
- *    Alt+Up and Alt+Down nudge a focused time by a tenth of a second
+ *  - the keyboard: Ctrl+[ and Ctrl+] on a Mac, Alt+[ and Alt+] elsewhere,
+ *    set In and Out from the playhead, and Alt+Up and Alt+Down nudge a
+ *    focused time by a tenth of a second
  *
  * Without this script the rows still type, play and seek as before, and the
  * menu's items do nothing.
@@ -26,6 +27,19 @@
   'use strict';
 
   const NUDGE = 0.1;            // seconds, Alt+Up and Alt+Down
+  const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '');
+
+  // The modifier for In and Out from the playhead (#860). Option on a Mac and
+  // AltGr elsewhere type characters ([ and ] on many European layouts, curly
+  // quotes on a US Mac), so a Mac uses Ctrl, which types nothing there, and
+  // elsewhere Alt counts only without Ctrl or AltGr, the way browsers report
+  // AltGr. The key is matched by position (event.code), whatever it prints.
+  const playheadModifier = (event) => {
+    if (event.metaKey || event.shiftKey) return false;
+    if (IS_MAC) return event.ctrlKey && !event.altKey;
+    const altGr = typeof event.getModifierState === 'function' && event.getModifierState('AltGraph');
+    return event.altKey && !event.ctrlKey && !altGr;
+  };
   const OUT_LEAD = 0.1;         // seeking to an Out lands just before it, as seekTo does
 
   const display = () => document.getElementById('captions-display');
@@ -154,10 +168,10 @@
 
   document.addEventListener('keydown', (event) => {
     const target = event.target;
-    // Alt+[ and Alt+]: In and Out from the playhead, for the row being edited
-    // or else the row that is playing. First, since the text box takes the
-    // other keys below.
-    if (event.altKey && (event.code === 'BracketLeft' || event.code === 'BracketRight')) {
+    // Ctrl+[ and Ctrl+] on a Mac, Alt+[ and Alt+] elsewhere: In and Out from
+    // the playhead, for the row being edited or else the row that is playing.
+    // First, since the text box takes the other keys below.
+    if (playheadModifier(event) && (event.code === 'BracketLeft' || event.code === 'BracketRight')) {
       if (display() === null) return;
       const row = rowOf(document.activeElement) || display().querySelector('.caption-current');
       if (row === null) return;

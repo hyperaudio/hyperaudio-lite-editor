@@ -154,17 +154,42 @@ test('a pasted third line folds onto the second', async ({ page }) => {
   expect(await area.inputValue()).toBe('first\nsecond third fourth');
 });
 
-test('In and Out are set from the playhead with Alt and a bracket', async ({ page }) => {
+// #860: on a Mac it's Ctrl and a bracket, since Option types characters
+// there (curly quotes on a US layout). The platform is pinned, as the module
+// reads it once when it loads
+test('In and Out are set from the playhead with Ctrl and a bracket on a Mac', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' }));
   await openCaptions(page);
   await fakeClock(page);
   await tick(page, 75.5);
   await page.locator(`${ROW}:nth-child(2) textarea.lines`).click();
+  // Option and a bracket is left to type
+  const end = await page.locator(`${ROW}:nth-child(2) .end`).inputValue();
+  await page.keyboard.press('Alt+BracketRight');
+  await expect(page.locator(`${ROW}:nth-child(2) .end`)).toHaveValue(end);
+  await page.keyboard.press('Control+BracketRight');
+  await expect(page.locator(`${ROW}:nth-child(2) .end`)).toHaveValue('00:01:15.500');
+  await page.keyboard.press('Control+BracketLeft');
+  await expect(page.locator(`${ROW}:nth-child(2) .start`)).toHaveValue('00:01:15.500');
+  // the edit reached the one door: the project is marked dirty
+  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
+});
+
+// elsewhere it stays Alt and a bracket, but never with AltGr, which
+// browsers on Windows report as Ctrl and Alt together
+test('In and Out are set from the playhead with Alt and a bracket on Windows, not with AltGr', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'Win32' }));
+  await openCaptions(page);
+  await fakeClock(page);
+  await tick(page, 75.5);
+  await page.locator(`${ROW}:nth-child(2) textarea.lines`).click();
+  const end = await page.locator(`${ROW}:nth-child(2) .end`).inputValue();
+  await page.keyboard.press('Control+Alt+BracketRight');
+  await expect(page.locator(`${ROW}:nth-child(2) .end`)).toHaveValue(end);
   await page.keyboard.press('Alt+BracketRight');
   await expect(page.locator(`${ROW}:nth-child(2) .end`)).toHaveValue('00:01:15.500');
   await page.keyboard.press('Alt+BracketLeft');
   await expect(page.locator(`${ROW}:nth-child(2) .start`)).toHaveValue('00:01:15.500');
-  // the edit reached the one door: the project is marked dirty
-  await expect(page.locator('#project-save-btn')).toHaveClass(/dirty/);
 });
 
 test('Alt+Up and Alt+Down nudge a focused time by a tenth of a second', async ({ page }) => {
